@@ -1,8 +1,11 @@
 # Админ-панель
 
+import re
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from telegram import Update
+from telegram.constants import ChatType
+from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from core.config import settings
@@ -16,11 +19,68 @@ from bot.messages import (
     NO_DECK_NAME,
     NO_ACTIVE_TOURNAMENT,
     MULTIPLE_TOURNAMENTS_MSG,
-    PLAYER_NOT_FOUND,
     PLAYER_ADDED,
+    TELEGRAM_USER_LOOKUP_FAILED,
     TOURNAMENT_CLOSED_MSG,
     ADD_PLAYERS_USAGE,
 )
+
+
+def parse_add_player_command(message_text: str, bot_username: str | None) -> tuple[str, str] | None:
+    """
+    Разбор текста /add_player … в (username_игрока, название_колоды).
+
+    Поддерживает случай, когда пользователь пишет /add_player@nickname Колода
+    и Telegram воспринимает @nickname как суффикс команды, а не как игрока:
+    тогда nickname — это игрок, остаток строки — колода.
+
+    Все пробельные символы Unicode приводятся к обычному пробелу: после выбора
+    @username клиенты иногда вставляют узкий неразрывный пробел (U+202F) и т.п.,
+    из‑за чего str.split() не отделяет ник от названия колоды.
+    """
+    if not message_text or not message_text.strip():
+        return None
+    text = re.sub(r"\s+", " ", message_text.strip())
+    parts = text.split(None, 1)
+    if not parts:
+        return None
+    cmd_token = parts[0]
+    rest = parts[1].strip() if len(parts) > 1 else ""
+
+    if not cmd_token.lower().startswith("/add_player"):
+        return None
+
+    suffix = ""
+    if "@" in cmd_token:
+        _, _, suffix = cmd_token.partition("@")
+
+    bot_u = (bot_username or "").lower().lstrip("@")
+    if suffix and suffix.lower() != bot_u:
+        if not rest:
+            return None
+        return (suffix, rest)
+
+    if not rest:
+        return None
+    user_and_deck = rest.split(None, 1)
+    if len(user_and_deck) < 2:
+        return None
+    username = user_and_deck[0].lstrip("@")
+    deck_name = user_and_deck[1].strip()
+    if not username or not deck_name:
+        return None
+    return (username, deck_name)
+
+
+def parse_bulk_player_line(line: str) -> tuple[str, str] | None:
+    """Строка «@user Колода» → (username_без_собаки, колода). Неверная строка → None."""
+    text = re.sub(r"\s+", " ", line.strip())
+    if not text:
+        return None
+    parts = text.split(None, 1)
+    if len(parts) < 2:
+        return None
+    return (parts[0].lstrip("@"), parts[1].strip())
 
 
 def _is_admin(db: Session, tg_id: int) -> bool:
@@ -73,8 +133,9 @@ def handle_add_me(
             archetype_id=archetype.id,
             added_by_admin=True,
         )
+        user_label = f"@{username}" if username else (first_name or f"id{tg_id}")
         return HandlerResult(PLAYER_ADDED.format(
-            username=username or first_name,
+            user=user_label,
             archetype_name=archetype.name,
         ))
     except errors.ParticipantAlreadyRegistered:
@@ -83,11 +144,23 @@ def handle_add_me(
         return HandlerResult("Регистрация на этот турнир закрыта.")
 
 
+def _player_display_label(username: str | None, first_name: str | None, tg_id: int) -> str:
+    if username:
+        return f"@{username}"
+    if first_name:
+        return first_name
+    return f"игрок {tg_id}"
+
+
 def handle_add_player(
     db: Session,
     tg_id: int,
-    target_username: str,
+    *,
+    target_tg_id: int,
+    target_username: str | None,
     deck_name: str,
+    target_first_name: str | None = None,
+    target_last_name: str | None = None,
 ) -> HandlerResult:
     if not _is_admin(db, tg_id):
         return HandlerResult(NOT_ADMIN)
@@ -95,11 +168,13 @@ def handle_add_player(
     active, err = _resolve_tournament(svc)
     if err:
         return err
-    stmt = select(models.User).where(models.User.username == target_username)
-    target_user = db.execute(stmt).scalar_one_or_none()
-    if not target_user:
-        return HandlerResult(PLAYER_NOT_FOUND.format(username=target_username))
     try:
+        target_user = svc.get_or_create_user(
+            tg_id=target_tg_id,
+            username=target_username,
+            first_name=target_first_name,
+            last_name=target_last_name,
+        )
         archetype = svc.get_or_create_archetype_by_name(deck_name)
         svc.register_participant(
             tournament_id=active.id,
@@ -107,12 +182,14 @@ def handle_add_player(
             archetype_id=archetype.id,
             added_by_admin=True,
         )
+        user_label = _player_display_label(target_username, target_first_name, target_tg_id)
         return HandlerResult(PLAYER_ADDED.format(
-            username=target_username,
+            user=user_label,
             archetype_name=archetype.name,
         ))
     except errors.ParticipantAlreadyRegistered:
-        return HandlerResult(f"@{target_username} уже записан на этот турнир.")
+        user_label = _player_display_label(target_username, target_first_name, target_tg_id)
+        return HandlerResult(f"{user_label} уже записан на этот турнир.")
     except errors.TournamentInvalidState:
         return HandlerResult("Регистрация на этот турнир закрыта.")
 
@@ -120,30 +197,26 @@ def handle_add_player(
 def handle_add_players(
     db: Session,
     tg_id: int,
-    lines: list[str],
+    entries: list[tuple[int, str | None, str | None, str]],
 ) -> HandlerResult:
+    """entries: (target_tg_id, username, first_name, deck_name) — после резолва в Telegram."""
     if not _is_admin(db, tg_id):
         return HandlerResult(NOT_ADMIN)
-    if not lines:
-        return HandlerResult(ADD_PLAYERS_USAGE)
+    if not entries:
+        return HandlerResult("Нет данных для обработки.")
     svc = TournamentService(db)
     active, err = _resolve_tournament(svc)
     if err:
         return err
     results = []
-    for line in lines:
-        parts = line.split(None, 1)
-        if len(parts) < 2:
-            results.append(f"⚠️ Пропущено: «{line}» — нет названия колоды")
-            continue
-        username = parts[0].lstrip("@")
-        deck_name = parts[1].strip()
-        stmt = select(models.User).where(models.User.username == username)
-        target_user = db.execute(stmt).scalar_one_or_none()
-        if not target_user:
-            results.append(f"❌ @{username} — не найден (должен написать /start)")
-            continue
+    for target_tg_id, uname, fname, deck_name in entries:
+        user_label = _player_display_label(uname, fname, target_tg_id)
         try:
+            target_user = svc.get_or_create_user(
+                tg_id=target_tg_id,
+                username=uname,
+                first_name=fname,
+            )
             archetype = svc.get_or_create_archetype_by_name(deck_name)
             svc.register_participant(
                 tournament_id=active.id,
@@ -151,11 +224,11 @@ def handle_add_players(
                 archetype_id=archetype.id,
                 added_by_admin=True,
             )
-            results.append(f"✅ @{username} — {archetype.name}")
+            results.append(f"✅ {user_label} — {archetype.name}")
         except errors.ParticipantAlreadyRegistered:
-            results.append(f"⚠️ @{username} — уже записан")
+            results.append(f"⚠️ {user_label} — уже записан")
         except errors.TournamentInvalidState:
-            results.append(f"❌ @{username} — регистрация закрыта")
+            results.append(f"❌ {user_label} — регистрация закрыта")
     return HandlerResult("\n".join(results) if results else "Нет данных для обработки.")
 
 
@@ -217,15 +290,33 @@ async def cmd_add_player(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     msg = update.effective_message
     if not user or not msg:
         return
-    args = context.args or []
-    if len(args) < 2:
+    bot_name = context.bot.username if context.bot else None
+    parsed = parse_add_player_command(msg.text or "", bot_name)
+    if not parsed:
         await msg.reply_text("Использование: /add_player @username Название колоды")
         return
-    username = args[0].lstrip("@")
-    deck_name = " ".join(args[1:]).strip()
+    username, deck_name = parsed
+    try:
+        chat = await context.bot.get_chat(f"@{username}")
+    except TelegramError:
+        await msg.reply_text(TELEGRAM_USER_LOOKUP_FAILED.format(username=username))
+        return
+    if chat.type != ChatType.PRIVATE:
+        await msg.reply_text(
+            f"❌ @{username} — укажите @username человека (не группу или канал)."
+        )
+        return
     db = SessionLocal()
     try:
-        result = handle_add_player(db, user.id, username, deck_name)
+        result = handle_add_player(
+            db,
+            user.id,
+            target_tg_id=chat.id,
+            target_username=chat.username,
+            deck_name=deck_name,
+            target_first_name=chat.first_name,
+            target_last_name=chat.last_name,
+        )
         await msg.reply_text(result.text)
     finally:
         db.close()
@@ -238,11 +329,38 @@ async def cmd_add_players(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not user or not msg:
         return
     text = msg.text or ""
-    lines = [l.strip() for l in text.splitlines()[1:] if l.strip()]
+    raw_lines = [l.strip() for l in text.splitlines()[1:] if l.strip()]
+    if not raw_lines:
+        await msg.reply_text(ADD_PLAYERS_USAGE)
+        return
+
+    fragments: list[str] = []
+    entries: list[tuple[int, str | None, str | None, str]] = []
+    for line in raw_lines:
+        pl = parse_bulk_player_line(line)
+        if not pl:
+            fragments.append(f"⚠️ Пропущено: «{line}» — нет названия колоды")
+            continue
+        uname, deck_name = pl
+        try:
+            chat = await context.bot.get_chat(f"@{uname}")
+        except TelegramError:
+            fragments.append(f"❌ @{uname} — не найден в Telegram")
+            continue
+        if chat.type != ChatType.PRIVATE:
+            fragments.append(f"❌ @{uname} — укажите @username человека (не группу или канал)")
+            continue
+        entries.append((chat.id, chat.username, chat.first_name, deck_name))
+
     db = SessionLocal()
     try:
-        result = handle_add_players(db, user.id, lines)
-        await msg.reply_text(result.text)
+        if not entries:
+            body = "\n".join(fragments) if fragments else ADD_PLAYERS_USAGE
+            await msg.reply_text(body)
+            return
+        result = handle_add_players(db, user.id, entries)
+        out = ("\n".join(fragments) + "\n" + result.text).strip() if fragments else result.text
+        await msg.reply_text(out)
     finally:
         db.close()
 

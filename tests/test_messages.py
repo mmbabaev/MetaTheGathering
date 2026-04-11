@@ -22,13 +22,12 @@ class TestFormatTournamentCard:
 
 
 class TestMessageTemplates:
-    def test_player_not_found_template(self):
-        result = msg.PLAYER_NOT_FOUND.format(username="alice")
+    def test_telegram_user_lookup_failed_template(self):
+        result = msg.TELEGRAM_USER_LOOKUP_FAILED.format(username="alice")
         assert "@alice" in result
-        assert "/start" in result
 
     def test_player_added_template(self):
-        result = msg.PLAYER_ADDED.format(username="alice", archetype_name="Burn")
+        result = msg.PLAYER_ADDED.format(user="@alice", archetype_name="Burn")
         assert "@alice" in result
         assert "Burn" in result
 
