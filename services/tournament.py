@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import List, Optional
 
 from sqlalchemy import select, func
@@ -106,7 +106,7 @@ class TournamentService:
             chat_id=data.chat_id,
             slug=data.slug,
             status=models.TournamentStatus.REGISTRATION,
-            created_at=datetime.utcnow(),
+            created_at=models.utc_now(),
         )
         self.db.add(tournament)
         self.db.commit()
@@ -154,6 +154,17 @@ class TournamentService:
         )
         rows = self.db.execute(stmt).scalars().all()
         return [TournamentRead.model_validate(t) for t in rows]
+
+    def get_single_active_tournament(self) -> TournamentRead:
+        """Возвращает единственный активный турнир.
+        Raises TournamentNotFound если нет активных.
+        Raises MultipleActiveTournaments если их несколько."""
+        tournaments = self.list_all_active_tournaments()
+        if not tournaments:
+            raise errors.TournamentNotFound("No active tournaments")
+        if len(tournaments) > 1:
+            raise errors.MultipleActiveTournaments([(t.id, t.title) for t in tournaments])
+        return tournaments[0]
 
     def list_all_active_tournaments(self) -> List[TournamentRead]:
         """Все турниры со статусом не CLOSED, по убыванию created_at."""
@@ -245,7 +256,7 @@ class TournamentService:
     def open_registration(self, tournament_id: int) -> TournamentRead:
         tournament = get_tournament(self.db, tournament_id)
         tournament.status = models.TournamentStatus.REGISTRATION
-        tournament.registration_open_at = datetime.utcnow()
+        tournament.registration_open_at = models.utc_now()
 
         self.db.commit()
         self.db.refresh(tournament)
@@ -260,7 +271,7 @@ class TournamentService:
 
         tournament.status = models.TournamentStatus.ONGOING
         if not tournament.started_at:
-            tournament.started_at = datetime.utcnow()
+            tournament.started_at = models.utc_now()
 
         self.db.commit()
         self.db.refresh(tournament)
@@ -290,7 +301,7 @@ class TournamentService:
         )
 
         tournament.status = models.TournamentStatus.CLOSED
-        tournament.ended_at = datetime.utcnow()
+        tournament.ended_at = models.utc_now()
 
         self.db.commit()
         self.db.refresh(tournament)
@@ -324,8 +335,8 @@ class TournamentService:
             user_id=user_id,
             archetype_id=archetype_id,
             added_by_admin=added_by_admin,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=models.utc_now(),
+            updated_at=models.utc_now(),
         )
         self.db.add(participant)
         self.db.commit()
@@ -343,7 +354,7 @@ class TournamentService:
 
         participant.archetype_id = archetype_id
         participant.confirmed = False
-        participant.updated_at = datetime.utcnow()
+        participant.updated_at = models.utc_now()
 
         if reset_votes:
             self.db.query(models.Vote).filter(
@@ -400,7 +411,7 @@ class TournamentService:
             voter_id=voter_user_id,
         )
 
-        now = datetime.utcnow()
+        now = models.utc_now()
 
         if existing_vote:
             if apply_cooldown and now - existing_vote.created_at < CHANGE_VOTE_COOLDOWN:
@@ -459,7 +470,7 @@ class TournamentService:
         participant.upvotes_count = 0
         participant.downvotes_count = 0
         participant.confirmed = False
-        participant.updated_at = datetime.utcnow()
+        participant.updated_at = models.utc_now()
 
         self.db.commit()
 

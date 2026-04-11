@@ -2,7 +2,7 @@
 
 import pytest
 from core.schemas import TournamentCreate
-from core.models import TournamentStatus
+from core.models import TournamentStatus, utc_now
 from bot.handlers.player import (
     handle_tournaments,
     handle_tournament_select,
@@ -42,14 +42,13 @@ class TestHandleTournaments:
         assert result.keyboard is not None
 
     def test_multiple_tournaments_returns_list(self, db):
-        import datetime
         from core import models
         # Insert two tournaments in different chats
         for i, slug in enumerate(("t1", "t2"), start=1):
             db.add(models.Tournament(
                 title=slug.upper(), chat_id=CHAT_ID + i, slug=slug,
                 status=models.TournamentStatus.REGISTRATION,
-                created_at=datetime.datetime.utcnow(),
+                created_at=utc_now(),
             ))
         db.commit()
         result = handle_tournaments(db)

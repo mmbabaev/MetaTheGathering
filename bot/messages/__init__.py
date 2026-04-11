@@ -17,9 +17,23 @@ NO_ACTIVE_TOURNAMENT = "Нет активного турнира в этом ч�
 PLAYER_NOT_FOUND = "Пользователь @{username} не найден. Он должен написать боту /start."
 PLAYER_ADDED = "✅ @{username} добавлен как {archetype_name}."
 TOURNAMENT_CLOSED_MSG = "Турнир закрыт."
+MULTIPLE_TOURNAMENTS_MSG = "Активных турниров несколько. Используйте /tournament_status чтобы увидеть их ID."
 ADD_PLAYERS_USAGE = (
     "Формат:\n/add_players\n@username1 Название колоды\n@username2 Другая колода"
 )
+
+
+HELP_TEXT = """\
+Команды для игроков:
+/tournaments — список активных турниров и запись
+
+Команды для администраторов:
+/tournament_status — участники всех активных турниров
+/add_me <колода> — записать себя на турнир
+/add_player @username <колода> — записать игрока
+/add_players — массовая запись (по строке: @username Колода)
+/close_tournament — закрыть текущий турнир\
+"""
 
 
 def format_tournament_card(title: str, status: str, slug: str | None = None) -> str:

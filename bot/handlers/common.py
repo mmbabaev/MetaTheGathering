@@ -15,6 +15,5 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.effective_message:
         return
-    await update.effective_message.reply_text(
-        "/tournaments — показать активные турниры и записаться на турнир с выбором архетипа колоды."
-    )
+    from bot.messages import HELP_TEXT
+    await update.effective_message.reply_text(HELP_TEXT)

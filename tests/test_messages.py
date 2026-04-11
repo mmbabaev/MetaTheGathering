@@ -42,6 +42,11 @@ class TestMessageTemplates:
             msg.REGISTERED, msg.ALREADY_REGISTERED, msg.REGISTRATION_CLOSED,
             msg.TOURNAMENT_NOT_FOUND, msg.NOT_ADMIN, msg.NO_DECK_NAME,
             msg.NO_ACTIVE_TOURNAMENT, msg.TOURNAMENT_CLOSED_MSG, msg.ADD_PLAYERS_USAGE,
+            msg.HELP_TEXT,
         ]
         for constant in constants:
             assert isinstance(constant, str) and len(constant) > 0
+
+    def test_help_text_covers_main_commands(self):
+        for cmd in ("/tournaments", "/tournament_status", "/add_me", "/add_player", "/close_tournament"):
+            assert cmd in msg.HELP_TEXT

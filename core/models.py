@@ -1,5 +1,5 @@
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     BigInteger,
@@ -18,11 +18,25 @@ from sqlalchemy.orm import relationship
 from core.database import Base
 
 
+def utc_now() -> datetime:
+    """Current UTC time as naive datetime (matches SQLAlchemy DateTime without timezone=True / SQLite)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 class TournamentStatus(str, enum.Enum):
     REGISTRATION = "registration"
     ONGOING = "ongoing"
     VOTING = "voting"
     CLOSED = "closed"
+
+    @property
+    def label_ru(self) -> str:
+        return {
+            TournamentStatus.REGISTRATION: "Регистрация",
+            TournamentStatus.ONGOING: "Идёт",
+            TournamentStatus.VOTING: "Голосование",
+            TournamentStatus.CLOSED: "Завершён",
+        }.get(self, self.value)
 
 
 class User(Base):
@@ -39,7 +53,7 @@ class User(Base):
     is_admin = Column(Boolean, default=False, nullable=False)
     is_superadmin = Column(Boolean, default=False, nullable=False)
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
 
     participants = relationship("Participant", back_populates="user", cascade="all, delete-orphan")
     votes = relationship("Vote", back_populates="voter", cascade="all, delete-orphan")
@@ -61,7 +75,7 @@ class Tournament(Base):
     started_at = Column(DateTime, nullable=True)
     ended_at = Column(DateTime, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
 
     participants = relationship("Participant", back_populates="tournament", cascade="all, delete-orphan")
     votes = relationship("Vote", back_populates="tournament", cascade="all, delete-orphan")
@@ -75,7 +89,7 @@ class Archetype(Base):
     color_emoji = Column(String(8), nullable=True)           # "🔴"
     short_name = Column(String(64), nullable=True)           # "RDW"
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
 
     participants = relationship("Participant", back_populates="archetype")
 
@@ -118,8 +132,8 @@ class Participant(Base):
     upvotes_count = Column(Integer, default=0, nullable=False)
     downvotes_count = Column(Integer, default=0, nullable=False)
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, nullable=False)
 
     tournament = relationship("Tournament", back_populates="participants")
     user = relationship("User", back_populates="participants")
@@ -149,7 +163,7 @@ class Vote(Base):
 
     vote_type = Column(Enum(VoteType), nullable=False)
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
 
     tournament = relationship("Tournament", back_populates="votes")
     participant = relationship("Participant", back_populates="votes")

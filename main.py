@@ -3,6 +3,7 @@
 import asyncio
 import logging
 
+from telegram import BotCommand
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -24,6 +25,19 @@ logging.basicConfig(
     level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
+
+
+async def _set_commands(app: Application) -> None:
+    await app.bot.set_my_commands([
+        BotCommand("tournaments", "Активные турниры и запись"),
+        BotCommand("help", "Справка по командам"),
+        BotCommand("tournament_status", "Участники турниров (админ)"),
+        BotCommand("add_me", "Записать себя (админ)"),
+        BotCommand("add_player", "Записать игрока (админ)"),
+        BotCommand("add_players", "Массовая запись (админ)"),
+        BotCommand("close_tournament", "Закрыть турнир (админ)"),
+    ])
+    logger.info("Bot commands registered.")
 
 
 def _debug_create_tournament() -> None:
@@ -48,7 +62,7 @@ def _debug_create_tournament() -> None:
 
 
 def main() -> None:
-    app = Application.builder().token(settings.TELEGRAM_BOT_TOKEN).build()
+    app = Application.builder().token(settings.TELEGRAM_BOT_TOKEN).post_init(_set_commands).build()
 
     app.add_handler(CommandHandler("start", common.cmd_start))
     app.add_handler(CommandHandler("help", common.cmd_help))

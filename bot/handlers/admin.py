@@ -15,6 +15,7 @@ from bot.messages import (
     NOT_ADMIN,
     NO_DECK_NAME,
     NO_ACTIVE_TOURNAMENT,
+    MULTIPLE_TOURNAMENTS_MSG,
     PLAYER_NOT_FOUND,
     PLAYER_ADDED,
     TOURNAMENT_CLOSED_MSG,
@@ -30,16 +31,17 @@ def _is_admin(db: Session, tg_id: int) -> bool:
     return user is not None and (user.is_admin or user.is_superadmin)
 
 
-def _status_display(status: models.TournamentStatus) -> str:
-    return {
-        models.TournamentStatus.REGISTRATION: "Регистрация",
-        models.TournamentStatus.ONGOING: "Идёт",
-        models.TournamentStatus.VOTING: "Голосование",
-        models.TournamentStatus.CLOSED: "Завершён",
-    }.get(status, status.value)
-
-
 # --- Pure business logic functions ---
+
+def _resolve_tournament(svc: TournamentService):
+    """Возвращает (tournament, error_result). Один из них None."""
+    try:
+        return svc.get_single_active_tournament(), None
+    except errors.TournamentNotFound:
+        return None, HandlerResult(NO_ACTIVE_TOURNAMENT)
+    except errors.MultipleActiveTournaments:
+        return None, HandlerResult(MULTIPLE_TOURNAMENTS_MSG)
+
 
 def handle_add_me(
     db: Session,
@@ -47,7 +49,6 @@ def handle_add_me(
     username: str | None,
     first_name: str | None,
     last_name: str | None,
-    chat_id: int,
     deck_name: str,
 ) -> HandlerResult:
     if not _is_admin(db, tg_id):
@@ -55,9 +56,9 @@ def handle_add_me(
     if not deck_name:
         return HandlerResult(NO_DECK_NAME)
     svc = TournamentService(db)
-    active = svc.get_active_tournament_for_chat(chat_id)
-    if not active:
-        return HandlerResult(NO_ACTIVE_TOURNAMENT)
+    active, err = _resolve_tournament(svc)
+    if err:
+        return err
     try:
         db_user = svc.get_or_create_user(
             tg_id=tg_id,
@@ -85,16 +86,15 @@ def handle_add_me(
 def handle_add_player(
     db: Session,
     tg_id: int,
-    chat_id: int,
     target_username: str,
     deck_name: str,
 ) -> HandlerResult:
     if not _is_admin(db, tg_id):
         return HandlerResult(NOT_ADMIN)
     svc = TournamentService(db)
-    active = svc.get_active_tournament_for_chat(chat_id)
-    if not active:
-        return HandlerResult(NO_ACTIVE_TOURNAMENT)
+    active, err = _resolve_tournament(svc)
+    if err:
+        return err
     stmt = select(models.User).where(models.User.username == target_username)
     target_user = db.execute(stmt).scalar_one_or_none()
     if not target_user:
@@ -120,7 +120,6 @@ def handle_add_player(
 def handle_add_players(
     db: Session,
     tg_id: int,
-    chat_id: int,
     lines: list[str],
 ) -> HandlerResult:
     if not _is_admin(db, tg_id):
@@ -128,9 +127,9 @@ def handle_add_players(
     if not lines:
         return HandlerResult(ADD_PLAYERS_USAGE)
     svc = TournamentService(db)
-    active = svc.get_active_tournament_for_chat(chat_id)
-    if not active:
-        return HandlerResult(NO_ACTIVE_TOURNAMENT)
+    active, err = _resolve_tournament(svc)
+    if err:
+        return err
     results = []
     for line in lines:
         parts = line.split(None, 1)
@@ -160,33 +159,37 @@ def handle_add_players(
     return HandlerResult("\n".join(results) if results else "Нет данных для обработки.")
 
 
-def handle_tournament_status(db: Session, tg_id: int, chat_id: int) -> HandlerResult:
+def handle_tournament_status(db: Session, tg_id: int) -> HandlerResult:
     if not _is_admin(db, tg_id):
         return HandlerResult(NOT_ADMIN)
     svc = TournamentService(db)
-    active = svc.get_active_tournament_for_chat(chat_id)
-    if not active:
+    tournaments = svc.list_all_active_tournaments()
+    if not tournaments:
         return HandlerResult(NO_ACTIVE_TOURNAMENT)
-    participants = svc.list_participants_for_tournament(active.id)
-    lines = [
-        f"Турнир: {active.title}",
-        f"Статус: {_status_display(active.status)}",
-        f"Участники ({len(participants)}):",
-    ]
-    for i, p in enumerate(participants, 1):
-        username = (p.user.username or p.user.first_name or f"id{p.user.tg_id}") if p.user else "?"
-        archetype = p.archetype.name if p.archetype else "?"
-        lines.append(f"{i}. @{username} — {archetype}")
-    return HandlerResult("\n".join(lines))
+    blocks = []
+    for t in tournaments:
+        participants = svc.list_participants_for_tournament(t.id)
+        lines = [
+            f"Турнир: {t.title}",
+            f"Статус: {t.status.label_ru}",
+            f"Участники ({len(participants)}):",
+        ]
+        for i, p in enumerate(participants, 1):
+            username = (p.user.username or p.user.first_name or f"id{p.user.tg_id}") if p.user else "?"
+            archetype = p.archetype.name if p.archetype else "не указана"
+            confirmed = " ✅" if p.confirmed else ""
+            lines.append(f"{i}. @{username} — {archetype}{confirmed}")
+        blocks.append("\n".join(lines))
+    return HandlerResult("\n\n---\n\n".join(blocks))
 
 
-def handle_close_tournament(db: Session, tg_id: int, chat_id: int) -> HandlerResult:
+def handle_close_tournament(db: Session, tg_id: int) -> HandlerResult:
     if not _is_admin(db, tg_id):
         return HandlerResult(NOT_ADMIN)
     svc = TournamentService(db)
-    active = svc.get_active_tournament_for_chat(chat_id)
-    if not active:
-        return HandlerResult(NO_ACTIVE_TOURNAMENT)
+    active, err = _resolve_tournament(svc)
+    if err:
+        return err
     svc.close_tournament(active.id)
     return HandlerResult(TOURNAMENT_CLOSED_MSG)
 
@@ -202,10 +205,7 @@ async def cmd_add_me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     deck_name = " ".join(context.args or []).strip()
     db = SessionLocal()
     try:
-        result = handle_add_me(
-            db, user.id, user.username, user.first_name, user.last_name,
-            update.effective_chat.id, deck_name,
-        )
+        result = handle_add_me(db, user.id, user.username, user.first_name, user.last_name, deck_name)
         await msg.reply_text(result.text)
     finally:
         db.close()
@@ -225,9 +225,7 @@ async def cmd_add_player(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     deck_name = " ".join(args[1:]).strip()
     db = SessionLocal()
     try:
-        result = handle_add_player(
-            db, user.id, update.effective_chat.id, username, deck_name,
-        )
+        result = handle_add_player(db, user.id, username, deck_name)
         await msg.reply_text(result.text)
     finally:
         db.close()
@@ -243,21 +241,21 @@ async def cmd_add_players(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     lines = [l.strip() for l in text.splitlines()[1:] if l.strip()]
     db = SessionLocal()
     try:
-        result = handle_add_players(db, user.id, update.effective_chat.id, lines)
+        result = handle_add_players(db, user.id, lines)
         await msg.reply_text(result.text)
     finally:
         db.close()
 
 
 async def cmd_tournament_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/tournament_status — текущий турнир и список участников."""
+    """/tournament_status — все активные турниры и их участники."""
     user = update.effective_user
     msg = update.effective_message
     if not user or not msg:
         return
     db = SessionLocal()
     try:
-        result = handle_tournament_status(db, user.id, update.effective_chat.id)
+        result = handle_tournament_status(db, user.id)
         await msg.reply_text(result.text)
     finally:
         db.close()
@@ -271,7 +269,7 @@ async def cmd_close_tournament(update: Update, context: ContextTypes.DEFAULT_TYP
         return
     db = SessionLocal()
     try:
-        result = handle_close_tournament(db, user.id, update.effective_chat.id)
+        result = handle_close_tournament(db, user.id)
         await msg.reply_text(result.text)
     finally:
         db.close()

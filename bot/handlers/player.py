@@ -5,7 +5,6 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from core.database import SessionLocal
-from core.models import TournamentStatus
 from services.tournament import TournamentService
 from services import errors
 from services.utils import get_tournament
@@ -34,15 +33,6 @@ from bot.messages import (
 USER_DATA_PENDING_CUSTOM = "pending_custom_archetype_tournament_id"
 
 
-def _status_display(status: TournamentStatus) -> str:
-    return {
-        TournamentStatus.REGISTRATION: "Регистрация",
-        TournamentStatus.ONGOING: "Идёт",
-        TournamentStatus.VOTING: "Голосование",
-        TournamentStatus.CLOSED: "Завершён",
-    }.get(status, status.value)
-
-
 # --- Pure business logic functions ---
 
 def handle_tournaments(db: Session) -> HandlerResult:
@@ -52,7 +42,7 @@ def handle_tournaments(db: Session) -> HandlerResult:
         return HandlerResult(NO_ACTIVE_TOURNAMENTS)
     if len(tournaments) == 1:
         t = tournaments[0]
-        text = format_tournament_card(t.title, _status_display(t.status), t.slug)
+        text = format_tournament_card(t.title, t.status.label_ru, t.slug)
         return HandlerResult(text, keyboard=register_button(t.id))
     tour_list = [(t.id, t.title) for t in tournaments]
     return HandlerResult("Выберите турнир:", keyboard=tournament_list_keyboard(tour_list))
@@ -63,7 +53,7 @@ def handle_tournament_select(db: Session, tournament_id: int) -> HandlerResult:
         t = get_tournament(db, tournament_id)
     except errors.TournamentNotFound:
         return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
-    text = format_tournament_card(t.title, _status_display(t.status), t.slug)
+    text = format_tournament_card(t.title, t.status.label_ru, t.slug)
     return HandlerResult(text, keyboard=register_button(tournament_id))
 
 

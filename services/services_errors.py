@@ -20,6 +20,13 @@ class TournamentInvalidState(TournamentError):
     pass
 
 
+class MultipleActiveTournaments(TournamentError):
+    """Активных турниров несколько — нужно уточнить, с каким работать."""
+    def __init__(self, tournaments: list):
+        self.tournaments = tournaments  # list of (id, title)
+        super().__init__(f"Multiple active tournaments: {[t[0] for t in tournaments]}")
+
+
 # --- Participant ---
 
 class ParticipantError(ServiceError):

@@ -1,8 +1,8 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import pytest
 
-from core.models import TournamentStatus, VoteType
+from core.models import TournamentStatus, VoteType, utc_now
 from core.schemas import TournamentCreate
 from services.errors import (
     TournamentAlreadyExists,
@@ -150,7 +150,7 @@ class TestCastVote:
         # Сдвигаем created_at голоса назад, чтобы обойти cooldown
         from core.models import Vote
         vote = db.query(Vote).filter_by(participant_id=self.p_alice.id, voter_id=user_bob.id).first()
-        vote.created_at = datetime.utcnow() - timedelta(seconds=60)
+        vote.created_at = utc_now() - timedelta(seconds=60)
         db.commit()
 
         svc.cast_vote(tournament_id=tournament.id, participant_id=self.p_alice.id, voter_user_id=user_bob.id, vote_type=VoteType.DOWN, apply_cooldown=True)
@@ -314,7 +314,7 @@ class TestListArchetypesForUser:
 
     def test_most_recent_choice_wins(self, svc, db, user_alice, archetype_burn, archetype_affinity):
         from core.schemas import TournamentCreate
-        import datetime, core.models as m
+        import core.models as m
         t1 = svc.create_tournament(TournamentCreate(title="T1", chat_id=1))
         t2 = svc.create_tournament(TournamentCreate(title="T2", chat_id=2))
         svc.register_participant(tournament_id=t1.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
@@ -322,8 +322,8 @@ class TestListArchetypesForUser:
         p2 = m.Participant(
             tournament_id=t2.id, user_id=user_alice.id, archetype_id=archetype_affinity.id,
             added_by_admin=False, confirmed=False, upvotes_count=0, downvotes_count=0,
-            created_at=datetime.datetime.utcnow() + datetime.timedelta(seconds=1),
-            updated_at=datetime.datetime.utcnow(),
+            created_at=utc_now() + timedelta(seconds=1),
+            updated_at=utc_now(),
         )
         db.add(p2)
         db.commit()
