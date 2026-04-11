@@ -296,26 +296,34 @@ async def cmd_add_player(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await msg.reply_text("Использование: /add_player @username Название колоды")
         return
     username, deck_name = parsed
-    try:
-        chat = await context.bot.get_chat(f"@{username}")
-    except TelegramError:
-        await msg.reply_text(TELEGRAM_USER_LOOKUP_FAILED.format(username=username))
-        return
-    if chat.type != ChatType.PRIVATE:
-        await msg.reply_text(
-            f"❌ @{username} — укажите @username человека (не группу или канал)."
-        )
-        return
+    if settings.DEBUG:
+        target_tg_id = 0
+        target_first_name = None
+        target_last_name = None
+    else:
+        try:
+            chat = await context.bot.get_chat(f"@{username}")
+        except TelegramError:
+            await msg.reply_text(TELEGRAM_USER_LOOKUP_FAILED.format(username=username))
+            return
+        if chat.type != ChatType.PRIVATE:
+            await msg.reply_text(
+                f"❌ @{username} — укажите @username человека (не группу или канал)."
+            )
+            return
+        target_tg_id = chat.id
+        target_first_name = chat.first_name
+        target_last_name = chat.last_name
     db = SessionLocal()
     try:
         result = handle_add_player(
             db,
             user.id,
-            target_tg_id=chat.id,
-            target_username=chat.username,
+            target_tg_id=target_tg_id,
+            target_username=username,
             deck_name=deck_name,
-            target_first_name=chat.first_name,
-            target_last_name=chat.last_name,
+            target_first_name=target_first_name,
+            target_last_name=target_last_name,
         )
         await msg.reply_text(result.text)
     finally:
