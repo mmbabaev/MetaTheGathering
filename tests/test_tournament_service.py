@@ -1,0 +1,298 @@
+from datetime import datetime, timedelta
+
+import pytest
+
+from core.models import TournamentStatus, VoteType
+from core.schemas import TournamentCreate
+from services.errors import (
+    TournamentAlreadyExists,
+    TournamentInvalidState,
+    ParticipantAlreadyRegistered,
+    SelfVoteNotAllowed,
+    VotingNotAllowed,
+)
+from services.tournament import CONFIRM_THRESHOLD, REJECT_THRESHOLD
+
+
+# ===== Tournament lifecycle =====
+
+class TestCreateTournament:
+    def test_creates_with_correct_fields(self, svc):
+        t = svc.create_tournament(TournamentCreate(title="Pauper Cup", chat_id=42, slug="pauper-cup"))
+        assert t.title == "Pauper Cup"
+        assert t.chat_id == 42
+        assert t.slug == "pauper-cup"
+        assert t.status == TournamentStatus.REGISTRATION
+
+    def test_raises_if_active_tournament_exists(self, svc, tournament):
+        with pytest.raises(TournamentAlreadyExists):
+            svc.create_tournament(TournamentCreate(title="Another", chat_id=100))
+
+    def test_allows_new_tournament_after_close(self, svc, tournament):
+        svc.close_tournament(tournament.id)
+        t2 = svc.create_tournament(TournamentCreate(title="Next", chat_id=100))
+        assert t2.id != tournament.id
+
+
+class TestTournamentLifecycle:
+    def test_full_lifecycle(self, svc, tournament):
+        t = svc.start_tournament(tournament.id)
+        assert t.status == TournamentStatus.ONGOING
+
+        t = svc.open_voting(t.id)
+        assert t.status == TournamentStatus.VOTING
+
+        t = svc.close_tournament(t.id)
+        assert t.status == TournamentStatus.CLOSED
+        assert t.ended_at is not None
+
+    def test_open_voting_from_registration(self, svc, tournament):
+        # Можно перейти в VOTING прямо из REGISTRATION (пропустив ONGOING)
+        t = svc.open_voting(tournament.id)
+        assert t.status == TournamentStatus.VOTING
+
+    def test_invalid_transition_raises(self, svc, tournament):
+        svc.close_tournament(tournament.id)
+        with pytest.raises(TournamentInvalidState):
+            svc.start_tournament(tournament.id)
+
+
+# ===== Participants =====
+
+class TestRegisterParticipant:
+    def test_registers_successfully(self, svc, tournament, user_alice, archetype_burn):
+        p = svc.register_participant(
+            tournament_id=tournament.id,
+            user_id=user_alice.id,
+            archetype_id=archetype_burn.id,
+        )
+        assert p.tournament_id == tournament.id
+        assert p.user_id == user_alice.id
+        assert p.archetype_id == archetype_burn.id
+        assert p.confirmed is False
+        assert p.upvotes_count == 0
+        assert p.downvotes_count == 0
+
+    def test_raises_on_duplicate(self, svc, tournament, user_alice, archetype_burn):
+        svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
+        with pytest.raises(ParticipantAlreadyRegistered):
+            svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
+
+    def test_raises_when_registration_closed(self, svc, tournament, user_alice, archetype_burn):
+        svc.start_tournament(tournament.id)
+        with pytest.raises(TournamentInvalidState):
+            svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
+
+    def test_added_by_admin_flag(self, svc, tournament, user_alice, archetype_burn):
+        p = svc.register_participant(
+            tournament_id=tournament.id,
+            user_id=user_alice.id,
+            archetype_id=archetype_burn.id,
+            added_by_admin=True,
+        )
+        assert p.added_by_admin is True
+
+
+class TestSetParticipantArchetype:
+    def test_changes_archetype_and_resets_votes(self, svc, db, tournament, user_alice, user_bob, archetype_burn, archetype_affinity):
+        # Регистрируем alice и bob
+        p_alice = svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
+        svc.register_participant(tournament_id=tournament.id, user_id=user_bob.id, archetype_id=archetype_affinity.id)
+
+        # Открываем голосование и голосуем
+        svc.open_voting(tournament.id)
+        svc.cast_vote(tournament_id=tournament.id, participant_id=p_alice.id, voter_user_id=user_bob.id, vote_type=VoteType.UP)
+
+        # Меняем архетип — голоса должны сброситься
+        p_updated = svc.set_participant_archetype(participant_id=p_alice.id, archetype_id=archetype_affinity.id)
+        assert p_updated.archetype_id == archetype_affinity.id
+        assert p_updated.upvotes_count == 0
+        assert p_updated.confirmed is False
+
+
+# ===== Voting =====
+
+class TestCastVote:
+    @pytest.fixture(autouse=True)
+    def setup_voting(self, svc, tournament, user_alice, user_bob, archetype_burn, archetype_affinity):
+        """Регистрируем двух участников и открываем голосование."""
+        self.p_alice = svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
+        self.p_bob = svc.register_participant(tournament_id=tournament.id, user_id=user_bob.id, archetype_id=archetype_affinity.id)
+        svc.open_voting(tournament.id)
+
+    def test_upvote_increments_counter(self, svc, tournament, user_bob):
+        svc.cast_vote(tournament_id=tournament.id, participant_id=self.p_alice.id, voter_user_id=user_bob.id, vote_type=VoteType.UP)
+        p = svc._get_participant(self.p_alice.id)
+        assert p.upvotes_count == 1
+        assert p.downvotes_count == 0
+
+    def test_downvote_increments_counter(self, svc, tournament, user_bob):
+        svc.cast_vote(tournament_id=tournament.id, participant_id=self.p_alice.id, voter_user_id=user_bob.id, vote_type=VoteType.DOWN)
+        p = svc._get_participant(self.p_alice.id)
+        assert p.downvotes_count == 1
+        assert p.upvotes_count == 0
+
+    def test_self_vote_raises(self, svc, tournament, user_alice):
+        with pytest.raises(SelfVoteNotAllowed):
+            svc.cast_vote(tournament_id=tournament.id, participant_id=self.p_alice.id, voter_user_id=user_alice.id, vote_type=VoteType.UP)
+
+    def test_vote_outside_voting_phase_raises(self, svc, db, tournament, user_bob):
+        # Закрываем турнир — голосование недоступно
+        from core.models import Tournament
+        t_orm = db.get(Tournament, tournament.id)
+        t_orm.status = TournamentStatus.CLOSED
+        db.commit()
+        with pytest.raises(TournamentInvalidState):
+            svc.cast_vote(tournament_id=tournament.id, participant_id=self.p_alice.id, voter_user_id=user_bob.id, vote_type=VoteType.UP)
+
+    def test_vote_change_updates_counters(self, svc, db, tournament, user_bob):
+        svc.cast_vote(tournament_id=tournament.id, participant_id=self.p_alice.id, voter_user_id=user_bob.id, vote_type=VoteType.UP)
+        # Сдвигаем created_at голоса назад, чтобы обойти cooldown
+        from core.models import Vote
+        vote = db.query(Vote).filter_by(participant_id=self.p_alice.id, voter_id=user_bob.id).first()
+        vote.created_at = datetime.utcnow() - timedelta(seconds=60)
+        db.commit()
+
+        svc.cast_vote(tournament_id=tournament.id, participant_id=self.p_alice.id, voter_user_id=user_bob.id, vote_type=VoteType.DOWN, apply_cooldown=True)
+        p = svc._get_participant(self.p_alice.id)
+        assert p.upvotes_count == 0
+        assert p.downvotes_count == 1
+
+    def test_vote_change_cooldown_raises(self, svc, tournament, user_bob):
+        svc.cast_vote(tournament_id=tournament.id, participant_id=self.p_alice.id, voter_user_id=user_bob.id, vote_type=VoteType.UP)
+        # Сразу меняем голос — cooldown не прошёл
+        with pytest.raises(VotingNotAllowed):
+            svc.cast_vote(tournament_id=tournament.id, participant_id=self.p_alice.id, voter_user_id=user_bob.id, vote_type=VoteType.DOWN, apply_cooldown=True)
+
+    def test_same_vote_twice_is_idempotent(self, svc, tournament, user_bob):
+        svc.cast_vote(tournament_id=tournament.id, participant_id=self.p_alice.id, voter_user_id=user_bob.id, vote_type=VoteType.UP)
+        # apply_cooldown=False чтобы дойти до проверки идемпотентности
+        svc.cast_vote(tournament_id=tournament.id, participant_id=self.p_alice.id, voter_user_id=user_bob.id, vote_type=VoteType.UP, apply_cooldown=False)
+        p = svc._get_participant(self.p_alice.id)
+        assert p.upvotes_count == 1  # не увеличился дважды
+
+
+# ===== Confirmation thresholds =====
+
+class TestConfirmationThreshold:
+    def _make_voters(self, svc, tournament, count):
+        voters = []
+        for i in range(count):
+            u = svc.get_or_create_user(tg_id=2000 + i, username=f"voter{i}")
+            archetype = svc.get_or_create_archetype_by_name(f"Deck{i}")
+            svc.register_participant(tournament_id=tournament.id, user_id=u.id, archetype_id=archetype.id)
+            voters.append(u)
+        return voters
+
+    def test_confirmed_after_enough_upvotes(self, svc, db, tournament, user_alice, archetype_burn):
+        p = svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
+        voters = self._make_voters(svc, tournament, CONFIRM_THRESHOLD)
+        svc.open_voting(tournament.id)
+
+        for v in voters:
+            svc.cast_vote(tournament_id=tournament.id, participant_id=p.id, voter_user_id=v.id, vote_type=VoteType.UP)
+
+        participant = svc._get_participant(p.id)
+        assert participant.confirmed is True
+
+    def test_not_confirmed_below_threshold(self, svc, db, tournament, user_alice, archetype_burn):
+        p = svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
+        voters = self._make_voters(svc, tournament, CONFIRM_THRESHOLD - 1)
+        svc.open_voting(tournament.id)
+
+        for v in voters:
+            svc.cast_vote(tournament_id=tournament.id, participant_id=p.id, voter_user_id=v.id, vote_type=VoteType.UP)
+
+        participant = svc._get_participant(p.id)
+        assert participant.confirmed is False
+
+    def test_rejected_after_enough_downvotes(self, svc, db, tournament, user_alice, archetype_burn):
+        p = svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
+        voters = self._make_voters(svc, tournament, REJECT_THRESHOLD)
+        svc.open_voting(tournament.id)
+
+        for v in voters:
+            svc.cast_vote(tournament_id=tournament.id, participant_id=p.id, voter_user_id=v.id, vote_type=VoteType.DOWN)
+
+        participant = svc._get_participant(p.id)
+        assert participant.confirmed is False
+
+
+# ===== get_or_create helpers =====
+
+class TestGetOrCreate:
+    def test_get_or_create_user_creates_new(self, svc):
+        u = svc.get_or_create_user(tg_id=9999, username="newuser", first_name="New")
+        assert u.tg_id == 9999
+        assert u.username == "newuser"
+
+    def test_get_or_create_user_returns_existing(self, svc):
+        u1 = svc.get_or_create_user(tg_id=9999, username="newuser")
+        u2 = svc.get_or_create_user(tg_id=9999, username="newuser")
+        assert u1.id == u2.id
+
+    def test_get_or_create_archetype_creates_new(self, svc):
+        a = svc.get_or_create_archetype_by_name("Bogles")
+        assert a.name == "Bogles"
+
+    def test_get_or_create_archetype_returns_existing(self, svc):
+        a1 = svc.get_or_create_archetype_by_name("Bogles")
+        a2 = svc.get_or_create_archetype_by_name("Bogles")
+        assert a1.id == a2.id
+
+
+# ===== list_participants =====
+
+class TestListParticipants:
+    def test_returns_all_participants(self, svc, tournament, user_alice, user_bob, archetype_burn, archetype_affinity):
+        svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
+        svc.register_participant(tournament_id=tournament.id, user_id=user_bob.id, archetype_id=archetype_affinity.id)
+        participants = svc.list_participants_for_tournament(tournament.id)
+        assert len(participants) == 2
+
+    def test_includes_user_and_archetype(self, svc, tournament, user_alice, archetype_burn):
+        svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
+        participants = svc.list_participants_for_tournament(tournament.id)
+        p = participants[0]
+        assert p.user.tg_id == user_alice.tg_id
+        assert p.archetype.name == "Burn"
+
+    def test_empty_for_no_participants(self, svc, tournament):
+        participants = svc.list_participants_for_tournament(tournament.id)
+        assert participants == []
+
+
+# ===== reset_votes =====
+
+class TestResetVotes:
+    def test_reset_clears_all_votes(self, svc, db, tournament, user_alice, user_bob, archetype_burn, archetype_affinity):
+        p_alice = svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
+        svc.register_participant(tournament_id=tournament.id, user_id=user_bob.id, archetype_id=archetype_affinity.id)
+        svc.open_voting(tournament.id)
+        svc.cast_vote(tournament_id=tournament.id, participant_id=p_alice.id, voter_user_id=user_bob.id, vote_type=VoteType.UP)
+
+        svc.reset_votes_for_participant(p_alice.id)
+        p = svc._get_participant(p_alice.id)
+        assert p.upvotes_count == 0
+        assert p.downvotes_count == 0
+        assert p.confirmed is False
+
+
+# ===== Meta aggregation =====
+
+class TestGetTournamentMeta:
+    def test_meta_aggregates_by_archetype(self, svc, tournament, user_alice, user_bob, archetype_burn, archetype_affinity):
+        u3 = svc.get_or_create_user(tg_id=1003, username="carol")
+        svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
+        svc.register_participant(tournament_id=tournament.id, user_id=user_bob.id, archetype_id=archetype_burn.id)
+        svc.register_participant(tournament_id=tournament.id, user_id=u3.id, archetype_id=archetype_affinity.id)
+
+        meta = svc.get_tournament_meta(tournament.id)
+        by_name = {row.archetype_name: row for row in meta}
+
+        assert by_name["Burn"].count == 2
+        assert by_name["Affinity"].count == 1
+
+    def test_meta_empty_for_no_participants(self, svc, tournament):
+        meta = svc.get_tournament_meta(tournament.id)
+        assert meta == []
