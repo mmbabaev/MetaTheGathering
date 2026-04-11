@@ -1,5 +1,6 @@
 # Регистрация, выбор колоды
 
+from sqlalchemy.orm import Session
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -8,6 +9,7 @@ from core.models import TournamentStatus
 from services.tournament import TournamentService
 from services import errors
 from services.utils import get_tournament
+from bot.handlers.base import HandlerResult
 from bot.keyboards import (
     tournament_list_keyboard,
     register_button,
@@ -41,33 +43,107 @@ def _status_display(status: TournamentStatus) -> str:
     }.get(status, status.value)
 
 
+# --- Pure business logic functions ---
+
+def handle_tournaments(db: Session) -> HandlerResult:
+    svc = TournamentService(db)
+    tournaments = svc.list_all_active_tournaments()
+    if not tournaments:
+        return HandlerResult(NO_ACTIVE_TOURNAMENTS)
+    if len(tournaments) == 1:
+        t = tournaments[0]
+        text = format_tournament_card(t.title, _status_display(t.status), t.slug)
+        return HandlerResult(text, keyboard=register_button(t.id))
+    tour_list = [(t.id, t.title) for t in tournaments]
+    return HandlerResult("Выберите турнир:", keyboard=tournament_list_keyboard(tour_list))
+
+
+def handle_tournament_select(db: Session, tournament_id: int) -> HandlerResult:
+    try:
+        t = get_tournament(db, tournament_id)
+    except errors.TournamentNotFound:
+        return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
+    text = format_tournament_card(t.title, _status_display(t.status), t.slug)
+    return HandlerResult(text, keyboard=register_button(tournament_id))
+
+
+def handle_register(db: Session, tournament_id: int) -> HandlerResult:
+    svc = TournamentService(db)
+    archetypes = svc.list_archetypes()
+    arch_list = [(a.id, a.name) for a in archetypes]
+    return HandlerResult(CHOOSE_ARCHETYPE, keyboard=archetype_keyboard(tournament_id, arch_list))
+
+
+def handle_archetype(
+    db: Session,
+    tg_id: int,
+    username: str | None,
+    first_name: str | None,
+    last_name: str | None,
+    tournament_id: int,
+    archetype_id: int,
+) -> HandlerResult:
+    svc = TournamentService(db)
+    try:
+        db_user = svc.get_or_create_user(
+            tg_id=tg_id,
+            username=username,
+            first_name=first_name,
+            last_name=last_name,
+        )
+        svc.register_participant(
+            tournament_id=tournament_id,
+            user_id=db_user.id,
+            archetype_id=archetype_id,
+        )
+        archetypes = {a.id: a.name for a in svc.list_archetypes()}
+        name = archetypes.get(archetype_id, "?")
+        return HandlerResult(REGISTERED_AS.format(archetype_name=name))
+    except errors.ParticipantAlreadyRegistered:
+        return HandlerResult(ALREADY_REGISTERED, is_alert=True)
+    except errors.TournamentInvalidState:
+        return HandlerResult(REGISTRATION_CLOSED, is_alert=True)
+
+
+def handle_custom_archetype_text(
+    db: Session,
+    tg_id: int,
+    username: str | None,
+    first_name: str | None,
+    last_name: str | None,
+    tournament_id: int,
+    name: str,
+) -> HandlerResult:
+    svc = TournamentService(db)
+    try:
+        archetype = svc.get_or_create_archetype_by_name(name)
+        db_user = svc.get_or_create_user(
+            tg_id=tg_id,
+            username=username,
+            first_name=first_name,
+            last_name=last_name,
+        )
+        svc.register_participant(
+            tournament_id=tournament_id,
+            user_id=db_user.id,
+            archetype_id=archetype.id,
+        )
+        return HandlerResult(REGISTERED)
+    except errors.ParticipantAlreadyRegistered:
+        return HandlerResult(ALREADY_REGISTERED)
+    except errors.TournamentInvalidState:
+        return HandlerResult(REGISTRATION_CLOSED)
+
+
+# --- Telegram wrappers ---
+
 async def cmd_tournaments(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not update.effective_message or not update.effective_chat:
+    if not update.effective_message:
         return
-    chat_id = update.effective_chat.id
     db = SessionLocal()
     try:
-        svc = TournamentService(db)
-        tournaments = svc.list_active_tournaments_for_chat(chat_id)
-        if not tournaments:
-            await update.effective_message.reply_text(NO_ACTIVE_TOURNAMENTS)
-            return
-        if len(tournaments) == 1:
-            t = tournaments[0]
-            text = format_tournament_card(
-                t.title, _status_display(t.status), t.slug
-            )
-            await update.effective_message.reply_text(
-                text,
-                reply_markup=register_button(t.id),
-            )
-            return
-        # Несколько турниров — список кнопок
-        tour_list = [(t.id, t.title) for t in tournaments]
-        await update.effective_message.reply_text(
-            "Выберите турнир:",
-            reply_markup=tournament_list_keyboard(tour_list),
-        )
+        result = handle_tournaments(db)
+        await update.effective_message.reply_text(result.text, reply_markup=result.keyboard)
     finally:
         db.close()
 
@@ -84,19 +160,11 @@ async def callback_tournament_select(update: Update, context: ContextTypes.DEFAU
         return
     db = SessionLocal()
     try:
-        svc = TournamentService(db)
-        try:
-            t = get_tournament(db, tournament_id)
-        except errors.TournamentNotFound:
-            await query.answer(TOURNAMENT_NOT_FOUND, show_alert=True)
+        result = handle_tournament_select(db, tournament_id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
             return
-        text = format_tournament_card(
-            t.title, _status_display(t.status), t.slug
-        )
-        await query.edit_message_text(
-            text,
-            reply_markup=register_button(tournament_id),
-        )
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
     finally:
         db.close()
@@ -114,13 +182,8 @@ async def callback_register(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
     db = SessionLocal()
     try:
-        svc = TournamentService(db)
-        archetypes = svc.list_archetypes()
-        arch_list = [(a.id, a.name) for a in archetypes]
-        await query.edit_message_text(
-            CHOOSE_ARCHETYPE,
-            reply_markup=archetype_keyboard(tournament_id, arch_list),
-        )
+        result = handle_register(db, tournament_id)
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
     finally:
         db.close()
@@ -140,28 +203,14 @@ async def callback_archetype(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
     db = SessionLocal()
     try:
-        svc = TournamentService(db)
-        try:
-            db_user = svc.get_or_create_user(
-                tg_id=user.id,
-                username=user.username,
-                first_name=user.first_name,
-                last_name=user.last_name,
-            )
-            participant = svc.register_participant(
-                tournament_id=tournament_id,
-                user_id=db_user.id,
-                archetype_id=archetype_id,
-            )
-            archetypes = {a.id: a.name for a in svc.list_archetypes()}
-            name = archetypes.get(archetype_id, "?")
-            await query.edit_message_text(REGISTERED_AS.format(archetype_name=name))
-        except errors.ParticipantAlreadyRegistered:
-            await query.answer(ALREADY_REGISTERED, show_alert=True)
+        result = handle_archetype(
+            db, user.id, user.username, user.first_name, user.last_name,
+            tournament_id, archetype_id,
+        )
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
             return
-        except errors.TournamentInvalidState:
-            await query.answer(REGISTRATION_CLOSED, show_alert=True)
-            return
+        await query.edit_message_text(result.text)
         await query.answer()
     finally:
         db.close()
@@ -202,24 +251,10 @@ async def message_custom_archetype(update: Update, context: ContextTypes.DEFAULT
         return
     db = SessionLocal()
     try:
-        svc = TournamentService(db)
-        try:
-            archetype = svc.get_or_create_archetype_by_name(name)
-            db_user = svc.get_or_create_user(
-                tg_id=user.id,
-                username=user.username,
-                first_name=user.first_name,
-                last_name=user.last_name,
-            )
-            svc.register_participant(
-                tournament_id=tournament_id,
-                user_id=db_user.id,
-                archetype_id=archetype.id,
-            )
-            await update.effective_message.reply_text(REGISTERED)
-        except errors.ParticipantAlreadyRegistered:
-            await update.effective_message.reply_text(ALREADY_REGISTERED)
-        except errors.TournamentInvalidState:
-            await update.effective_message.reply_text(REGISTRATION_CLOSED)
+        result = handle_custom_archetype_text(
+            db, user.id, user.username, user.first_name, user.last_name,
+            tournament_id, name,
+        )
+        await update.effective_message.reply_text(result.text)
     finally:
         db.close()

@@ -68,17 +68,25 @@ python3 -m pytest tests/ --cov=. --cov-report=term-missing --ignore=.venv
 python3 -m pytest tests/test_tournament_service.py -v
 ```
 
-**Current status (60 tests, all passing):**
+**Handler testing pattern** — handlers are split into two layers:
+- `handle_xxx(db, ...primitives) → HandlerResult` — pure business logic, tested directly (no Telegram mocks)
+- `cmd_xxx / callback_xxx` — thin Telegram wrappers that call `handle_xxx` and send the result
+
+`HandlerResult` is defined in `bot/handlers/base.py` (`text`, `keyboard`, `is_alert`).
+
+**Current status (96 tests, all passing, ~81% coverage):**
 
 | File | Coverage | Notes |
 |------|----------|-------|
 | `services/tournament.py` | 88% | Main business logic |
 | `services/utils.py` | 92% | |
 | `core/models.py`, `schemas.py`, `config.py` | 100% | |
-| `bot/keyboards/__init__.py`, `bot/messages/__init__.py` | 100% | |
+| `bot/keyboards/__init__.py`, `bot/messages/__init__.py`, `bot/handlers/base.py` | 100% | |
 | `utils/seed.py` | 85% | |
-| `bot/scheduler.py` | 43% | `scheduled_tournament_job` not covered |
-| `bot/handlers/` | 0% | Require Telegram mock — see `docs/test_plan.md` |
+| `bot/handlers/admin.py` | 64% | `handle_xxx` covered, `cmd_xxx` wrappers not |
+| `bot/handlers/player.py` | 41% | `handle_xxx` covered, `callback_xxx` wrappers not |
+| `bot/scheduler.py` | 43% | `_create_tournaments_for_schedule` not covered |
+| `bot/handlers/common.py` | 0% | Trivial /start and /help |
 
 Tests use **SQLite in-memory** — no real PostgreSQL needed. See `docs/test_plan.md` for the full plan.
 
