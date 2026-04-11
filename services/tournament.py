@@ -155,11 +155,56 @@ class TournamentService:
         rows = self.db.execute(stmt).scalars().all()
         return [TournamentRead.model_validate(t) for t in rows]
 
+    def list_all_active_tournaments(self) -> List[TournamentRead]:
+        """Все турниры со статусом не CLOSED, по убыванию created_at."""
+        stmt = (
+            select(models.Tournament)
+            .where(models.Tournament.status != models.TournamentStatus.CLOSED)
+            .order_by(models.Tournament.created_at.desc())
+        )
+        rows = self.db.execute(stmt).scalars().all()
+        return [TournamentRead.model_validate(t) for t in rows]
+
     def list_archetypes(self) -> List[ArchetypeItem]:
         """Список всех архетипов (id, name)."""
         stmt = select(models.Archetype).order_by(models.Archetype.name.asc())
         rows = self.db.execute(stmt).scalars().all()
         return [ArchetypeItem(id=a.id, name=a.name) for a in rows]
+
+    def list_archetypes_for_user(self, tg_id: int, total: int = 10) -> List[ArchetypeItem]:
+        """Топ-N архетипов: последние выборы пользователя первыми, остальные по алфавиту."""
+        all_archetypes = self.list_archetypes()
+
+        # Ищем последние выборы пользователя (самые новые сначала, без дублей)
+        user_stmt = select(models.User).where(models.User.tg_id == tg_id)
+        user = self.db.execute(user_stmt).scalar_one_or_none()
+
+        recent_ids: list[int] = []
+        if user:
+            hist_stmt = (
+                select(models.Participant.archetype_id)
+                .where(
+                    models.Participant.user_id == user.id,
+                    models.Participant.archetype_id.isnot(None),
+                )
+                .order_by(models.Participant.created_at.desc())
+            )
+            seen: set[int] = set()
+            for (aid,) in self.db.execute(hist_stmt).all():
+                if aid not in seen:
+                    seen.add(aid)
+                    recent_ids.append(aid)
+
+        recent_set = set(recent_ids)
+        recent_map = {aid: i for i, aid in enumerate(recent_ids)}
+
+        recent = sorted(
+            [a for a in all_archetypes if a.id in recent_set],
+            key=lambda a: recent_map[a.id],
+        )
+        rest = [a for a in all_archetypes if a.id not in recent_set]
+
+        return (recent + rest)[:total]
 
     def get_or_create_user(
         self,

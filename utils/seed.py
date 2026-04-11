@@ -4,19 +4,17 @@ from core.database import SessionLocal
 from core.models import Archetype
 
 PAUPER_ARCHETYPES = [
-    {"name": "Burn", "color_emoji": "🔴", "short_name": "RDW"},
-    {"name": "Affinity", "color_emoji": "⚙️", "short_name": "Affinity"},
-    {"name": "Faeries", "color_emoji": "🔵", "short_name": "UB Faeries"},
-    {"name": "Mono-Blue Faeries", "color_emoji": "🔵", "short_name": "MUF"},
-    {"name": "Goblins", "color_emoji": "🔴", "short_name": "Goblins"},
-    {"name": "Bogles", "color_emoji": "🟢", "short_name": "Bogles"},
-    {"name": "Stompy", "color_emoji": "🟢", "short_name": "Stompy"},
-    {"name": "Dimir Control", "color_emoji": "🔵", "short_name": "UB Control"},
-    {"name": "Izzet Faeries", "color_emoji": "🔵", "short_name": "UR Faeries"},
-    {"name": "Elves", "color_emoji": "🟢", "short_name": "Elves"},
-    {"name": "Boros Bully", "color_emoji": "🟡", "short_name": "WR Bully"},
-    {"name": "Tron", "color_emoji": "⚙️", "short_name": "Tron"},
-    {"name": "Caw-Gate", "color_emoji": "⚪", "short_name": "Caw-Gate"},
+    # Top 10 по данным метагейма (апрель 2026)
+    {"name": "Mono Red Madness", "color_emoji": "🔴", "short_name": "MR Madness"},   # 12.2%
+    {"name": "Blue Terror",      "color_emoji": "🔵", "short_name": "UB Terror"},     # 9.6%
+    {"name": "Grixis Affinity",  "color_emoji": "⚙️", "short_name": "Grixis Aff"},   # 8.8%
+    {"name": "Elves",            "color_emoji": "🟢", "short_name": "Elves"},          # 8.0%
+    {"name": "Jund Wildfire",    "color_emoji": "🟤", "short_name": "Jund WF"},        # 5.6%
+    {"name": "Spy Combo",        "color_emoji": "🟢", "short_name": "Spy"},            # 4.3%
+    {"name": "White Aggro",      "color_emoji": "⚪", "short_name": "WW"},             # 4.2%
+    {"name": "Caw-Gates",        "color_emoji": "🔵", "short_name": "Caw-Gates"},      # 3.3%
+    {"name": "Mono Red Rally",   "color_emoji": "🔴", "short_name": "MR Rally"},       # 3.2%
+    {"name": "Tron",             "color_emoji": "⚙️", "short_name": "Tron"},           # ~3%
 ]
 
 

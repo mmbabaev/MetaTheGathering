@@ -32,22 +32,38 @@ def parse_schedule(schedule_str: str) -> tuple[int, datetime.time]:
     return weekday, t
 
 
-async def scheduled_tournament_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+async def _create_tournaments_for_schedule(bot, schedule_entry: str) -> None:
+    """Создаёт турниры для одной записи расписания, если сегодня нужный день."""
     tz = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
     now = datetime.now(tz)
+    target_weekday, _ = parse_schedule(schedule_entry)
+
+    logger.info(
+        f"Job fired for '{schedule_entry}': now={now.strftime('%A %H:%M')} "
+        f"(weekday={now.weekday()}), target_weekday={target_weekday}"
+    )
+
+    if now.weekday() != target_weekday:
+        logger.info("Not the right weekday, skipping.")
+        return
+
+    chat_ids = settings.chat_ids
+    logger.info(f"Target chat_ids: {chat_ids}")
+
+    if not chat_ids:
+        logger.warning("TOURNAMENT_CHAT_IDS is empty — no tournaments will be created")
+        return
+
     date_str = now.strftime("%Y-%m-%d")
     title = f"Pauper {date_str}"
     slug = f"{date_str}-pauper"
 
-    if not settings.chat_ids:
-        logger.warning("TOURNAMENT_CHAT_IDS is empty — no tournaments will be created")
-        return
-
     db = SessionLocal()
     try:
         svc = TournamentService(db)
-        for chat_id in settings.chat_ids:
+        for chat_id in chat_ids:
             try:
+                logger.info(f"Processing chat {chat_id}...")
                 active = svc.get_active_tournament_for_chat(chat_id)
                 if active:
                     svc.close_tournament(active.id)
@@ -60,14 +76,22 @@ async def scheduled_tournament_job(context: ContextTypes.DEFAULT_TYPE) -> None:
                 ))
                 logger.info(f"Created tournament #{new_t.id} '{title}' for chat {chat_id}")
 
-                await context.bot.send_message(
+                await bot.send_message(
                     chat_id=chat_id,
                     text=f"🏆 Новый турнир: {title}\nРегистрация открыта! Используйте /tournaments для записи.",
                 )
+                logger.info(f"Announcement sent to chat {chat_id}")
             except Exception as e:
                 logger.error(f"Scheduler error for chat {chat_id}: {e}", exc_info=True)
     finally:
         db.close()
+
+
+def _make_job(schedule_entry: str):
+    async def job(context: ContextTypes.DEFAULT_TYPE) -> None:
+        await _create_tournaments_for_schedule(context.bot, schedule_entry)
+    job.__name__ = f"scheduled_tournament_job[{schedule_entry}]"
+    return job
 
 
 def setup_scheduler(app: Application) -> None:
@@ -75,9 +99,9 @@ def setup_scheduler(app: Application) -> None:
     tz = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
 
     for schedule_entry in settings.schedule_list:
-        weekday, scheduled_time = parse_schedule(schedule_entry)
+        _, scheduled_time = parse_schedule(schedule_entry)
         aware_time = scheduled_time.replace(tzinfo=tz)
-        app.job_queue.run_daily(scheduled_tournament_job, time=aware_time, days=(weekday,))
+        app.job_queue.run_daily(_make_job(schedule_entry), time=aware_time)
         logger.info(
             f"Scheduler set up: tournaments created every {schedule_entry} "
             f"({settings.TOURNAMENT_TIMEZONE}) for chats: {settings.chat_ids}"

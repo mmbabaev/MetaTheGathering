@@ -296,3 +296,52 @@ class TestGetTournamentMeta:
     def test_meta_empty_for_no_participants(self, svc, tournament):
         meta = svc.get_tournament_meta(tournament.id)
         assert meta == []
+
+
+class TestListArchetypesForUser:
+    def test_unknown_user_returns_top10_alphabetically(self, svc):
+        for name in ("Burn", "Affinity", "Elves"):
+            svc.get_or_create_archetype_by_name(name)
+        result = svc.list_archetypes_for_user(tg_id=9999)
+        names = [a.name for a in result]
+        assert names == sorted(names)
+        assert len(result) <= 10
+
+    def test_recent_choice_comes_first(self, svc, tournament, user_alice, archetype_burn, archetype_affinity):
+        svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
+        result = svc.list_archetypes_for_user(tg_id=user_alice.tg_id)
+        assert result[0].name == "Burn"
+
+    def test_most_recent_choice_wins(self, svc, db, user_alice, archetype_burn, archetype_affinity):
+        from core.schemas import TournamentCreate
+        import datetime, core.models as m
+        t1 = svc.create_tournament(TournamentCreate(title="T1", chat_id=1))
+        t2 = svc.create_tournament(TournamentCreate(title="T2", chat_id=2))
+        svc.register_participant(tournament_id=t1.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
+        # Make t2 participant appear newer
+        p2 = m.Participant(
+            tournament_id=t2.id, user_id=user_alice.id, archetype_id=archetype_affinity.id,
+            added_by_admin=False, confirmed=False, upvotes_count=0, downvotes_count=0,
+            created_at=datetime.datetime.utcnow() + datetime.timedelta(seconds=1),
+            updated_at=datetime.datetime.utcnow(),
+        )
+        db.add(p2)
+        db.commit()
+        result = svc.list_archetypes_for_user(tg_id=user_alice.tg_id)
+        assert result[0].name == "Affinity"
+        assert result[1].name == "Burn"
+
+    def test_deduplicates_repeated_choices(self, svc, db, user_alice, archetype_burn):
+        from core.schemas import TournamentCreate
+        t1 = svc.create_tournament(TournamentCreate(title="T1", chat_id=1))
+        t2 = svc.create_tournament(TournamentCreate(title="T2", chat_id=2))
+        svc.register_participant(tournament_id=t1.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
+        svc.register_participant(tournament_id=t2.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
+        result = svc.list_archetypes_for_user(tg_id=user_alice.tg_id)
+        assert [a.name for a in result].count("Burn") == 1
+
+    def test_caps_at_total(self, svc):
+        for i in range(15):
+            svc.get_or_create_archetype_by_name(f"Arch{i:02d}")
+        result = svc.list_archetypes_for_user(tg_id=9999, total=10)
+        assert len(result) == 10

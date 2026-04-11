@@ -2,6 +2,7 @@ import enum
 from datetime import datetime
 
 from sqlalchemy import (
+    BigInteger,
     Column,
     Integer,
     String,
@@ -30,7 +31,7 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
-    tg_id = Column(Integer, unique=True, nullable=False, index=True)
+    tg_id = Column(BigInteger, unique=True, nullable=False, index=True)
     username = Column(String(255), nullable=True)
     first_name = Column(String(255), nullable=True)
     last_name = Column(String(255), nullable=True)
@@ -49,7 +50,7 @@ class Tournament(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(255), nullable=False)
-    chat_id = Column(Integer, nullable=False, index=True)  # id группового чата
+    chat_id = Column(BigInteger, nullable=False, index=True)  # id группового чата
     slug = Column(String(64), nullable=True, index=True)   # например "2026-01-31-pauper"
 
     status = Column(Enum(TournamentStatus), default=TournamentStatus.REGISTRATION, nullable=False)

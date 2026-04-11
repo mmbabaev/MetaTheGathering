@@ -67,9 +67,12 @@ def handle_tournament_select(db: Session, tournament_id: int) -> HandlerResult:
     return HandlerResult(text, keyboard=register_button(tournament_id))
 
 
-def handle_register(db: Session, tournament_id: int) -> HandlerResult:
+def handle_register(db: Session, tournament_id: int, tg_id: int | None = None) -> HandlerResult:
     svc = TournamentService(db)
-    archetypes = svc.list_archetypes()
+    if tg_id is not None:
+        archetypes = svc.list_archetypes_for_user(tg_id)
+    else:
+        archetypes = svc.list_archetypes()[:10]
     arch_list = [(a.id, a.name) for a in archetypes]
     return HandlerResult(CHOOSE_ARCHETYPE, keyboard=archetype_keyboard(tournament_id, arch_list))
 
@@ -172,6 +175,7 @@ async def callback_tournament_select(update: Update, context: ContextTypes.DEFAU
 
 async def callback_register(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    user = update.effective_user
     if not query or not query.data:
         return
     try:
@@ -182,7 +186,7 @@ async def callback_register(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
     db = SessionLocal()
     try:
-        result = handle_register(db, tournament_id)
+        result = handle_register(db, tournament_id, tg_id=user.id if user else None)
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
     finally:

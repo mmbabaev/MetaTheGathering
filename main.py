@@ -12,6 +12,9 @@ from telegram.ext import (
 )
 
 from core.config import settings
+from core.database import SessionLocal
+from core.schemas import TournamentCreate
+from services.tournament import TournamentService
 from bot.handlers import common, player, admin
 from bot.keyboards import CB_TOURNAMENT, CB_REGISTER, CB_ARCHETYPE, CB_CUSTOM_ARCHETYPE
 from bot.scheduler import setup_scheduler
@@ -21,6 +24,27 @@ logging.basicConfig(
     level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
+
+
+def _debug_create_tournament() -> None:
+    """Создаёт тестовый турнир для каждого chat_id из конфига. Только при DEBUG=true."""
+    from datetime import datetime
+    db = SessionLocal()
+    try:
+        svc = TournamentService(db)
+        date_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+        for chat_id in settings.chat_ids:
+            try:
+                svc.create_tournament(TournamentCreate(
+                    title=f"[TEST] Pauper {date_str}",
+                    chat_id=chat_id,
+                    slug=None,
+                ))
+                logger.info(f"[DEBUG] Created test tournament for chat {chat_id}")
+            except Exception as e:
+                logger.warning(f"[DEBUG] Could not create tournament for chat {chat_id}: {e}")
+    finally:
+        db.close()
 
 
 def main() -> None:
@@ -54,6 +78,9 @@ def main() -> None:
     )
 
     setup_scheduler(app)
+
+    if settings.DEBUG:
+        _debug_create_tournament()
 
     logger.info("Bot starting (polling)...")
     app.run_polling(allowed_updates=["message", "callback_query"])
