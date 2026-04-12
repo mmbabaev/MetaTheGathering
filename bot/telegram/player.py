@@ -11,6 +11,9 @@ from bot.handlers.player import (
     handle_save_name_then_register,
     handle_archetype,
     handle_custom_archetype_text,
+    handle_tournament_public_status,
+    handle_leave_tournament,
+    handle_leave_confirm,
 )
 from bot.handlers.settings import handle_settings_name_text
 from bot.keyboards import CB_REGISTER, CB_ARCHETYPE, CB_CUSTOM_ARCHETYPE, CB_TOURNAMENT
@@ -24,9 +27,10 @@ USER_DATA_PENDING_SETTINGS_NAME = "pending_settings_name"
 async def cmd_tournaments(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.effective_message:
         return
+    user = update.effective_user
     db = SessionLocal()
     try:
-        result = handle_tournaments(db)
+        result = handle_tournaments(db, tg_id=user.id if user else None)
         await update.effective_message.reply_text(result.text, reply_markup=result.keyboard)
     finally:
         db.close()
@@ -34,6 +38,7 @@ async def cmd_tournaments(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 async def callback_tournament_select(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    user = update.effective_user
     if not query or not query.data:
         return
     try:
@@ -44,7 +49,7 @@ async def callback_tournament_select(update: Update, context: ContextTypes.DEFAU
         return
     db = SessionLocal()
     try:
-        result = handle_tournament_select(db, tournament_id)
+        result = handle_tournament_select(db, tournament_id, tg_id=user.id if user else None)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
@@ -120,6 +125,101 @@ async def callback_custom_archetype(update: Update, context: ContextTypes.DEFAUL
     context.user_data[USER_DATA_PENDING_CUSTOM] = tournament_id
     await query.edit_message_text(CUSTOM_ARCHETYPE_PROMPT)
     await query.answer()
+
+
+async def callback_tournament_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка «Статус» — показывает список участников турнира."""
+    query = update.callback_query
+    if not query or not query.data:
+        return
+    try:
+        _, tid_str = query.data.split(":", 1)
+        tournament_id = int(tid_str)
+    except (ValueError, IndexError):
+        await query.answer("Ошибка данных.")
+        return
+    db = SessionLocal()
+    try:
+        result = handle_tournament_public_status(db, tournament_id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        await query.edit_message_text(result.text)
+        await query.answer()
+    finally:
+        db.close()
+
+
+async def callback_leave_tournament(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка «Выйти из турнира» — показывает подтверждение."""
+    query = update.callback_query
+    user = update.effective_user
+    if not query or not query.data or not user:
+        return
+    try:
+        _, tid_str = query.data.split(":", 1)
+        tournament_id = int(tid_str)
+    except (ValueError, IndexError):
+        await query.answer("Ошибка данных.")
+        return
+    db = SessionLocal()
+    try:
+        result = handle_leave_tournament(db, user.id, tournament_id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+        await query.answer()
+    finally:
+        db.close()
+
+
+async def callback_leave_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Подтверждение выхода из турнира."""
+    query = update.callback_query
+    user = update.effective_user
+    if not query or not query.data or not user:
+        return
+    try:
+        _, tid_str = query.data.split(":", 1)
+        tournament_id = int(tid_str)
+    except (ValueError, IndexError):
+        await query.answer("Ошибка данных.")
+        return
+    db = SessionLocal()
+    try:
+        result = handle_leave_confirm(db, user.id, tournament_id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        await query.edit_message_text(result.text)
+        await query.answer()
+    finally:
+        db.close()
+
+
+async def callback_leave_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Отмена выхода — возвращает карточку турнира."""
+    query = update.callback_query
+    user = update.effective_user
+    if not query or not query.data or not user:
+        return
+    try:
+        _, tid_str = query.data.split(":", 1)
+        tournament_id = int(tid_str)
+    except (ValueError, IndexError):
+        await query.answer("Ошибка данных.")
+        return
+    db = SessionLocal()
+    try:
+        result = handle_tournament_select(db, tournament_id, tg_id=user.id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+        await query.answer()
+    finally:
+        db.close()
 
 
 async def message_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

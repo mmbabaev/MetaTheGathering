@@ -7,6 +7,7 @@ import core.models  # noqa: F401 — регистрирует все модел�
 from core.models import TournamentStatus, VoteType
 from core.schemas import TournamentCreate
 from services.tournament import TournamentService
+from services.user import UserService
 
 
 @pytest.fixture
@@ -37,18 +38,23 @@ def svc(db):
 
 
 @pytest.fixture
+def user_svc(db):
+    return UserService(db)
+
+
+@pytest.fixture
 def tournament(svc):
     return svc.create_tournament(TournamentCreate(title="Test Tournament", chat_id=100, slug="test"))
 
 
 @pytest.fixture
-def user_alice(svc):
-    return svc.get_or_create_user(tg_id=1001, username="alice", first_name="Alice")
+def user_alice(user_svc):
+    return user_svc.get_or_create(tg_id=1001, username="alice", first_name="Alice")
 
 
 @pytest.fixture
-def user_bob(svc):
-    return svc.get_or_create_user(tg_id=1002, username="bob", first_name="Bob")
+def user_bob(user_svc):
+    return user_svc.get_or_create(tg_id=1002, username="bob", first_name="Bob")
 
 
 @pytest.fixture

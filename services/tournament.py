@@ -217,53 +217,6 @@ class TournamentService:
 
         return (recent + rest)[:total]
 
-    def get_user_by_tg_id(self, tg_id: int) -> Optional[models.User]:
-        """Вернуть пользователя по tg_id или None."""
-        stmt = select(models.User).where(models.User.tg_id == tg_id)
-        return self.db.execute(stmt).scalar_one_or_none()
-
-    def update_user_name(
-        self,
-        tg_id: int,
-        first_name: str,
-        last_name: Optional[str] = None,
-    ) -> models.User:
-        """Обновить имя и фамилию пользователя по tg_id. Создаёт запись если не существует."""
-        stmt = select(models.User).where(models.User.tg_id == tg_id)
-        user = self.db.execute(stmt).scalar_one_or_none()
-        if not user:
-            user = models.User(tg_id=tg_id)
-            self.db.add(user)
-        user.first_name = first_name.strip()
-        user.last_name = last_name.strip() if last_name else None
-        self.db.commit()
-        self.db.refresh(user)
-        return user
-
-    def get_or_create_user(
-        self,
-        *,
-        tg_id: int,
-        username: Optional[str] = None,
-        first_name: Optional[str] = None,
-        last_name: Optional[str] = None,
-    ) -> models.User:
-        """Найти пользователя по tg_id или создать нового."""
-        stmt = select(models.User).where(models.User.tg_id == tg_id)
-        user = self.db.execute(stmt).scalar_one_or_none()
-        if user:
-            return user
-        user = models.User(
-            tg_id=tg_id,
-            username=username,
-            first_name=first_name,
-            last_name=last_name,
-        )
-        self.db.add(user)
-        self.db.commit()
-        self.db.refresh(user)
-        return user
-
     def get_or_create_archetype_by_name(self, name: str) -> models.Archetype:
         """Найти архетип по имени или создать новый."""
         stmt = select(models.Archetype).where(models.Archetype.name == name)
@@ -401,6 +354,24 @@ class TournamentService:
         )
         participants = self.db.execute(stmt).scalars().all()
         return [ParticipantWithUserAndArchetype.model_validate(p) for p in participants]
+
+    def get_participant(
+        self, tournament_id: int, user_id: int
+    ) -> Optional[models.Participant]:
+        """Вернуть участника турнира по user_id или None."""
+        stmt = select(models.Participant).where(
+            models.Participant.tournament_id == tournament_id,
+            models.Participant.user_id == user_id,
+        )
+        return self.db.execute(stmt).scalar_one_or_none()
+
+    def unregister_participant(self, tournament_id: int, user_id: int) -> None:
+        """Удалить участника из турнира. Raises ParticipantNotFound если не найден."""
+        participant = self.get_participant(tournament_id, user_id)
+        if participant is None:
+            raise errors.ParticipantNotFound()
+        self.db.delete(participant)
+        self.db.commit()
 
     # ===== voting =====
 

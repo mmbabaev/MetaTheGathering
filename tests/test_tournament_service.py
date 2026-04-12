@@ -175,18 +175,18 @@ class TestCastVote:
 # ===== Confirmation thresholds =====
 
 class TestConfirmationThreshold:
-    def _make_voters(self, svc, tournament, count):
+    def _make_voters(self, svc, user_svc, tournament, count):
         voters = []
         for i in range(count):
-            u = svc.get_or_create_user(tg_id=2000 + i, username=f"voter{i}")
+            u = user_svc.get_or_create(tg_id=2000 + i, username=f"voter{i}")
             archetype = svc.get_or_create_archetype_by_name(f"Deck{i}")
             svc.register_participant(tournament_id=tournament.id, user_id=u.id, archetype_id=archetype.id)
             voters.append(u)
         return voters
 
-    def test_confirmed_after_enough_upvotes(self, svc, db, tournament, user_alice, archetype_burn):
+    def test_confirmed_after_enough_upvotes(self, svc, user_svc, db, tournament, user_alice, archetype_burn):
         p = svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
-        voters = self._make_voters(svc, tournament, CONFIRM_THRESHOLD)
+        voters = self._make_voters(svc, user_svc, tournament, CONFIRM_THRESHOLD)
         svc.open_voting(tournament.id)
 
         for v in voters:
@@ -195,9 +195,9 @@ class TestConfirmationThreshold:
         participant = svc._get_participant(p.id)
         assert participant.confirmed is True
 
-    def test_not_confirmed_below_threshold(self, svc, db, tournament, user_alice, archetype_burn):
+    def test_not_confirmed_below_threshold(self, svc, user_svc, db, tournament, user_alice, archetype_burn):
         p = svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
-        voters = self._make_voters(svc, tournament, CONFIRM_THRESHOLD - 1)
+        voters = self._make_voters(svc, user_svc, tournament, CONFIRM_THRESHOLD - 1)
         svc.open_voting(tournament.id)
 
         for v in voters:
@@ -206,9 +206,9 @@ class TestConfirmationThreshold:
         participant = svc._get_participant(p.id)
         assert participant.confirmed is False
 
-    def test_rejected_after_enough_downvotes(self, svc, db, tournament, user_alice, archetype_burn):
+    def test_rejected_after_enough_downvotes(self, svc, user_svc, db, tournament, user_alice, archetype_burn):
         p = svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
-        voters = self._make_voters(svc, tournament, REJECT_THRESHOLD)
+        voters = self._make_voters(svc, user_svc, tournament, REJECT_THRESHOLD)
         svc.open_voting(tournament.id)
 
         for v in voters:
@@ -221,14 +221,14 @@ class TestConfirmationThreshold:
 # ===== get_or_create helpers =====
 
 class TestGetOrCreate:
-    def test_get_or_create_user_creates_new(self, svc):
-        u = svc.get_or_create_user(tg_id=9999, username="newuser", first_name="New")
+    def test_get_or_create_user_creates_new(self, user_svc):
+        u = user_svc.get_or_create(tg_id=9999, username="newuser", first_name="New")
         assert u.tg_id == 9999
         assert u.username == "newuser"
 
-    def test_get_or_create_user_returns_existing(self, svc):
-        u1 = svc.get_or_create_user(tg_id=9999, username="newuser")
-        u2 = svc.get_or_create_user(tg_id=9999, username="newuser")
+    def test_get_or_create_user_returns_existing(self, user_svc):
+        u1 = user_svc.get_or_create(tg_id=9999, username="newuser")
+        u2 = user_svc.get_or_create(tg_id=9999, username="newuser")
         assert u1.id == u2.id
 
     def test_get_or_create_archetype_creates_new(self, svc):
@@ -281,8 +281,8 @@ class TestResetVotes:
 # ===== Meta aggregation =====
 
 class TestGetTournamentMeta:
-    def test_meta_aggregates_by_archetype(self, svc, tournament, user_alice, user_bob, archetype_burn, archetype_affinity):
-        u3 = svc.get_or_create_user(tg_id=1003, username="carol")
+    def test_meta_aggregates_by_archetype(self, svc, user_svc, tournament, user_alice, user_bob, archetype_burn, archetype_affinity):
+        u3 = user_svc.get_or_create(tg_id=1003, username="carol")
         svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
         svc.register_participant(tournament_id=tournament.id, user_id=user_bob.id, archetype_id=archetype_burn.id)
         svc.register_participant(tournament_id=tournament.id, user_id=u3.id, archetype_id=archetype_affinity.id)
@@ -417,12 +417,12 @@ class TestGetParticipantNotFound:
 
 class TestCastVoteEdgeCases:
     @pytest.fixture
-    def voting_setup(self, svc):
+    def voting_setup(self, svc, user_svc):
         """Two chats each with their own tournament in VOTING state."""
         t1 = svc.create_tournament(TournamentCreate(title="T1", chat_id=400, slug="t1"))
         t2 = svc.create_tournament(TournamentCreate(title="T2", chat_id=401, slug="t2"))
-        ua = svc.get_or_create_user(tg_id=4001, username="ua", first_name="UA")
-        ub = svc.get_or_create_user(tg_id=4002, username="ub", first_name="UB")
+        ua = user_svc.get_or_create(tg_id=4001, username="ua", first_name="UA")
+        ub = user_svc.get_or_create(tg_id=4002, username="ub", first_name="UB")
         arch = svc.get_or_create_archetype_by_name("Burn")
         # Register participant before opening voting
         p = svc.register_participant(tournament_id=t1.id, user_id=ua.id, archetype_id=arch.id)

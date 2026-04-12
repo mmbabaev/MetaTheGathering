@@ -18,7 +18,10 @@ from core.schemas import TournamentCreate
 from services.tournament import TournamentService
 from bot.telegram import common, player, admin
 from bot.telegram import settings as settings_handler
-from bot.keyboards import CB_TOURNAMENT, CB_REGISTER, CB_ARCHETYPE, CB_CUSTOM_ARCHETYPE, CB_SETTINGS_NAME
+from bot.keyboards import (
+    CB_TOURNAMENT, CB_REGISTER, CB_ARCHETYPE, CB_CUSTOM_ARCHETYPE,
+    CB_SETTINGS_NAME, CB_TSTATUS, CB_LEAVE, CB_LEAVE_CONFIRM, CB_LEAVE_CANCEL,
+)
 from bot.scheduler import setup_scheduler
 
 logging.basicConfig(
@@ -88,6 +91,18 @@ def main() -> None:
     )
     app.add_handler(
         CallbackQueryHandler(player.callback_custom_archetype, pattern=f"^{CB_CUSTOM_ARCHETYPE}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(player.callback_tournament_status, pattern=f"^{CB_TSTATUS}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(player.callback_leave_tournament, pattern=f"^{CB_LEAVE}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(player.callback_leave_confirm, pattern=f"^{CB_LEAVE_CONFIRM}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(player.callback_leave_cancel, pattern=f"^{CB_LEAVE_CANCEL}:")
     )
     app.add_handler(
         CallbackQueryHandler(settings_handler.callback_settings_name, pattern=f"^{CB_SETTINGS_NAME}$")
