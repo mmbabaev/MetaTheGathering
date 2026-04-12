@@ -11,7 +11,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 # Run bot (polling mode)
 python main.py
+
+# Preferred: use server.sh for background process management
+./server.sh           # restart (stop old + start new) — default
+./server.sh start     # start if not running
+./server.sh stop      # stop
+./server.sh status    # show PID and last 20 log lines
+./server.sh logs      # tail -f server.log
 ```
+
+`server.sh` uses a PID file (`.server.pid`) and logs to `server.log` (both gitignored). Use `./server.sh restart` to redeploy after code changes.
 
 Requires `TELEGRAM_BOT_TOKEN` and `DATABASE_URL` in `.env`. PostgreSQL must be running. `core/config.py` is not yet implemented — this is the first thing to set up.
 
