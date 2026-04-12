@@ -74,19 +74,21 @@ python3 -m pytest tests/test_tournament_service.py -v
 
 `HandlerResult` is defined in `bot/handlers/base.py` (`text`, `keyboard`, `is_alert`).
 
-**Current status (96 tests, all passing, ~81% coverage):**
+**Current status (121 tests, all passing, ~80% coverage):**
 
 | File | Coverage | Notes |
 |------|----------|-------|
-| `services/tournament.py` | 88% | Main business logic |
-| `services/utils.py` | 92% | |
-| `core/models.py`, `schemas.py`, `config.py` | 100% | |
+| `services/tournament.py` | 91% | Main business logic |
+| `services/utils.py` | 100% | |
+| `core/models.py`, `schemas.py` | 100% | |
+| `core/config.py` | 90% | |
 | `bot/keyboards/__init__.py`, `bot/messages/__init__.py`, `bot/handlers/base.py` | 100% | |
 | `utils/seed.py` | 85% | |
-| `bot/handlers/admin.py` | 64% | `handle_xxx` covered, `cmd_xxx` wrappers not |
-| `bot/handlers/player.py` | 41% | `handle_xxx` covered, `callback_xxx` wrappers not |
-| `bot/scheduler.py` | 43% | `_create_tournaments_for_schedule` not covered |
+| `bot/handlers/admin.py` | 57% | `handle_xxx` covered, `cmd_xxx` wrappers not |
+| `bot/handlers/player.py` | 40% | `handle_xxx` covered, `callback_xxx` wrappers not |
+| `bot/scheduler.py` | 35% | `_create_tournaments_for_schedule` not covered |
 | `bot/handlers/common.py` | 0% | Trivial /start and /help |
+| `main.py` | 0% | Entry point wiring only |
 
 Tests use **SQLite in-memory** — no real PostgreSQL needed. See `docs/test_plan.md` for the full plan.
 

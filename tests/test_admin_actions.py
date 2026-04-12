@@ -4,6 +4,8 @@ import pytest
 from core.schemas import TournamentCreate
 from core.models import TournamentStatus
 from bot.handlers.admin import (
+    parse_add_player_command,
+    parse_bulk_player_line,
     handle_add_me,
     handle_add_player,
     handle_add_players,
@@ -15,14 +17,75 @@ from bot.messages import (
     NO_DECK_NAME,
     NO_ACTIVE_TOURNAMENT,
     MULTIPLE_TOURNAMENTS_MSG,
-    PLAYER_NOT_FOUND,
     PLAYER_ADDED,
     TOURNAMENT_CLOSED_MSG,
-    ADD_PLAYERS_USAGE,
 )
 
 ADMIN_TG_ID = 9999
 CHAT_ID = 100
+
+
+class TestParseAddPlayerCommand:
+    """Поведение как у Telegram: /add_player@X может означать бота X или игрока X."""
+
+    def test_standard_form(self):
+        assert parse_add_player_command("/add_player @testuser Elves", "metabot") == (
+            "testuser",
+            "Elves",
+        )
+
+    def test_player_mistaken_for_command_suffix(self):
+        """Частая ошибка: /add_player@testuser Elves — testuser это игрок, не бот."""
+        assert parse_add_player_command("/add_player@testuser Elves", "metabot") == (
+            "testuser",
+            "Elves",
+        )
+
+    def test_with_real_bot_suffix(self):
+        assert parse_add_player_command(
+            "/add_player@metabot @alice Burn", "metabot"
+        ) == ("alice", "Burn")
+
+    def test_bot_suffix_case_insensitive(self):
+        assert parse_add_player_command(
+            "/add_player@MetaBot @alice Burn", "metabot"
+        ) == ("alice", "Burn")
+
+    def test_multiword_deck(self):
+        assert parse_add_player_command(
+            "/add_player @bob Izzet Faeries", "bot"
+        ) == ("bob", "Izzet Faeries")
+
+    def test_mistaken_suffix_multiword_deck(self):
+        assert parse_add_player_command(
+            "/add_player@bob Izzet Faeries", "metabot"
+        ) == ("bob", "Izzet Faeries")
+
+    def test_narrow_no_break_space_between_username_and_deck(self):
+        """Клиенты Telegram иногда ставят U+202F между @user и колодой — как пробел, но split() его не режет."""
+        assert parse_add_player_command(
+            "/add_player @testuser\u202fElves", "metabot"
+        ) == ("testuser", "Elves")
+
+    def test_missing_deck_returns_none(self):
+        assert parse_add_player_command("/add_player @alice", "bot") is None
+
+    def test_missing_everything_returns_none(self):
+        assert parse_add_player_command("/add_player", "bot") is None
+
+    def test_wrong_suffix_no_deck_returns_none(self):
+        assert parse_add_player_command("/add_player@testuser", "metabot") is None
+
+
+class TestParseBulkPlayerLine:
+    def test_ok(self):
+        assert parse_bulk_player_line("@alice Burn") == ("alice", "Burn")
+
+    def test_multiword_deck(self):
+        assert parse_bulk_player_line("@bob Izzet Faeries") == ("bob", "Izzet Faeries")
+
+    def test_no_deck(self):
+        assert parse_bulk_player_line("@bob") is None
 
 
 @pytest.fixture
@@ -77,64 +140,143 @@ class TestHandleAddMe:
 
 class TestHandleAddPlayer:
     def test_non_admin_returns_not_admin(self, db, user_alice):
-        result = handle_add_player(db, tg_id=42, target_username="alice", deck_name="Burn")
+        result = handle_add_player(
+            db,
+            tg_id=42,
+            target_tg_id=user_alice.tg_id,
+            target_username="alice",
+            deck_name="Burn",
+        )
         assert result.text == NOT_ADMIN
 
     def test_no_active_tournament(self, db, admin_user, user_alice):
-        result = handle_add_player(db, tg_id=ADMIN_TG_ID, target_username="alice", deck_name="Burn")
+        result = handle_add_player(
+            db,
+            tg_id=ADMIN_TG_ID,
+            target_tg_id=user_alice.tg_id,
+            target_username="alice",
+            deck_name="Burn",
+        )
         assert result.text == NO_ACTIVE_TOURNAMENT
 
-    def test_player_not_found(self, db, admin_user, active_tournament):
-        result = handle_add_player(db, tg_id=ADMIN_TG_ID, target_username="ghost", deck_name="Burn")
-        assert "ghost" in result.text
-        assert "не найден" in result.text
+    def test_creates_user_by_tg_id_without_prior_row(self, db, admin_user, active_tournament):
+        """Раньше требовали строку в БД после /start; теперь достаточно tg_id (как из getChat)."""
+        result = handle_add_player(
+            db,
+            tg_id=ADMIN_TG_ID,
+            target_tg_id=77_777,
+            target_username="ghost",
+            deck_name="Burn",
+            target_first_name="Ghost",
+        )
+        assert "ghost" in result.text or "Ghost" in result.text
+        assert "Burn" in result.text
 
     def test_registers_player_successfully(self, db, admin_user, active_tournament, user_alice):
-        result = handle_add_player(db, tg_id=ADMIN_TG_ID, target_username="alice", deck_name="Affinity")
+        result = handle_add_player(
+            db,
+            tg_id=ADMIN_TG_ID,
+            target_tg_id=user_alice.tg_id,
+            target_username="alice",
+            deck_name="Affinity",
+            target_first_name="Alice",
+        )
         assert "alice" in result.text
         assert "Affinity" in result.text
 
     def test_already_registered(self, db, admin_user, active_tournament, user_alice):
-        handle_add_player(db, tg_id=ADMIN_TG_ID, target_username="alice", deck_name="Burn")
-        result = handle_add_player(db, tg_id=ADMIN_TG_ID, target_username="alice", deck_name="Burn")
+        handle_add_player(
+            db,
+            tg_id=ADMIN_TG_ID,
+            target_tg_id=user_alice.tg_id,
+            target_username="alice",
+            deck_name="Burn",
+            target_first_name="Alice",
+        )
+        result = handle_add_player(
+            db,
+            tg_id=ADMIN_TG_ID,
+            target_tg_id=user_alice.tg_id,
+            target_username="alice",
+            deck_name="Burn",
+            target_first_name="Alice",
+        )
         assert "уже записан" in result.text
 
     def test_multiple_tournaments_returns_clarification(self, db, svc, admin_user, active_tournament, user_alice):
         svc.create_tournament(TournamentCreate(title="Second", chat_id=CHAT_ID + 1))
-        result = handle_add_player(db, tg_id=ADMIN_TG_ID, target_username="alice", deck_name="Burn")
+        result = handle_add_player(
+            db,
+            tg_id=ADMIN_TG_ID,
+            target_tg_id=user_alice.tg_id,
+            target_username="alice",
+            deck_name="Burn",
+        )
         assert result.text == MULTIPLE_TOURNAMENTS_MSG
 
 
 # --- handle_add_players ---
 
 class TestHandleAddPlayers:
-    def test_non_admin_returns_not_admin(self, db):
-        result = handle_add_players(db, tg_id=42, lines=["@alice Burn"])
+    """entries: (target_tg_id, username, first_name, deck_name) — как после getChat в cmd."""
+
+    def test_non_admin_returns_not_admin(self, db, user_alice):
+        result = handle_add_players(
+            db,
+            tg_id=42,
+            entries=[(user_alice.tg_id, "alice", "Alice", "Burn")],
+        )
         assert result.text == NOT_ADMIN
 
-    def test_empty_lines_returns_usage(self, db, admin_user):
-        result = handle_add_players(db, tg_id=ADMIN_TG_ID, lines=[])
-        assert result.text == ADD_PLAYERS_USAGE
+    def test_empty_entries_returns_no_data(self, db, admin_user):
+        result = handle_add_players(db, tg_id=ADMIN_TG_ID, entries=[])
+        assert result.text == "Нет данных для обработки."
 
-    def test_no_active_tournament(self, db, admin_user):
-        result = handle_add_players(db, tg_id=ADMIN_TG_ID, lines=["@alice Burn"])
+    def test_no_active_tournament(self, db, admin_user, user_alice):
+        result = handle_add_players(
+            db,
+            tg_id=ADMIN_TG_ID,
+            entries=[(user_alice.tg_id, "alice", "Alice", "Burn")],
+        )
         assert result.text == NO_ACTIVE_TOURNAMENT
 
-    def test_mixed_results(self, db, admin_user, active_tournament, user_alice, user_bob):
-        lines = ["@alice Burn", "@ghost Affinity", "@bob"]
-        result = handle_add_players(db, tg_id=ADMIN_TG_ID, lines=lines)
+    def test_mixed_success_and_duplicate_line(self, db, admin_user, active_tournament, user_alice):
+        entries = [
+            (user_alice.tg_id, "alice", "Alice", "Burn"),
+            (88_888, "ghost", "Ghost", "Affinity"),
+            (user_alice.tg_id, "alice", "Alice", "Burn"),
+        ]
+        result = handle_add_players(db, tg_id=ADMIN_TG_ID, entries=entries)
         assert "✅ @alice" in result.text
-        assert "❌ @ghost" in result.text
-        assert "⚠️ Пропущено" in result.text
-
-    def test_already_registered_line(self, db, admin_user, active_tournament, user_alice):
-        handle_add_player(db, tg_id=ADMIN_TG_ID, target_username="alice", deck_name="Burn")
-        result = handle_add_players(db, tg_id=ADMIN_TG_ID, lines=["@alice Burn"])
+        assert "✅ @ghost" in result.text
+        assert "⚠️ @alice" in result.text
         assert "уже записан" in result.text
 
-    def test_multiple_tournaments_returns_clarification(self, db, svc, admin_user, active_tournament):
+    def test_already_registered_line(self, db, admin_user, active_tournament, user_alice):
+        handle_add_player(
+            db,
+            tg_id=ADMIN_TG_ID,
+            target_tg_id=user_alice.tg_id,
+            target_username="alice",
+            deck_name="Burn",
+            target_first_name="Alice",
+        )
+        result = handle_add_players(
+            db,
+            tg_id=ADMIN_TG_ID,
+            entries=[(user_alice.tg_id, "alice", "Alice", "Burn")],
+        )
+        assert "уже записан" in result.text
+
+    def test_multiple_tournaments_returns_clarification(
+        self, db, svc, admin_user, active_tournament, user_alice
+    ):
         svc.create_tournament(TournamentCreate(title="Second", chat_id=CHAT_ID + 1))
-        result = handle_add_players(db, tg_id=ADMIN_TG_ID, lines=["@alice Burn"])
+        result = handle_add_players(
+            db,
+            tg_id=ADMIN_TG_ID,
+            entries=[(user_alice.tg_id, "alice", "Alice", "Burn")],
+        )
         assert result.text == MULTIPLE_TOURNAMENTS_MSG
 
 
@@ -199,3 +341,149 @@ class TestHandleCloseTournament:
         svc.create_tournament(TournamentCreate(title="Second", chat_id=CHAT_ID + 1))
         result = handle_close_tournament(db, tg_id=ADMIN_TG_ID)
         assert result.text == MULTIPLE_TOURNAMENTS_MSG
+
+
+# --- _is_admin via settings.admin_ids ---
+
+class TestIsAdminViaSettings:
+    def test_admin_via_settings_ids(self, db):
+        from unittest.mock import patch
+        from bot.handlers.admin import _is_admin
+        with patch("bot.handlers.admin.settings") as mock_settings:
+            mock_settings.admin_ids = [555]
+            assert _is_admin(db, tg_id=555) is True
+
+    def test_non_admin_not_in_settings_or_db(self, db):
+        from unittest.mock import patch
+        from bot.handlers.admin import _is_admin
+        with patch("bot.handlers.admin.settings") as mock_settings:
+            mock_settings.admin_ids = []
+            assert _is_admin(db, tg_id=42) is False
+
+    def test_admin_via_db_is_admin_flag(self, db, admin_user):
+        from bot.handlers.admin import _is_admin
+        from unittest.mock import patch
+        with patch("bot.handlers.admin.settings") as mock_settings:
+            mock_settings.admin_ids = []
+            assert _is_admin(db, tg_id=ADMIN_TG_ID) is True
+
+
+# --- handle_add_me: TournamentInvalidState ---
+
+class TestHandleAddMeInvalidState:
+    def test_registration_closed_returns_message(self, db, svc, admin_user, active_tournament):
+        svc.close_tournament(active_tournament.id)
+        # Reopen as ONGOING so it's active but not in REGISTRATION
+        from core import models as m
+        from sqlalchemy import select
+        obj = db.execute(select(m.Tournament).where(m.Tournament.id == active_tournament.id)).scalar_one()
+        obj.status = m.TournamentStatus.ONGOING
+        db.commit()
+        result = handle_add_me(
+            db, tg_id=ADMIN_TG_ID, username="admin", first_name="Admin", last_name=None, deck_name="Burn"
+        )
+        assert "закрыта" in result.text
+
+
+# --- handle_add_player: TournamentInvalidState ---
+
+class TestHandleAddPlayerInvalidState:
+    def test_registration_closed_returns_message(self, db, svc, admin_user, active_tournament, user_alice):
+        from core import models as m
+        from sqlalchemy import select
+        obj = db.execute(select(m.Tournament).where(m.Tournament.id == active_tournament.id)).scalar_one()
+        obj.status = m.TournamentStatus.ONGOING
+        db.commit()
+        result = handle_add_player(
+            db,
+            tg_id=ADMIN_TG_ID,
+            target_tg_id=user_alice.tg_id,
+            target_username="alice",
+            deck_name="Burn",
+        )
+        assert "закрыта" in result.text
+
+
+# --- handle_add_players: TournamentInvalidState ---
+
+class TestHandleAddPlayersInvalidState:
+    def test_registration_closed_marks_line(self, db, svc, admin_user, active_tournament, user_alice):
+        from core import models as m
+        from sqlalchemy import select
+        obj = db.execute(select(m.Tournament).where(m.Tournament.id == active_tournament.id)).scalar_one()
+        obj.status = m.TournamentStatus.ONGOING
+        db.commit()
+        result = handle_add_players(
+            db,
+            tg_id=ADMIN_TG_ID,
+            entries=[(user_alice.tg_id, "alice", "Alice", "Burn")],
+        )
+        assert "закрыта" in result.text
+
+
+# --- parse_add_player_command: uncovered branches ---
+
+class TestParseAddPlayerCommandEdgeCases:
+    def test_empty_message_returns_none(self):
+        assert parse_add_player_command("", "bot") is None
+
+    def test_whitespace_only_returns_none(self):
+        assert parse_add_player_command("   ", "bot") is None
+
+    def test_non_add_player_command_returns_none(self):
+        assert parse_add_player_command("/start something", "bot") is None
+
+    def test_empty_username_after_at_returns_none(self):
+        # "@ Burn" → username stripped to "" → should return None
+        assert parse_add_player_command("/add_player @ Burn", "bot") is None
+
+
+class TestParseBulkPlayerLineEdgeCases:
+    def test_empty_string_returns_none(self):
+        assert parse_bulk_player_line("") is None
+
+    def test_whitespace_only_returns_none(self):
+        assert parse_bulk_player_line("   ") is None
+
+
+# --- _player_display_label: no-username branches ---
+
+class TestPlayerDisplayLabel:
+    def test_username_present(self):
+        from bot.handlers.admin import _player_display_label
+        assert _player_display_label("alice", "Alice", 1) == "@alice"
+
+    def test_no_username_uses_first_name(self):
+        from bot.handlers.admin import _player_display_label
+        assert _player_display_label(None, "Alice", 1) == "Alice"
+
+    def test_no_username_no_first_name_uses_id(self):
+        from bot.handlers.admin import _player_display_label
+        assert _player_display_label(None, None, 42) == "игрок 42"
+
+
+# --- handle_add_player: _player_display_label no-username path in result ---
+
+class TestHandleAddPlayerNoUsername:
+    def test_already_registered_no_username_shows_first_name(self, db, svc, admin_user, active_tournament):
+        target = svc.get_or_create_user(tg_id=5001, username=None, first_name="Bob")
+        handle_add_player(
+            db, tg_id=ADMIN_TG_ID,
+            target_tg_id=target.tg_id, target_username=None,
+            deck_name="Burn", target_first_name="Bob",
+        )
+        result = handle_add_player(
+            db, tg_id=ADMIN_TG_ID,
+            target_tg_id=target.tg_id, target_username=None,
+            deck_name="Burn", target_first_name="Bob",
+        )
+        assert "Bob" in result.text
+        assert "уже записан" in result.text
+
+    def test_registered_with_no_username_no_first_name(self, db, svc, admin_user, active_tournament):
+        result = handle_add_player(
+            db, tg_id=ADMIN_TG_ID,
+            target_tg_id=6001, target_username=None,
+            deck_name="Burn", target_first_name=None,
+        )
+        assert "6001" in result.text or "Burn" in result.text

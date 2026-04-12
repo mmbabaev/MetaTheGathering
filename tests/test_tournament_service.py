@@ -345,3 +345,134 @@ class TestListArchetypesForUser:
             svc.get_or_create_archetype_by_name(f"Arch{i:02d}")
         result = svc.list_archetypes_for_user(tg_id=9999, total=10)
         assert len(result) == 10
+
+
+# ===== List methods =====
+
+class TestListTournamentsForChat:
+    def test_returns_all_including_closed(self, svc):
+        t1 = svc.create_tournament(TournamentCreate(title="A", chat_id=300, slug="a300"))
+        svc.close_tournament(t1.id)
+        t2 = svc.create_tournament(TournamentCreate(title="B", chat_id=300, slug="b300"))
+        result = svc.list_tournaments_for_chat(300)
+        ids = {t.id for t in result}
+        assert t1.id in ids
+        assert t2.id in ids
+
+    def test_excludes_other_chats(self, svc):
+        svc.create_tournament(TournamentCreate(title="A", chat_id=301, slug="a301"))
+        svc.create_tournament(TournamentCreate(title="B", chat_id=302, slug="b302"))
+        result = svc.list_tournaments_for_chat(301)
+        assert all(t.chat_id == 301 for t in result)
+
+    def test_respects_limit(self, svc):
+        t1 = svc.create_tournament(TournamentCreate(title="A", chat_id=303, slug="a303"))
+        svc.close_tournament(t1.id)
+        svc.create_tournament(TournamentCreate(title="B", chat_id=303, slug="b303"))
+        result = svc.list_tournaments_for_chat(303, limit=1)
+        assert len(result) == 1
+
+    def test_empty_for_unknown_chat(self, svc):
+        assert svc.list_tournaments_for_chat(99999) == []
+
+
+class TestListActiveTournamentsForChat:
+    def test_excludes_closed(self, svc):
+        t = svc.create_tournament(TournamentCreate(title="A", chat_id=310, slug="a310"))
+        svc.close_tournament(t.id)
+        assert svc.list_active_tournaments_for_chat(310) == []
+
+    def test_includes_registration_and_voting(self, svc):
+        t = svc.create_tournament(TournamentCreate(title="A", chat_id=311, slug="a311"))
+        result = svc.list_active_tournaments_for_chat(311)
+        assert len(result) == 1
+        assert result[0].status == TournamentStatus.REGISTRATION
+
+    def test_empty_for_unknown_chat(self, svc):
+        assert svc.list_active_tournaments_for_chat(99998) == []
+
+
+# ===== open_registration =====
+
+class TestOpenRegistration:
+    def test_sets_status_to_registration(self, svc):
+        t = svc.create_tournament(TournamentCreate(title="A", chat_id=320, slug="a320"))
+        t = svc.start_tournament(t.id)
+        assert t.status == TournamentStatus.ONGOING
+        t = svc.open_registration(t.id)
+        assert t.status == TournamentStatus.REGISTRATION
+        assert t.registration_open_at is not None
+
+
+# ===== _get_participant error path =====
+
+class TestGetParticipantNotFound:
+    def test_raises_on_missing_participant(self, svc):
+        from services.errors import ParticipantNotFound
+        with pytest.raises(ParticipantNotFound):
+            svc._get_participant(99999)
+
+
+# ===== cast_vote edge cases =====
+
+class TestCastVoteEdgeCases:
+    @pytest.fixture
+    def voting_setup(self, svc):
+        """Two chats each with their own tournament in VOTING state."""
+        t1 = svc.create_tournament(TournamentCreate(title="T1", chat_id=400, slug="t1"))
+        t2 = svc.create_tournament(TournamentCreate(title="T2", chat_id=401, slug="t2"))
+        ua = svc.get_or_create_user(tg_id=4001, username="ua", first_name="UA")
+        ub = svc.get_or_create_user(tg_id=4002, username="ub", first_name="UB")
+        arch = svc.get_or_create_archetype_by_name("Burn")
+        # Register participant before opening voting
+        p = svc.register_participant(tournament_id=t1.id, user_id=ua.id, archetype_id=arch.id)
+        svc.open_voting(t1.id)
+        svc.open_voting(t2.id)
+        return t1, t2, ua, ub, arch, p
+
+    def test_participant_in_wrong_tournament_raises(self, svc, voting_setup):
+        t1, t2, ua, ub, arch, p = voting_setup
+        # p belongs to t1 but we vote against t2
+        with pytest.raises(VotingNotAllowed):
+            svc.cast_vote(
+                tournament_id=t2.id,
+                participant_id=p.id,
+                voter_user_id=ub.id,
+                vote_type=VoteType.UP,
+            )
+
+    def test_nonexistent_voter_raises(self, svc, voting_setup):
+        t1, t2, ua, ub, arch, p = voting_setup
+        with pytest.raises(VotingNotAllowed):
+            svc.cast_vote(
+                tournament_id=t1.id,
+                participant_id=p.id,
+                voter_user_id=99999,  # does not exist
+                vote_type=VoteType.UP,
+            )
+
+    def test_change_vote_down_to_up(self, svc, voting_setup):
+        t1, t2, ua, ub, arch, p = voting_setup
+        # First vote: DOWN
+        svc.cast_vote(
+            tournament_id=t1.id,
+            participant_id=p.id,
+            voter_user_id=ub.id,
+            vote_type=VoteType.DOWN,
+            apply_cooldown=False,
+        )
+        # Change to UP
+        result = svc.cast_vote(
+            tournament_id=t1.id,
+            participant_id=p.id,
+            voter_user_id=ub.id,
+            vote_type=VoteType.UP,
+            apply_cooldown=False,
+        )
+        assert result.vote_type == VoteType.UP
+        # Reload participant to verify counters
+        from core import models as m
+        from sqlalchemy import select
+        part = svc.db.execute(select(m.Participant).where(m.Participant.id == p.id)).scalar_one()
+        assert part.downvotes_count == 0
+        assert part.upvotes_count == 1
