@@ -248,10 +248,16 @@ def handle_tournament_status(db: Session, tg_id: int) -> HandlerResult:
             f"Участники ({len(participants)}):",
         ]
         for i, p in enumerate(participants, 1):
-            username = (p.user.username or p.user.first_name or f"id{p.user.tg_id}") if p.user else "?"
+            if p.user:
+                name_parts = [n for n in (p.user.first_name, p.user.last_name) if n]
+                full_name = " ".join(name_parts) if name_parts else f"id{p.user.tg_id}"
+                username_hint = f" (@{p.user.username})" if p.user.username else ""
+                display = f"{full_name}{username_hint}"
+            else:
+                display = "?"
             archetype = p.archetype.name if p.archetype else "не указана"
             confirmed = " ✅" if p.confirmed else ""
-            lines.append(f"{i}. @{username} — {archetype}{confirmed}")
+            lines.append(f"{i}. {display} — {archetype}{confirmed}")
         blocks.append("\n".join(lines))
     return HandlerResult("\n\n---\n\n".join(blocks))
 

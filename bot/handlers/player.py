@@ -27,10 +27,13 @@ from bot.messages import (
     ALREADY_REGISTERED,
     REGISTRATION_CLOSED,
     TOURNAMENT_NOT_FOUND,
+    NAME_REQUIRED_FOR_REGISTRATION,
+    NAME_SAVED,
     format_tournament_card,
 )
 
 USER_DATA_PENDING_CUSTOM = "pending_custom_archetype_tournament_id"
+USER_DATA_PENDING_NAME = "pending_name_for_tournament_id"
 
 
 # --- Pure business logic functions ---
@@ -63,6 +66,31 @@ def handle_register(db: Session, tournament_id: int, tg_id: int | None = None) -
         archetypes = svc.list_archetypes_for_user(tg_id)
     else:
         archetypes = svc.list_archetypes()[:10]
+    arch_list = [(a.id, a.name) for a in archetypes]
+    return HandlerResult(CHOOSE_ARCHETYPE, keyboard=archetype_keyboard(tournament_id, arch_list))
+
+
+def user_needs_name(db: Session, tg_id: int) -> bool:
+    """Возвращает True если у пользователя не задано имя в базе."""
+    svc = TournamentService(db)
+    user = svc.get_user_by_tg_id(tg_id)
+    return user is None or not user.first_name
+
+
+def handle_save_name_then_register(
+    db: Session,
+    tg_id: int,
+    username: str | None,
+    name_text: str,
+    tournament_id: int,
+) -> HandlerResult:
+    """Сохраняет имя пользователя и возвращает выбор архетипа."""
+    parts = name_text.strip().split(None, 1)
+    first_name = parts[0]
+    last_name = parts[1] if len(parts) > 1 else None
+    svc = TournamentService(db)
+    svc.update_user_name(tg_id, first_name, last_name)
+    archetypes = svc.list_archetypes_for_user(tg_id)
     arch_list = [(a.id, a.name) for a in archetypes]
     return HandlerResult(CHOOSE_ARCHETYPE, keyboard=archetype_keyboard(tournament_id, arch_list))
 
@@ -174,9 +202,19 @@ async def callback_register(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     except (ValueError, IndexError):
         await query.answer("Ошибка данных.")
         return
+    if not user:
+        await query.answer("Ошибка: не удалось определить пользователя.")
+        return
     db = SessionLocal()
     try:
-        result = handle_register(db, tournament_id, tg_id=user.id if user else None)
+        if user_needs_name(db, user.id):
+            if context.user_data is None:
+                context.user_data = {}
+            context.user_data[USER_DATA_PENDING_NAME] = tournament_id
+            await query.edit_message_text(NAME_REQUIRED_FOR_REGISTRATION)
+            await query.answer()
+            return
+        result = handle_register(db, tournament_id, tg_id=user.id)
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
     finally:
@@ -227,28 +265,67 @@ async def callback_custom_archetype(update: Update, context: ContextTypes.DEFAUL
     await query.answer()
 
 
-async def message_custom_archetype(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not update.effective_message or not update.effective_message.text:
+async def message_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Единый обработчик текстовых сообщений для всех состояний user_data."""
+    msg = update.effective_message
+    user = update.effective_user
+    if not msg or not msg.text or not user:
         return
     if context.user_data is None:
         return
+
+    text = msg.text.strip()
+
+    # --- State: waiting for name to complete registration ---
+    if USER_DATA_PENDING_NAME in context.user_data:
+        tournament_id = context.user_data.pop(USER_DATA_PENDING_NAME)
+        if not text:
+            context.user_data[USER_DATA_PENDING_NAME] = tournament_id
+            await msg.reply_text("Введите непустое имя.")
+            return
+        db = SessionLocal()
+        try:
+            result = handle_save_name_then_register(
+                db, user.id, user.username, text, tournament_id,
+            )
+            await msg.reply_text(result.text, reply_markup=result.keyboard)
+        finally:
+            db.close()
+        return
+
+    # --- State: waiting for name change from /settings ---
+    from bot.handlers.settings import USER_DATA_PENDING_SETTINGS_NAME, handle_settings_name_text
+    if context.user_data.pop(USER_DATA_PENDING_SETTINGS_NAME, None):
+        if not text:
+            context.user_data[USER_DATA_PENDING_SETTINGS_NAME] = True
+            await msg.reply_text("Введите непустое имя.")
+            return
+        db = SessionLocal()
+        try:
+            result = handle_settings_name_text(db, user.id, text)
+            await msg.reply_text(result.text)
+        finally:
+            db.close()
+        return
+
+    # --- State: waiting for custom archetype name ---
     tournament_id = context.user_data.pop(USER_DATA_PENDING_CUSTOM, None)
     if tournament_id is None:
         return
-    user = update.effective_user
-    if not user:
-        return
-    name = update.effective_message.text.strip()
-    if not name:
+    if not text:
         context.user_data[USER_DATA_PENDING_CUSTOM] = tournament_id
-        await update.effective_message.reply_text("Введите непустое название архетипа.")
+        await msg.reply_text("Введите непустое название архетипа.")
         return
     db = SessionLocal()
     try:
         result = handle_custom_archetype_text(
             db, user.id, user.username, user.first_name, user.last_name,
-            tournament_id, name,
+            tournament_id, text,
         )
-        await update.effective_message.reply_text(result.text)
+        await msg.reply_text(result.text)
     finally:
         db.close()
+
+
+# Keep old name as alias so existing references don't break
+message_custom_archetype = message_text_input

@@ -10,6 +10,15 @@ REGISTRATION_CLOSED = "Регистрация на этот турнир зак�
 TOURNAMENT_NOT_FOUND = "Турнир не найден."
 
 
+# Name prompts
+ASK_NAME = "Как вас зовут? Введите имя (или имя и фамилию через пробел):"
+NAME_SAVED = "Имя сохранено: {full_name}"
+NAME_REQUIRED_FOR_REGISTRATION = "Для записи на турнир нужно указать ваше имя.\n\nКак вас зовут? Введите имя (или имя и фамилию через пробел):"
+
+# Settings
+SETTINGS_MENU = "⚙️ Настройки"
+SETTINGS_CHANGE_NAME_PROMPT = "Введите новое имя (или имя и фамилию через пробел):"
+
 # Admin messages
 NOT_ADMIN = "У вас нет прав администратора."
 NO_DECK_NAME = "Укажите название колоды. Пример: /add_me Burn"
@@ -26,6 +35,7 @@ ADD_PLAYERS_USAGE = (
 HELP_TEXT = """\
 Команды для игроков:
 /tournaments — список активных турниров и запись
+/settings — настройки профиля (имя)
 
 Команды для администраторов:
 /tournament_status — участники всех активных турниров

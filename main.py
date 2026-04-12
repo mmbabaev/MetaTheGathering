@@ -17,7 +17,8 @@ from core.database import SessionLocal
 from core.schemas import TournamentCreate
 from services.tournament import TournamentService
 from bot.handlers import common, player, admin
-from bot.keyboards import CB_TOURNAMENT, CB_REGISTER, CB_ARCHETYPE, CB_CUSTOM_ARCHETYPE
+from bot.handlers import settings as settings_handler
+from bot.keyboards import CB_TOURNAMENT, CB_REGISTER, CB_ARCHETYPE, CB_CUSTOM_ARCHETYPE, CB_SETTINGS_NAME
 from bot.scheduler import setup_scheduler
 
 logging.basicConfig(
@@ -30,6 +31,7 @@ logger = logging.getLogger(__name__)
 async def _set_commands(app: Application) -> None:
     await app.bot.set_my_commands([
         BotCommand("tournaments", "Активные турниры и запись"),
+        BotCommand("settings", "Настройки профиля"),
         BotCommand("help", "Справка по командам"),
         BotCommand("tournament_status", "Участники турниров (админ)"),
         BotCommand("add_me", "Записать себя (админ)"),
@@ -67,6 +69,7 @@ def main() -> None:
     app.add_handler(CommandHandler("start", common.cmd_start))
     app.add_handler(CommandHandler("help", common.cmd_help))
     app.add_handler(CommandHandler("tournaments", player.cmd_tournaments))
+    app.add_handler(CommandHandler("settings", settings_handler.cmd_settings))
 
     app.add_handler(CommandHandler("add_me", admin.cmd_add_me))
     app.add_handler(CommandHandler("add_player", admin.cmd_add_player))
@@ -86,9 +89,12 @@ def main() -> None:
     app.add_handler(
         CallbackQueryHandler(player.callback_custom_archetype, pattern=f"^{CB_CUSTOM_ARCHETYPE}:")
     )
+    app.add_handler(
+        CallbackQueryHandler(settings_handler.callback_settings_name, pattern=f"^{CB_SETTINGS_NAME}$")
+    )
 
     app.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, player.message_custom_archetype)
+        MessageHandler(filters.TEXT & ~filters.COMMAND, player.message_text_input)
     )
 
     setup_scheduler(app)
