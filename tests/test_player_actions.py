@@ -163,3 +163,47 @@ class TestHandleRegisterNoUser:
         result = handle_register(db, active_tournament.id, tg_id=None)
         assert result.text == CHOOSE_ARCHETYPE
         assert result.keyboard is not None
+
+
+# --- user_needs_name ---
+
+class TestUserNeedsName:
+    def test_returns_true_for_unknown_user(self, db):
+        from bot.handlers.player import user_needs_name
+        assert user_needs_name(db, tg_id=7001) is True
+
+    def test_returns_true_when_no_first_name(self, db, svc):
+        svc.get_or_create_user(tg_id=7002, username="u", first_name=None)
+        from bot.handlers.player import user_needs_name
+        assert user_needs_name(db, tg_id=7002) is True
+
+    def test_returns_false_when_name_set(self, db, svc):
+        svc.get_or_create_user(tg_id=7003, username="u", first_name="Иван")
+        from bot.handlers.player import user_needs_name
+        assert user_needs_name(db, tg_id=7003) is False
+
+
+# --- handle_save_name_then_register ---
+
+class TestHandleSaveNameThenRegister:
+    def test_saves_name_and_returns_archetype_keyboard(self, db, svc, active_tournament, archetype_burn):
+        from bot.handlers.player import handle_save_name_then_register
+        result = handle_save_name_then_register(
+            db, tg_id=7010, username="u", name_text="Иван Петров",
+            tournament_id=active_tournament.id,
+        )
+        assert result.text == CHOOSE_ARCHETYPE
+        assert result.keyboard is not None
+        user = svc.get_user_by_tg_id(7010)
+        assert user.first_name == "Иван"
+        assert user.last_name == "Петров"
+
+    def test_first_name_only(self, db, svc, active_tournament):
+        from bot.handlers.player import handle_save_name_then_register
+        handle_save_name_then_register(
+            db, tg_id=7011, username=None, name_text="Мария",
+            tournament_id=active_tournament.id,
+        )
+        user = svc.get_user_by_tg_id(7011)
+        assert user.first_name == "Мария"
+        assert user.last_name is None
