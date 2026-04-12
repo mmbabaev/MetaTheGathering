@@ -341,3 +341,149 @@ class TestHandleCloseTournament:
         svc.create_tournament(TournamentCreate(title="Second", chat_id=CHAT_ID + 1))
         result = handle_close_tournament(db, tg_id=ADMIN_TG_ID)
         assert result.text == MULTIPLE_TOURNAMENTS_MSG
+
+
+# --- _is_admin via settings.admin_ids ---
+
+class TestIsAdminViaSettings:
+    def test_admin_via_settings_ids(self, db):
+        from unittest.mock import patch
+        from bot.handlers.admin import _is_admin
+        with patch("bot.handlers.admin.settings") as mock_settings:
+            mock_settings.admin_ids = [555]
+            assert _is_admin(db, tg_id=555) is True
+
+    def test_non_admin_not_in_settings_or_db(self, db):
+        from unittest.mock import patch
+        from bot.handlers.admin import _is_admin
+        with patch("bot.handlers.admin.settings") as mock_settings:
+            mock_settings.admin_ids = []
+            assert _is_admin(db, tg_id=42) is False
+
+    def test_admin_via_db_is_admin_flag(self, db, admin_user):
+        from bot.handlers.admin import _is_admin
+        from unittest.mock import patch
+        with patch("bot.handlers.admin.settings") as mock_settings:
+            mock_settings.admin_ids = []
+            assert _is_admin(db, tg_id=ADMIN_TG_ID) is True
+
+
+# --- handle_add_me: TournamentInvalidState ---
+
+class TestHandleAddMeInvalidState:
+    def test_registration_closed_returns_message(self, db, svc, admin_user, active_tournament):
+        svc.close_tournament(active_tournament.id)
+        # Reopen as ONGOING so it's active but not in REGISTRATION
+        from core import models as m
+        from sqlalchemy import select
+        obj = db.execute(select(m.Tournament).where(m.Tournament.id == active_tournament.id)).scalar_one()
+        obj.status = m.TournamentStatus.ONGOING
+        db.commit()
+        result = handle_add_me(
+            db, tg_id=ADMIN_TG_ID, username="admin", first_name="Admin", last_name=None, deck_name="Burn"
+        )
+        assert "закрыта" in result.text
+
+
+# --- handle_add_player: TournamentInvalidState ---
+
+class TestHandleAddPlayerInvalidState:
+    def test_registration_closed_returns_message(self, db, svc, admin_user, active_tournament, user_alice):
+        from core import models as m
+        from sqlalchemy import select
+        obj = db.execute(select(m.Tournament).where(m.Tournament.id == active_tournament.id)).scalar_one()
+        obj.status = m.TournamentStatus.ONGOING
+        db.commit()
+        result = handle_add_player(
+            db,
+            tg_id=ADMIN_TG_ID,
+            target_tg_id=user_alice.tg_id,
+            target_username="alice",
+            deck_name="Burn",
+        )
+        assert "закрыта" in result.text
+
+
+# --- handle_add_players: TournamentInvalidState ---
+
+class TestHandleAddPlayersInvalidState:
+    def test_registration_closed_marks_line(self, db, svc, admin_user, active_tournament, user_alice):
+        from core import models as m
+        from sqlalchemy import select
+        obj = db.execute(select(m.Tournament).where(m.Tournament.id == active_tournament.id)).scalar_one()
+        obj.status = m.TournamentStatus.ONGOING
+        db.commit()
+        result = handle_add_players(
+            db,
+            tg_id=ADMIN_TG_ID,
+            entries=[(user_alice.tg_id, "alice", "Alice", "Burn")],
+        )
+        assert "закрыта" in result.text
+
+
+# --- parse_add_player_command: uncovered branches ---
+
+class TestParseAddPlayerCommandEdgeCases:
+    def test_empty_message_returns_none(self):
+        assert parse_add_player_command("", "bot") is None
+
+    def test_whitespace_only_returns_none(self):
+        assert parse_add_player_command("   ", "bot") is None
+
+    def test_non_add_player_command_returns_none(self):
+        assert parse_add_player_command("/start something", "bot") is None
+
+    def test_empty_username_after_at_returns_none(self):
+        # "@ Burn" → username stripped to "" → should return None
+        assert parse_add_player_command("/add_player @ Burn", "bot") is None
+
+
+class TestParseBulkPlayerLineEdgeCases:
+    def test_empty_string_returns_none(self):
+        assert parse_bulk_player_line("") is None
+
+    def test_whitespace_only_returns_none(self):
+        assert parse_bulk_player_line("   ") is None
+
+
+# --- _player_display_label: no-username branches ---
+
+class TestPlayerDisplayLabel:
+    def test_username_present(self):
+        from bot.handlers.admin import _player_display_label
+        assert _player_display_label("alice", "Alice", 1) == "@alice"
+
+    def test_no_username_uses_first_name(self):
+        from bot.handlers.admin import _player_display_label
+        assert _player_display_label(None, "Alice", 1) == "Alice"
+
+    def test_no_username_no_first_name_uses_id(self):
+        from bot.handlers.admin import _player_display_label
+        assert _player_display_label(None, None, 42) == "игрок 42"
+
+
+# --- handle_add_player: _player_display_label no-username path in result ---
+
+class TestHandleAddPlayerNoUsername:
+    def test_already_registered_no_username_shows_first_name(self, db, svc, admin_user, active_tournament):
+        target = svc.get_or_create_user(tg_id=5001, username=None, first_name="Bob")
+        handle_add_player(
+            db, tg_id=ADMIN_TG_ID,
+            target_tg_id=target.tg_id, target_username=None,
+            deck_name="Burn", target_first_name="Bob",
+        )
+        result = handle_add_player(
+            db, tg_id=ADMIN_TG_ID,
+            target_tg_id=target.tg_id, target_username=None,
+            deck_name="Burn", target_first_name="Bob",
+        )
+        assert "Bob" in result.text
+        assert "уже записан" in result.text
+
+    def test_registered_with_no_username_no_first_name(self, db, svc, admin_user, active_tournament):
+        result = handle_add_player(
+            db, tg_id=ADMIN_TG_ID,
+            target_tg_id=6001, target_username=None,
+            deck_name="Burn", target_first_name=None,
+        )
+        assert "6001" in result.text or "Burn" in result.text

@@ -153,3 +153,13 @@ class TestHandleCustomArchetypeText:
             tournament_id=active_tournament.id, name="Turbo Fog",
         )
         assert result.text == REGISTRATION_CLOSED
+
+
+# --- handle_register: tg_id=None (fallback to global archetype list) ---
+
+class TestHandleRegisterNoUser:
+    def test_returns_archetypes_without_tg_id(self, db, active_tournament, archetype_burn, archetype_affinity):
+        """When tg_id is None the handler falls back to list_archetypes()[:10]."""
+        result = handle_register(db, active_tournament.id, tg_id=None)
+        assert result.text == CHOOSE_ARCHETYPE
+        assert result.keyboard is not None
