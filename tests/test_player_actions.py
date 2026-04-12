@@ -85,10 +85,28 @@ class TestHandleTournamentSelect:
 # --- handle_register ---
 
 class TestHandleRegister:
-    def test_returns_archetype_choice(self, db, active_tournament, archetype_burn, archetype_affinity):
+    def test_returns_archetype_choice_no_tg_id(self, db, active_tournament, archetype_burn, archetype_affinity):
         result = handle_register(db, active_tournament.id)
         assert result.text == CHOOSE_ARCHETYPE
         assert result.keyboard is not None
+        assert not result.needs_name
+
+    def test_returns_archetype_choice_when_user_has_name(self, db, svc, active_tournament, archetype_burn):
+        user = svc.get_or_create_user(tg_id=5100, username="u", first_name="Иван")
+        result = handle_register(db, active_tournament.id, tg_id=user.tg_id)
+        assert result.text == CHOOSE_ARCHETYPE
+        assert result.keyboard is not None
+        assert not result.needs_name
+
+    def test_needs_name_when_user_has_no_name(self, db, svc, active_tournament):
+        user = svc.get_or_create_user(tg_id=5101, username="u", first_name=None)
+        result = handle_register(db, active_tournament.id, tg_id=user.tg_id)
+        assert result.needs_name is True
+        assert result.keyboard is None
+
+    def test_needs_name_when_user_unknown(self, db, active_tournament):
+        result = handle_register(db, active_tournament.id, tg_id=99999)
+        assert result.needs_name is True
 
 
 # --- handle_archetype ---
@@ -153,34 +171,6 @@ class TestHandleCustomArchetypeText:
             tournament_id=active_tournament.id, name="Turbo Fog",
         )
         assert result.text == REGISTRATION_CLOSED
-
-
-# --- handle_register: tg_id=None (fallback to global archetype list) ---
-
-class TestHandleRegisterNoUser:
-    def test_returns_archetypes_without_tg_id(self, db, active_tournament, archetype_burn, archetype_affinity):
-        """When tg_id is None the handler falls back to list_archetypes()[:10]."""
-        result = handle_register(db, active_tournament.id, tg_id=None)
-        assert result.text == CHOOSE_ARCHETYPE
-        assert result.keyboard is not None
-
-
-# --- user_needs_name ---
-
-class TestUserNeedsName:
-    def test_returns_true_for_unknown_user(self, db):
-        from bot.handlers.player import user_needs_name
-        assert user_needs_name(db, tg_id=7001) is True
-
-    def test_returns_true_when_no_first_name(self, db, svc):
-        svc.get_or_create_user(tg_id=7002, username="u", first_name=None)
-        from bot.handlers.player import user_needs_name
-        assert user_needs_name(db, tg_id=7002) is True
-
-    def test_returns_false_when_name_set(self, db, svc):
-        svc.get_or_create_user(tg_id=7003, username="u", first_name="Иван")
-        from bot.handlers.player import user_needs_name
-        assert user_needs_name(db, tg_id=7003) is False
 
 
 # --- handle_save_name_then_register ---

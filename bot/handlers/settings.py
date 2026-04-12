@@ -1,19 +1,12 @@
-# /settings — управление профилем пользователя
+# /settings — управление профилем пользователя — чистая бизнес-логика
 
 from sqlalchemy.orm import Session
-from telegram import Update
-from telegram.ext import ContextTypes
 
-from core.database import SessionLocal
 from services.tournament import TournamentService
 from bot.handlers.base import HandlerResult
-from bot.keyboards import settings_keyboard, CB_SETTINGS_NAME
-from bot.messages import SETTINGS_MENU, SETTINGS_CHANGE_NAME_PROMPT, NAME_SAVED
+from bot.keyboards import settings_keyboard
+from bot.messages import SETTINGS_MENU, NAME_SAVED
 
-USER_DATA_PENDING_SETTINGS_NAME = "pending_settings_name"
-
-
-# --- Pure logic ---
 
 def handle_settings(db: Session, tg_id: int) -> HandlerResult:
     """Показывает меню настроек с кнопкой смены имени."""
@@ -38,30 +31,3 @@ def handle_settings_name_text(db: Session, tg_id: int, name_text: str) -> Handle
     svc.update_user_name(tg_id, first_name, last_name)
     full_name = f"{first_name} {last_name}" if last_name else first_name
     return HandlerResult(NAME_SAVED.format(full_name=full_name))
-
-
-# --- Telegram wrappers ---
-
-async def cmd_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user = update.effective_user
-    msg = update.effective_message
-    if not user or not msg:
-        return
-    db = SessionLocal()
-    try:
-        result = handle_settings(db, user.id)
-        await msg.reply_text(result.text, reply_markup=result.keyboard)
-    finally:
-        db.close()
-
-
-async def callback_settings_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    user = update.effective_user
-    if not query or not user:
-        return
-    if context.user_data is None:
-        context.user_data = {}
-    context.user_data[USER_DATA_PENDING_SETTINGS_NAME] = True
-    await query.edit_message_text(SETTINGS_CHANGE_NAME_PROMPT)
-    await query.answer()

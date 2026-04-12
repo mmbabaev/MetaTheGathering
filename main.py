@@ -16,8 +16,8 @@ from core.config import settings
 from core.database import SessionLocal
 from core.schemas import TournamentCreate
 from services.tournament import TournamentService
-from bot.handlers import common, player, admin
-from bot.handlers import settings as settings_handler
+from bot.telegram import common, player, admin
+from bot.telegram import settings as settings_handler
 from bot.keyboards import CB_TOURNAMENT, CB_REGISTER, CB_ARCHETYPE, CB_CUSTOM_ARCHETYPE, CB_SETTINGS_NAME
 from bot.scheduler import setup_scheduler
 
