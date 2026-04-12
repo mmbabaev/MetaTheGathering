@@ -85,10 +85,28 @@ class TestHandleTournamentSelect:
 # --- handle_register ---
 
 class TestHandleRegister:
-    def test_returns_archetype_choice(self, db, active_tournament, archetype_burn, archetype_affinity):
+    def test_returns_archetype_choice_no_tg_id(self, db, active_tournament, archetype_burn, archetype_affinity):
         result = handle_register(db, active_tournament.id)
         assert result.text == CHOOSE_ARCHETYPE
         assert result.keyboard is not None
+        assert not result.needs_name
+
+    def test_returns_archetype_choice_when_user_has_name(self, db, svc, active_tournament, archetype_burn):
+        user = svc.get_or_create_user(tg_id=5100, username="u", first_name="Иван")
+        result = handle_register(db, active_tournament.id, tg_id=user.tg_id)
+        assert result.text == CHOOSE_ARCHETYPE
+        assert result.keyboard is not None
+        assert not result.needs_name
+
+    def test_needs_name_when_user_has_no_name(self, db, svc, active_tournament):
+        user = svc.get_or_create_user(tg_id=5101, username="u", first_name=None)
+        result = handle_register(db, active_tournament.id, tg_id=user.tg_id)
+        assert result.needs_name is True
+        assert result.keyboard is None
+
+    def test_needs_name_when_user_unknown(self, db, active_tournament):
+        result = handle_register(db, active_tournament.id, tg_id=99999)
+        assert result.needs_name is True
 
 
 # --- handle_archetype ---
@@ -155,11 +173,27 @@ class TestHandleCustomArchetypeText:
         assert result.text == REGISTRATION_CLOSED
 
 
-# --- handle_register: tg_id=None (fallback to global archetype list) ---
+# --- handle_save_name_then_register ---
 
-class TestHandleRegisterNoUser:
-    def test_returns_archetypes_without_tg_id(self, db, active_tournament, archetype_burn, archetype_affinity):
-        """When tg_id is None the handler falls back to list_archetypes()[:10]."""
-        result = handle_register(db, active_tournament.id, tg_id=None)
+class TestHandleSaveNameThenRegister:
+    def test_saves_name_and_returns_archetype_keyboard(self, db, svc, active_tournament, archetype_burn):
+        from bot.handlers.player import handle_save_name_then_register
+        result = handle_save_name_then_register(
+            db, tg_id=7010, username="u", name_text="Иван Петров",
+            tournament_id=active_tournament.id,
+        )
         assert result.text == CHOOSE_ARCHETYPE
         assert result.keyboard is not None
+        user = svc.get_user_by_tg_id(7010)
+        assert user.first_name == "Иван"
+        assert user.last_name == "Петров"
+
+    def test_first_name_only(self, db, svc, active_tournament):
+        from bot.handlers.player import handle_save_name_then_register
+        handle_save_name_then_register(
+            db, tg_id=7011, username=None, name_text="Мария",
+            tournament_id=active_tournament.id,
+        )
+        user = svc.get_user_by_tg_id(7011)
+        assert user.first_name == "Мария"
+        assert user.last_name is None

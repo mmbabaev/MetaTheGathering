@@ -1,10 +1,7 @@
-# Регистрация, выбор колоды
+# Регистрация, выбор колоды — чистая бизнес-логика
 
 from sqlalchemy.orm import Session
-from telegram import Update
-from telegram.ext import ContextTypes
 
-from core.database import SessionLocal
 from services.tournament import TournamentService
 from services import errors
 from services.utils import get_tournament
@@ -13,27 +10,19 @@ from bot.keyboards import (
     tournament_list_keyboard,
     register_button,
     archetype_keyboard,
-    CB_REGISTER,
-    CB_ARCHETYPE,
-    CB_CUSTOM_ARCHETYPE,
-    CB_TOURNAMENT,
 )
 from bot.messages import (
     NO_ACTIVE_TOURNAMENTS,
     CHOOSE_ARCHETYPE,
-    CUSTOM_ARCHETYPE_PROMPT,
     REGISTERED_AS,
     REGISTERED,
     ALREADY_REGISTERED,
     REGISTRATION_CLOSED,
     TOURNAMENT_NOT_FOUND,
+    NAME_REQUIRED_FOR_REGISTRATION,
     format_tournament_card,
 )
 
-USER_DATA_PENDING_CUSTOM = "pending_custom_archetype_tournament_id"
-
-
-# --- Pure business logic functions ---
 
 def handle_tournaments(db: Session) -> HandlerResult:
     svc = TournamentService(db)
@@ -58,11 +47,33 @@ def handle_tournament_select(db: Session, tournament_id: int) -> HandlerResult:
 
 
 def handle_register(db: Session, tournament_id: int, tg_id: int | None = None) -> HandlerResult:
+    """Возвращает выбор архетипа. Если имя не задано — needs_name=True."""
     svc = TournamentService(db)
     if tg_id is not None:
+        user = svc.get_user_by_tg_id(tg_id)
+        if user is None or not user.first_name:
+            return HandlerResult(NAME_REQUIRED_FOR_REGISTRATION, needs_name=True)
         archetypes = svc.list_archetypes_for_user(tg_id)
     else:
         archetypes = svc.list_archetypes()[:10]
+    arch_list = [(a.id, a.name) for a in archetypes]
+    return HandlerResult(CHOOSE_ARCHETYPE, keyboard=archetype_keyboard(tournament_id, arch_list))
+
+
+def handle_save_name_then_register(
+    db: Session,
+    tg_id: int,
+    username: str | None,
+    name_text: str,
+    tournament_id: int,
+) -> HandlerResult:
+    """Сохраняет имя пользователя и возвращает выбор архетипа."""
+    parts = name_text.strip().split(None, 1)
+    first_name = parts[0]
+    last_name = parts[1] if len(parts) > 1 else None
+    svc = TournamentService(db)
+    svc.update_user_name(tg_id, first_name, last_name)
+    archetypes = svc.list_archetypes_for_user(tg_id)
     arch_list = [(a.id, a.name) for a in archetypes]
     return HandlerResult(CHOOSE_ARCHETYPE, keyboard=archetype_keyboard(tournament_id, arch_list))
 
@@ -126,129 +137,3 @@ def handle_custom_archetype_text(
         return HandlerResult(ALREADY_REGISTERED)
     except errors.TournamentInvalidState:
         return HandlerResult(REGISTRATION_CLOSED)
-
-
-# --- Telegram wrappers ---
-
-async def cmd_tournaments(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not update.effective_message:
-        return
-    db = SessionLocal()
-    try:
-        result = handle_tournaments(db)
-        await update.effective_message.reply_text(result.text, reply_markup=result.keyboard)
-    finally:
-        db.close()
-
-
-async def callback_tournament_select(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    if not query or not query.data:
-        return
-    try:
-        _, tid_str = query.data.split(":", 1)
-        tournament_id = int(tid_str)
-    except (ValueError, IndexError):
-        await query.answer("Ошибка данных.")
-        return
-    db = SessionLocal()
-    try:
-        result = handle_tournament_select(db, tournament_id)
-        if result.is_alert:
-            await query.answer(result.text, show_alert=True)
-            return
-        await query.edit_message_text(result.text, reply_markup=result.keyboard)
-        await query.answer()
-    finally:
-        db.close()
-
-
-async def callback_register(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    user = update.effective_user
-    if not query or not query.data:
-        return
-    try:
-        _, tid_str = query.data.split(":", 1)
-        tournament_id = int(tid_str)
-    except (ValueError, IndexError):
-        await query.answer("Ошибка данных.")
-        return
-    db = SessionLocal()
-    try:
-        result = handle_register(db, tournament_id, tg_id=user.id if user else None)
-        await query.edit_message_text(result.text, reply_markup=result.keyboard)
-        await query.answer()
-    finally:
-        db.close()
-
-
-async def callback_archetype(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    user = update.effective_user
-    if not query or not query.data or not user:
-        return
-    try:
-        _, tid_str, aid_str = query.data.split(":", 2)
-        tournament_id = int(tid_str)
-        archetype_id = int(aid_str)
-    except (ValueError, IndexError):
-        await query.answer("Ошибка данных.")
-        return
-    db = SessionLocal()
-    try:
-        result = handle_archetype(
-            db, user.id, user.username, user.first_name, user.last_name,
-            tournament_id, archetype_id,
-        )
-        if result.is_alert:
-            await query.answer(result.text, show_alert=True)
-            return
-        await query.edit_message_text(result.text)
-        await query.answer()
-    finally:
-        db.close()
-
-
-async def callback_custom_archetype(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    if not query or not query.data:
-        return
-    try:
-        _, tid_str = query.data.split(":", 1)
-        tournament_id = int(tid_str)
-    except (ValueError, IndexError):
-        await query.answer("Ошибка данных.")
-        return
-    if context.user_data is None:
-        context.user_data = {}
-    context.user_data[USER_DATA_PENDING_CUSTOM] = tournament_id
-    await query.edit_message_text(CUSTOM_ARCHETYPE_PROMPT)
-    await query.answer()
-
-
-async def message_custom_archetype(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not update.effective_message or not update.effective_message.text:
-        return
-    if context.user_data is None:
-        return
-    tournament_id = context.user_data.pop(USER_DATA_PENDING_CUSTOM, None)
-    if tournament_id is None:
-        return
-    user = update.effective_user
-    if not user:
-        return
-    name = update.effective_message.text.strip()
-    if not name:
-        context.user_data[USER_DATA_PENDING_CUSTOM] = tournament_id
-        await update.effective_message.reply_text("Введите непустое название архетипа.")
-        return
-    db = SessionLocal()
-    try:
-        result = handle_custom_archetype_text(
-            db, user.id, user.username, user.first_name, user.last_name,
-            tournament_id, name,
-        )
-        await update.effective_message.reply_text(result.text)
-    finally:
-        db.close()

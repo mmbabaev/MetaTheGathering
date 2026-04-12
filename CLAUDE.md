@@ -29,11 +29,12 @@ Requires `TELEGRAM_BOT_TOKEN` and `DATABASE_URL` in `.env`. PostgreSQL must be r
 ### Layered structure
 
 ```
-main.py  →  bot/handlers/  →  services/  →  core/models + database
+main.py  →  bot/telegram/  →  bot/handlers/  →  services/  →  core/models + database
 ```
 
-- **`main.py`** — wires Telegram handlers and starts polling
-- **`bot/handlers/`** — async Telegram callbacks; each handler opens a `SessionLocal()`, instantiates `TournamentService(db)`, calls service methods, then closes the session in `finally`
+- **`main.py`** — wires Telegram handlers and starts polling; imports from `bot/telegram/`
+- **`bot/telegram/`** — thin async Telegram wrappers (`cmd_xxx`, `callback_xxx`); extract primitives from `Update`/`context`, open a `SessionLocal()`, call the corresponding `handle_xxx`, send the result. Not unit-tested.
+- **`bot/handlers/`** — pure business logic (`handle_xxx` functions); take only primitives + `Session`, return `HandlerResult`. No Telegram imports. 100% unit-testable.
 - **`bot/keyboards/`** — callback prefix constants (`CB_*`) and inline keyboard builders; callback data format is `PREFIX:arg1:arg2`
 - **`bot/messages/`** — Russian-language string constants and `format_*` helpers
 - **`services/tournament.py`** — the primary service class `TournamentService`; handles tournament lifecycle, participant registration, voting, and meta aggregation
@@ -62,7 +63,7 @@ Defined in `services/tournament.py`:
 
 ### Custom archetype flow
 
-Uses `context.user_data[USER_DATA_PENDING_CUSTOM]` to store `tournament_id` between the callback and the subsequent text message. Key: `"pending_custom_archetype_tournament_id"` in `bot/handlers/player.py`.
+Uses `context.user_data[USER_DATA_PENDING_CUSTOM]` to store `tournament_id` between the callback and the subsequent text message. Key: `"pending_custom_archetype_tournament_id"` in `bot/telegram/player.py`.
 
 ## Tests
 
@@ -78,25 +79,26 @@ python3 -m pytest tests/test_tournament_service.py -v
 ```
 
 **Handler testing pattern** — handlers are split into two layers:
-- `handle_xxx(db, ...primitives) → HandlerResult` — pure business logic, tested directly (no Telegram mocks)
-- `cmd_xxx / callback_xxx` — thin Telegram wrappers that call `handle_xxx` and send the result
+- `handle_xxx(db, ...primitives) → HandlerResult` in `bot/handlers/` — pure business logic, tested directly (no Telegram mocks)
+- `cmd_xxx / callback_xxx` in `bot/telegram/` — thin Telegram wrappers that call `handle_xxx` and send the result; not unit-tested
 
-`HandlerResult` is defined in `bot/handlers/base.py` (`text`, `keyboard`, `is_alert`).
+`HandlerResult` is defined in `bot/handlers/base.py` (`text`, `keyboard`, `is_alert`, `needs_name`).
 
-**Current status (121 tests, all passing, ~80% coverage):**
+**Current status (181 tests, all passing, ~84% coverage):**
 
 | File | Coverage | Notes |
 |------|----------|-------|
-| `services/tournament.py` | 91% | Main business logic |
+| `services/tournament.py` | 100% | Main business logic |
 | `services/utils.py` | 100% | |
 | `core/models.py`, `schemas.py` | 100% | |
 | `core/config.py` | 90% | |
 | `bot/keyboards/__init__.py`, `bot/messages/__init__.py`, `bot/handlers/base.py` | 100% | |
+| `bot/handlers/admin.py` | 99% | Pure logic only — fully covered |
+| `bot/handlers/player.py` | 100% | Pure logic only — fully covered |
+| `bot/handlers/settings.py` | 100% | Pure logic only — fully covered |
+| `bot/scheduler.py` | 100% | |
 | `utils/seed.py` | 85% | |
-| `bot/handlers/admin.py` | 57% | `handle_xxx` covered, `cmd_xxx` wrappers not |
-| `bot/handlers/player.py` | 40% | `handle_xxx` covered, `callback_xxx` wrappers not |
-| `bot/scheduler.py` | 35% | `_create_tournaments_for_schedule` not covered |
-| `bot/handlers/common.py` | 0% | Trivial /start and /help |
+| `bot/telegram/` | 0% | Telegram wrappers — not unit-tested by design |
 | `main.py` | 0% | Entry point wiring only |
 
 Tests use **SQLite in-memory** — no real PostgreSQL needed. See `docs/test_plan.md` for the full plan.

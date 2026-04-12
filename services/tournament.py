@@ -217,6 +217,29 @@ class TournamentService:
 
         return (recent + rest)[:total]
 
+    def get_user_by_tg_id(self, tg_id: int) -> Optional[models.User]:
+        """Вернуть пользователя по tg_id или None."""
+        stmt = select(models.User).where(models.User.tg_id == tg_id)
+        return self.db.execute(stmt).scalar_one_or_none()
+
+    def update_user_name(
+        self,
+        tg_id: int,
+        first_name: str,
+        last_name: Optional[str] = None,
+    ) -> models.User:
+        """Обновить имя и фамилию пользователя по tg_id. Создаёт запись если не существует."""
+        stmt = select(models.User).where(models.User.tg_id == tg_id)
+        user = self.db.execute(stmt).scalar_one_or_none()
+        if not user:
+            user = models.User(tg_id=tg_id)
+            self.db.add(user)
+        user.first_name = first_name.strip()
+        user.last_name = last_name.strip() if last_name else None
+        self.db.commit()
+        self.db.refresh(user)
+        return user
+
     def get_or_create_user(
         self,
         *,

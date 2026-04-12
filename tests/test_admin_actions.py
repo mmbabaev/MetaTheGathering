@@ -487,3 +487,27 @@ class TestHandleAddPlayerNoUsername:
             deck_name="Burn", target_first_name=None,
         )
         assert "6001" in result.text or "Burn" in result.text
+
+
+# --- handle_tournament_status: full name display ---
+
+class TestTournamentStatusFullName:
+    def test_shows_first_and_last_name(self, db, svc, admin_user, active_tournament, archetype_burn):
+        user = svc.get_or_create_user(tg_id=6100, username=None, first_name="Иван", last_name="Иванов")
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
+        result = handle_tournament_status(db, tg_id=ADMIN_TG_ID)
+        assert "Иван" in result.text
+        assert "Иванов" in result.text
+
+    def test_shows_username_hint_when_available(self, db, svc, admin_user, active_tournament, archetype_burn):
+        user = svc.get_or_create_user(tg_id=6101, username="ivan", first_name="Иван", last_name=None)
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
+        result = handle_tournament_status(db, tg_id=ADMIN_TG_ID)
+        assert "Иван" in result.text
+        assert "@ivan" in result.text
+
+    def test_falls_back_to_id_when_no_name(self, db, svc, admin_user, active_tournament, archetype_burn):
+        user = svc.get_or_create_user(tg_id=6102, username=None, first_name=None)
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
+        result = handle_tournament_status(db, tg_id=ADMIN_TG_ID)
+        assert "6102" in result.text
