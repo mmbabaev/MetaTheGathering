@@ -4,8 +4,13 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from core.database import SessionLocal
-from bot.handlers.settings import handle_settings, handle_settings_name_text
+from services.user import UserService
+from bot.handlers.settings import SettingsHandler
 from bot.messages import SETTINGS_CHANGE_NAME_PROMPT
+
+
+def _settings_handler(db) -> SettingsHandler:
+    return SettingsHandler(UserService(db))
 
 USER_DATA_PENDING_SETTINGS_NAME = "pending_settings_name"
 
@@ -17,7 +22,7 @@ async def cmd_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
     db = SessionLocal()
     try:
-        result = handle_settings(db, user.id)
+        result = _settings_handler(db).handle_settings(user.id)
         await msg.reply_text(result.text, reply_markup=result.keyboard)
     finally:
         db.close()

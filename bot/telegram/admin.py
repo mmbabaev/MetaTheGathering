@@ -7,16 +7,14 @@ from telegram.ext import ContextTypes
 
 from core.config import settings
 from core.database import SessionLocal
-from bot.handlers.admin import (
-    handle_add_me,
-    handle_add_player,
-    handle_add_players,
-    handle_tournament_status,
-    handle_close_tournament,
-    parse_add_player_command,
-    parse_bulk_player_line,
-)
+from services.tournament import TournamentService
+from services.user import UserService
+from bot.handlers.admin import AdminHandler, parse_add_player_command, parse_bulk_player_line
 from bot.messages import TELEGRAM_USER_LOOKUP_FAILED, ADD_PLAYERS_USAGE
+
+
+def _admin_handler(db) -> AdminHandler:
+    return AdminHandler(TournamentService(db), UserService(db))
 
 
 async def cmd_add_me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -28,7 +26,7 @@ async def cmd_add_me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     deck_name = " ".join(context.args or []).strip()
     db = SessionLocal()
     try:
-        result = handle_add_me(db, user.id, user.username, user.first_name, user.last_name, deck_name)
+        result = _admin_handler(db).handle_add_me(user.id, user.username, user.first_name, user.last_name, deck_name)
         await msg.reply_text(result.text)
     finally:
         db.close()
@@ -66,8 +64,7 @@ async def cmd_add_player(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         target_last_name = chat.last_name
     db = SessionLocal()
     try:
-        result = handle_add_player(
-            db,
+        result = _admin_handler(db).handle_add_player(
             user.id,
             target_tg_id=target_tg_id,
             target_username=username,
@@ -116,7 +113,7 @@ async def cmd_add_players(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             body = "\n".join(fragments) if fragments else ADD_PLAYERS_USAGE
             await msg.reply_text(body)
             return
-        result = handle_add_players(db, user.id, entries)
+        result = _admin_handler(db).handle_add_players(user.id, entries)
         out = ("\n".join(fragments) + "\n" + result.text).strip() if fragments else result.text
         await msg.reply_text(out)
     finally:
@@ -131,7 +128,7 @@ async def cmd_tournament_status(update: Update, context: ContextTypes.DEFAULT_TY
         return
     db = SessionLocal()
     try:
-        result = handle_tournament_status(db, user.id)
+        result = _admin_handler(db).handle_tournament_status(user.id)
         await msg.reply_text(result.text)
     finally:
         db.close()
@@ -145,7 +142,7 @@ async def cmd_close_tournament(update: Update, context: ContextTypes.DEFAULT_TYP
         return
     db = SessionLocal()
     try:
-        result = handle_close_tournament(db, user.id)
+        result = _admin_handler(db).handle_close_tournament(user.id)
         await msg.reply_text(result.text)
     finally:
         db.close()
