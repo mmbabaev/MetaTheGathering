@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from core.config import settings
 from core import models
 from services.tournament import TournamentService
+from services.user import UserService
 from services import errors
 from bot.handlers.base import HandlerResult
 from bot.messages import (
@@ -16,6 +17,7 @@ from bot.messages import (
     MULTIPLE_TOURNAMENTS_MSG,
     PLAYER_ADDED,
     TOURNAMENT_CLOSED_MSG,
+    format_tournament_status,
 )
 
 
@@ -112,8 +114,9 @@ def handle_add_me(
     active, err = _resolve_tournament(svc)
     if err:
         return err
+    user_svc = UserService(db)
     try:
-        db_user = svc.get_or_create_user(
+        db_user = user_svc.get_or_create(
             tg_id=tg_id,
             username=username,
             first_name=first_name,
@@ -161,8 +164,9 @@ def handle_add_player(
     active, err = _resolve_tournament(svc)
     if err:
         return err
+    user_svc = UserService(db)
     try:
-        target_user = svc.get_or_create_user(
+        target_user = user_svc.get_or_create(
             tg_id=target_tg_id,
             username=target_username,
             first_name=target_first_name,
@@ -202,10 +206,11 @@ def handle_add_players(
     if err:
         return err
     results = []
+    user_svc = UserService(db)
     for target_tg_id, uname, fname, deck_name in entries:
         user_label = _player_display_label(uname, fname, target_tg_id)
         try:
-            target_user = svc.get_or_create_user(
+            target_user = user_svc.get_or_create(
                 tg_id=target_tg_id,
                 username=uname,
                 first_name=fname,
@@ -232,26 +237,10 @@ def handle_tournament_status(db: Session, tg_id: int) -> HandlerResult:
     tournaments = svc.list_all_active_tournaments()
     if not tournaments:
         return HandlerResult(NO_ACTIVE_TOURNAMENT)
-    blocks = []
-    for t in tournaments:
-        participants = svc.list_participants_for_tournament(t.id)
-        lines = [
-            f"Турнир: {t.title}",
-            f"Статус: {t.status.label_ru}",
-            f"Участники ({len(participants)}):",
-        ]
-        for i, p in enumerate(participants, 1):
-            if p.user:
-                name_parts = [n for n in (p.user.first_name, p.user.last_name) if n]
-                full_name = " ".join(name_parts) if name_parts else f"id{p.user.tg_id}"
-                username_hint = f" (@{p.user.username})" if p.user.username else ""
-                display = f"{full_name}{username_hint}"
-            else:
-                display = "?"
-            archetype = p.archetype.name if p.archetype else "не указана"
-            confirmed = " ✅" if p.confirmed else ""
-            lines.append(f"{i}. {display} — {archetype}{confirmed}")
-        blocks.append("\n".join(lines))
+    blocks = [
+        format_tournament_status(t.title, t.status.label_ru, svc.list_participants_for_tournament(t.id))
+        for t in tournaments
+    ]
     return HandlerResult("\n\n---\n\n".join(blocks))
 
 

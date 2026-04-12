@@ -8,6 +8,10 @@ CB_ARCHETYPE = "arch"
 CB_CUSTOM_ARCHETYPE = "custom"
 CB_TOURNAMENT = "t"
 CB_SETTINGS_NAME = "settings_name"
+CB_TSTATUS = "tstatus"
+CB_LEAVE = "leave"
+CB_LEAVE_CONFIRM = "leave_confirm"
+CB_LEAVE_CANCEL = "leave_cancel"
 
 
 def tournament_list_keyboard(tournaments: list) -> InlineKeyboardMarkup:
@@ -19,10 +23,34 @@ def tournament_list_keyboard(tournaments: list) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(buttons)
 
 
+def tournament_card_keyboard(tournament_id: int, is_registered: bool) -> InlineKeyboardMarkup:
+    """Кнопки для карточки турнира — зависят от статуса регистрации игрока."""
+    if is_registered:
+        action_btn = InlineKeyboardButton(
+            "🚪 Выйти из турнира", callback_data=f"{CB_LEAVE}:{tournament_id}"
+        )
+    else:
+        action_btn = InlineKeyboardButton(
+            "Записаться", callback_data=f"{CB_REGISTER}:{tournament_id}"
+        )
+    status_btn = InlineKeyboardButton(
+        "📋 Статус", callback_data=f"{CB_TSTATUS}:{tournament_id}"
+    )
+    return InlineKeyboardMarkup([[action_btn], [status_btn]])
+
+
 def register_button(tournament_id: int) -> InlineKeyboardMarkup:
-    """Одна кнопка «Записаться» для турнира."""
+    """Одна кнопка «Записаться» для турнира (обратная совместимость)."""
+    return tournament_card_keyboard(tournament_id, is_registered=False)
+
+
+def leave_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
+    """Кнопки подтверждения выхода из турнира."""
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("Записаться", callback_data=f"{CB_REGISTER}:{tournament_id}")]
+        [
+            InlineKeyboardButton("✅ Да, выйти", callback_data=f"{CB_LEAVE_CONFIRM}:{tournament_id}"),
+            InlineKeyboardButton("❌ Отмена", callback_data=f"{CB_LEAVE_CANCEL}:{tournament_id}"),
+        ]
     ])
 
 

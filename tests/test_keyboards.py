@@ -29,10 +29,10 @@ class TestTournamentListKeyboard:
 
 
 class TestRegisterButton:
-    def test_single_button(self):
+    def test_has_register_and_status_buttons(self):
         markup = register_button(7)
-        assert len(markup.inline_keyboard) == 1
-        assert len(markup.inline_keyboard[0]) == 1
+        # register_button delegates to tournament_card_keyboard(unregistered) → 2 rows
+        assert len(markup.inline_keyboard) == 2
 
     def test_callback_data_format(self):
         markup = register_button(7)

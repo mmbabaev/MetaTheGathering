@@ -89,8 +89,8 @@ class TestParseBulkPlayerLine:
 
 
 @pytest.fixture
-def admin_user(svc):
-    u = svc.get_or_create_user(tg_id=ADMIN_TG_ID, username="admin", first_name="Admin")
+def admin_user(user_svc, svc):
+    u = user_svc.get_or_create(tg_id=ADMIN_TG_ID, username="admin", first_name="Admin")
     from core import models
     from sqlalchemy import select
     stmt = select(models.User).where(models.User.tg_id == ADMIN_TG_ID)
@@ -465,8 +465,8 @@ class TestPlayerDisplayLabel:
 # --- handle_add_player: _player_display_label no-username path in result ---
 
 class TestHandleAddPlayerNoUsername:
-    def test_already_registered_no_username_shows_first_name(self, db, svc, admin_user, active_tournament):
-        target = svc.get_or_create_user(tg_id=5001, username=None, first_name="Bob")
+    def test_already_registered_no_username_shows_first_name(self, db, svc, user_svc, admin_user, active_tournament):
+        target = user_svc.get_or_create(tg_id=5001, username=None, first_name="Bob")
         handle_add_player(
             db, tg_id=ADMIN_TG_ID,
             target_tg_id=target.tg_id, target_username=None,
@@ -492,22 +492,22 @@ class TestHandleAddPlayerNoUsername:
 # --- handle_tournament_status: full name display ---
 
 class TestTournamentStatusFullName:
-    def test_shows_first_and_last_name(self, db, svc, admin_user, active_tournament, archetype_burn):
-        user = svc.get_or_create_user(tg_id=6100, username=None, first_name="Иван", last_name="Иванов")
+    def test_shows_first_and_last_name(self, db, svc, user_svc, admin_user, active_tournament, archetype_burn):
+        user = user_svc.get_or_create(tg_id=6100, username=None, first_name="Иван", last_name="Иванов")
         svc.register_participant(tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
         result = handle_tournament_status(db, tg_id=ADMIN_TG_ID)
         assert "Иван" in result.text
         assert "Иванов" in result.text
 
-    def test_shows_username_hint_when_available(self, db, svc, admin_user, active_tournament, archetype_burn):
-        user = svc.get_or_create_user(tg_id=6101, username="ivan", first_name="Иван", last_name=None)
+    def test_shows_username_hint_when_available(self, db, svc, user_svc, admin_user, active_tournament, archetype_burn):
+        user = user_svc.get_or_create(tg_id=6101, username="ivan", first_name="Иван", last_name=None)
         svc.register_participant(tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
         result = handle_tournament_status(db, tg_id=ADMIN_TG_ID)
         assert "Иван" in result.text
         assert "@ivan" in result.text
 
-    def test_falls_back_to_id_when_no_name(self, db, svc, admin_user, active_tournament, archetype_burn):
-        user = svc.get_or_create_user(tg_id=6102, username=None, first_name=None)
+    def test_falls_back_to_id_when_no_name(self, db, svc, user_svc, admin_user, active_tournament, archetype_burn):
+        user = user_svc.get_or_create(tg_id=6102, username=None, first_name=None)
         svc.register_participant(tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
         result = handle_tournament_status(db, tg_id=ADMIN_TG_ID)
         assert "6102" in result.text

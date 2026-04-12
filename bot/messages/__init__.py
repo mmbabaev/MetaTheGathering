@@ -8,6 +8,9 @@ REGISTERED = "Вы записаны."
 ALREADY_REGISTERED = "Вы уже записаны на этот турнир."
 REGISTRATION_CLOSED = "Регистрация на этот турнир закрыта."
 TOURNAMENT_NOT_FOUND = "Турнир не найден."
+LEAVE_CONFIRM_PROMPT = "Вы уверены, что хотите выйти из турнира?"
+LEFT_TOURNAMENT = "Вы вышли из турнира."
+NOT_REGISTERED_IN_TOURNAMENT = "Вы не записаны на этот турнир."
 
 
 # Name prompts
@@ -51,3 +54,24 @@ def format_tournament_card(title: str, status: str, slug: str | None = None) -> 
     if slug:
         parts.append(f"Slug: {slug}")
     return "\n".join(parts)
+
+
+def format_tournament_status(title: str, status: str, participants: list) -> str:
+    """Форматирует список участников турнира для отображения игрокам."""
+    lines = [
+        f"Турнир: {title}",
+        f"Статус: {status}",
+        f"Участники ({len(participants)}):",
+    ]
+    for i, p in enumerate(participants, 1):
+        if p.user:
+            name_parts = [n for n in (p.user.first_name, p.user.last_name) if n]
+            full_name = " ".join(name_parts) if name_parts else f"id{p.user.tg_id}"
+            username_hint = f" (@{p.user.username})" if p.user.username else ""
+            display = f"{full_name}{username_hint}"
+        else:
+            display = "?"
+        archetype = p.archetype.name if p.archetype else "не указана"
+        confirmed = " ✅" if p.confirmed else ""
+        lines.append(f"{i}. {display} — {archetype}{confirmed}")
+    return "\n".join(lines)
