@@ -12,6 +12,7 @@ CB_TSTATUS = "tstatus"
 CB_LEAVE = "leave"
 CB_LEAVE_CONFIRM = "leave_confirm"
 CB_LEAVE_CANCEL = "leave_cancel"
+CB_BULK_ADD = "bulk_add"
 
 
 def tournament_list_keyboard(tournaments: list) -> InlineKeyboardMarkup:
@@ -23,8 +24,12 @@ def tournament_list_keyboard(tournaments: list) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(buttons)
 
 
-def tournament_card_keyboard(tournament_id: int, is_registered: bool) -> InlineKeyboardMarkup:
-    """Кнопки для карточки турнира — зависят от статуса регистрации игрока."""
+def tournament_card_keyboard(
+    tournament_id: int,
+    is_registered: bool,
+    is_admin: bool = False,
+) -> InlineKeyboardMarkup:
+    """Кнопки для карточки турнира — зависят от статуса регистрации и роли пользователя."""
     if is_registered:
         action_btn = InlineKeyboardButton(
             "🚪 Выйти из турнира", callback_data=f"{CB_LEAVE}:{tournament_id}"
@@ -36,7 +41,14 @@ def tournament_card_keyboard(tournament_id: int, is_registered: bool) -> InlineK
     status_btn = InlineKeyboardButton(
         "📋 Статус", callback_data=f"{CB_TSTATUS}:{tournament_id}"
     )
-    return InlineKeyboardMarkup([[action_btn], [status_btn]])
+    rows = [[action_btn], [status_btn]]
+    if is_admin:
+        rows.append([
+            InlineKeyboardButton(
+                "➕ Добавить участников", callback_data=f"{CB_BULK_ADD}:{tournament_id}"
+            )
+        ])
+    return InlineKeyboardMarkup(rows)
 
 
 def register_button(tournament_id: int) -> InlineKeyboardMarkup:
