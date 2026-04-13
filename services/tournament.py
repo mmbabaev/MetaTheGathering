@@ -355,6 +355,11 @@ class TournamentService:
         participants = self.db.execute(stmt).scalars().all()
         return [ParticipantWithUserAndArchetype.model_validate(p) for p in participants]
 
+    def get_participant_by_id(self, participant_id: int) -> Optional[models.Participant]:
+        """Вернуть участника по participant.id или None."""
+        stmt = select(models.Participant).where(models.Participant.id == participant_id)
+        return self.db.execute(stmt).scalar_one_or_none()
+
     def get_participant(
         self, tournament_id: int, user_id: int
     ) -> Optional[models.Participant]:

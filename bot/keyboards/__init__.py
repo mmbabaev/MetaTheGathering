@@ -13,6 +13,9 @@ CB_LEAVE = "leave"
 CB_LEAVE_CONFIRM = "leave_confirm"
 CB_LEAVE_CANCEL = "leave_cancel"
 CB_BULK_ADD = "bulk_add"
+CB_ADMIN_PICK_ARCH = "adm_pick"    # adm_pick:{participant_id}
+CB_ADMIN_SET_ARCH = "adm_set"     # adm_set:{participant_id}:{archetype_id}
+CB_ADMIN_CUSTOM_ARCH = "adm_custom"  # adm_custom:{participant_id}
 
 
 def tournament_list_keyboard(tournaments: list) -> InlineKeyboardMarkup:
@@ -71,6 +74,34 @@ def settings_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✏️ Изменить имя", callback_data=CB_SETTINGS_NAME)]
     ])
+
+
+def admin_participants_keyboard(participants: list) -> InlineKeyboardMarkup:
+    """Кнопка на каждого участника для редактирования колоды (admin status view)."""
+    buttons = []
+    for p in participants:
+        if p.user:
+            name_parts = [n for n in (p.user.first_name, p.user.last_name) if n]
+            name = " ".join(name_parts) if name_parts else f"id{p.user.tg_id}"
+        else:
+            name = f"id{p.id}"
+        prefix = "📝 " if p.archetype is None else "✏️ "
+        buttons.append([
+            InlineKeyboardButton(f"{prefix}{name}", callback_data=f"{CB_ADMIN_PICK_ARCH}:{p.id}")
+        ])
+    return InlineKeyboardMarkup(buttons)
+
+
+def admin_archetype_select_keyboard(participant_id: int, archetypes: list) -> InlineKeyboardMarkup:
+    """Выбор архетипа для конкретного участника (admin flow)."""
+    buttons = [
+        [InlineKeyboardButton(name, callback_data=f"{CB_ADMIN_SET_ARCH}:{participant_id}:{aid}")]
+        for aid, name in archetypes
+    ]
+    buttons.append([
+        InlineKeyboardButton("Свой вариант", callback_data=f"{CB_ADMIN_CUSTOM_ARCH}:{participant_id}")
+    ])
+    return InlineKeyboardMarkup(buttons)
 
 
 def archetype_keyboard(tournament_id: int, archetypes: list) -> InlineKeyboardMarkup:

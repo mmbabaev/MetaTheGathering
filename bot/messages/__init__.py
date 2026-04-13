@@ -38,6 +38,8 @@ BULK_ADD_PROMPT = (
     "Пример:\nИван Иванов\nМария Петрова\nАлексей"
 )
 BULK_ADD_EMPTY = "Список игроков пустой."
+PARTICIPANT_NOT_FOUND = "Участник не найден."
+ADMIN_ARCH_SAVED = "✅ Колода обновлена: {archetype_name}"
 
 
 HELP_TEXT = """\

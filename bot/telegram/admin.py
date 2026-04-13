@@ -10,7 +10,7 @@ from core.database import SessionLocal
 from services.tournament import TournamentService
 from services.user import UserService
 from bot.handlers.admin import AdminHandler, parse_add_player_command, parse_bulk_player_line
-from bot.telegram.player import USER_DATA_PENDING_BULK_ADD
+from bot.telegram.player import USER_DATA_PENDING_BULK_ADD, USER_DATA_PENDING_ADMIN_CUSTOM_ARCH
 from bot.messages import TELEGRAM_USER_LOOKUP_FAILED, ADD_PLAYERS_USAGE, BULK_ADD_PROMPT
 
 
@@ -33,6 +33,73 @@ async def callback_bulk_add_start(update: Update, context: ContextTypes.DEFAULT_
         context.user_data = {}
     context.user_data[USER_DATA_PENDING_BULK_ADD] = tournament_id
     await query.edit_message_text(BULK_ADD_PROMPT)
+    await query.answer()
+
+
+async def callback_admin_pick_arch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Нажатие на участника в admin status → показывает выбор архетипа."""
+    query = update.callback_query
+    user = update.effective_user
+    if not query or not query.data or not user:
+        return
+    try:
+        _, pid_str = query.data.split(":", 1)
+        participant_id = int(pid_str)
+    except (ValueError, IndexError):
+        await query.answer("Ошибка данных.")
+        return
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_admin_pick_arch(user.id, participant_id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+        await query.answer()
+    finally:
+        db.close()
+
+
+async def callback_admin_set_arch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Выбор конкретного архетипа для участника."""
+    query = update.callback_query
+    user = update.effective_user
+    if not query or not query.data or not user:
+        return
+    try:
+        _, pid_str, aid_str = query.data.split(":", 2)
+        participant_id = int(pid_str)
+        archetype_id = int(aid_str)
+    except (ValueError, IndexError):
+        await query.answer("Ошибка данных.")
+        return
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_admin_set_arch(user.id, participant_id, archetype_id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        await query.edit_message_text(result.text)
+        await query.answer()
+    finally:
+        db.close()
+
+
+async def callback_admin_custom_arch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«Свой вариант» — ждём текст с названием архетипа."""
+    query = update.callback_query
+    if not query or not query.data:
+        return
+    try:
+        _, pid_str = query.data.split(":", 1)
+        participant_id = int(pid_str)
+    except (ValueError, IndexError):
+        await query.answer("Ошибка данных.")
+        return
+    if context.user_data is None:
+        context.user_data = {}
+    context.user_data[USER_DATA_PENDING_ADMIN_CUSTOM_ARCH] = participant_id
+    await query.edit_message_text("Напишите название архетипа:")
     await query.answer()
 
 
