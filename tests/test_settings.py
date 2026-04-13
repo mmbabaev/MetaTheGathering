@@ -1,9 +1,13 @@
 """Tests for /settings handler and UserService methods."""
 
 import pytest
-from core.schemas import TournamentCreate
-from bot.handlers.settings import handle_settings, handle_settings_name_text
+from bot.handlers.settings import SettingsHandler
 from bot.messages import SETTINGS_MENU, NAME_SAVED
+
+
+@pytest.fixture
+def handler(user_svc):
+    return SettingsHandler(user_svc)
 
 
 # --- UserService.update_name ---
@@ -48,48 +52,48 @@ class TestGetUserByTgId:
 # --- handle_settings ---
 
 class TestHandleSettings:
-    def test_no_user_shows_not_set(self, db):
-        result = handle_settings(db, tg_id=8001)
+    def test_no_user_shows_not_set(self, handler):
+        result = handler.handle_settings(tg_id=8001)
         assert SETTINGS_MENU in result.text
         assert "не указано" in result.text
         assert result.keyboard is not None
 
-    def test_user_with_name_shows_name(self, db, user_svc):
+    def test_user_with_name_shows_name(self, handler, user_svc):
         user_svc.update_name(tg_id=8002, first_name="Иван", last_name="Иванов")
-        result = handle_settings(db, tg_id=8002)
+        result = handler.handle_settings(tg_id=8002)
         assert "Иван" in result.text
         assert "Иванов" in result.text
 
-    def test_user_with_first_name_only(self, db, user_svc):
+    def test_user_with_first_name_only(self, handler, user_svc):
         user_svc.update_name(tg_id=8003, first_name="Мария")
-        result = handle_settings(db, tg_id=8003)
+        result = handler.handle_settings(tg_id=8003)
         assert "Мария" in result.text
 
-    def test_returns_keyboard(self, db):
-        result = handle_settings(db, tg_id=8004)
+    def test_returns_keyboard(self, handler):
+        result = handler.handle_settings(tg_id=8004)
         assert result.keyboard is not None
 
 
 # --- handle_settings_name_text ---
 
 class TestHandleSettingsNameText:
-    def test_saves_first_name_only(self, db, user_svc):
+    def test_saves_first_name_only(self, handler, user_svc):
         user_svc.get_or_create(tg_id=8010, username="u", first_name="Old")
-        result = handle_settings_name_text(db, tg_id=8010, name_text="Новое")
+        result = handler.handle_settings_name_text(tg_id=8010, name_text="Новое")
         assert "Новое" in result.text
         user = user_svc.get_by_tg_id(8010)
         assert user.first_name == "Новое"
         assert user.last_name is None
 
-    def test_saves_first_and_last_name(self, db, user_svc):
+    def test_saves_first_and_last_name(self, handler, user_svc):
         user_svc.get_or_create(tg_id=8011, username="u", first_name="Old")
-        result = handle_settings_name_text(db, tg_id=8011, name_text="Иван Петров")
+        result = handler.handle_settings_name_text(tg_id=8011, name_text="Иван Петров")
         assert "Иван" in result.text
         assert "Петров" in result.text
         user = user_svc.get_by_tg_id(8011)
         assert user.first_name == "Иван"
         assert user.last_name == "Петров"
 
-    def test_returns_name_saved_message(self, db):
-        result = handle_settings_name_text(db, tg_id=8012, name_text="Анна")
+    def test_returns_name_saved_message(self, handler):
+        result = handler.handle_settings_name_text(tg_id=8012, name_text="Анна")
         assert result.text == NAME_SAVED.format(full_name="Анна")

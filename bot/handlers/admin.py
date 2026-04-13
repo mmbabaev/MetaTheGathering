@@ -1,11 +1,8 @@
 # Админ-панель — чистая бизнес-логика
 
 import re
-from sqlalchemy import select
-from sqlalchemy.orm import Session
 
 from core.config import settings
-from core import models
 from services.tournament import TournamentService
 from services.user import UserService
 from services import errors
@@ -78,68 +75,6 @@ def parse_bulk_player_line(line: str) -> tuple[str, str] | None:
     return (parts[0].lstrip("@"), parts[1].strip())
 
 
-def _is_admin(db: Session, tg_id: int) -> bool:
-    if tg_id in settings.admin_ids:
-        return True
-    stmt = select(models.User).where(models.User.tg_id == tg_id)
-    user = db.execute(stmt).scalar_one_or_none()
-    return user is not None and (user.is_admin or user.is_superadmin)
-
-
-# --- Pure business logic functions ---
-
-def _resolve_tournament(svc: TournamentService):
-    """Возвращает (tournament, error_result). Один из них None."""
-    try:
-        return svc.get_single_active_tournament(), None
-    except errors.TournamentNotFound:
-        return None, HandlerResult(NO_ACTIVE_TOURNAMENT)
-    except errors.MultipleActiveTournaments:
-        return None, HandlerResult(MULTIPLE_TOURNAMENTS_MSG)
-
-
-def handle_add_me(
-    db: Session,
-    tg_id: int,
-    username: str | None,
-    first_name: str | None,
-    last_name: str | None,
-    deck_name: str,
-) -> HandlerResult:
-    if not _is_admin(db, tg_id):
-        return HandlerResult(NOT_ADMIN)
-    if not deck_name:
-        return HandlerResult(NO_DECK_NAME)
-    svc = TournamentService(db)
-    active, err = _resolve_tournament(svc)
-    if err:
-        return err
-    user_svc = UserService(db)
-    try:
-        db_user = user_svc.get_or_create(
-            tg_id=tg_id,
-            username=username,
-            first_name=first_name,
-            last_name=last_name,
-        )
-        archetype = svc.get_or_create_archetype_by_name(deck_name)
-        svc.register_participant(
-            tournament_id=active.id,
-            user_id=db_user.id,
-            archetype_id=archetype.id,
-            added_by_admin=True,
-        )
-        user_label = f"@{username}" if username else (first_name or f"id{tg_id}")
-        return HandlerResult(PLAYER_ADDED.format(
-            user=user_label,
-            archetype_name=archetype.name,
-        ))
-    except errors.ParticipantAlreadyRegistered:
-        return HandlerResult("Вы уже записаны на этот турнир.")
-    except errors.TournamentInvalidState:
-        return HandlerResult("Регистрация на этот турнир закрыта.")
-
-
 def _player_display_label(username: str | None, first_name: str | None, tg_id: int) -> str:
     if username:
         return f"@{username}"
@@ -148,108 +83,158 @@ def _player_display_label(username: str | None, first_name: str | None, tg_id: i
     return f"игрок {tg_id}"
 
 
-def handle_add_player(
-    db: Session,
-    tg_id: int,
-    *,
-    target_tg_id: int,
-    target_username: str | None,
-    deck_name: str,
-    target_first_name: str | None = None,
-    target_last_name: str | None = None,
-) -> HandlerResult:
-    if not _is_admin(db, tg_id):
-        return HandlerResult(NOT_ADMIN)
-    svc = TournamentService(db)
-    active, err = _resolve_tournament(svc)
-    if err:
-        return err
-    user_svc = UserService(db)
-    try:
-        target_user = user_svc.get_or_create(
-            tg_id=target_tg_id,
-            username=target_username,
-            first_name=target_first_name,
-            last_name=target_last_name,
-        )
-        archetype = svc.get_or_create_archetype_by_name(deck_name)
-        svc.register_participant(
-            tournament_id=active.id,
-            user_id=target_user.id,
-            archetype_id=archetype.id,
-            added_by_admin=True,
-        )
-        user_label = _player_display_label(target_username, target_first_name, target_tg_id)
-        return HandlerResult(PLAYER_ADDED.format(
-            user=user_label,
-            archetype_name=archetype.name,
-        ))
-    except errors.ParticipantAlreadyRegistered:
-        user_label = _player_display_label(target_username, target_first_name, target_tg_id)
-        return HandlerResult(f"{user_label} уже записан на этот турнир.")
-    except errors.TournamentInvalidState:
-        return HandlerResult("Регистрация на этот турнир закрыта.")
+class AdminHandler:
+    def __init__(self, svc: TournamentService, user_svc: UserService) -> None:
+        self.svc = svc
+        self.user_svc = user_svc
 
+    def _is_admin(self, tg_id: int) -> bool:
+        if tg_id in settings.admin_ids:
+            return True
+        user = self.user_svc.get_by_tg_id(tg_id)
+        return user is not None and (user.is_admin or user.is_superadmin)
 
-def handle_add_players(
-    db: Session,
-    tg_id: int,
-    entries: list[tuple[int, str | None, str | None, str]],
-) -> HandlerResult:
-    """entries: (target_tg_id, username, first_name, deck_name) — после резолва в Telegram."""
-    if not _is_admin(db, tg_id):
-        return HandlerResult(NOT_ADMIN)
-    if not entries:
-        return HandlerResult("Нет данных для обработки.")
-    svc = TournamentService(db)
-    active, err = _resolve_tournament(svc)
-    if err:
-        return err
-    results = []
-    user_svc = UserService(db)
-    for target_tg_id, uname, fname, deck_name in entries:
-        user_label = _player_display_label(uname, fname, target_tg_id)
+    def _resolve_tournament(self):
+        """Возвращает (tournament, error_result). Один из них None."""
         try:
-            target_user = user_svc.get_or_create(
-                tg_id=target_tg_id,
-                username=uname,
-                first_name=fname,
+            return self.svc.get_single_active_tournament(), None
+        except errors.TournamentNotFound:
+            return None, HandlerResult(NO_ACTIVE_TOURNAMENT)
+        except errors.MultipleActiveTournaments:
+            return None, HandlerResult(MULTIPLE_TOURNAMENTS_MSG)
+
+    def handle_add_me(
+        self,
+        tg_id: int,
+        username: str | None,
+        first_name: str | None,
+        last_name: str | None,
+        deck_name: str,
+    ) -> HandlerResult:
+        if not self._is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN)
+        if not deck_name:
+            return HandlerResult(NO_DECK_NAME)
+        active, err = self._resolve_tournament()
+        if err:
+            return err
+        try:
+            db_user = self.user_svc.get_or_create(
+                tg_id=tg_id,
+                username=username,
+                first_name=first_name,
+                last_name=last_name,
             )
-            archetype = svc.get_or_create_archetype_by_name(deck_name)
-            svc.register_participant(
+            archetype = self.svc.get_or_create_archetype_by_name(deck_name)
+            self.svc.register_participant(
+                tournament_id=active.id,
+                user_id=db_user.id,
+                archetype_id=archetype.id,
+                added_by_admin=True,
+            )
+            user_label = f"@{username}" if username else (first_name or f"id{tg_id}")
+            return HandlerResult(PLAYER_ADDED.format(
+                user=user_label,
+                archetype_name=archetype.name,
+            ))
+        except errors.ParticipantAlreadyRegistered:
+            return HandlerResult("Вы уже записаны на этот турнир.")
+        except errors.TournamentInvalidState:
+            return HandlerResult("Регистрация на этот турнир закрыта.")
+
+    def handle_add_player(
+        self,
+        tg_id: int,
+        *,
+        target_tg_id: int,
+        target_username: str | None,
+        deck_name: str,
+        target_first_name: str | None = None,
+        target_last_name: str | None = None,
+    ) -> HandlerResult:
+        if not self._is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN)
+        active, err = self._resolve_tournament()
+        if err:
+            return err
+        try:
+            target_user = self.user_svc.get_or_create(
+                tg_id=target_tg_id,
+                username=target_username,
+                first_name=target_first_name,
+                last_name=target_last_name,
+            )
+            archetype = self.svc.get_or_create_archetype_by_name(deck_name)
+            self.svc.register_participant(
                 tournament_id=active.id,
                 user_id=target_user.id,
                 archetype_id=archetype.id,
                 added_by_admin=True,
             )
-            results.append(f"✅ {user_label} — {archetype.name}")
+            user_label = _player_display_label(target_username, target_first_name, target_tg_id)
+            return HandlerResult(PLAYER_ADDED.format(
+                user=user_label,
+                archetype_name=archetype.name,
+            ))
         except errors.ParticipantAlreadyRegistered:
-            results.append(f"⚠️ {user_label} — уже записан")
+            user_label = _player_display_label(target_username, target_first_name, target_tg_id)
+            return HandlerResult(f"{user_label} уже записан на этот турнир.")
         except errors.TournamentInvalidState:
-            results.append(f"❌ {user_label} — регистрация закрыта")
-    return HandlerResult("\n".join(results) if results else "Нет данных для обработки.")
+            return HandlerResult("Регистрация на этот турнир закрыта.")
 
+    def handle_add_players(
+        self,
+        tg_id: int,
+        entries: list[tuple[int, str | None, str | None, str]],
+    ) -> HandlerResult:
+        """entries: (target_tg_id, username, first_name, deck_name) — после резолва в Telegram."""
+        if not self._is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN)
+        if not entries:
+            return HandlerResult("Нет данных для обработки.")
+        active, err = self._resolve_tournament()
+        if err:
+            return err
+        results = []
+        for target_tg_id, uname, fname, deck_name in entries:
+            user_label = _player_display_label(uname, fname, target_tg_id)
+            try:
+                target_user = self.user_svc.get_or_create(
+                    tg_id=target_tg_id,
+                    username=uname,
+                    first_name=fname,
+                )
+                archetype = self.svc.get_or_create_archetype_by_name(deck_name)
+                self.svc.register_participant(
+                    tournament_id=active.id,
+                    user_id=target_user.id,
+                    archetype_id=archetype.id,
+                    added_by_admin=True,
+                )
+                results.append(f"✅ {user_label} — {archetype.name}")
+            except errors.ParticipantAlreadyRegistered:
+                results.append(f"⚠️ {user_label} — уже записан")
+            except errors.TournamentInvalidState:
+                results.append(f"❌ {user_label} — регистрация закрыта")
+        return HandlerResult("\n".join(results) if results else "Нет данных для обработки.")
 
-def handle_tournament_status(db: Session, tg_id: int) -> HandlerResult:
-    if not _is_admin(db, tg_id):
-        return HandlerResult(NOT_ADMIN)
-    svc = TournamentService(db)
-    tournaments = svc.list_all_active_tournaments()
-    if not tournaments:
-        return HandlerResult(NO_ACTIVE_TOURNAMENT)
-    blocks = [
-        format_tournament_status(t.title, t.status.label_ru, svc.list_participants_for_tournament(t.id))
-        for t in tournaments
-    ]
-    return HandlerResult("\n\n---\n\n".join(blocks))
+    def handle_tournament_status(self, tg_id: int) -> HandlerResult:
+        if not self._is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN)
+        tournaments = self.svc.list_all_active_tournaments()
+        if not tournaments:
+            return HandlerResult(NO_ACTIVE_TOURNAMENT)
+        blocks = [
+            format_tournament_status(t.title, t.status.label_ru, self.svc.list_participants_for_tournament(t.id))
+            for t in tournaments
+        ]
+        return HandlerResult("\n\n---\n\n".join(blocks))
 
-
-def handle_close_tournament(db: Session, tg_id: int) -> HandlerResult:
-    if not _is_admin(db, tg_id):
-        return HandlerResult(NOT_ADMIN)
-    svc = TournamentService(db)
-    active, err = _resolve_tournament(svc)
-    if err:
-        return err
-    svc.close_tournament(active.id)
-    return HandlerResult(TOURNAMENT_CLOSED_MSG)
+    def handle_close_tournament(self, tg_id: int) -> HandlerResult:
+        if not self._is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN)
+        active, err = self._resolve_tournament()
+        if err:
+            return err
+        self.svc.close_tournament(active.id)
+        return HandlerResult(TOURNAMENT_CLOSED_MSG)

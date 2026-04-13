@@ -1,16 +1,13 @@
-"""Tests for admin handler business logic (handle_xxx functions)."""
+"""Tests for admin handler business logic (AdminHandler methods)."""
 
 import pytest
 from core.schemas import TournamentCreate
 from core.models import TournamentStatus
 from bot.handlers.admin import (
+    AdminHandler,
     parse_add_player_command,
     parse_bulk_player_line,
-    handle_add_me,
-    handle_add_player,
-    handle_add_players,
-    handle_tournament_status,
-    handle_close_tournament,
+    _player_display_label,
 )
 from bot.messages import (
     NOT_ADMIN,
@@ -105,43 +102,47 @@ def active_tournament(svc):
     return svc.create_tournament(TournamentCreate(title="Weekly", chat_id=CHAT_ID, slug="weekly"))
 
 
+@pytest.fixture
+def handler(svc, user_svc):
+    return AdminHandler(svc, user_svc)
+
+
 # --- handle_add_me ---
 
 class TestHandleAddMe:
-    def test_non_admin_returns_not_admin(self, db):
-        result = handle_add_me(db, tg_id=42, username="x", first_name="X", last_name=None, deck_name="Burn")
+    def test_non_admin_returns_not_admin(self, handler):
+        result = handler.handle_add_me(tg_id=42, username="x", first_name="X", last_name=None, deck_name="Burn")
         assert result.text == NOT_ADMIN
 
-    def test_empty_deck_name_returns_usage(self, db, admin_user):
-        result = handle_add_me(db, tg_id=ADMIN_TG_ID, username="admin", first_name="Admin", last_name=None, deck_name="")
+    def test_empty_deck_name_returns_usage(self, handler, admin_user):
+        result = handler.handle_add_me(tg_id=ADMIN_TG_ID, username="admin", first_name="Admin", last_name=None, deck_name="")
         assert result.text == NO_DECK_NAME
 
-    def test_no_active_tournament(self, db, admin_user):
-        result = handle_add_me(db, tg_id=ADMIN_TG_ID, username="admin", first_name="Admin", last_name=None, deck_name="Burn")
+    def test_no_active_tournament(self, handler, admin_user):
+        result = handler.handle_add_me(tg_id=ADMIN_TG_ID, username="admin", first_name="Admin", last_name=None, deck_name="Burn")
         assert result.text == NO_ACTIVE_TOURNAMENT
 
-    def test_registers_successfully(self, db, admin_user, active_tournament):
-        result = handle_add_me(db, tg_id=ADMIN_TG_ID, username="admin", first_name="Admin", last_name=None, deck_name="Burn")
+    def test_registers_successfully(self, handler, admin_user, active_tournament):
+        result = handler.handle_add_me(tg_id=ADMIN_TG_ID, username="admin", first_name="Admin", last_name=None, deck_name="Burn")
         assert "admin" in result.text
         assert "Burn" in result.text
 
-    def test_already_registered(self, db, admin_user, active_tournament):
-        handle_add_me(db, tg_id=ADMIN_TG_ID, username="admin", first_name="Admin", last_name=None, deck_name="Burn")
-        result = handle_add_me(db, tg_id=ADMIN_TG_ID, username="admin", first_name="Admin", last_name=None, deck_name="Burn")
+    def test_already_registered(self, handler, admin_user, active_tournament):
+        handler.handle_add_me(tg_id=ADMIN_TG_ID, username="admin", first_name="Admin", last_name=None, deck_name="Burn")
+        result = handler.handle_add_me(tg_id=ADMIN_TG_ID, username="admin", first_name="Admin", last_name=None, deck_name="Burn")
         assert "уже записаны" in result.text
 
-    def test_multiple_tournaments_returns_clarification(self, db, svc, admin_user, active_tournament):
+    def test_multiple_tournaments_returns_clarification(self, handler, svc, admin_user, active_tournament):
         svc.create_tournament(TournamentCreate(title="Second", chat_id=CHAT_ID + 1))
-        result = handle_add_me(db, tg_id=ADMIN_TG_ID, username="admin", first_name="Admin", last_name=None, deck_name="Burn")
+        result = handler.handle_add_me(tg_id=ADMIN_TG_ID, username="admin", first_name="Admin", last_name=None, deck_name="Burn")
         assert result.text == MULTIPLE_TOURNAMENTS_MSG
 
 
 # --- handle_add_player ---
 
 class TestHandleAddPlayer:
-    def test_non_admin_returns_not_admin(self, db, user_alice):
-        result = handle_add_player(
-            db,
+    def test_non_admin_returns_not_admin(self, handler, user_alice):
+        result = handler.handle_add_player(
             tg_id=42,
             target_tg_id=user_alice.tg_id,
             target_username="alice",
@@ -149,9 +150,8 @@ class TestHandleAddPlayer:
         )
         assert result.text == NOT_ADMIN
 
-    def test_no_active_tournament(self, db, admin_user, user_alice):
-        result = handle_add_player(
-            db,
+    def test_no_active_tournament(self, handler, admin_user, user_alice):
+        result = handler.handle_add_player(
             tg_id=ADMIN_TG_ID,
             target_tg_id=user_alice.tg_id,
             target_username="alice",
@@ -159,10 +159,9 @@ class TestHandleAddPlayer:
         )
         assert result.text == NO_ACTIVE_TOURNAMENT
 
-    def test_creates_user_by_tg_id_without_prior_row(self, db, admin_user, active_tournament):
+    def test_creates_user_by_tg_id_without_prior_row(self, handler, admin_user, active_tournament):
         """Раньше требовали строку в БД после /start; теперь достаточно tg_id (как из getChat)."""
-        result = handle_add_player(
-            db,
+        result = handler.handle_add_player(
             tg_id=ADMIN_TG_ID,
             target_tg_id=77_777,
             target_username="ghost",
@@ -172,9 +171,8 @@ class TestHandleAddPlayer:
         assert "ghost" in result.text or "Ghost" in result.text
         assert "Burn" in result.text
 
-    def test_registers_player_successfully(self, db, admin_user, active_tournament, user_alice):
-        result = handle_add_player(
-            db,
+    def test_registers_player_successfully(self, handler, admin_user, active_tournament, user_alice):
+        result = handler.handle_add_player(
             tg_id=ADMIN_TG_ID,
             target_tg_id=user_alice.tg_id,
             target_username="alice",
@@ -184,17 +182,15 @@ class TestHandleAddPlayer:
         assert "alice" in result.text
         assert "Affinity" in result.text
 
-    def test_already_registered(self, db, admin_user, active_tournament, user_alice):
-        handle_add_player(
-            db,
+    def test_already_registered(self, handler, admin_user, active_tournament, user_alice):
+        handler.handle_add_player(
             tg_id=ADMIN_TG_ID,
             target_tg_id=user_alice.tg_id,
             target_username="alice",
             deck_name="Burn",
             target_first_name="Alice",
         )
-        result = handle_add_player(
-            db,
+        result = handler.handle_add_player(
             tg_id=ADMIN_TG_ID,
             target_tg_id=user_alice.tg_id,
             target_username="alice",
@@ -203,10 +199,9 @@ class TestHandleAddPlayer:
         )
         assert "уже записан" in result.text
 
-    def test_multiple_tournaments_returns_clarification(self, db, svc, admin_user, active_tournament, user_alice):
+    def test_multiple_tournaments_returns_clarification(self, handler, svc, admin_user, active_tournament, user_alice):
         svc.create_tournament(TournamentCreate(title="Second", chat_id=CHAT_ID + 1))
-        result = handle_add_player(
-            db,
+        result = handler.handle_add_player(
             tg_id=ADMIN_TG_ID,
             target_tg_id=user_alice.tg_id,
             target_username="alice",
@@ -220,60 +215,55 @@ class TestHandleAddPlayer:
 class TestHandleAddPlayers:
     """entries: (target_tg_id, username, first_name, deck_name) — как после getChat в cmd."""
 
-    def test_non_admin_returns_not_admin(self, db, user_alice):
-        result = handle_add_players(
-            db,
+    def test_non_admin_returns_not_admin(self, handler, user_alice):
+        result = handler.handle_add_players(
             tg_id=42,
             entries=[(user_alice.tg_id, "alice", "Alice", "Burn")],
         )
         assert result.text == NOT_ADMIN
 
-    def test_empty_entries_returns_no_data(self, db, admin_user):
-        result = handle_add_players(db, tg_id=ADMIN_TG_ID, entries=[])
+    def test_empty_entries_returns_no_data(self, handler, admin_user):
+        result = handler.handle_add_players(tg_id=ADMIN_TG_ID, entries=[])
         assert result.text == "Нет данных для обработки."
 
-    def test_no_active_tournament(self, db, admin_user, user_alice):
-        result = handle_add_players(
-            db,
+    def test_no_active_tournament(self, handler, admin_user, user_alice):
+        result = handler.handle_add_players(
             tg_id=ADMIN_TG_ID,
             entries=[(user_alice.tg_id, "alice", "Alice", "Burn")],
         )
         assert result.text == NO_ACTIVE_TOURNAMENT
 
-    def test_mixed_success_and_duplicate_line(self, db, admin_user, active_tournament, user_alice):
+    def test_mixed_success_and_duplicate_line(self, handler, admin_user, active_tournament, user_alice):
         entries = [
             (user_alice.tg_id, "alice", "Alice", "Burn"),
             (88_888, "ghost", "Ghost", "Affinity"),
             (user_alice.tg_id, "alice", "Alice", "Burn"),
         ]
-        result = handle_add_players(db, tg_id=ADMIN_TG_ID, entries=entries)
+        result = handler.handle_add_players(tg_id=ADMIN_TG_ID, entries=entries)
         assert "✅ @alice" in result.text
         assert "✅ @ghost" in result.text
         assert "⚠️ @alice" in result.text
         assert "уже записан" in result.text
 
-    def test_already_registered_line(self, db, admin_user, active_tournament, user_alice):
-        handle_add_player(
-            db,
+    def test_already_registered_line(self, handler, admin_user, active_tournament, user_alice):
+        handler.handle_add_player(
             tg_id=ADMIN_TG_ID,
             target_tg_id=user_alice.tg_id,
             target_username="alice",
             deck_name="Burn",
             target_first_name="Alice",
         )
-        result = handle_add_players(
-            db,
+        result = handler.handle_add_players(
             tg_id=ADMIN_TG_ID,
             entries=[(user_alice.tg_id, "alice", "Alice", "Burn")],
         )
         assert "уже записан" in result.text
 
     def test_multiple_tournaments_returns_clarification(
-        self, db, svc, admin_user, active_tournament, user_alice
+        self, handler, svc, admin_user, active_tournament, user_alice
     ):
         svc.create_tournament(TournamentCreate(title="Second", chat_id=CHAT_ID + 1))
-        result = handle_add_players(
-            db,
+        result = handler.handle_add_players(
             tg_id=ADMIN_TG_ID,
             entries=[(user_alice.tg_id, "alice", "Alice", "Burn")],
         )
@@ -283,40 +273,39 @@ class TestHandleAddPlayers:
 # --- handle_tournament_status ---
 
 class TestHandleTournamentStatus:
-    def test_non_admin_returns_not_admin(self, db):
-        result = handle_tournament_status(db, tg_id=42)
+    def test_non_admin_returns_not_admin(self, handler):
+        result = handler.handle_tournament_status(tg_id=42)
         assert result.text == NOT_ADMIN
 
-    def test_no_active_tournament(self, db, admin_user):
-        result = handle_tournament_status(db, tg_id=ADMIN_TG_ID)
+    def test_no_active_tournament(self, handler, admin_user):
+        result = handler.handle_tournament_status(tg_id=ADMIN_TG_ID)
         assert result.text == NO_ACTIVE_TOURNAMENT
 
-    def test_shows_tournament_info(self, db, admin_user, active_tournament):
-        result = handle_tournament_status(db, tg_id=ADMIN_TG_ID)
+    def test_shows_tournament_info(self, handler, admin_user, active_tournament):
+        result = handler.handle_tournament_status(tg_id=ADMIN_TG_ID)
         assert "Weekly" in result.text
         assert "Участники" in result.text
 
-    def test_shows_participants_with_archetype(self, db, svc, admin_user, active_tournament, user_alice, archetype_burn):
+    def test_shows_participants_with_archetype(self, handler, svc, admin_user, active_tournament, user_alice, archetype_burn):
         svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
-        result = handle_tournament_status(db, tg_id=ADMIN_TG_ID)
+        result = handler.handle_tournament_status(tg_id=ADMIN_TG_ID)
         assert "alice" in result.text
         assert "Burn" in result.text
 
-    def test_confirmed_participant_has_checkmark(self, db, svc, admin_user, active_tournament, user_alice, archetype_burn):
+    def test_confirmed_participant_has_checkmark(self, db, handler, svc, admin_user, active_tournament, user_alice, archetype_burn):
         svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
-        # manually confirm
         from core import models as m
         from sqlalchemy import select
         p = db.execute(select(m.Participant).where(m.Participant.user_id == user_alice.id)).scalar_one()
         p.confirmed = True
         db.commit()
-        result = handle_tournament_status(db, tg_id=ADMIN_TG_ID)
+        result = handler.handle_tournament_status(tg_id=ADMIN_TG_ID)
         assert "✅" in result.text
 
-    def test_shows_all_active_tournaments(self, db, svc, admin_user, active_tournament):
+    def test_shows_all_active_tournaments(self, handler, svc, admin_user, active_tournament):
         from core.schemas import TournamentCreate
         svc.create_tournament(TournamentCreate(title="Second Cup", chat_id=CHAT_ID + 1))
-        result = handle_tournament_status(db, tg_id=ADMIN_TG_ID)
+        result = handler.handle_tournament_status(tg_id=ADMIN_TG_ID)
         assert "Weekly" in result.text
         assert "Second Cup" in result.text
 
@@ -324,54 +313,51 @@ class TestHandleTournamentStatus:
 # --- handle_close_tournament ---
 
 class TestHandleCloseTournament:
-    def test_non_admin_returns_not_admin(self, db):
-        result = handle_close_tournament(db, tg_id=42)
+    def test_non_admin_returns_not_admin(self, handler):
+        result = handler.handle_close_tournament(tg_id=42)
         assert result.text == NOT_ADMIN
 
-    def test_no_active_tournament(self, db, admin_user):
-        result = handle_close_tournament(db, tg_id=ADMIN_TG_ID)
+    def test_no_active_tournament(self, handler, admin_user):
+        result = handler.handle_close_tournament(tg_id=ADMIN_TG_ID)
         assert result.text == NO_ACTIVE_TOURNAMENT
 
-    def test_closes_tournament(self, db, svc, admin_user, active_tournament):
-        result = handle_close_tournament(db, tg_id=ADMIN_TG_ID)
+    def test_closes_tournament(self, handler, svc, admin_user, active_tournament):
+        result = handler.handle_close_tournament(tg_id=ADMIN_TG_ID)
         assert result.text == TOURNAMENT_CLOSED_MSG
         assert svc.list_all_active_tournaments() == []
 
-    def test_multiple_tournaments_returns_clarification(self, db, svc, admin_user, active_tournament):
+    def test_multiple_tournaments_returns_clarification(self, handler, svc, admin_user, active_tournament):
         svc.create_tournament(TournamentCreate(title="Second", chat_id=CHAT_ID + 1))
-        result = handle_close_tournament(db, tg_id=ADMIN_TG_ID)
+        result = handler.handle_close_tournament(tg_id=ADMIN_TG_ID)
         assert result.text == MULTIPLE_TOURNAMENTS_MSG
 
 
 # --- _is_admin via settings.admin_ids ---
 
 class TestIsAdminViaSettings:
-    def test_admin_via_settings_ids(self, db):
+    def test_admin_via_settings_ids(self, handler):
         from unittest.mock import patch
-        from bot.handlers.admin import _is_admin
         with patch("bot.handlers.admin.settings") as mock_settings:
             mock_settings.admin_ids = [555]
-            assert _is_admin(db, tg_id=555) is True
+            assert handler._is_admin(tg_id=555) is True
 
-    def test_non_admin_not_in_settings_or_db(self, db):
-        from unittest.mock import patch
-        from bot.handlers.admin import _is_admin
-        with patch("bot.handlers.admin.settings") as mock_settings:
-            mock_settings.admin_ids = []
-            assert _is_admin(db, tg_id=42) is False
-
-    def test_admin_via_db_is_admin_flag(self, db, admin_user):
-        from bot.handlers.admin import _is_admin
+    def test_non_admin_not_in_settings_or_db(self, handler):
         from unittest.mock import patch
         with patch("bot.handlers.admin.settings") as mock_settings:
             mock_settings.admin_ids = []
-            assert _is_admin(db, tg_id=ADMIN_TG_ID) is True
+            assert handler._is_admin(tg_id=42) is False
+
+    def test_admin_via_db_is_admin_flag(self, handler, admin_user):
+        from unittest.mock import patch
+        with patch("bot.handlers.admin.settings") as mock_settings:
+            mock_settings.admin_ids = []
+            assert handler._is_admin(tg_id=ADMIN_TG_ID) is True
 
 
 # --- handle_add_me: TournamentInvalidState ---
 
 class TestHandleAddMeInvalidState:
-    def test_registration_closed_returns_message(self, db, svc, admin_user, active_tournament):
+    def test_registration_closed_returns_message(self, db, handler, svc, admin_user, active_tournament):
         svc.close_tournament(active_tournament.id)
         # Reopen as ONGOING so it's active but not in REGISTRATION
         from core import models as m
@@ -379,8 +365,8 @@ class TestHandleAddMeInvalidState:
         obj = db.execute(select(m.Tournament).where(m.Tournament.id == active_tournament.id)).scalar_one()
         obj.status = m.TournamentStatus.ONGOING
         db.commit()
-        result = handle_add_me(
-            db, tg_id=ADMIN_TG_ID, username="admin", first_name="Admin", last_name=None, deck_name="Burn"
+        result = handler.handle_add_me(
+            tg_id=ADMIN_TG_ID, username="admin", first_name="Admin", last_name=None, deck_name="Burn"
         )
         assert "закрыта" in result.text
 
@@ -388,14 +374,13 @@ class TestHandleAddMeInvalidState:
 # --- handle_add_player: TournamentInvalidState ---
 
 class TestHandleAddPlayerInvalidState:
-    def test_registration_closed_returns_message(self, db, svc, admin_user, active_tournament, user_alice):
+    def test_registration_closed_returns_message(self, db, handler, svc, admin_user, active_tournament, user_alice):
         from core import models as m
         from sqlalchemy import select
         obj = db.execute(select(m.Tournament).where(m.Tournament.id == active_tournament.id)).scalar_one()
         obj.status = m.TournamentStatus.ONGOING
         db.commit()
-        result = handle_add_player(
-            db,
+        result = handler.handle_add_player(
             tg_id=ADMIN_TG_ID,
             target_tg_id=user_alice.tg_id,
             target_username="alice",
@@ -407,14 +392,13 @@ class TestHandleAddPlayerInvalidState:
 # --- handle_add_players: TournamentInvalidState ---
 
 class TestHandleAddPlayersInvalidState:
-    def test_registration_closed_marks_line(self, db, svc, admin_user, active_tournament, user_alice):
+    def test_registration_closed_marks_line(self, db, handler, svc, admin_user, active_tournament, user_alice):
         from core import models as m
         from sqlalchemy import select
         obj = db.execute(select(m.Tournament).where(m.Tournament.id == active_tournament.id)).scalar_one()
         obj.status = m.TournamentStatus.ONGOING
         db.commit()
-        result = handle_add_players(
-            db,
+        result = handler.handle_add_players(
             tg_id=ADMIN_TG_ID,
             entries=[(user_alice.tg_id, "alice", "Alice", "Burn")],
         )
@@ -450,39 +434,36 @@ class TestParseBulkPlayerLineEdgeCases:
 
 class TestPlayerDisplayLabel:
     def test_username_present(self):
-        from bot.handlers.admin import _player_display_label
         assert _player_display_label("alice", "Alice", 1) == "@alice"
 
     def test_no_username_uses_first_name(self):
-        from bot.handlers.admin import _player_display_label
         assert _player_display_label(None, "Alice", 1) == "Alice"
 
     def test_no_username_no_first_name_uses_id(self):
-        from bot.handlers.admin import _player_display_label
         assert _player_display_label(None, None, 42) == "игрок 42"
 
 
 # --- handle_add_player: _player_display_label no-username path in result ---
 
 class TestHandleAddPlayerNoUsername:
-    def test_already_registered_no_username_shows_first_name(self, db, svc, user_svc, admin_user, active_tournament):
+    def test_already_registered_no_username_shows_first_name(self, handler, svc, user_svc, admin_user, active_tournament):
         target = user_svc.get_or_create(tg_id=5001, username=None, first_name="Bob")
-        handle_add_player(
-            db, tg_id=ADMIN_TG_ID,
+        handler.handle_add_player(
+            tg_id=ADMIN_TG_ID,
             target_tg_id=target.tg_id, target_username=None,
             deck_name="Burn", target_first_name="Bob",
         )
-        result = handle_add_player(
-            db, tg_id=ADMIN_TG_ID,
+        result = handler.handle_add_player(
+            tg_id=ADMIN_TG_ID,
             target_tg_id=target.tg_id, target_username=None,
             deck_name="Burn", target_first_name="Bob",
         )
         assert "Bob" in result.text
         assert "уже записан" in result.text
 
-    def test_registered_with_no_username_no_first_name(self, db, svc, admin_user, active_tournament):
-        result = handle_add_player(
-            db, tg_id=ADMIN_TG_ID,
+    def test_registered_with_no_username_no_first_name(self, handler, svc, admin_user, active_tournament):
+        result = handler.handle_add_player(
+            tg_id=ADMIN_TG_ID,
             target_tg_id=6001, target_username=None,
             deck_name="Burn", target_first_name=None,
         )
@@ -492,22 +473,22 @@ class TestHandleAddPlayerNoUsername:
 # --- handle_tournament_status: full name display ---
 
 class TestTournamentStatusFullName:
-    def test_shows_first_and_last_name(self, db, svc, user_svc, admin_user, active_tournament, archetype_burn):
+    def test_shows_first_and_last_name(self, handler, svc, user_svc, admin_user, active_tournament, archetype_burn):
         user = user_svc.get_or_create(tg_id=6100, username=None, first_name="Иван", last_name="Иванов")
         svc.register_participant(tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
-        result = handle_tournament_status(db, tg_id=ADMIN_TG_ID)
+        result = handler.handle_tournament_status(tg_id=ADMIN_TG_ID)
         assert "Иван" in result.text
         assert "Иванов" in result.text
 
-    def test_shows_username_hint_when_available(self, db, svc, user_svc, admin_user, active_tournament, archetype_burn):
+    def test_shows_username_hint_when_available(self, handler, svc, user_svc, admin_user, active_tournament, archetype_burn):
         user = user_svc.get_or_create(tg_id=6101, username="ivan", first_name="Иван", last_name=None)
         svc.register_participant(tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
-        result = handle_tournament_status(db, tg_id=ADMIN_TG_ID)
+        result = handler.handle_tournament_status(tg_id=ADMIN_TG_ID)
         assert "Иван" in result.text
         assert "@ivan" in result.text
 
-    def test_falls_back_to_id_when_no_name(self, db, svc, user_svc, admin_user, active_tournament, archetype_burn):
+    def test_falls_back_to_id_when_no_name(self, handler, svc, user_svc, admin_user, active_tournament, archetype_burn):
         user = user_svc.get_or_create(tg_id=6102, username=None, first_name=None)
         svc.register_participant(tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
-        result = handle_tournament_status(db, tg_id=ADMIN_TG_ID)
+        result = handler.handle_tournament_status(tg_id=ADMIN_TG_ID)
         assert "6102" in result.text
