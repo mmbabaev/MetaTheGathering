@@ -373,6 +373,43 @@ class TournamentService:
         self.db.delete(participant)
         self.db.commit()
 
+    def bulk_add_participants(
+        self,
+        tournament_id: int,
+        entries: list[tuple[int, str]],
+    ) -> list[tuple[str, str]]:
+        """Массово добавить участников без архетипа.
+
+        entries: список (user_id, display_name).
+        Возвращает список (display_name, status) где status — "added" | "already_registered".
+        Raises TournamentNotFound, TournamentInvalidState.
+        Commit делается один раз в конце.
+        """
+        tournament = get_tournament(self.db, tournament_id)
+        ensure_tournament_status(tournament, allowed=[models.TournamentStatus.REGISTRATION])
+
+        results: list[tuple[str, str]] = []
+        registered_in_batch: set[int] = set()
+
+        for user_id, display_name in entries:
+            if user_id in registered_in_batch or self.get_participant(tournament_id, user_id):
+                results.append((display_name, "already_registered"))
+                continue
+            participant = models.Participant(
+                tournament_id=tournament_id,
+                user_id=user_id,
+                archetype_id=None,
+                added_by_admin=True,
+                created_at=models.utc_now(),
+                updated_at=models.utc_now(),
+            )
+            self.db.add(participant)
+            registered_in_batch.add(user_id)
+            results.append((display_name, "added"))
+
+        self.db.commit()
+        return results
+
     # ===== voting =====
 
     def cast_vote(

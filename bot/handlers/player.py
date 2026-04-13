@@ -1,5 +1,6 @@
 # Регистрация, выбор колоды — чистая бизнес-логика
 
+from core.config import settings
 from services.tournament import TournamentService
 from services.user import UserService
 from services import errors
@@ -33,14 +34,22 @@ class PlayerHandler:
         self.svc = svc
         self.user_svc = user_svc
 
+    def _is_admin(self, tg_id: int) -> bool:
+        if tg_id in settings.admin_ids:
+            return True
+        user = self.user_svc.get_by_tg_id(tg_id)
+        return user is not None and (user.is_admin or user.is_superadmin)
+
     def _tournament_card(self, t, tg_id: int | None) -> HandlerResult:
         is_registered = False
+        is_admin = False
         if tg_id is not None:
             user = self.user_svc.get_by_tg_id(tg_id)
             if user:
                 is_registered = self.svc.get_participant(t.id, user.id) is not None
+            is_admin = self._is_admin(tg_id)
         text = format_tournament_card(t.title, t.status.label_ru, t.slug)
-        return HandlerResult(text, keyboard=tournament_card_keyboard(t.id, is_registered))
+        return HandlerResult(text, keyboard=tournament_card_keyboard(t.id, is_registered, is_admin=is_admin))
 
     def handle_tournaments(self, tg_id: int | None = None) -> HandlerResult:
         tournaments = self.svc.list_all_active_tournaments()

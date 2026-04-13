@@ -14,6 +14,9 @@ from bot.messages import (
     MULTIPLE_TOURNAMENTS_MSG,
     PLAYER_ADDED,
     TOURNAMENT_CLOSED_MSG,
+    TOURNAMENT_NOT_FOUND,
+    REGISTRATION_CLOSED,
+    BULK_ADD_EMPTY,
     format_tournament_status,
 )
 
@@ -217,6 +220,53 @@ class AdminHandler:
             except errors.TournamentInvalidState:
                 results.append(f"❌ {user_label} — регистрация закрыта")
         return HandlerResult("\n".join(results) if results else "Нет данных для обработки.")
+
+    def handle_bulk_add_by_name(
+        self,
+        tg_id: int,
+        tournament_id: int,
+        names: list[str],
+    ) -> HandlerResult:
+        """Массово добавить игроков по имени без архетипа.
+
+        names: список строк вида «Имя» или «Имя Фамилия».
+        Игроки ищутся в БД по имени; если не найдены — создаются с placeholder tg_id.
+        Уже зарегистрированные пропускаются.
+        """
+        if not self._is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN)
+
+        parsed: list[tuple[str, str | None]] = []
+        for raw in names:
+            raw = raw.strip()
+            if not raw:
+                continue
+            parts = raw.split(None, 1)
+            parsed.append((parts[0], parts[1] if len(parts) > 1 else None))
+
+        if not parsed:
+            return HandlerResult(BULK_ADD_EMPTY)
+
+        entries: list[tuple[int, str]] = []
+        for first_name, last_name in parsed:
+            user, _ = self.user_svc.get_or_create_by_name(first_name, last_name)
+            display = f"{first_name} {last_name}" if last_name else first_name
+            entries.append((user.id, display))
+
+        try:
+            results = self.svc.bulk_add_participants(tournament_id, entries)
+        except errors.TournamentNotFound:
+            return HandlerResult(TOURNAMENT_NOT_FOUND)
+        except errors.TournamentInvalidState:
+            return HandlerResult(REGISTRATION_CLOSED)
+
+        lines = []
+        for display_name, status in results:
+            if status == "added":
+                lines.append(f"✅ {display_name}")
+            else:
+                lines.append(f"⚠️ {display_name} — уже записан")
+        return HandlerResult("\n".join(lines))
 
     def handle_tournament_status(self, tg_id: int) -> HandlerResult:
         if not self._is_admin(tg_id):

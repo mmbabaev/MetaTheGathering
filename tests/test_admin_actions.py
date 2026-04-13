@@ -492,3 +492,82 @@ class TestTournamentStatusFullName:
         svc.register_participant(tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
         result = handler.handle_tournament_status(tg_id=ADMIN_TG_ID)
         assert "6102" in result.text
+
+
+# --- handle_bulk_add_by_name ---
+
+class TestHandleBulkAddByName:
+    def test_non_admin_returns_not_admin(self, handler, active_tournament):
+        result = handler.handle_bulk_add_by_name(
+            tg_id=42, tournament_id=active_tournament.id, names=["Иван Иванов"]
+        )
+        assert result.text == NOT_ADMIN
+
+    def test_empty_names_returns_empty_message(self, handler, admin_user, active_tournament):
+        from bot.messages import BULK_ADD_EMPTY
+        result = handler.handle_bulk_add_by_name(
+            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=[]
+        )
+        assert result.text == BULK_ADD_EMPTY
+
+    def test_blank_lines_only_returns_empty(self, handler, admin_user, active_tournament):
+        from bot.messages import BULK_ADD_EMPTY
+        result = handler.handle_bulk_add_by_name(
+            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["  ", ""]
+        )
+        assert result.text == BULK_ADD_EMPTY
+
+    def test_creates_new_user_and_adds(self, handler, admin_user, active_tournament, user_svc):
+        result = handler.handle_bulk_add_by_name(
+            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["Иван Иванов"]
+        )
+        assert "✅ Иван Иванов" in result.text
+        user = user_svc.get_or_create_by_name("Иван", "Иванов")
+        assert user is not None
+
+    def test_finds_existing_user_by_name(self, handler, admin_user, active_tournament, user_svc):
+        user_svc.get_or_create_by_name("Мария", "Петрова")
+        user_svc.db.commit()
+        result = handler.handle_bulk_add_by_name(
+            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["Мария Петрова"]
+        )
+        assert "✅ Мария Петрова" in result.text
+
+    def test_skips_already_registered(self, handler, svc, user_svc, admin_user, active_tournament, archetype_burn):
+        user = user_svc.get_or_create(tg_id=7001, username=None, first_name="Алекс")
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
+        result = handler.handle_bulk_add_by_name(
+            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["Алекс"]
+        )
+        assert "⚠️ Алекс — уже записан" in result.text
+
+    def test_multiple_names_mixed_result(self, handler, svc, user_svc, admin_user, active_tournament, archetype_burn):
+        existing = user_svc.get_or_create(tg_id=7002, username=None, first_name="Борис")
+        svc.register_participant(tournament_id=active_tournament.id, user_id=existing.id, archetype_id=archetype_burn.id)
+        result = handler.handle_bulk_add_by_name(
+            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id,
+            names=["Борис", "Вера Новая"],
+        )
+        assert "⚠️ Борис — уже записан" in result.text
+        assert "✅ Вера Новая" in result.text
+
+    def test_tournament_not_found(self, handler, admin_user):
+        from bot.messages import TOURNAMENT_NOT_FOUND
+        result = handler.handle_bulk_add_by_name(
+            tg_id=ADMIN_TG_ID, tournament_id=99999, names=["Иван"]
+        )
+        assert result.text == TOURNAMENT_NOT_FOUND
+
+    def test_registration_closed(self, handler, svc, admin_user, active_tournament):
+        from bot.messages import REGISTRATION_CLOSED
+        svc.close_tournament(active_tournament.id)
+        result = handler.handle_bulk_add_by_name(
+            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["Иван"]
+        )
+        assert result.text == REGISTRATION_CLOSED
+
+    def test_first_name_only(self, handler, admin_user, active_tournament):
+        result = handler.handle_bulk_add_by_name(
+            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["Мария"]
+        )
+        assert "✅ Мария" in result.text

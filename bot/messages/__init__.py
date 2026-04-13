@@ -33,6 +33,11 @@ MULTIPLE_TOURNAMENTS_MSG = "Активных турниров несколько
 ADD_PLAYERS_USAGE = (
     "Формат:\n/add_players\n@username1 Название колоды\n@username2 Другая колода"
 )
+BULK_ADD_PROMPT = (
+    "Введите список игроков — по одному на строке (Имя Фамилия):\n\n"
+    "Пример:\nИван Иванов\nМария Петрова\nАлексей"
+)
+BULK_ADD_EMPTY = "Список игроков пустой."
 
 
 HELP_TEXT = """\

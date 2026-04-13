@@ -10,11 +10,30 @@ from core.database import SessionLocal
 from services.tournament import TournamentService
 from services.user import UserService
 from bot.handlers.admin import AdminHandler, parse_add_player_command, parse_bulk_player_line
-from bot.messages import TELEGRAM_USER_LOOKUP_FAILED, ADD_PLAYERS_USAGE
+from bot.telegram.player import USER_DATA_PENDING_BULK_ADD
+from bot.messages import TELEGRAM_USER_LOOKUP_FAILED, ADD_PLAYERS_USAGE, BULK_ADD_PROMPT
 
 
 def _admin_handler(db) -> AdminHandler:
     return AdminHandler(TournamentService(db), UserService(db))
+
+
+async def callback_bulk_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка «➕ Добавить участников» на карточке турнира."""
+    query = update.callback_query
+    if not query or not query.data:
+        return
+    try:
+        _, tid_str = query.data.split(":", 1)
+        tournament_id = int(tid_str)
+    except (ValueError, IndexError):
+        await query.answer("Ошибка данных.")
+        return
+    if context.user_data is None:
+        context.user_data = {}
+    context.user_data[USER_DATA_PENDING_BULK_ADD] = tournament_id
+    await query.edit_message_text(BULK_ADD_PROMPT)
+    await query.answer()
 
 
 async def cmd_add_me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

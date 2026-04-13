@@ -10,10 +10,12 @@ from bot.handlers.player import PlayerHandler
 from bot.handlers.settings import SettingsHandler
 from bot.keyboards import CB_REGISTER, CB_ARCHETYPE, CB_CUSTOM_ARCHETYPE, CB_TOURNAMENT
 from bot.messages import CUSTOM_ARCHETYPE_PROMPT
+from bot.handlers.admin import AdminHandler
 
 USER_DATA_PENDING_CUSTOM = "pending_custom_archetype_tournament_id"
 USER_DATA_PENDING_NAME = "pending_name_for_tournament_id"
 USER_DATA_PENDING_SETTINGS_NAME = "pending_settings_name"
+USER_DATA_PENDING_BULK_ADD = "pending_bulk_add_tournament_id"
 
 
 def _player_handler(db) -> PlayerHandler:
@@ -21,6 +23,9 @@ def _player_handler(db) -> PlayerHandler:
 
 def _settings_handler(db) -> SettingsHandler:
     return SettingsHandler(UserService(db))
+
+def _admin_handler(db) -> AdminHandler:
+    return AdminHandler(TournamentService(db), UserService(db))
 
 
 async def cmd_tournaments(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -254,6 +259,18 @@ async def message_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         db = SessionLocal()
         try:
             result = _settings_handler(db).handle_settings_name_text(user.id, text)
+            await msg.reply_text(result.text)
+        finally:
+            db.close()
+        return
+
+    # State: waiting for bulk add player names (admin)
+    if USER_DATA_PENDING_BULK_ADD in context.user_data:
+        tournament_id = context.user_data.pop(USER_DATA_PENDING_BULK_ADD)
+        names = [line.strip() for line in text.splitlines() if line.strip()]
+        db = SessionLocal()
+        try:
+            result = _admin_handler(db).handle_bulk_add_by_name(user.id, tournament_id, names)
             await msg.reply_text(result.text)
         finally:
             db.close()

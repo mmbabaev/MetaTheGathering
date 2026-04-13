@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from core import models
@@ -39,6 +39,40 @@ class UserService:
         self.db.commit()
         self.db.refresh(user)
         return user
+
+    def get_or_create_by_name(
+        self,
+        first_name: str,
+        last_name: Optional[str] = None,
+    ) -> tuple[models.User, bool]:
+        """Найти пользователя по имени или создать с placeholder tg_id.
+
+        Возвращает (user, was_created).
+        Использует flush() без commit() — вызывающий код должен сделать commit.
+        """
+        first_name = first_name.strip()
+        last_name = last_name.strip() if last_name else None
+
+        stmt = select(models.User).where(models.User.first_name == first_name)
+        if last_name:
+            stmt = stmt.where(models.User.last_name == last_name)
+        else:
+            stmt = stmt.where(models.User.last_name.is_(None))
+        user = self.db.execute(stmt).scalar_one_or_none()
+        if user:
+            return user, False
+
+        min_val = self.db.execute(select(func.min(models.User.tg_id))).scalar()
+        placeholder_tg_id = (min_val - 1) if (min_val is not None and min_val < 0) else -1
+
+        user = models.User(
+            tg_id=placeholder_tg_id,
+            first_name=first_name,
+            last_name=last_name,
+        )
+        self.db.add(user)
+        self.db.flush()
+        return user, True
 
     def update_name(
         self,

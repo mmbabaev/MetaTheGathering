@@ -476,3 +476,130 @@ class TestCastVoteEdgeCases:
         part = svc.db.execute(select(m.Participant).where(m.Participant.id == p.id)).scalar_one()
         assert part.downvotes_count == 0
         assert part.upvotes_count == 1
+
+
+# ===== bulk_add_participants =====
+
+class TestBulkAddParticipants:
+    @pytest.fixture
+    def tournament(self, svc):
+        return svc.create_tournament(TournamentCreate(title="Bulk Test", chat_id=500, slug="bulk"))
+
+    @pytest.fixture
+    def users(self, user_svc):
+        a = user_svc.get_or_create(tg_id=5001, username="a", first_name="Alice")
+        b = user_svc.get_or_create(tg_id=5002, username="b", first_name="Bob")
+        return a, b
+
+    def test_adds_participants_without_archetype(self, svc, tournament, users):
+        alice, bob = users
+        results = svc.bulk_add_participants(
+            tournament.id, [(alice.id, "Alice"), (bob.id, "Bob")]
+        )
+        assert len(results) == 2
+        assert all(status == "added" for _, status in results)
+        assert svc.get_participant(tournament.id, alice.id) is not None
+        assert svc.get_participant(tournament.id, bob.id) is not None
+
+    def test_archetype_is_none(self, svc, tournament, users):
+        alice, _ = users
+        svc.bulk_add_participants(tournament.id, [(alice.id, "Alice")])
+        p = svc.get_participant(tournament.id, alice.id)
+        assert p.archetype_id is None
+
+    def test_added_by_admin_flag(self, svc, tournament, users):
+        alice, _ = users
+        svc.bulk_add_participants(tournament.id, [(alice.id, "Alice")])
+        p = svc.get_participant(tournament.id, alice.id)
+        assert p.added_by_admin is True
+
+    def test_skips_already_registered(self, svc, tournament, users, archetype_burn):
+        alice, _ = users
+        svc.register_participant(tournament_id=tournament.id, user_id=alice.id, archetype_id=archetype_burn.id)
+        results = svc.bulk_add_participants(tournament.id, [(alice.id, "Alice")])
+        assert results[0] == ("Alice", "already_registered")
+
+    def test_skips_duplicate_in_same_batch(self, svc, tournament, users):
+        alice, _ = users
+        results = svc.bulk_add_participants(
+            tournament.id,
+            [(alice.id, "Alice"), (alice.id, "Alice again")],
+        )
+        assert results[0] == ("Alice", "added")
+        assert results[1] == ("Alice again", "already_registered")
+
+    def test_mixed_new_and_existing(self, svc, tournament, users, archetype_burn):
+        alice, bob = users
+        svc.register_participant(tournament_id=tournament.id, user_id=alice.id, archetype_id=archetype_burn.id)
+        results = svc.bulk_add_participants(
+            tournament.id, [(alice.id, "Alice"), (bob.id, "Bob")]
+        )
+        statuses = dict(results)
+        assert statuses["Alice"] == "already_registered"
+        assert statuses["Bob"] == "added"
+
+    def test_raises_when_tournament_not_found(self, svc, users):
+        alice, _ = users
+        from services.errors import TournamentNotFound
+        with pytest.raises(TournamentNotFound):
+            svc.bulk_add_participants(99999, [(alice.id, "Alice")])
+
+    def test_raises_when_registration_closed(self, svc, tournament, users):
+        alice, _ = users
+        svc.close_tournament(tournament.id)
+        with pytest.raises(TournamentInvalidState):
+            svc.bulk_add_participants(tournament.id, [(alice.id, "Alice")])
+
+    def test_empty_entries_returns_empty_list(self, svc, tournament):
+        results = svc.bulk_add_participants(tournament.id, [])
+        assert results == []
+
+
+# ===== UserService.get_or_create_by_name =====
+
+class TestGetOrCreateByName:
+    def test_creates_user_with_first_and_last_name(self, user_svc, db):
+        user, created = user_svc.get_or_create_by_name("Иван", "Иванов")
+        db.commit()
+        assert created is True
+        assert user.first_name == "Иван"
+        assert user.last_name == "Иванов"
+        assert user.tg_id < 0
+
+    def test_creates_user_with_first_name_only(self, user_svc, db):
+        user, created = user_svc.get_or_create_by_name("Мария")
+        db.commit()
+        assert created is True
+        assert user.first_name == "Мария"
+        assert user.last_name is None
+
+    def test_finds_existing_user(self, user_svc, db):
+        user_svc.get_or_create_by_name("Пётр", "Петров")
+        db.commit()
+        user2, created = user_svc.get_or_create_by_name("Пётр", "Петров")
+        db.commit()
+        assert created is False
+        assert user2.first_name == "Пётр"
+
+    def test_placeholder_tg_ids_decrement(self, user_svc, db):
+        u1, _ = user_svc.get_or_create_by_name("Первый")
+        db.commit()
+        u2, _ = user_svc.get_or_create_by_name("Второй")
+        db.commit()
+        assert u2.tg_id < u1.tg_id
+
+    def test_same_first_name_different_last_name_creates_two(self, user_svc, db):
+        u1, _ = user_svc.get_or_create_by_name("Иван", "Иванов")
+        db.commit()
+        u2, created = user_svc.get_or_create_by_name("Иван", "Петров")
+        db.commit()
+        assert created is True
+        assert u1.id != u2.id
+
+    def test_first_name_only_vs_with_last_name_are_different(self, user_svc, db):
+        u1, _ = user_svc.get_or_create_by_name("Иван")
+        db.commit()
+        u2, created = user_svc.get_or_create_by_name("Иван", "Иванов")
+        db.commit()
+        assert created is True
+        assert u1.id != u2.id
