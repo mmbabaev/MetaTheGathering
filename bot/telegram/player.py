@@ -8,7 +8,7 @@ from services.tournament import TournamentService
 from services.user import UserService
 from bot.handlers.player import PlayerHandler
 from bot.handlers.settings import SettingsHandler
-from bot.keyboards import CB_REGISTER, CB_ARCHETYPE, CB_CUSTOM_ARCHETYPE, CB_TOURNAMENT
+from bot.keyboards import CB_REGISTER, CB_ARCHETYPE, CB_CUSTOM_ARCHETYPE, CB_TOURNAMENT, CB_ARCHETYPE_MORE
 from bot.messages import CUSTOM_ARCHETYPE_PROMPT
 from bot.handlers.admin import AdminHandler
 
@@ -110,6 +110,27 @@ async def callback_archetype(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await query.answer(result.text, show_alert=True)
             return
         await query.edit_message_text(result.text)
+        await query.answer()
+    finally:
+        db.close()
+
+
+async def callback_archetype_more(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«... ещё» — разворачивает полный список архетипов."""
+    query = update.callback_query
+    user = update.effective_user
+    if not query or not query.data or not user:
+        return
+    try:
+        _, tid_str = query.data.split(":", 1)
+        tournament_id = int(tid_str)
+    except (ValueError, IndexError):
+        await query.answer("Ошибка данных.")
+        return
+    db = SessionLocal()
+    try:
+        result = _player_handler(db).handle_archetype_more(tournament_id, tg_id=user.id)
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
     finally:
         db.close()

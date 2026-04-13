@@ -12,6 +12,7 @@ from services.user import UserService
 from bot.handlers.admin import AdminHandler, parse_add_player_command, parse_bulk_player_line
 from bot.telegram.player import USER_DATA_PENDING_BULK_ADD, USER_DATA_PENDING_ADMIN_CUSTOM_ARCH
 from bot.messages import TELEGRAM_USER_LOOKUP_FAILED, ADD_PLAYERS_USAGE, BULK_ADD_PROMPT
+from bot.keyboards import CB_ADMIN_ARCH_MORE
 
 
 def _admin_handler(db) -> AdminHandler:
@@ -80,6 +81,30 @@ async def callback_admin_set_arch(update: Update, context: ContextTypes.DEFAULT_
             await query.answer(result.text, show_alert=True)
             return
         await query.edit_message_text(result.text)
+        await query.answer()
+    finally:
+        db.close()
+
+
+async def callback_admin_arch_more(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«... ещё» в admin pick arch — разворачивает полный список архетипов."""
+    query = update.callback_query
+    user = update.effective_user
+    if not query or not query.data or not user:
+        return
+    try:
+        _, pid_str = query.data.split(":", 1)
+        participant_id = int(pid_str)
+    except (ValueError, IndexError):
+        await query.answer("Ошибка данных.")
+        return
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_admin_arch_more(user.id, participant_id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
     finally:
         db.close()

@@ -6,6 +6,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 CB_REGISTER = "reg"
 CB_ARCHETYPE = "arch"
 CB_CUSTOM_ARCHETYPE = "custom"
+CB_ARCHETYPE_MORE = "arch_more"          # arch_more:{tournament_id}
 CB_TOURNAMENT = "t"
 CB_SETTINGS_NAME = "settings_name"
 CB_TSTATUS = "tstatus"
@@ -13,9 +14,10 @@ CB_LEAVE = "leave"
 CB_LEAVE_CONFIRM = "leave_confirm"
 CB_LEAVE_CANCEL = "leave_cancel"
 CB_BULK_ADD = "bulk_add"
-CB_ADMIN_PICK_ARCH = "adm_pick"    # adm_pick:{participant_id}
-CB_ADMIN_SET_ARCH = "adm_set"     # adm_set:{participant_id}:{archetype_id}
-CB_ADMIN_CUSTOM_ARCH = "adm_custom"  # adm_custom:{participant_id}
+CB_ADMIN_PICK_ARCH = "adm_pick"          # adm_pick:{participant_id}
+CB_ADMIN_SET_ARCH = "adm_set"            # adm_set:{participant_id}:{archetype_id}
+CB_ADMIN_CUSTOM_ARCH = "adm_custom"      # adm_custom:{participant_id}
+CB_ADMIN_ARCH_MORE = "adm_arch_more"     # adm_arch_more:{participant_id}
 
 
 def tournament_list_keyboard(tournaments: list) -> InlineKeyboardMarkup:
@@ -92,24 +94,52 @@ def admin_participants_keyboard(participants: list) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(buttons)
 
 
-def admin_archetype_select_keyboard(participant_id: int, archetypes: list) -> InlineKeyboardMarkup:
-    """Выбор архетипа для конкретного участника (admin flow)."""
+def admin_archetype_select_keyboard(
+    participant_id: int,
+    archetypes: list,
+    has_more: bool = False,
+) -> InlineKeyboardMarkup:
+    """Выбор архетипа для конкретного участника (admin flow).
+
+    archetypes: list of (id, name).
+    has_more: если True — добавляет кнопку «... ещё» перед «Свой вариант».
+    """
     buttons = [
         [InlineKeyboardButton(name, callback_data=f"{CB_ADMIN_SET_ARCH}:{participant_id}:{aid}")]
         for aid, name in archetypes
     ]
+    if has_more:
+        buttons.append([
+            InlineKeyboardButton(
+                "... ещё", callback_data=f"{CB_ADMIN_ARCH_MORE}:{participant_id}"
+            )
+        ])
     buttons.append([
         InlineKeyboardButton("Свой вариант", callback_data=f"{CB_ADMIN_CUSTOM_ARCH}:{participant_id}")
     ])
     return InlineKeyboardMarkup(buttons)
 
 
-def archetype_keyboard(tournament_id: int, archetypes: list) -> InlineKeyboardMarkup:
-    """Кнопки архетипов + «Свой вариант». archetypes: list of (id, name)."""
+def archetype_keyboard(
+    tournament_id: int,
+    archetypes: list,
+    has_more: bool = False,
+) -> InlineKeyboardMarkup:
+    """Кнопки архетипов + опционально «... ещё» + «Свой вариант».
+
+    archetypes: list of (id, name).
+    has_more: если True — добавляет кнопку «... ещё» перед «Свой вариант».
+    """
     buttons = [
         [InlineKeyboardButton(name, callback_data=f"{CB_ARCHETYPE}:{tournament_id}:{aid}")]
         for aid, name in archetypes
     ]
+    if has_more:
+        buttons.append([
+            InlineKeyboardButton(
+                "... ещё", callback_data=f"{CB_ARCHETYPE_MORE}:{tournament_id}"
+            )
+        ])
     buttons.append([
         InlineKeyboardButton("Свой вариант", callback_data=f"{CB_CUSTOM_ARCHETYPE}:{tournament_id}")
     ])

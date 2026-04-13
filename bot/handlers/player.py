@@ -1,7 +1,7 @@
 # Регистрация, выбор колоды — чистая бизнес-логика
 
 from core.config import settings
-from services.tournament import TournamentService
+from services.tournament import TournamentService, ArchetypeItem
 from services.user import UserService
 from services import errors
 from services.utils import get_tournament
@@ -28,6 +28,34 @@ from bot.messages import (
     format_tournament_status,
 )
 
+ARCHETYPE_COLLAPSED_COUNT = 3
+
+
+def build_archetype_list(
+    recent: list[ArchetypeItem],
+    top: list[ArchetypeItem],
+    expanded: bool = False,
+) -> tuple[list[ArchetypeItem], bool]:
+    """Формирует список архетипов для отображения и флаг наличия кнопки «ещё».
+
+    Правила:
+    - Нет истории: показываем top, has_more=False.
+    - Есть история, не развёрнуто: первые ARCHETYPE_COLLAPSED_COUNT из recent, has_more=True.
+    - Есть история, развёрнуто: вся история + top без дублей (из истории), has_more=False.
+
+    Аргументы:
+        recent: история пользователя (самые свежие первыми, без дублей).
+        top: топ-N архетипов по глобальной популярности.
+        expanded: True если пользователь нажал «ещё».
+    """
+    if not recent:
+        return list(top), False
+    if not expanded:
+        return list(recent[:ARCHETYPE_COLLAPSED_COUNT]), True
+    history_ids = {a.id for a in recent}
+    deduped_top = [a for a in top if a.id not in history_ids]
+    return list(recent) + deduped_top, False
+
 
 class PlayerHandler:
     def __init__(self, svc: TournamentService, user_svc: UserService) -> None:
@@ -50,6 +78,19 @@ class PlayerHandler:
             is_admin = self._is_admin(tg_id)
         text = format_tournament_card(t.title, t.status.label_ru, t.slug)
         return HandlerResult(text, keyboard=tournament_card_keyboard(t.id, is_registered, is_admin=is_admin))
+
+    def _archetype_keyboard_for_player(
+        self, tournament_id: int, tg_id: int | None, expanded: bool = False
+    ) -> HandlerResult:
+        """Строит HandlerResult с клавиатурой архетипов для игрока."""
+        if tg_id is not None:
+            recent = self.svc.list_user_recent_archetypes(tg_id)
+        else:
+            recent = []
+        top = self.svc.list_top_archetypes()
+        archetypes, has_more = build_archetype_list(recent, top, expanded)
+        arch_list = [(a.id, a.name) for a in archetypes]
+        return HandlerResult(CHOOSE_ARCHETYPE, keyboard=archetype_keyboard(tournament_id, arch_list, has_more))
 
     def handle_tournaments(self, tg_id: int | None = None) -> HandlerResult:
         tournaments = self.svc.list_all_active_tournaments()
@@ -77,11 +118,11 @@ class PlayerHandler:
             user = self.user_svc.get_by_tg_id(tg_id)
             if user is None or not user.first_name:
                 return HandlerResult(NAME_REQUIRED_FOR_REGISTRATION, needs_name=True)
-            archetypes = self.svc.list_archetypes_for_user(tg_id)
-        else:
-            archetypes = self.svc.list_archetypes()[:10]
-        arch_list = [(a.id, a.name) for a in archetypes]
-        return HandlerResult(CHOOSE_ARCHETYPE, keyboard=archetype_keyboard(tournament_id, arch_list))
+        return self._archetype_keyboard_for_player(tournament_id, tg_id)
+
+    def handle_archetype_more(self, tournament_id: int, tg_id: int) -> HandlerResult:
+        """Разворачивает полный список архетипов (история + топ)."""
+        return self._archetype_keyboard_for_player(tournament_id, tg_id, expanded=True)
 
     def handle_save_name_then_register(
         self,
@@ -95,9 +136,7 @@ class PlayerHandler:
         first_name = parts[0]
         last_name = parts[1] if len(parts) > 1 else None
         self.user_svc.update_name(tg_id, first_name, last_name)
-        archetypes = self.svc.list_archetypes_for_user(tg_id)
-        arch_list = [(a.id, a.name) for a in archetypes]
-        return HandlerResult(CHOOSE_ARCHETYPE, keyboard=archetype_keyboard(tournament_id, arch_list))
+        return self._archetype_keyboard_for_player(tournament_id, tg_id)
 
     def handle_archetype(
         self,
@@ -138,7 +177,7 @@ class PlayerHandler:
         name: str,
     ) -> HandlerResult:
         try:
-            archetype = self.svc.get_or_create_archetype_by_name(name)
+            archetype = self.svc.get_or_create_archetype_by_name(name, is_custom=True)
             db_user = self.user_svc.get_or_create(
                 tg_id=tg_id,
                 username=username,

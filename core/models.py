@@ -88,6 +88,8 @@ class Archetype(Base):
     name = Column(String(255), unique=True, nullable=False)  # "Burn"
     color_emoji = Column(String(8), nullable=True)           # "🔴"
     short_name = Column(String(64), nullable=True)           # "RDW"
+    meta_rank = Column(Integer, nullable=True, index=True)   # позиция в топ-мета (1=первый); NULL — нет места в списке
+    is_custom = Column(Boolean, nullable=False, default=False, server_default="false")  # True = введён игроком вручную; не показывается в глобальном топе
 
     created_at = Column(DateTime, default=utc_now, nullable=False)
 
