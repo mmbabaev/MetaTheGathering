@@ -33,6 +33,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+if settings.DEBUG:
+    logging.getLogger("services.tournament").setLevel(logging.DEBUG)
+
 
 async def _set_commands(app: Application) -> None:
     await app.bot.set_my_commands([
