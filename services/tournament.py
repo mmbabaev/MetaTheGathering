@@ -183,16 +183,18 @@ class TournamentService:
         return [ArchetypeItem(id=a.id, name=a.name) for a in rows]
 
     def list_archetypes_for_user(self, tg_id: int, total: int = 10) -> List[ArchetypeItem]:
-        """Топ-N архетипов: последние выборы пользователя первыми, остальные по алфавиту."""
+        """Топ-N архетипов: история игрока (турниры + user_deck_history) первой, остальные по алфавиту."""
         all_archetypes = self.list_archetypes()
 
-        # Ищем последние выборы пользователя (самые новые сначала, без дублей)
         user_stmt = select(models.User).where(models.User.tg_id == tg_id)
         user = self.db.execute(user_stmt).scalar_one_or_none()
 
         recent_ids: list[int] = []
         if user:
-            hist_stmt = (
+            seen: set[int] = set()
+
+            # 1. Колоды из прошлых турниров (самые новые первыми)
+            part_stmt = (
                 select(models.Participant.archetype_id)
                 .where(
                     models.Participant.user_id == user.id,
@@ -200,7 +202,18 @@ class TournamentService:
                 )
                 .order_by(models.Participant.created_at.desc())
             )
-            seen: set[int] = set()
+            for (aid,) in self.db.execute(part_stmt).all():
+                if aid not in seen:
+                    seen.add(aid)
+                    recent_ids.append(aid)
+
+            # 2. Колоды из user_deck_history (DataLens import и т.п.)
+            # ORDER BY id ASC сохраняет порядок вставки = порядок DataLens (наибольшее число матчей первым)
+            hist_stmt = (
+                select(models.UserDeckHistory.archetype_id)
+                .where(models.UserDeckHistory.user_id == user.id)
+                .order_by(models.UserDeckHistory.id.asc())
+            )
             for (aid,) in self.db.execute(hist_stmt).all():
                 if aid not in seen:
                     seen.add(aid)

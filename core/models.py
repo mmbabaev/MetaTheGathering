@@ -57,6 +57,7 @@ class User(Base):
 
     participants = relationship("Participant", back_populates="user", cascade="all, delete-orphan")
     votes = relationship("Vote", back_populates="voter", cascade="all, delete-orphan")
+    deck_history = relationship("UserDeckHistory", back_populates="user", cascade="all, delete-orphan")
 
 
 class Tournament(Base):
@@ -92,6 +93,7 @@ class Archetype(Base):
     created_at = Column(DateTime, default=utc_now, nullable=False)
 
     participants = relationship("Participant", back_populates="archetype")
+    user_history = relationship("UserDeckHistory", back_populates="archetype", cascade="all, delete-orphan")
 
     aliases = relationship("ArchetypeAlias", back_populates="archetype", cascade="all, delete-orphan")
 
@@ -143,6 +145,30 @@ class Participant(Base):
     __table_args__ = (
         UniqueConstraint("tournament_id", "user_id", name="uq_tournament_user"),
         Index("ix_tournament_archetype", "tournament_id", "archetype_id"),
+    )
+
+
+class UserDeckHistory(Base):
+    """История колод игрока из внешних источников (DataLens import и т.п.).
+
+    Используется для показа подсказок при регистрации на турнир.
+    Не привязана к конкретному турниру — хранит «когда-либо играл».
+    """
+
+    __tablename__ = "user_deck_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    archetype_id = Column(Integer, ForeignKey("archetypes.id", ondelete="CASCADE"), nullable=False)
+    source = Column(String(64), nullable=True)  # напр. "datalens_import"
+
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+    user = relationship("User", back_populates="deck_history")
+    archetype = relationship("Archetype", back_populates="user_history")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "archetype_id", name="uq_user_deck_history"),
     )
 
 
