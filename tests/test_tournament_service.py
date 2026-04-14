@@ -603,3 +603,93 @@ class TestGetOrCreateByName:
         db.commit()
         assert created is True
         assert u1.id != u2.id
+
+    # --- Гибкий поиск (регистр, ё/е, порядок имён) ---
+
+    def test_case_insensitive_match(self, user_svc, db):
+        """'иванов Иван' находит 'Иванов' 'Иван'."""
+        u1, _ = user_svc.get_or_create_by_name("Иванов", "Иван")
+        db.commit()
+        u2, created = user_svc.get_or_create_by_name("иванов", "иван")
+        db.commit()
+        assert created is False
+        assert u1.id == u2.id
+
+    def test_yo_ye_normalization(self, user_svc, db):
+        """'Семен' находит 'Семён' (ё→е нормализация)."""
+        u1, _ = user_svc.get_or_create_by_name("Семён", "Фёдоров")
+        db.commit()
+        u2, created = user_svc.get_or_create_by_name("Семен", "Федоров")
+        db.commit()
+        assert created is False
+        assert u1.id == u2.id
+
+    def test_swapped_name_order_finds_existing(self, user_svc, db):
+        """'Антон Ильин' находит 'Ильин Антон' (порядок Фамилия Имя → Имя Фамилия)."""
+        u1, _ = user_svc.get_or_create_by_name("Ильин", "Антон")
+        db.commit()
+        u2, created = user_svc.get_or_create_by_name("Антон", "Ильин")
+        db.commit()
+        assert created is False
+        assert u1.id == u2.id
+
+    def test_prefers_user_with_deck_history(self, user_svc, db, svc):
+        """Когда два совпадения — возвращает того, у кого есть история колод."""
+        from core import models
+        # Два пользователя с одинаковыми именами (разный порядок слов)
+        u_no_hist, _ = user_svc.get_or_create_by_name("Антон", "Ильин")
+        db.commit()
+        u_with_hist, _ = user_svc.get_or_create_by_name("Ильин", "Антон")
+        db.commit()
+
+        # Даём u_with_hist историю колод
+        arch = svc.get_or_create_archetype_by_name("Burn")
+        db.add(models.UserDeckHistory(user_id=u_with_hist.id, archetype_id=arch.id, source="test"))
+        db.commit()
+
+        # Поиск должен вернуть u_with_hist
+        found, created = user_svc.get_or_create_by_name("Антон", "Ильин")
+        assert created is False
+        assert found.id == u_with_hist.id
+
+    def test_swapped_order_case_insensitive(self, user_svc, db):
+        """Комбинация: нижний регистр + обратный порядок."""
+        u1, _ = user_svc.get_or_create_by_name("Левитина", "Мария")
+        db.commit()
+        u2, created = user_svc.get_or_create_by_name("мария", "левитина")
+        db.commit()
+        assert created is False
+        assert u1.id == u2.id
+
+    def test_bulk_add_uses_flexible_search(self, user_svc, db, svc):
+        """handle_bulk_add_by_name находит игрока даже при перестановке имени и фамилии."""
+        from bot.handlers.admin import AdminHandler
+        from core import models as m
+        from core.schemas import TournamentCreate
+
+        # Создаём пользователя в DataLens-порядке (Фамилия Имя)
+        u, _ = user_svc.get_or_create_by_name("Ильин", "Антон")
+        db.commit()
+
+        # Назначаем ему историю (чтобы убедиться что нашли правильного)
+        arch = svc.get_or_create_archetype_by_name("Elves")
+        db.add(m.UserDeckHistory(user_id=u.id, archetype_id=arch.id, source="test"))
+        db.commit()
+
+        # Турнир
+        t = svc.create_tournament(TournamentCreate(title="T", chat_id=9999))
+
+        class FakeAdminHandler(AdminHandler):
+            def _is_admin(self, tg_id): return True
+
+        handler = FakeAdminHandler(svc, user_svc)
+
+        # Добавляем в порядке Имя Фамилия (как вводит оператор)
+        result = handler.handle_bulk_add_by_name(
+            tg_id=0, tournament_id=t.id, names=["Антон Ильин"]
+        )
+        assert "✅ Антон Ильин" in result.text
+
+        # Участник должен быть привязан к правильному пользователю (с историей)
+        participant = svc.get_participant(t.id, u.id)
+        assert participant is not None, "Участник не связан с правильным пользователем"

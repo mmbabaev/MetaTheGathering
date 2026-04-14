@@ -8,6 +8,11 @@ from sqlalchemy.orm import Session
 from core import models
 
 
+def _normalize_name(s: str) -> str:
+    """Нижний регистр + ё→е для сравнения имён."""
+    return s.strip().lower().replace("ё", "е")
+
+
 class UserService:
     def __init__(self, db: Session) -> None:
         self.db = db
@@ -45,6 +50,55 @@ class UserService:
         self.db.refresh(user)
         return user
 
+    def _find_user_flexible(
+        self, first_name: str, last_name: Optional[str]
+    ) -> Optional[models.User]:
+        """Гибкий поиск пользователя по имени:
+        — регистронезависимый
+        — нормализует ё→е
+        — пробует оба порядка (Имя Фамилия / Фамилия Имя)
+        — при нескольких совпадениях предпочитает того, у кого есть история колод
+
+        Работает на Python-уровне (fetches all users). Допустимо при небольшом
+        числе пользователей (~500).
+        """
+        fn = _normalize_name(first_name)
+        ln = _normalize_name(last_name) if last_name else None
+
+        all_users = self.db.execute(select(models.User)).scalars().all()
+
+        candidates: list[models.User] = []
+        for user in all_users:
+            ufn = _normalize_name(user.first_name or "")
+            uln = _normalize_name(user.last_name or "")
+
+            # Прямой порядок: first_name совпадает с first_name
+            direct = (ufn == fn) and (uln == (ln or ""))
+            # Обратный порядок: ввели «Имя Фамилия», а в БД «Фамилия Имя»
+            swapped = ln is not None and (ufn == ln) and (uln == fn)
+
+            if direct or swapped:
+                candidates.append(user)
+
+        if not candidates:
+            return None
+        if len(candidates) == 1:
+            return candidates[0]
+
+        # Несколько совпадений — предпочитаем того, у кого есть история колод
+        for user in candidates:
+            has_history = self.db.execute(
+                select(models.UserDeckHistory.id)
+                .where(models.UserDeckHistory.user_id == user.id)
+                .limit(1)
+            ).scalar_one_or_none()
+            if has_history:
+                return user
+
+        # Иначе — предпочитаем реального пользователя (положительный tg_id)
+        real = [u for u in candidates if u.tg_id > 0]
+        return real[0] if real else candidates[0]
+
     def get_or_create_by_name(
         self,
         first_name: str,
@@ -52,18 +106,16 @@ class UserService:
     ) -> tuple[models.User, bool]:
         """Найти пользователя по имени или создать с placeholder tg_id.
 
+        Поиск: регистронезависимый + ё/е нормализация + оба порядка слов.
+        При нескольких совпадениях предпочитает пользователя с историей колод.
+
         Возвращает (user, was_created).
         Использует flush() без commit() — вызывающий код должен сделать commit.
         """
         first_name = first_name.strip()
         last_name = last_name.strip() if last_name else None
 
-        stmt = select(models.User).where(models.User.first_name == first_name)
-        if last_name:
-            stmt = stmt.where(models.User.last_name == last_name)
-        else:
-            stmt = stmt.where(models.User.last_name.is_(None))
-        user = self.db.execute(stmt).scalar_one_or_none()
+        user = self._find_user_flexible(first_name, last_name)
         if user:
             return user, False
 
