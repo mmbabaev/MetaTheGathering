@@ -186,7 +186,10 @@ class TournamentService:
         return [ArchetypeItem(id=a.id, name=a.name) for a in rows]
 
     def list_top_archetypes(self, n: int = 10) -> List[ArchetypeItem]:
-        """Топ-N архетипов.
+        """Топ-N архетипов по числу использований в турнирах прошедших фазу регистрации.
+
+        Участники турниров в статусе REGISTRATION не учитываются — иначе только что
+        назначенные колоды всплывали бы в топе и загрязняли меню выбора.
 
         Порядок сортировки:
         1. usage_count DESC  — больше сыгранных турниров → выше
@@ -194,13 +197,25 @@ class TournamentService:
         3. name ASC — алфавит для остального
         """
         from sqlalchemy import nulls_last
+
+        # Субзапрос: id турниров, вышедших из фазы регистрации
+        past_registration = (
+            select(models.Tournament.id).where(
+                models.Tournament.status != models.TournamentStatus.REGISTRATION
+            )
+        ).scalar_subquery()
+
         stmt = (
             select(
                 models.Archetype.id,
                 models.Archetype.name,
                 func.count(models.Participant.id).label("usage_count"),
             )
-            .outerjoin(models.Participant, models.Participant.archetype_id == models.Archetype.id)
+            .outerjoin(
+                models.Participant,
+                (models.Participant.archetype_id == models.Archetype.id)
+                & models.Participant.tournament_id.in_(past_registration),
+            )
             .where(models.Archetype.is_custom.is_(False))
             .group_by(models.Archetype.id, models.Archetype.name, models.Archetype.meta_rank)
             .order_by(

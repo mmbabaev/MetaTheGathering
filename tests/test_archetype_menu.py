@@ -9,6 +9,7 @@
 """
 
 import pytest
+from core import models
 from core.schemas import TournamentCreate
 from services.tournament import TournamentService, ArchetypeItem
 from services.user import UserService
@@ -18,6 +19,16 @@ from bot.handlers.admin import AdminHandler
 CHAT_ID = 200
 ADMIN_TG_ID = 9999
 PLAYER_TG_ID = 1111
+
+
+def close_tournament(svc: TournamentService, tournament_id: int) -> None:
+    """Принудительно переводит турнир в статус CLOSED (для тестов исторических данных)."""
+    from sqlalchemy import select
+    t = svc.db.execute(
+        select(models.Tournament).where(models.Tournament.id == tournament_id)
+    ).scalar_one()
+    t.status = models.TournamentStatus.CLOSED
+    svc.db.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -59,7 +70,7 @@ class TestListTopArchetypes:
         assert svc.list_top_archetypes() == []
 
     def test_returns_archetypes_ordered_by_usage_count_desc(self, svc, user_svc):
-        """Архетип с большим числом участников должен быть первым."""
+        """Архетип с большим числом участников должен быть первым (только CLOSED-турниры)."""
         burn = svc.get_or_create_archetype_by_name("Burn")
         elves = svc.get_or_create_archetype_by_name("Elves")
 
@@ -78,6 +89,10 @@ class TestListTopArchetypes:
         u_burn = user_svc.get_or_create(tg_id=200, username=None, first_name="BurnP")
         svc.register_participant(tournament_id=t1.id, user_id=u_burn.id, archetype_id=burn.id)
 
+        # Закрываем турниры — только тогда счётчик учитывается
+        for t in [t1, t2, t3]:
+            close_tournament(svc, t.id)
+
         result = svc.list_top_archetypes()
         assert result[0].name == "Elves"
         assert result[1].name == "Burn"
@@ -92,6 +107,7 @@ class TestListTopArchetypes:
         u2 = user_svc.get_or_create(tg_id=302, username=None, first_name="P2")
         svc.register_participant(tournament_id=t1.id, user_id=u1.id, archetype_id=burn.id)
         svc.register_participant(tournament_id=t1.id, user_id=u2.id, archetype_id=affinity.id)
+        close_tournament(svc, t1.id)
 
         result = svc.list_top_archetypes()
         assert result[0].name == "Affinity"   # 'A' < 'B'
@@ -105,12 +121,36 @@ class TestListTopArchetypes:
         t1 = svc.create_tournament(TournamentCreate(title="T1", chat_id=CHAT_ID + 20))
         u = user_svc.get_or_create(tg_id=401, username=None, first_name="P")
         svc.register_participant(tournament_id=t1.id, user_id=u.id, archetype_id=burn.id)
+        close_tournament(svc, t1.id)
 
         result = svc.list_top_archetypes()
         names = [a.name for a in result]
         assert "Burn" in names
         assert "Zzz Unused" in names
         assert names.index("Burn") < names.index("Zzz Unused")
+
+    def test_registration_phase_participants_excluded_from_top(self, svc, user_svc):
+        """Участники в REGISTRATION-турнире не влияют на рейтинг — это баг-фикс."""
+        burn = svc.get_or_create_archetype_by_name("Burn")
+        elves = svc.get_or_create_archetype_by_name("Elves")
+
+        # Исторический (CLOSED) турнир: Elves сыгран 3 раза
+        hist = svc.create_tournament(TournamentCreate(title="Historical", chat_id=CHAT_ID + 21))
+        for tg in [501, 502, 503]:
+            u = user_svc.get_or_create(tg_id=tg, username=None, first_name=f"P{tg}")
+            svc.register_participant(tournament_id=hist.id, user_id=u.id, archetype_id=elves.id)
+        close_tournament(svc, hist.id)
+
+        # Текущий (REGISTRATION) турнир: Burn назначен одному игроку
+        active = svc.create_tournament(TournamentCreate(title="Active", chat_id=CHAT_ID + 22))
+        u_new = user_svc.get_or_create(tg_id=601, username=None, first_name="New")
+        svc.register_participant(tournament_id=active.id, user_id=u_new.id, archetype_id=burn.id)
+        # НЕ закрываем — остаётся в REGISTRATION
+
+        result = svc.list_top_archetypes()
+        # Elves (3 из истории) должна быть выше Burn (0 из истории, только в REGISTRATION)
+        names = [a.name for a in result]
+        assert names.index("Elves") < names.index("Burn")
 
     def test_respects_n_limit(self, svc):
         for i in range(15):
@@ -523,3 +563,170 @@ class TestAdminArchMore:
         from bot.messages import NOT_ADMIN
         result = admin_handler.handle_admin_arch_more(tg_id=42, participant_id=participant_with_history.id)
         assert result.text == NOT_ADMIN
+
+
+# ---------------------------------------------------------------------------
+# 8. Сценарий заполнения турнира — регрессия на баг «загрязнение топа»
+# ---------------------------------------------------------------------------
+
+class TestTournamentFillScenario:
+    """
+    Воспроизводит реальный сценарий:
+    Админ добавляет нескольких игроков через bulk_add и затем выбирает колоды.
+    Выбор колоды для одного игрока не должен влиять на меню выбора другого.
+    """
+
+    FILL_ADMIN = 8888
+    FILL_CHAT  = 700
+
+    @pytest.fixture
+    def fill_admin(self, svc, user_svc):
+        u = user_svc.get_or_create(tg_id=self.FILL_ADMIN, username="admin", first_name="Admin")
+        from sqlalchemy import select
+        obj = svc.db.execute(
+            select(models.User).where(models.User.tg_id == self.FILL_ADMIN)
+        ).scalar_one()
+        obj.is_admin = True
+        svc.db.commit()
+        return u
+
+    @pytest.fixture
+    def fill_tournament(self, svc):
+        return svc.create_tournament(TournamentCreate(title="Fill Test", chat_id=self.FILL_CHAT))
+
+    @pytest.fixture
+    def two_participants(self, svc, user_svc, fill_tournament):
+        """Два игрока без истории, добавленных через bulk_add."""
+        p1_user = user_svc.get_or_create_by_name("Player", "One")[0]
+        p2_user = user_svc.get_or_create_by_name("Player", "Two")[0]
+        svc.bulk_add_participants(fill_tournament.id, [
+            (p1_user.id, "Player One"),
+            (p2_user.id, "Player Two"),
+        ])
+        p1 = svc.get_participant(fill_tournament.id, p1_user.id)
+        p2 = svc.get_participant(fill_tournament.id, p2_user.id)
+        return p1, p2
+
+    def test_assigning_deck_to_p1_does_not_affect_p2_top(
+        self, svc, user_svc, admin_handler, fill_admin, fill_tournament, two_participants
+    ):
+        """Баг-регрессия: назначение колоды игроку1 не должно менять меню игрока2."""
+        p1, p2 = two_participants
+        burn = svc.get_or_create_archetype_by_name("Burn")
+        elves = svc.get_or_create_archetype_by_name("Elves")
+
+        # Снимаем фиксацию порядка: оба на 0, алфавит → Burn < Elves
+        top_before = admin_handler.handle_admin_pick_arch(self.FILL_ADMIN, p2.id)
+        btn_names_before = [
+            b.text for row in top_before.keyboard.inline_keyboard for b in row
+        ]
+
+        # Назначаем Burn игроку1
+        admin_handler.handle_admin_set_arch(self.FILL_ADMIN, p1.id, burn.id)
+
+        # Меню игрока2 не должно измениться
+        top_after = admin_handler.handle_admin_pick_arch(self.FILL_ADMIN, p2.id)
+        btn_names_after = [
+            b.text for row in top_after.keyboard.inline_keyboard for b in row
+        ]
+        assert btn_names_before == btn_names_after
+
+    def test_registration_deck_not_at_top_when_historical_alternative_exists(
+        self, svc, user_svc, admin_handler, fill_admin, fill_tournament, two_participants
+    ):
+        """Колода из REGISTRATION не вытесняет популярную историческую колоду из топа."""
+        p1, p2 = two_participants
+        popular = svc.get_or_create_archetype_by_name("Aaaaa Popular")  # 'A' гарантирует алфавитный приоритет
+        rare_deck = svc.get_or_create_archetype_by_name("Zzz Rare Deck")
+
+        # Историческая популярная колода (3 игрока в закрытом турнире)
+        hist = svc.create_tournament(TournamentCreate(title="Hist", chat_id=self.FILL_CHAT + 10))
+        for tg in [801, 802, 803]:
+            u = user_svc.get_or_create(tg_id=tg, username=None, first_name=f"H{tg}")
+            svc.register_participant(tournament_id=hist.id, user_id=u.id, archetype_id=popular.id)
+        close_tournament(svc, hist.id)
+
+        # Назначаем редкую колоду игроку1 в REGISTRATION-турнире
+        admin_handler.handle_admin_set_arch(self.FILL_ADMIN, p1.id, rare_deck.id)
+
+        # Игрок2 без истории видит топ: популярная историческая должна быть выше
+        result = admin_handler.handle_admin_pick_arch(self.FILL_ADMIN, p2.id)
+        from bot.keyboards import CB_ADMIN_SET_ARCH
+        arch_btns = [
+            b for row in result.keyboard.inline_keyboard for b in row
+            if b.callback_data.startswith(CB_ADMIN_SET_ARCH)
+        ]
+        assert arch_btns
+        assert "Aaaaa Popular" in arch_btns[0].text, (
+            f"Первой должна быть историческая Popular, но: {arch_btns[0].text}"
+        )
+
+    def test_historical_deck_ranks_above_registration_deck(
+        self, svc, user_svc, admin_handler, fill_admin, fill_tournament, two_participants
+    ):
+        """Колода из закрытого турнира стоит выше колоды из текущей регистрации."""
+        p1, p2 = two_participants
+        popular = svc.get_or_create_archetype_by_name("Popular Historical")
+        new_deck  = svc.get_or_create_archetype_by_name("New Registration Deck")
+
+        # Исторический закрытый турнир: popular сыгран 5 раз
+        hist = svc.create_tournament(TournamentCreate(title="Hist", chat_id=self.FILL_CHAT + 1))
+        for tg in [701, 702, 703, 704, 705]:
+            u = user_svc.get_or_create(tg_id=tg, username=None, first_name=f"H{tg}")
+            svc.register_participant(tournament_id=hist.id, user_id=u.id, archetype_id=popular.id)
+        close_tournament(svc, hist.id)
+
+        # Назначаем new_deck игроку1 в текущем REGISTRATION-турнире
+        admin_handler.handle_admin_set_arch(self.FILL_ADMIN, p1.id, new_deck.id)
+
+        # Меню игрока2: popular должна быть выше new_deck
+        result = admin_handler.handle_admin_pick_arch(self.FILL_ADMIN, p2.id)
+        btns = [b.text for row in result.keyboard.inline_keyboard for b in row]
+
+        # Убираем emoji-prefix для поиска
+        def find_pos(name: str) -> int:
+            for i, text in enumerate(btns):
+                if name in text:
+                    return i
+            return -1
+
+        pos_popular = find_pos("Popular Historical")
+        pos_new = find_pos("New Registration Deck")
+        assert pos_popular != -1, "Popular Historical не найдена в меню"
+        assert pos_new != -1, "New Registration Deck не найдена в меню"
+        assert pos_popular < pos_new
+
+    def test_player_own_history_unaffected_by_other_players_assignment(
+        self, svc, user_svc, admin_handler, fill_admin, fill_tournament
+    ):
+        """История игрока (из DataLens/турниров) не зависит от назначений другим игрокам."""
+        elves = svc.get_or_create_archetype_by_name("Elves")
+        burn  = svc.get_or_create_archetype_by_name("Burn")
+
+        # Игрок A — есть история (Elves из прошлого турнира)
+        player_a = user_svc.get_or_create(tg_id=800, username=None, first_name="PlayerA")
+        hist = svc.create_tournament(TournamentCreate(title="PH", chat_id=self.FILL_CHAT + 2))
+        svc.register_participant(tournament_id=hist.id, user_id=player_a.id, archetype_id=elves.id)
+        close_tournament(svc, hist.id)
+
+        # Игрок B — без истории, добавлен через bulk_add
+        player_b = user_svc.get_or_create_by_name("Player", "B")[0]
+        svc.bulk_add_participants(fill_tournament.id, [
+            (player_a.id, "PlayerA"),
+            (player_b.id, "PlayerB"),
+        ])
+        p_a = svc.get_participant(fill_tournament.id, player_a.id)
+        p_b = svc.get_participant(fill_tournament.id, player_b.id)
+
+        # Назначаем Burn игроку B
+        admin_handler.handle_admin_set_arch(self.FILL_ADMIN, p_b.id, burn.id)
+
+        # У игрока A первой должна стоять Elves (его история)
+        result = admin_handler.handle_admin_pick_arch(self.FILL_ADMIN, p_a.id)
+        from bot.keyboards import CB_ADMIN_SET_ARCH
+        arch_btns = [
+            b for row in result.keyboard.inline_keyboard for b in row
+            if b.callback_data.startswith(CB_ADMIN_SET_ARCH)
+        ]
+        assert arch_btns, "Нет кнопок архетипов"
+        assert "Elves" in arch_btns[0].text, f"Первая кнопка должна быть Elves, но: {arch_btns[0].text}"
