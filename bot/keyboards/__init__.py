@@ -18,6 +18,9 @@ CB_ADMIN_PICK_ARCH = "adm_pick"          # adm_pick:{participant_id}
 CB_ADMIN_SET_ARCH = "adm_set"            # adm_set:{participant_id}:{archetype_id}
 CB_ADMIN_CUSTOM_ARCH = "adm_custom"      # adm_custom:{participant_id}
 CB_ADMIN_ARCH_MORE = "adm_arch_more"     # adm_arch_more:{participant_id}
+CB_DELETE_TOURNAMENT = "del_t"           # del_t:{tournament_id}
+CB_DELETE_TOURNAMENT_CONFIRM = "del_t_yes"  # del_t_yes:{tournament_id}
+CB_DELETE_TOURNAMENT_CANCEL = "del_t_no"    # del_t_no:{tournament_id}
 
 
 def tournament_list_keyboard(tournaments: list) -> InlineKeyboardMarkup:
@@ -53,7 +56,24 @@ def tournament_card_keyboard(
                 "➕ Добавить участников", callback_data=f"{CB_BULK_ADD}:{tournament_id}"
             )
         ])
+        rows.append([
+            InlineKeyboardButton(
+                "🗑 Удалить турнир", callback_data=f"{CB_DELETE_TOURNAMENT}:{tournament_id}"
+            )
+        ])
     return InlineKeyboardMarkup(rows)
+
+
+def delete_tournament_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
+    """Подтверждение удаления турнира."""
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton(
+            "✅ Да, удалить", callback_data=f"{CB_DELETE_TOURNAMENT_CONFIRM}:{tournament_id}"
+        ),
+        InlineKeyboardButton(
+            "❌ Отмена", callback_data=f"{CB_DELETE_TOURNAMENT_CANCEL}:{tournament_id}"
+        ),
+    ]])
 
 
 def register_button(tournament_id: int) -> InlineKeyboardMarkup:

@@ -287,3 +287,84 @@ async def cmd_delete_tournament(update: Update, context: ContextTypes.DEFAULT_TY
         await msg.reply_text(result.text)
     finally:
         db.close()
+
+
+async def callback_delete_tournament_prompt(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Кнопка «🗑 Удалить турнир» — показывает запрос подтверждения."""
+    query = update.callback_query
+    user = update.effective_user
+    if not query or not query.data or not user:
+        return
+    try:
+        _, tid_str = query.data.split(":", 1)
+        tournament_id = int(tid_str)
+    except (ValueError, IndexError):
+        await query.answer("Ошибка данных.")
+        return
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_delete_tournament_prompt(user.id, tournament_id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+        await query.answer()
+    finally:
+        db.close()
+
+
+async def callback_delete_tournament_confirm(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Подтверждение удаления турнира."""
+    query = update.callback_query
+    user = update.effective_user
+    if not query or not query.data or not user:
+        return
+    try:
+        _, tid_str = query.data.split(":", 1)
+        tournament_id = int(tid_str)
+    except (ValueError, IndexError):
+        await query.answer("Ошибка данных.")
+        return
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_delete_tournament_confirm(user.id, tournament_id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        await query.edit_message_text(result.text)
+        await query.answer()
+    finally:
+        db.close()
+
+
+async def callback_delete_tournament_cancel(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Отмена удаления — возвращает карточку турнира."""
+    query = update.callback_query
+    user = update.effective_user
+    if not query or not query.data or not user:
+        return
+    try:
+        _, tid_str = query.data.split(":", 1)
+        tournament_id = int(tid_str)
+    except (ValueError, IndexError):
+        await query.answer("Отменено.")
+        return
+    from core.database import SessionLocal as SL
+    from services.tournament import TournamentService
+    from services.user import UserService
+    from bot.handlers.player import PlayerHandler
+    db = SL()
+    try:
+        svc = TournamentService(db)
+        user_svc = UserService(db)
+        result = PlayerHandler(svc, user_svc).handle_tournament_select(tournament_id, tg_id=user.id)
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+        await query.answer()
+    finally:
+        db.close()

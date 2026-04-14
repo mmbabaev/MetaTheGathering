@@ -8,7 +8,11 @@ from services.user import UserService
 from services import errors
 from bot.handlers.base import HandlerResult
 from bot.handlers.player import build_archetype_menu
-from bot.keyboards import admin_participants_keyboard, admin_archetype_select_keyboard
+from bot.keyboards import (
+    admin_participants_keyboard,
+    admin_archetype_select_keyboard,
+    delete_tournament_confirm_keyboard,
+)
 from bot.messages import (
     NOT_ADMIN,
     NO_DECK_NAME,
@@ -391,7 +395,7 @@ class AdminHandler:
         return HandlerResult(f"✅ Турнир создан: «{t.title}» (id={t.id})")
 
     def handle_delete_tournament(self, tg_id: int) -> HandlerResult:
-        """Удалить активный турнир вместе с участниками (для дебага)."""
+        """Удалить активный турнир вместе с участниками (для дебага, через /delete_tournament)."""
         if not self._is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
         active, err = self._resolve_tournament()
@@ -399,4 +403,37 @@ class AdminHandler:
             return err
         title = active.title
         self.svc.delete_tournament(active.id)
+        return HandlerResult(f"🗑 Турнир «{title}» удалён.")
+
+    def handle_delete_tournament_prompt(
+        self, tg_id: int, tournament_id: int
+    ) -> HandlerResult:
+        """Показывает запрос подтверждения удаления турнира."""
+        if not self._is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN)
+        try:
+            from services.utils import get_tournament
+            t = get_tournament(self.svc.db, tournament_id)
+        except errors.TournamentNotFound:
+            return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
+        n = len(self.svc.list_participants_for_tournament(tournament_id))
+        text = (
+            f"⚠️ Удалить турнир «{t.title}»?\n"
+            f"Будет удалено {n} участник(ов). Действие необратимо."
+        )
+        return HandlerResult(text, keyboard=delete_tournament_confirm_keyboard(tournament_id))
+
+    def handle_delete_tournament_confirm(
+        self, tg_id: int, tournament_id: int
+    ) -> HandlerResult:
+        """Выполняет удаление после подтверждения."""
+        if not self._is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN)
+        try:
+            from services.utils import get_tournament
+            t = get_tournament(self.svc.db, tournament_id)
+        except errors.TournamentNotFound:
+            return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
+        title = t.title
+        self.svc.delete_tournament(tournament_id)
         return HandlerResult(f"🗑 Турнир «{title}» удалён.")

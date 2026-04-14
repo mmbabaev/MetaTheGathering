@@ -24,6 +24,7 @@ from bot.keyboards import (
     CB_SETTINGS_NAME, CB_TSTATUS, CB_LEAVE, CB_LEAVE_CONFIRM, CB_LEAVE_CANCEL,
     CB_BULK_ADD, CB_ADMIN_PICK_ARCH, CB_ADMIN_SET_ARCH, CB_ADMIN_CUSTOM_ARCH,
     CB_ADMIN_ARCH_MORE,
+    CB_DELETE_TOURNAMENT, CB_DELETE_TOURNAMENT_CONFIRM, CB_DELETE_TOURNAMENT_CANCEL,
 )
 from bot.scheduler import setup_scheduler
 
@@ -134,6 +135,15 @@ def main() -> None:
     )
     app.add_handler(
         CallbackQueryHandler(admin.callback_admin_custom_arch, pattern=f"^{CB_ADMIN_CUSTOM_ARCH}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(admin.callback_delete_tournament_prompt, pattern=f"^{CB_DELETE_TOURNAMENT}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(admin.callback_delete_tournament_confirm, pattern=f"^{CB_DELETE_TOURNAMENT_CONFIRM}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(admin.callback_delete_tournament_cancel, pattern=f"^{CB_DELETE_TOURNAMENT_CANCEL}:")
     )
 
     app.add_handler(
