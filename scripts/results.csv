@@ -8,12 +8,15 @@ tg_id,ru_name,tg_name,username,status,match_score,decks
 291252928,Оленин Дмитрий,Dmitry Olenin,@olenindl,fuzzy_ok,88.9,"Glee Combo, Jund Midrange, Red Madness, Dimir Faeries, Mardu Synthesizer, Blue Faeries, Dimir Terror, Combo Affinity, Gardens"
 317775412,Амелин Антон,Anton,@dontgiveupskeleton,fuzzy_ok,90.0,"Blue Faeries, Caw Gates, Blue Delver, Green Infect, Bogles, Glee Combo, Infect, Red Dredge, Black Sacrifice, Dimir Faeries, High Tide, Rakdos Madness, Red Burn, Red Kuldotha, Simic Infect, Simic Mill"
 581974841,Лапин Егор,Егор Лапин,@egorlapin,fuzzy_ok,100.0,"Blue Faeries, Dimir Faeries, Izzet Faeries, Izzet Control, Izzet Terror, Red Kuldotha, Dimir Terror, Elves, Gruul Ramp"
+608058315,Кирьянов Глеб,Glebka,(no username),fuzzy_low,72.0,"Gruul Ramp, Rakdos Reanimator"
 512914041,Малинников Лев,Lev Malinnikov,@Lev_m,fuzzy_ok,100.0,"Spy, Dimir Faeries, Rakdos Dredge, Boros Synthesizer, Golgari Dredge, Gruul Ponza, Blue Faeries, Boros Gates, Caw Gates, Mardu Synthesizer, Altar Tron, Azorius Familiars, Blue Delver, Grixis Affinity, Orzhov Blade, Red Dredge, Red Rally, Gruul Ramp, Gruul Storm, Red Madness"
 91062783,Берест Полина,Yulia,@yuliamme,fuzzy_low,60.0,"Bogles, Green Infect, Slivers"
 50342417,Андрей,Andrew Wolf,@a_wolf02,fuzzy_low,81.8,Elves
 1341949182,Акимов Матвей,Матвей,@vpivetvoyasilaimudrost,fuzzy_ok,90.0,"Jeskai Ephemerate, Izzet Control, Izzet Faeries, Jund Midrange, Blue Faeries, Flicker Tron, Grixis Affinity, Dimir Faeries, Dimir Terror, Grixis Control, Moggwarts Combo, Gruul Ponza, Glee Combo, Temur Skred, Rogue"
 325711476,Пономарев Дмитрий,Dmitry Ponomarev,@traktorist_dez,fuzzy_ok,90.9,"Dimir Faeries, Grixis Affinity, Izzet Skred, Jeskai Glitters Affinity, Cascade Tron, Esper Affinity, Rakdos Reanimator, Red Tron, Classic Burn, Dimir Control, Mardu Synthesizer, Blue Faeries, Boros Synthesizer, Dimir Terror, Flicker Tron, Gruul Ponza, Gruul Tron, Izzet Control, Izzet Terror, Orzhov Blade, Gardens, Jund Midrange, Reanimator"
+1402404763,Ожгибесов Артур,Артур Ожгибесов,(no username),fuzzy_ok,100.0,"Tortured Existence, Elves, Turbo Fog, Bogles, Grixis Affinity, Altar Tron, Black Zombie, Combo Affinity, Esper Gates, Izzet Stax, Landfall Control, Mono Black Control, Orzhov Gates, Abzan Tortex, Dimir Faeries, Zubera Storm, Naya Initiative"
 1582566452,Андреев Кирилл,Кирилл Андреев,@andrkirandr,fuzzy_ok,100.0,"Izzet Control, Gardens, Flicker Tron, Temur Skred, Grixis Affinity, White Weenie, Blue Delver, Caw Gates, Elves, Azorius Familiars, Dimir Faeries, Golgari Dredge, Cycling Storm, Izzet Faeries, Jeskai Ephemerate, Red Rally, Spy, Tortured Existence, Bogles, Combo Walls, Rogue, Ruby Storm"
+779859298,Смирнов Денис,Денис Смирнов,(no username),fuzzy_ok,100.0,"Izzet Control, Gruul Ramp, Rogue, Black Rats Ninjas, Combo Walls, Glitters Affinity, Orzhov Blade, Orzhov Soul Sisters, Gruul Ponza, Mono Black Control, Elves, Green Tokens, Izzet Curve, Naya Zoo, Simic Mill, White Weenie, Dimir Control, Eldrazi Ramp, Midnight Gond Combo, Dimir Terror, Poison Storm"
 459539926,Мамедов Марк,Ne nado Tak,@Nenadotaks,fuzzy_low,52.2,"Izzet Ophidian Eye Storm, Selesnya Fog, Blue Delver, Rogue"
 1292082575,Никонов Константин,Никен,@Niken_ca,fuzzy_low,72.0,"White Weenie, Midnight Gond Combo, Simic 8 Kenku, Orzhov Blade, Azorius Faeries, Acid Trip, Rogue, Naya Bully, Glee Combo, Azorius Skies, Esper Spirit, White Soldiers, Golgari Pest Control, Izzet Miracle, 4c Gates, Azorius Metalcraft, Bant Ephemerate, Naya Eldrazi Energy, White Tron, Orzhov Soldiers, Project X, Delver of Trinket, Glitters Affinity, Orzhov Vampires, Selesnya Mushroom Samba, Selesnya Tokens, Esper Mill, Selesnya Agro Food, Selesnya Gates, Selesnya Swine Mastery"
 365214010,Чехлов Патрик,Patrick Chekhlov,@PatrickChekhlov,fuzzy_ok,92.9,"Orzhov Blade, Caw Gates"
@@ -34,6 +37,7 @@ tg_id,ru_name,tg_name,username,status,match_score,decks
 825099056,Серов Данил,6thW Seraphim,@srphmqq,fuzzy_low,41.7,Red Madness
 5138672874,Адигамов Вениамин,phoenix,@phoenix_sk2,fuzzy_low,51.4,Blue Delver
 5164582096,КОСЬЯН Максим,TONSAVER,@TonSaver,fuzzy_low,32.7,Blue Delver
+1601944958,Пиривердиев Юрий,Юрий Пиривердиев,(no username),fuzzy_ok,100.0,"Red Kuldotha, Golgari Dredge, Orzhov Blade, Bogles, White Weenie, Poison Storm, Blue Delver, Jund Midrange, Grixis Affinity, Izzet Control, Gardens, Glee Combo, Pinger Burn, Red Rally, Elves, Rakdos Madness, 4c Gates, Black Sacrifice, Caw Gates, Dimir Faeries, Golgari Pestilence, Gruul Ponza, Red Madness, Green Tron, Rakdos Affinity, Spy"
 1138986774,Агаев Дмитрий,Дмитрий,@Timecras,fuzzy_ok,90.0,Blue Faeries
 437305911,Нивников Константин,Nivnikoff,@nivnikoff,fuzzy_low,78.8,"Azorius Familiars, Flicker Tron, Blue Delver, Gardens, Lifegain Tron, Temur Skred, Izzet Faeries, Golgari Pestilence, Temur Faeries"
 104715184,Бабаев Михаил,playasdevil,@playasdevil,fuzzy_low,50.0,"Red Kuldotha, Rakdos Madness, Blue Delver, Red Rally, Red Burn, Boros Synthesizer, Golgari Dredge"
@@ -47,9 +51,11 @@ tg_id,ru_name,tg_name,username,status,match_score,decks
 6362017084,Ларин Илья,Lunar,@MagictgLuNaR,fuzzy_low,67.5,"Blue Delver, Esper Affinity, Gruul Ramp, Rogue"
 7657637823,Горинов Максим,Max Larionov,@crzzmvx,fuzzy_low,61.5,"Dimir Teachings, Esper Control, Grixis Curve, Dimir Faeries"
 214351462,Арановский Владимир,Владимир Арановский,@Varandru,fuzzy_ok,100.0,Blue Faeries
+152258645,Васильев Сергей,Сергей Васильев,(no username),fuzzy_ok,100.0,"Caw Gates, Azorius Familiars, Red Kuldotha, Dimir Faeries, Izzet Control, Jeskai Ephemerate, Bogles, Classic Burn, High Tide, White Weenie, Blue Faeries, Boros Synthesizer, Combo Walls, Gruul Ponza, Blue Delver, Jund Midrange, Gruul Ramp, Golgari Dredge, Turbo Fog, Gardens, Boros Moxite, Flicker Tron, Glee Combo, Impulse Kuldotha, Izzet Faeries"
 419213814,Педан Сергей,Sergey Pedan,@SergeyPedan,fuzzy_ok,91.7,"Rakdos Madness, Blue Delver"
 1266222385,Чехлов Патрик,Al Parfi,@al_parfi,fuzzy_low,60.0,"Orzhov Blade, Caw Gates"
 1048756194,Охлопков Илья,хлоп хлоп,@Hl0p_Hl0p,fuzzy_low,54.5,"Rakdos Madness, Red Madness"
+477989858,Корганбеков Улукбек,Ulukbek,(no username),fuzzy_ok,90.0,Jund Midrange
 1208083504,Бариев Амир,Bagger,@Baggertiptop,fuzzy_low,60.0,Altar Tron
 264823620,Транчуков Илья,Илья Баганов,@Jirni,fuzzy_low,69.2,"Azorius Familiars, Spy, Backup Combo, Dimir Familiars, Orzhov Blade, Pestilence"
 200007237,Александр Ермановский,Alexey,@ax_episode,fuzzy_low,60.0,Red Rally
@@ -58,6 +64,8 @@ tg_id,ru_name,tg_name,username,status,match_score,decks
 6314932636,Бабаев Михаил,Михаил (Марш🦊) Верецук,@bouenmarsh,fuzzy_ok,85.5,"Red Kuldotha, Rakdos Madness, Blue Delver, Red Rally, Red Burn, Boros Synthesizer, Golgari Dredge"
 329745960,Рябинин Андрей,Andrey Ryabinin,@ryan_112,fuzzy_low,82.8,"White Weenie, Poison Storm, Rakdos Madness"
 1838323989,Ларин Илья,Ilya Larin,@dlarian,fuzzy_low,80.0,"Blue Delver, Esper Affinity, Gruul Ramp, Rogue"
+825922723,Ильин Антон,Антон Ильин,(no username),fuzzy_ok,100.0,"Red Kuldotha, Red Burn, Red Madness, Glitters Affinity, Jeskai Glitters Affinity, Bogles, Boros Kuldotha, Pinger Burn"
+201386817,Лукьянов Сергей,Сергей Лукьянов,(no username),fuzzy_ok,100.0,"Dimir Faeries, Rakdos Madness, Grixis Affinity, Red Kuldotha, Combo Affinity, Boros Synthesizer, Jund Midrange, Blue Delver, Gruul Ponza, White Heroic, Dimir Affinity, Green Stompy, Boros Glitters, Gruul Ramp, Red Burn"
 403601700,Савелов Сергей,Сергей Савёлов,@HighIQMonster,fuzzy_ok,92.9,"Red Madness, Flicker Tron"
 391735300,Андрей,Andrey,@szdx1234,fuzzy_low,83.3,Elves
 5051219594,Овчинников Даниель,beanie,@beaniethebean,fuzzy_low,62.2,Ruby Storm
@@ -81,6 +89,7 @@ tg_id,ru_name,tg_name,username,status,match_score,decks
 149374136,Кононов Илья,ilya kononov,@LingWD,fuzzy_low,66.7,Blue Delver
 231735971,Курмакаев Игорь,Igor Konev,@oneeyedsinner,fuzzy_low,70.0,"Gardens, Jeskai Glitters Affinity"
 789720843,Александр Ермановский,Alexey,@tier2dude,fuzzy_low,60.0,Red Rally
+474753872,Зинин Даниил,Zinedin,(no username),fuzzy_low,75.0,Flicker Tron
 367993813,Рагулин Вадим,Вадим Рагулин,@VadimRagulin,fuzzy_ok,100.0,Rakdos Madness
 308563550,Ильин Никита,Nikita Ilin,@ilin_nikita_al,fuzzy_ok,95.7,"Rogue, Black Sacrifice, Green Rhino Friends, Blue Delver, Orzhov Blade, Dimir Reanimator, Rakdos Casino, Black Rats, Black Rogue, Selesnya Gates, Sultai Bridges, Blue Control, Blue Faeries, Dimir Control, Dimir Owls, Eldrazi Trible, Gruul Ramp, Izzet Curve, Jund Blisterpod, Midnight Gond Combo, White Control, Dimir Faeries, Gruul Dominator, Reanimator, Selesnya Bargain, Blue Mill"
 1875154699,Карпачев Денис,Denis Karpachev,@karden3,fuzzy_ok,100.0,"Glee Combo, Azorius Familiars, Inside Out, Spy, Dimir Terror, Cycling Storm, Dimir Faeries, Golgari Dredge, Moggwarts Combo, Combo Walls, Poison Storm"
@@ -108,8 +117,11 @@ tg_id,ru_name,tg_name,username,status,match_score,decks
 336067918,Князев Иван,Ivan Knyazev,@baseposition,fuzzy_ok,87.0,"Elves, Dimir Faeries, Dimir Control, Blue Faeries, Glitters Affinity, Combo Walls, Grixis Affinity, Jeskai Ephemerate, Dimir Teachings, Bogles, Green Infect, Izzet Faeries, Red Hotdog"
 1432447527,Косьян Максим,Максим Косьян,@mkosian,fuzzy_ok,100.0,"Blue Faeries, Bogles"
 720777077,Тонеев Дмитрий,Pioneer,@p10neer,fuzzy_low,60.0,Blue Faeries
+1250779458,Алексей Малышев,Алексей Б.,(no username),fuzzy_ok,85.5,Elves
+700582134,Марсант Никита,darkuscha,(no username),fuzzy_low,55.4,White Weenie
 117161623,Лашко Стефан,stefan lashko,@stefanlashko,fuzzy_low,83.3,"Grixis Affinity, Blue Faeries"
 401103228,Ноздрин Николай,Nikolay Nozdrin,@Gregil,fuzzy_ok,93.3,"Dimir Terror, Golgari Dredge, Gardens, Izzet Control, Blue Delver, Dimir Control, Rakdos Madness, Rogue"
+1968973917,Васильев Сергей,Виктор Васильев,(no username),fuzzy_low,66.7,"Caw Gates, Azorius Familiars, Red Kuldotha, Dimir Faeries, Izzet Control, Jeskai Ephemerate, Bogles, Classic Burn, High Tide, White Weenie, Blue Faeries, Boros Synthesizer, Combo Walls, Gruul Ponza, Blue Delver, Jund Midrange, Gruul Ramp, Golgari Dredge, Turbo Fog, Gardens, Boros Moxite, Flicker Tron, Glee Combo, Impulse Kuldotha, Izzet Faeries"
 453747204,Кочетков Сергей,Сергей Федорченко,@Mfreenzy,fuzzy_low,75.0,Bogles
 288415040,Верхоглазов Константин,Itachi Vergil,@Itachi261092,fuzzy_low,54.0,Jeskai Ephemerate
 337000043,Арановский Владимир,Vladimir,@Chuki_chan,fuzzy_ok,90.0,Blue Faeries
@@ -128,16 +140,21 @@ tg_id,ru_name,tg_name,username,status,match_score,decks
 5149241896,Арепин Артем,Artem,@FilyaArtyom,fuzzy_ok,90.0,"Rakdos Madness, Dimir Control, Dimir Faeries, Caw Gates, Bogles, Gardens, White Weenie, Grixis Affinity"
 108806775,,W,@etnedal,not_found,,
 1117965355,Лесник Владимир,snaikru,@snaikru,fuzzy_low,62.2,"Izzet Control, Jeskai Ephemerate"
+7163006266,Марат Сайбодалов,Mr.Nft,(no username),fuzzy_low,49.1,Gardens
 5377887349,Адигамов Вениамин,gtmn,@tzzret,fuzzy_low,51.4,Blue Delver
 5950689457,Палеха Егор,Paule,@gatito_perdido,fuzzy_low,80.0,"Spy, Combo Walls, Altar Tron, Red Madness, Rakdos Madness, Black Sacrifice, Caw Gates, Esper Affinity"
 5224405203,Терентьев Олег,sweeteklerixq,@eqwuie,fuzzy_low,44.4,"Dimir Faeries, Green Tron"
+5911762229,Богданов Сергей,Сергей Иванов,(no username),fuzzy_low,78.6,Gardens
+6762707926,Маркопольский Роман,Roman Tonin,(no username),fuzzy_ok,85.5,Dimir Terror
 439609904,Бондаренко Константин,ну кто? ты,@nuktoti,fuzzy_low,45.0,Rakdos Madness
 82999855,Пашков Артем,Артем Пашков,@Alucard_Yanas,fuzzy_ok,100.0,"Golgari Dredge, Dredge"
 464345688,Арепин Артем,Артём Арепин,@ArtyomArepin,fuzzy_ok,91.7,"Rakdos Madness, Dimir Control, Dimir Faeries, Caw Gates, Bogles, Gardens, White Weenie, Grixis Affinity"
 1750866080,Лунев Максим,Mighty Lev,@One_Goget,fuzzy_low,54.5,"Boros Synthesizer, Elves, White Heroic"
 1373747292,Герберсгаген Максим,Максим Ларин,@Maoxxxxx,fuzzy_ok,85.5,"Elves, Red Madness, Red Rally, Blue Delver, Grixis Affinity, White Weenie, Red Burn"
+1033603107,Митрофанов Мирослав,Max Fofanov,(no username),fuzzy_low,65.5,Izzet Terror
 274398034,Арепин Артем,Artem,@laggernut,fuzzy_ok,90.0,"Rakdos Madness, Dimir Control, Dimir Faeries, Caw Gates, Bogles, Gardens, White Weenie, Grixis Affinity"
 8143306087,,:-),@ch1llaxer,not_found,,
+8109536364,Дорошенко Никита,Vicki Bourgeois,(no username),fuzzy_low,51.6,"Rakdos Madness, Red Burn, White Weenie"
 2007407338,Цвеленев Федор,Fedor Tsvelenev,@AsmoYo7,fuzzy_ok,100.0,"Azorius Familiars, Turbo Fog, Altar Tron, Flicker Tron, High Tide, Red Madness"
 361311362,Харин Илья,Илья Харин,@ilyakharin,fuzzy_ok,100.0,"Grixis Affinity, Dimir Control"
 111141802,Данюков Михаил,Данька,@Smehotron3000,fuzzy_low,65.5,Green Infect
@@ -146,6 +163,7 @@ tg_id,ru_name,tg_name,username,status,match_score,decks
 215078631,Андрей,Старшинов Андрей,@Starshinov9,fuzzy_ok,90.0,Elves
 5485319960,Хан Дмитрий,Дмитрий Балясников,@d_balda,fuzzy_ok,85.5,Green Stompy
 80509807,Кузин Алексей,Aleksey Yukin,@alekseyyukin,fuzzy_low,76.9,Esper Affinity
+225098158,Даур Ладария,@DCXHALO,(no username),fuzzy_low,25.7,"Grixis Affinity, Caw Gates"
 513865644,Амелин Антон,Yucon,@Yuc0n,fuzzy_low,51.4,"Blue Faeries, Caw Gates, Blue Delver, Green Infect, Bogles, Glee Combo, Infect, Red Dredge, Black Sacrifice, Dimir Faeries, High Tide, Rakdos Madness, Red Burn, Red Kuldotha, Simic Infect, Simic Mill"
 729917119,К. Владислав,Vladislav,@StarVlad03,fuzzy_ok,95.0,Gruul Ponza
 1713857592,Александр Ермановский,Алекс,@Alex_pavrnd,fuzzy_ok,90.0,Red Rally
@@ -153,6 +171,7 @@ tg_id,ru_name,tg_name,username,status,match_score,decks
 674386508,Буланов Владимир,Vladimir Butorin,@eric_snowflake,fuzzy_low,75.0,Red Burn
 341045517,Андрей,Андрей Гольчиков,@Golchikov,fuzzy_ok,90.0,Elves
 371306200,Мипов Дмитрий,Dmitry Osipov,@osipov_dg,fuzzy_low,76.9,"Elves, Red Rally, Rogue"
+1416831247,Андрей,Андрей Репин,(no username),fuzzy_ok,90.0,Elves
 1062744351,Ильин Никита,Nikita Solokhin,@muhozhyk,fuzzy_low,74.1,"Rogue, Black Sacrifice, Green Rhino Friends, Blue Delver, Orzhov Blade, Dimir Reanimator, Rakdos Casino, Black Rats, Black Rogue, Selesnya Gates, Sultai Bridges, Blue Control, Blue Faeries, Dimir Control, Dimir Owls, Eldrazi Trible, Gruul Ramp, Izzet Curve, Jund Blisterpod, Midnight Gond Combo, White Control, Dimir Faeries, Gruul Dominator, Reanimator, Selesnya Bargain, Blue Mill"
 294632118,Ильин Никита,Nikita Staroseltsev,@nikitozz13,fuzzy_ok,85.5,"Rogue, Black Sacrifice, Green Rhino Friends, Blue Delver, Orzhov Blade, Dimir Reanimator, Rakdos Casino, Black Rats, Black Rogue, Selesnya Gates, Sultai Bridges, Blue Control, Blue Faeries, Dimir Control, Dimir Owls, Eldrazi Trible, Gruul Ramp, Izzet Curve, Jund Blisterpod, Midnight Gond Combo, White Control, Dimir Faeries, Gruul Dominator, Reanimator, Selesnya Bargain, Blue Mill"
 278855737,Гуртовая Елизавета,Liza,@feneck,fuzzy_low,67.5,Orzhov Aristocrats
@@ -180,6 +199,7 @@ tg_id,ru_name,tg_name,username,status,match_score,decks
 201694251,Золин Илья,Илья Овсянников,@Mad_Grizzly,fuzzy_ok,85.5,Rogue
 452816018,Харитонов Дмитрий,Дмитрий Харитонов,@dmitrih201,fuzzy_ok,100.0,"Blue Delver, Rogue, Rakdos Madness"
 1324050591,Мипов Дмитрий,Dmitriy Popov,@nodiscard,fuzzy_low,76.9,"Elves, Red Rally, Rogue"
+539918489,Коршунов Станислав,Stanislav Kolusev,(no username),fuzzy_low,80.0,Green Tron
 735956324,Александр Ермановский,Александр Ермановский,@ZooM4DC,cyrillic,100,Red Rally
 128858318,Степанов Игорь,Igor Serkin,@igorserkin,fuzzy_low,64.0,"Spy, Combo Walls, Pizza Combo, Jund Midrange, Azorius Familiars, Red Madness, High Tide, Black Sacrifice, Ruby Storm"
 72578995,Сорокин Ярослав,Yaroslav Sorokin,@d0nt_panic,fuzzy_ok,90.3,Simic Mill
@@ -197,9 +217,11 @@ tg_id,ru_name,tg_name,username,status,match_score,decks
 410229783,Андропов Виктор,victor andropov,@Opbl4,fuzzy_low,80.0,Grixis Affinity
 135279691,Макаренко Иван,Ivan Makarenko,@makarenkoivan,fuzzy_ok,100.0,"Gardens, Grixis Affinity, Blue Delver, Dimir Faeries, Pinger Burn, Altar Tron, Azorius Familiars, Golgari Dredge, Red Tron"
 134680146,Алпатов Сергей,Geꙮrge,@georgeov,fuzzy_low,65.5,"Bogles, Classic Burn, Pinger Burn, Grixis Affinity, Red Burn, Red Kuldotha"
+7288307371,Андрей,Андрей,(no username),cyrillic,100,Elves
 105457221,Педан Сергей,Serge Garshin,@wushvuzulle,fuzzy_low,66.7,"Rakdos Madness, Blue Delver"
 328629503,Волков Даниил,Daniil Milyukov,@WizardDM,fuzzy_low,78.6,Jeskai Ephemerate
 313681204,Панферов Антон,Антон Тепляков,@Antonio7655,fuzzy_low,64.3,"Orzhov Gates, Gardens, Rakdos Madness, Selesnya Initiative"
+6705447317,Бурмистров Павел,Pavel KoT,(no username),fuzzy_ok,85.5,"Inside Out, Dimir Control, Inside out, Poison Storm, Mardu Synthesizer"
 1010635731,Андрей,Andrey,@Lucky8508,fuzzy_low,83.3,Elves
 569918574,Цаплин Павел,CrazyApelsin,@CrazyApelsinn,fuzzy_low,50.0,"Combo Walls, Spy"
 441112407,Кол Василий,Klol1k,@WhiteKlol1k,fuzzy_low,60.0,"Rakdos Madness, Caw Gates"
@@ -211,6 +233,7 @@ tg_id,ru_name,tg_name,username,status,match_score,decks
 800751969,Алексеевич Илья,Илья К.,@badlocale,fuzzy_ok,85.5,Blue Delver
 6178552625,Харитонов Алексей,Alexey Platonov,@GODFIB,fuzzy_low,68.8,"Glee Combo, Gardens, Rakdos Madness, Gruul Ramp, Black Sacrifice, Boros Kuldotha, Red Kuldotha, Red Madness, Green Tron, Jeskai Ephemerate, Orzhov Blade, Dimir Faeries, Jund Midrange, Golgari Pestilence, Caw Gates, Blue Delver, Dimir Control, Dimir Terror, Jeskai Synthesizer, Pestilence Food, Rogue, Boros Synthesizer, Flicker Tron, Golgari Food, Izzet Miracle, Red Burn, Temur Ponza, Temur Ramp, White Weenie, Blue Tempo, Blue Faeries"
 7333280478,Андреев Кирилл,Andriy,@aaaazAh,fuzzy_low,72.0,"Izzet Control, Gardens, Flicker Tron, Temur Skred, Grixis Affinity, White Weenie, Blue Delver, Caw Gates, Elves, Azorius Familiars, Dimir Faeries, Golgari Dredge, Cycling Storm, Izzet Faeries, Jeskai Ephemerate, Red Rally, Spy, Tortured Existence, Bogles, Combo Walls, Rogue, Ruby Storm"
+470371885,Сергеевичев Герман,Sergey,(no username),fuzzy_low,81.8,Izzet Faeries
 180822717,Александр Ермановский,kaur | EDGE,@kaurkaur,fuzzy_low,40.9,Red Rally
 1974998104,Мусихин Игнат,Игнат Мусихин,@mushikinignat,fuzzy_ok,100.0,Combo Walls
 109825216,Самарин Дмитрий,Swawm,@Swawm,fuzzy_low,67.5,Altar Tron
@@ -227,8 +250,10 @@ tg_id,ru_name,tg_name,username,status,match_score,decks
 1348025463,Кучин Данила,Данила Кучин,@gadgistan4k,fuzzy_ok,100.0,"Red Burn, Red Kuldotha, Blue Faeries, Glee Combo, Blue Delver, Bogles, Golgari Fog, Izzet Control, Rakdos Madness, Poison Storm"
 962271457,Кулаков Евгений,Eugene Klikunov,@Eugene_Klikunov,fuzzy_low,66.7,"Cycling Storm, Rakdos Madness, Mardu Synthesizer, White Weenie"
 1031137648,ЕГОРИЙ,I,@euiaaow,fuzzy_ok,90.0,Jund Midrange
+7750482431,Генералов Влад,Vlad Nurokov,(no username),fuzzy_low,61.5,Rakdos Madness
 446835037,Дмитрий Агеев,Dmitriy,@MIDirty,fuzzy_low,83.1,Blue Faeries
 937134095,Антипов Владислав,Владислав Антипов,@vladaantipov,fuzzy_ok,100.0,"Azorius Familiars, Orzhov Blade, Elves, Gruul Ramp, Boros Synthesizer, Izzet Faeries, Izzet Control"
+848927585,Каро Филип Николас Александр,Alexander Volkau,(no username),fuzzy_low,66.0,Dimir Terror
 846549905,Жиркин Максим,Mirian A,@MirianIII,fuzzy_low,60.0,Blue Delver
 966449107,Сорокин Ярослав,Yakov Solodukhin,@yakov_solodukhin,fuzzy_low,58.1,Simic Mill
 6844814949,Тутисани И Д,DIMON,@malyar_diray,fuzzy_low,42.8,Grixis Affinity
@@ -238,6 +263,7 @@ tg_id,ru_name,tg_name,username,status,match_score,decks
 252339921,Реш Артем,Artyom Resh,@reshnaut,fuzzy_low,84.2,Blue Faeries
 874648576,Александров Никита,Никита,@Dark12041999,fuzzy_ok,90.0,Spy
 1428409578,Андрей,Unruhe,@kirillunruhe,fuzzy_low,50.0,Elves
+6453007279,Будаква Иван,Ivan Budakva,(no username),fuzzy_ok,100.0,"Blue Delver, Gruul Ramp"
 1432590100,Белов Даниил,Даниил,@et1ms,fuzzy_ok,90.0,"Flicker Tron, Izzet Control, Bogles, Blue Faeries"
 1742242360,Дмитрий Агеев,Dmitry,@WonderfullEveryday,fuzzy_low,81.8,Blue Faeries
 15164465,Иванов Никита,Никита Иванов,@just_allonsy,fuzzy_ok,100.0,"Red Kuldotha, Jund Midrange"
@@ -251,7 +277,9 @@ tg_id,ru_name,tg_name,username,status,match_score,decks
 806256245,Волков Данила,Dima Volkov,@dvolkov198411,fuzzy_low,83.3,"Jund Midrange, Golgari Dredge, Red Kuldotha"
 7239484234,Сергеевичев Герман,Sergey,@sergeymaslov111,fuzzy_low,81.8,Izzet Faeries
 1064336860,Дремин Михаил,Drelf,@nikitavtor,fuzzy_low,67.5,"Gardens, Golgari Gardens, Gruul Ponza, Rogue"
+578600733,Амелин Антон,Anton,(no username),fuzzy_ok,90.0,"Blue Faeries, Caw Gates, Blue Delver, Green Infect, Bogles, Glee Combo, Infect, Red Dredge, Black Sacrifice, Dimir Faeries, High Tide, Rakdos Madness, Red Burn, Red Kuldotha, Simic Infect, Simic Mill"
 382629217,Кол Константин,Константин,@KonstantinPiven,fuzzy_ok,95.0,Blue Delver
+815401490,Андрей,Andrey Chaginski,(no username),fuzzy_low,81.8,Elves
 533723454,Артем Ткаченко,zengOo,@znggnz,fuzzy_low,54.0,Temur Skred
 5344629134,Журавлев Павел,Pavel Zhuravlev,@Izzet303,fuzzy_ok,100.0,Blue Faeries
 5436595934,Агаев Дмитрий,Dmitriy Karasev,@XDiemondS,fuzzy_low,71.4,Blue Faeries
@@ -272,6 +300,7 @@ tg_id,ru_name,tg_name,username,status,match_score,decks
 307446963,Алексеев Роман,P R,@nasosiviti,fuzzy_low,60.0,"Gruul Ramp, Jund Midrange"
 407675105,Бер Михаил,Mikhail Gavrilkin,@Delokroa,fuzzy_low,70.0,Blue Faeries
 333245422,Никитин Константин,Rikishi,@siroy_kartofel,fuzzy_low,60.0,"Grixis Affinity, Reanimator, Red Madness"
+7512744244,Волков Даня,Саня,(no username),fuzzy_low,77.1,Blue Delver
 5568928864,Етингер Даниил,Daniel Etinger,@untala123,fuzzy_ok,92.9,"Black Burn, Rakdos Madness"
 1410511793,Герберсгаген Максим,Максим,@somebacherols,fuzzy_ok,90.0,"Elves, Red Madness, Red Rally, Blue Delver, Grixis Affinity, White Weenie, Red Burn"
 386943599,Русаков Юрий,Yury Rusakov,@BurnedPants,fuzzy_low,75.0,Izzet Curve
@@ -287,6 +316,7 @@ tg_id,ru_name,tg_name,username,status,match_score,decks
 437515095,Боровик Александр,Александр Боровик,@little_ctulhu,fuzzy_ok,100.0,Bogles
 1171579,Климойц Никита,Nikita Klimoyts,@neeqle,fuzzy_ok,92.9,Red Kuldotha
 772510002,Фаткулбаянов Тимур,мурка,@new_year_cat,fuzzy_low,67.5,Red Madness
+1081713514,Заболодская Анна,ЗИ,(no username),fuzzy_low,60.0,Red Stompy
 224356540,Иван Березин,Ivan Bolduryan,@bolduryan,fuzzy_low,61.5,"Mardu Affinity, Jund Midrange"
 2119723316,Каро Филип Николас Александр,Александр Ларионов,@Laraks5,fuzzy_ok,85.5,Dimir Terror
 435185743,Алексеевич Илья,Илья,@Bloodbath71,fuzzy_ok,90.0,Blue Delver
@@ -298,6 +328,7 @@ tg_id,ru_name,tg_name,username,status,match_score,decks
 521231604,Даниил Тимс,Danibor,@Danibor,fuzzy_low,65.5,Rakdos Madness
 1006528338,Юрескул Егор,Jesuz 🌱SEED,@Jesuz_41,fuzzy_low,43.5,"Combo Affinity, Blue Tempo, Black Burn"
 502096828,Сит Алекс,Truck Aesthetics,@dunmermiro,fuzzy_low,52.6,Gruul Ponza
+1176784774,Дюндин Александр,Daspien Despars,(no username),fuzzy_low,51.6,"Jeskai Ephemerate, Boros Synthesizer, Blue Delver, Grixis Affinity, Red Madness, White Heroic, Red Burn, Combo Affinity, Green Stompy, Dimir Faeries, Rakdos Madness"
 336571264,Кол Василий,Vasiliy,@Metalonot,fuzzy_low,78.9,"Rakdos Madness, Caw Gates"
 144988867,Горелов Алексей,oh_rly,@oh_rly,fuzzy_low,49.1,Poison Storm
 1950543418,Волков Даня,Мишаня,@mishanui,fuzzy_low,60.0,Blue Delver
@@ -329,10 +360,12 @@ tg_id,ru_name,tg_name,username,status,match_score,decks
 552736845,Адигамов Вениамин,Gwin,@Ellearin,fuzzy_low,60.0,Blue Delver
 604062598,Амелин Антон,Антон Викторович Побылица,@Zirrexz,fuzzy_ok,85.5,"Blue Faeries, Caw Gates, Blue Delver, Green Infect, Bogles, Glee Combo, Infect, Red Dredge, Black Sacrifice, Dimir Faeries, High Tide, Rakdos Madness, Red Burn, Red Kuldotha, Simic Infect, Simic Mill"
 977048326,Евсеенко Даниил,Danny Bee,@danishbirch,fuzzy_low,60.0,Jund Midrange
+6257250810,Брегеда Евгений,Евгений Брегеда,(no username),fuzzy_ok,100.0,"Boros Synthesizer, Golgari Dredge, Black Burn, Cascade Tron, Red Tron"
 958152567,Гутаев Захар,Захар Гутаев,@ZaharGutaev,fuzzy_ok,100.0,Grixis Affinity
 100525192,Болгов Павел,Pavel Viktorovich Sarabeev,@psarabeev,fuzzy_ok,85.5,"Blue Affinity, Black Rats"
 238462321,Жданкин Максим,Даня Жабкин,@Maj0neZ,fuzzy_low,56.0,Caw Gates
 2129022502,Кузин Алексей,Кузьмич,@Grimorz,fuzzy_low,65.5,Esper Affinity
+239655287,Белозеров Илья,Ilia Nesterov,(no username),fuzzy_low,59.3,"Elves, Slivers"
 5272413200,Цаплин Павел,Pavel Tsaplin,@ModnarPT,fuzzy_ok,100.0,"Combo Walls, Spy"
 402749571,Деулин Матвей,DefaultName,@defaultname856,fuzzy_low,50.0,Blue Delver
 212599467,К. Владислав,Vladislav Pos.,@VladislawPos,fuzzy_low,84.6,Gruul Ponza
@@ -343,8 +376,11 @@ tg_id,ru_name,tg_name,username,status,match_score,decks
 741451138,Репин Илья,Алина Репина,@Asyna228,fuzzy_low,63.6,Red Kuldotha
 1183787502,Андрей,Иванов Андрей,@BY8888BB8,fuzzy_ok,90.0,Elves
 1173791657,Новиков Валентин,Nik False,@FalseHas,fuzzy_low,60.0,"Golgari Dredge, Temur Control"
+345506652,Бабаев Михаил,Михаил Щавелев,(no username),fuzzy_low,74.1,"Red Kuldotha, Rakdos Madness, Blue Delver, Red Rally, Red Burn, Boros Synthesizer, Golgari Dredge"
 81286693,Соломенцев Виктор,Viktor Koreysha,@koreysha,fuzzy_low,58.1,Elves
+988275720,Крутов Виталий,Vitya,(no username),fuzzy_low,76.0,Red Kuldotha
 1290520293,Лихачев Григорий,Grigory Likhachev,@nejabogl,fuzzy_ok,87.5,"Blue Faeries, Gardens, Moggwarts Combo"
+769736758,Соломенцев Виктор,Viktor Solomentsev,(no username),fuzzy_ok,100.0,Elves
 146568763,Бондарь Ярослав,Yaroslav,@daibaka,fuzzy_low,77.1,Rakdos Madness
 107933882,Коршунов Станислав,Stanislav Kulyandtsev,@StanislavK88,fuzzy_low,73.7,Green Tron
 744985440,Верхоглазов Константин,Kostya Verhoglazov,@Ve_Ko,fuzzy_ok,85.0,Jeskai Ephemerate
@@ -399,14 +435,20 @@ tg_id,ru_name,tg_name,username,status,match_score,decks
 1985796976,Иван Березин,ILIM,@IVANLimonka,fuzzy_low,36.0,"Mardu Affinity, Jund Midrange"
 437820317,Храмова Наталья,Наталья Храмова,@khramovanatasha,fuzzy_ok,100.0,"Rakdos Madness, Pinger Burn, Red Madness, Red Burn"
 432560731,Белоконев Денис,Денис С,@X0maTG,fuzzy_ok,85.5,"Blue Delver, Combo Affinity, Dimir Affinity, Dimir Terror"
+7309670387,Лаврешин Иван,Лёша,(no username),fuzzy_low,60.0,"Gardens, Azorius Familiars, Grixis Affinity, Red Kuldotha, Golgari Dredge, Bogles, White Weenie, Blue Faeries, Rakdos Madness, Elves, Dimir Terror, High Tide, Jund Midrange, Orzhov Blade, Altar Tron, Glitters Affinity, Gruul Ponza, White Heroic"
+7099805210,Борисов А.Н.,.,(no username),fuzzy_low,60.0,Black Sacrifice
 663698192,Лашко Стефан,Chieftain,@Chieft27,fuzzy_low,60.0,"Grixis Affinity, Blue Faeries"
 310877640,Мавзолеев Илья,Max,@MarkussRos,fuzzy_low,72.0,Rogue
 645881465,Егоров Андрей,Aidar Tagirov,@atgirov,fuzzy_low,61.5,"Dimir Affinity, Gruul Ramp"
+7186177666,Каменский Илья,<no name>,(no username),fuzzy_low,51.4,Grixis Affinity
+7927144149,Каменский Илья,<no name>,(no username),fuzzy_low,51.4,Grixis Affinity
 488816137,Александров Никита,Никита,@Ixidor_realitysculptor,fuzzy_ok,90.0,Spy
 739724487,Осипов Артем,Artem Vlasov,@Baneslayer55,fuzzy_low,75.0,"Grixis Affinity, Rakdos Madness, Bogles, White Weenie"
 639598431,Плешаков Василий,Василий Плешаков,@replekXT,fuzzy_ok,100.0,"Grixis Affinity, Blue Faeries"
+8564657288,Каменский Илья,<no name>,(no username),fuzzy_low,51.4,Grixis Affinity
 768996151,Курзаев Игорь,Игорь Курзаев,@Buffy2005,fuzzy_ok,100.0,"Blue Faeries, Blue Delver, Boros Bully"
 435910043,Ермоленко Никита,Nikita Yermolenko,@nikita_yer,fuzzy_ok,90.9,"Black Devotion, Rogue, Gardens, Izzet Control, Jeskai Ephemerate, Jeskai Synthesizer, Mardu Ephemerate"
+8088318114,Каменский Илья,<no name>,(no username),fuzzy_low,51.4,Grixis Affinity
 492648666,Попов Владимир,Владимир Попов,@magika40,fuzzy_ok,100.0,Grixis Affinity
 971000667,Александр Ермановский,AlexTr,@A1exTr,fuzzy_low,60.0,Red Rally
 1447079714,Хайон Искандер,Varnery,@TranscendentalEtudes,fuzzy_low,60.0,Glitters Affinity
@@ -414,6 +456,7 @@ tg_id,ru_name,tg_name,username,status,match_score,decks
 1319278383,Поляков Мирослав,Мика Поляков,@MikkaPoliak,fuzzy_low,78.6,"Jeskai Ephemerate, Dimir Faeries, Glee Combo, Gruul Ponza, Bogles, Golgari Fog, Spy, Golgari Dredge, Blue Delver, Caw Gates, Dimir Control, Gardens, Glitters Affinity, Grixis Affinity, Rakdos Madness, White Weenie, Red Kuldotha"
 5184149288,Герберсгаген Максим,Ger,@Griooooov,fuzzy_ok,90.0,"Elves, Red Madness, Red Rally, Blue Delver, Grixis Affinity, White Weenie, Red Burn"
 7440714022,Герберсгаген Максим,Макс,@maxmw01,fuzzy_ok,90.0,"Elves, Red Madness, Red Rally, Blue Delver, Grixis Affinity, White Weenie, Red Burn"
+8226130280,Кирпа Сергей,Кирюша,(no username),fuzzy_low,65.5,Rakdos Madness
 774358223,Печников Сергей,Сеня Пасечник,@senia3rs,fuzzy_low,64.3,"Jund Midrange, White Weenie, Caw Gates"
 7936635036,Попов Георгий,Георгий Жуков,@GeorgijZHukov787,fuzzy_low,76.9,Red Madness
 158371468,Лысенко Артем,Artyom Lysenko,@lysenko_artyom,fuzzy_ok,88.9,"Glitters Affinity, Blue Faeries, Dimir Terror, Izzet Control, Izzet Faeries"
@@ -432,15 +475,19 @@ tg_id,ru_name,tg_name,username,status,match_score,decks
 606150215,Богатырев Евгений,Evgeney Bogatyrev,@EvgeneyBogatyrev,fuzzy_ok,88.2,Dimir Faeries
 1014728111,,☍,@plotnikovs1,not_found,,
 731756503,Коротков Данила,Danila Korotkov,@SENNA_CG,fuzzy_ok,100.0,Elves
+603984005,Левитина Мария,Лев,(no username),fuzzy_ok,90.0,"Blue Faeries, Black Sacrifice, Black Burn, Gruul Ramp, Rakdos Sacrifice, Rakdos Madness, Blue Delver, Red Burn, Boros Synthesizer, Dimir Terror"
 182320817,Шаховский Дмитрий,Dmitriy Granovskiy,@GranovskiyDL,fuzzy_low,74.3,"Blue Faeries, Sultai Affinity"
 1056180231,Зитев Евгений,JustBite,@YoursTrulyJustBite,fuzzy_low,49.1,"Gardens, Grixis Affinity"
+6048433765,Ларин Илья,Валерия Ларина,(no username),fuzzy_low,66.7,"Blue Delver, Esper Affinity, Gruul Ramp, Rogue"
 8041711108,Волков Даня,Даня Волков,@sentriplets,fuzzy_ok,100.0,Blue Delver
 1344407600,Забивский Никодим,m. GodjiRRa,@YoursTrulyBongzilla,fuzzy_low,48.0,Poison Storm
 6053198702,Храмова Наталья,Танюша Герасимова,@tanyagerasimova33,fuzzy_low,56.2,"Rakdos Madness, Pinger Burn, Red Madness, Red Burn"
 545529051,Запащиков Сергей,pachi,@sadapachi,fuzzy_low,67.5,Grixis Affinity
 88898762,Кол Василий,Василий,@rehabKul,fuzzy_ok,90.0,"Rakdos Madness, Caw Gates"
+6601685443,Лю Жуйцзе,Лю Жуйцзе,(no username),cyrillic,100,Grixis Affinity
 440757838,Чехлов Патрик,Ярик,@RangerTy,fuzzy_low,77.1,"Orzhov Blade, Caw Gates"
 1686916503,Образцов Руслан,<blank>,@PauperEnjoyer,fuzzy_low,54.0,Green Stompy
+8092332410,Ларин Илья,Iswari 🎂🆘Stylish,(no username),fuzzy_low,45.0,"Blue Delver, Esper Affinity, Gruul Ramp, Rogue"
 1134412124,Глотов Николай,Николай,@kolian0v,fuzzy_ok,90.0,"Blue Tron, Blue Delver"
 848373801,Алексей Малышев,Алексей,@Alex_Ras12,fuzzy_ok,90.0,Elves
 934315891,Рылов Григорий,Григорий Рылов,@vulpecuLa05,fuzzy_ok,100.0,Blue Faeries
@@ -451,6 +498,8 @@ tg_id,ru_name,tg_name,username,status,match_score,decks
 183704778,Ашаров Вадим,Jim,@Jim_and_Mewtwo,fuzzy_low,72.0,"Flicker Tron, Jeskai Ephemerate, Grixis Affinity, Grixis Curve, Golgari Fog, Cycling Storm, Izzet Curve, Azorius Familiars, Blue Faeries, Black Sacrifice, Bogles, Rakdos Madness, Simic Advisors, Spy, Tortured Existence, Turbo Fog, Jund Midrange, Rogue"
 135664752,Андрей,Андрей Милованов,@Doggka,fuzzy_ok,90.0,Elves
 263000062,Сологуб Марк,Sol,@CaptainSol,fuzzy_ok,90.0,Izzet Faeries
+7072998325,Каменский Илья,<no name>,(no username),fuzzy_low,51.4,Grixis Affinity
+6897100098,Каменский Илья,<no name>,(no username),fuzzy_low,51.4,Grixis Affinity
 829754415,Титов Алексей,Алексей Титов,@Falltaris,fuzzy_ok,100.0,"Jeskai Ephemerate, Dimir Control, Dimir Terror, Golgari Dredge, Red Kuldotha"
 1995160546,Михаил Дремин,Габриэль Дель Пино,@Gabriel_Del_Pino,fuzzy_low,51.6,Gruul Land Loss
 491097608,Петрыкин Василий,Vasiliy Petrykin,@petrykin_vasiliy,fuzzy_ok,93.8,"Rakdos Madness, Dimir Control, Glitters Affinity, Blue Delver, Dimir Terror, Grixis Affinity"

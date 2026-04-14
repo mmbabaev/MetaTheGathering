@@ -38,7 +38,7 @@ DEFAULT_MAPPING_FILE = SCRIPTS_DIR / "name_mapping.json"
 # Each data line looks like:
 #   Mikhail Babaev                           @mbabaev                  232778570
 # Fields are separated by 2+ spaces.
-_DATA_LINE_RE = re.compile(r"^(.+?)\s{2,}(\S+)\s{2,}(\d+)\s*$")
+_DATA_LINE_RE = re.compile(r"^(.+?)\s{2,}(@\S+|\(no username\))\s{2,}(\d+)\s*$")
 
 
 def _parse_player_line(line: str) -> tuple[str, str, int] | None:
