@@ -130,8 +130,11 @@ def archetype_keyboard(
     archetypes: list of (id, name).
     has_more: если True — добавляет кнопку «... ещё» перед «Свой вариант».
     """
+def archetype_keyboard(tournament_id: int, archetypes: list) -> InlineKeyboardMarkup:
+    """Кнопки архетипов + «Свой вариант». archetypes: list of (id, name)."""
+    from bot.deck_emoji import deck_emoji
     buttons = [
-        [InlineKeyboardButton(name, callback_data=f"{CB_ARCHETYPE}:{tournament_id}:{aid}")]
+        [InlineKeyboardButton(deck_emoji.format(name), callback_data=f"{CB_ARCHETYPE}:{tournament_id}:{aid}")]
         for aid, name in archetypes
     ]
     if has_more:
