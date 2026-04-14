@@ -7,7 +7,7 @@ from services.tournament import TournamentService
 from services.user import UserService
 from services import errors
 from bot.handlers.base import HandlerResult
-from bot.handlers.player import build_archetype_list
+from bot.handlers.player import build_archetype_menu
 from bot.keyboards import admin_participants_keyboard, admin_archetype_select_keyboard
 from bot.messages import (
     NOT_ADMIN,
@@ -290,13 +290,7 @@ class AdminHandler:
         self, participant_id: int, player_tg_id: int | None, expanded: bool = False
     ) -> HandlerResult:
         """Строит HandlerResult с клавиатурой архетипов для участника."""
-        if player_tg_id is not None:
-            recent = self.svc.list_user_recent_archetypes(player_tg_id)
-        else:
-            recent = []
-        top = self.svc.list_top_archetypes()
-        archetypes, has_more = build_archetype_list(recent, top, expanded)
-        arch_list = [(a.id, a.name) for a in archetypes]
+        arch_list, has_more = build_archetype_menu(self.svc, player_tg_id, expanded)
         return HandlerResult(
             CHOOSE_ARCHETYPE,
             keyboard=admin_archetype_select_keyboard(participant_id, arch_list, has_more),

@@ -31,6 +31,24 @@ from bot.messages import (
 ARCHETYPE_COLLAPSED_COUNT = 3
 
 
+def build_archetype_menu(
+    svc: "TournamentService",
+    player_tg_id: int | None,
+    expanded: bool = False,
+) -> tuple[list[tuple[int, str]], bool]:
+    """Общая логика сборки меню архетипов для любого игрока.
+
+    Используется в PlayerHandler (флоу «Записаться») и AdminHandler
+    (флоу «выбор колоды для участника»).
+
+    Возвращает (arch_list, has_more), где arch_list = [(id, name), ...].
+    """
+    recent = svc.list_user_recent_archetypes(player_tg_id) if player_tg_id is not None else []
+    top = svc.list_top_archetypes()
+    archetypes, has_more = build_archetype_list(recent, top, expanded)
+    return [(a.id, a.name) for a in archetypes], has_more
+
+
 def build_archetype_list(
     recent: list[ArchetypeItem],
     top: list[ArchetypeItem],
@@ -83,13 +101,7 @@ class PlayerHandler:
         self, tournament_id: int, tg_id: int | None, expanded: bool = False
     ) -> HandlerResult:
         """Строит HandlerResult с клавиатурой архетипов для игрока."""
-        if tg_id is not None:
-            recent = self.svc.list_user_recent_archetypes(tg_id)
-        else:
-            recent = []
-        top = self.svc.list_top_archetypes()
-        archetypes, has_more = build_archetype_list(recent, top, expanded)
-        arch_list = [(a.id, a.name) for a in archetypes]
+        arch_list, has_more = build_archetype_menu(self.svc, tg_id, expanded)
         return HandlerResult(CHOOSE_ARCHETYPE, keyboard=archetype_keyboard(tournament_id, arch_list, has_more))
 
     def handle_tournaments(self, tg_id: int | None = None) -> HandlerResult:
