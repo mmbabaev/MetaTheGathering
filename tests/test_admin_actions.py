@@ -779,3 +779,128 @@ class TestHandleAdminPickArchUsesParticipantHistory:
             f"Ожидали 'Aaa Deck' первым (глобальный топ: 2 использования у Aaa vs 1 у Zzz), "
             f"но получили: {first_btn.text!r}. Все кнопки: {all_btn_names}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Возврат статуса турнира после действий
+# ---------------------------------------------------------------------------
+
+class TestStatusReturnedAfterBulkAdd:
+    """После bulk_add ответ содержит статус турнира и клавиатуру участников."""
+
+    def test_result_contains_add_summary(self, handler, admin_user, active_tournament):
+        result = handler.handle_bulk_add_by_name(
+            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["Иван Иванов"]
+        )
+        assert "✅ Иван Иванов" in result.text
+
+    def test_result_contains_tournament_status(self, handler, admin_user, active_tournament):
+        """После добавления текст содержит заголовок турнира."""
+        result = handler.handle_bulk_add_by_name(
+            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["Иван Иванов"]
+        )
+        assert active_tournament.title in result.text
+
+    def test_result_has_participants_keyboard(self, handler, admin_user, active_tournament):
+        """После добавления клавиатура содержит кнопки участников."""
+        from bot.keyboards import CB_ADMIN_PICK_ARCH
+        result = handler.handle_bulk_add_by_name(
+            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["Иван Иванов"]
+        )
+        assert result.keyboard is not None
+        cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
+        assert any(cb.startswith(CB_ADMIN_PICK_ARCH) for cb in cbs)
+
+    def test_add_summary_comes_before_status(self, handler, admin_user, active_tournament):
+        """Строки добавления идут перед блоком статуса."""
+        result = handler.handle_bulk_add_by_name(
+            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["Пётр Петров"]
+        )
+        pos_add = result.text.index("✅ Пётр Петров")
+        pos_title = result.text.index(active_tournament.title)
+        assert pos_add < pos_title
+
+    def test_multiple_players_all_in_text_and_keyboard(self, handler, admin_user, active_tournament):
+        result = handler.handle_bulk_add_by_name(
+            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id,
+            names=["Анна Первая", "Борис Второй"],
+        )
+        assert "✅ Анна Первая" in result.text
+        assert "✅ Борис Второй" in result.text
+        from bot.keyboards import CB_ADMIN_PICK_ARCH
+        cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
+        assert sum(1 for cb in cbs if cb.startswith(CB_ADMIN_PICK_ARCH)) == 2
+
+
+class TestStatusReturnedAfterSetArch:
+    """После назначения архетипа ответ содержит статус турнира и клавиатуру участников."""
+
+    @pytest.fixture
+    def participant(self, svc, user_svc, active_tournament):
+        user = user_svc.get_or_create(tg_id=9200, username=None, first_name="Игрок")
+        svc.bulk_add_participants(active_tournament.id, [(user.id, "Игрок")])
+        return svc.get_participant(active_tournament.id, user.id)
+
+    @pytest.fixture
+    def archetype_burn(self, svc):
+        return svc.get_or_create_archetype_by_name("Burn")
+
+    def test_result_contains_arch_name(
+        self, handler, admin_user, active_tournament, participant, archetype_burn
+    ):
+        result = handler.handle_admin_set_arch(
+            tg_id=ADMIN_TG_ID, participant_id=participant.id, archetype_id=archetype_burn.id
+        )
+        assert "Burn" in result.text
+
+    def test_result_contains_tournament_status(
+        self, handler, admin_user, active_tournament, participant, archetype_burn
+    ):
+        result = handler.handle_admin_set_arch(
+            tg_id=ADMIN_TG_ID, participant_id=participant.id, archetype_id=archetype_burn.id
+        )
+        assert active_tournament.title in result.text
+
+    def test_result_has_participants_keyboard(
+        self, handler, admin_user, active_tournament, participant, archetype_burn
+    ):
+        from bot.keyboards import CB_ADMIN_PICK_ARCH
+        result = handler.handle_admin_set_arch(
+            tg_id=ADMIN_TG_ID, participant_id=participant.id, archetype_id=archetype_burn.id
+        )
+        assert result.keyboard is not None
+        cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
+        assert any(cb.startswith(CB_ADMIN_PICK_ARCH) for cb in cbs)
+
+    def test_arch_saved_message_comes_before_status(
+        self, handler, admin_user, active_tournament, participant, archetype_burn
+    ):
+        result = handler.handle_admin_set_arch(
+            tg_id=ADMIN_TG_ID, participant_id=participant.id, archetype_id=archetype_burn.id
+        )
+        pos_arch = result.text.index("Burn")
+        pos_title = result.text.index(active_tournament.title)
+        assert pos_arch < pos_title
+
+    def test_archetype_actually_saved_in_db(
+        self, handler, svc, admin_user, active_tournament, participant, archetype_burn
+    ):
+        handler.handle_admin_set_arch(
+            tg_id=ADMIN_TG_ID, participant_id=participant.id, archetype_id=archetype_burn.id
+        )
+        updated = svc.get_participant(active_tournament.id, participant.user_id)
+        assert updated.archetype_id == archetype_burn.id
+
+    def test_keyboard_button_has_edit_prefix_after_arch_set(
+        self, handler, admin_user, active_tournament, participant, archetype_burn
+    ):
+        """После назначения колоды кнопка участника должна иметь prefix ✏️."""
+        result = handler.handle_admin_set_arch(
+            tg_id=ADMIN_TG_ID, participant_id=participant.id, archetype_id=archetype_burn.id
+        )
+        btns = [b for row in result.keyboard.inline_keyboard for b in row]
+        participant_btn = next(
+            (b for b in btns if str(participant.id) in b.callback_data), None
+        )
+        assert participant_btn is not None
+        assert participant_btn.text.startswith("✏️")

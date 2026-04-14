@@ -271,20 +271,31 @@ class AdminHandler:
                 lines.append(f"✅ {display_name}")
             else:
                 lines.append(f"⚠️ {display_name} — уже записан")
-        return HandlerResult("\n".join(lines))
+        return self._tournament_status_result(tournament_id, prefix="\n".join(lines))
+
+    def _tournament_status_result(
+        self, tournament_id: int, prefix: str = ""
+    ) -> HandlerResult:
+        """Строит HandlerResult со статусом турнира и клавиатурой участников.
+
+        prefix — необязательный текст (например, итог операции), который добавляется
+        перед статусом через пустую строку.
+        """
+        from services.utils import get_tournament
+        try:
+            t = get_tournament(self.svc.db, tournament_id)
+        except errors.TournamentNotFound:
+            return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
+        participants = self.svc.list_participants_for_tournament(tournament_id)
+        status_text = format_tournament_status(t.title, t.status.label_ru, participants)
+        text = f"{prefix}\n\n{status_text}" if prefix else status_text
+        return HandlerResult(text, keyboard=admin_participants_keyboard(participants))
 
     def handle_admin_status(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Список участников с кнопками для редактирования колоды (admin view)."""
         if not self._is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
-        try:
-            from services.utils import get_tournament
-            t = get_tournament(self.svc.db, tournament_id)
-        except errors.TournamentNotFound:
-            return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
-        participants = self.svc.list_participants_for_tournament(tournament_id)
-        text = format_tournament_status(t.title, t.status.label_ru, participants)
-        return HandlerResult(text, keyboard=admin_participants_keyboard(participants))
+        return self._tournament_status_result(tournament_id)
 
     def _archetype_keyboard_for_participant(
         self, participant_id: int, player_tg_id: int | None, expanded: bool = False
@@ -316,16 +327,21 @@ class AdminHandler:
     def handle_admin_set_arch(
         self, tg_id: int, participant_id: int, archetype_id: int
     ) -> HandlerResult:
-        """Устанавливает архетип участнику. Сбрасывает голоса."""
+        """Устанавливает архетип участнику, затем возвращает обновлённый статус турнира."""
         if not self._is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
+        p = self.svc.get_participant_by_id(participant_id)
+        if p is None:
+            return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
         archetypes = {a.id: a.name for a in self.svc.list_archetypes()}
         arch_name = archetypes.get(archetype_id, "?")
         try:
             self.svc.set_participant_archetype(participant_id=participant_id, archetype_id=archetype_id)
         except errors.ParticipantNotFound:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
-        return HandlerResult(ADMIN_ARCH_SAVED.format(archetype_name=arch_name))
+        return self._tournament_status_result(
+            p.tournament_id, prefix=ADMIN_ARCH_SAVED.format(archetype_name=arch_name)
+        )
 
     def handle_admin_custom_arch_text(
         self, tg_id: int, participant_id: int, arch_name: str
