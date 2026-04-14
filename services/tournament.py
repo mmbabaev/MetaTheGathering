@@ -355,6 +355,12 @@ class TournamentService:
         self.db.refresh(tournament)
         return TournamentRead.model_validate(tournament)
 
+    def delete_tournament(self, tournament_id: int) -> None:
+        """Полностью удалить турнир и всех его участников из БД (для дебага/сброса)."""
+        tournament = get_tournament(self.db, tournament_id)
+        self.db.delete(tournament)
+        self.db.commit()
+
     # ===== participants =====
 
     def register_participant(

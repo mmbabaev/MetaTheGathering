@@ -360,3 +360,27 @@ class AdminHandler:
             return err
         self.svc.close_tournament(active.id)
         return HandlerResult(TOURNAMENT_CLOSED_MSG)
+
+    def handle_create_tournament(
+        self, tg_id: int, chat_id: int, title: str | None = None
+    ) -> HandlerResult:
+        """Создать новый турнир в текущем чате."""
+        from core.schemas import TournamentCreate
+        from datetime import datetime
+        if not self._is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN)
+        if not title:
+            title = f"Pauper {datetime.now().strftime('%Y-%m-%d')}"
+        t = self.svc.create_tournament(TournamentCreate(title=title, chat_id=chat_id))
+        return HandlerResult(f"✅ Турнир создан: «{t.title}» (id={t.id})")
+
+    def handle_delete_tournament(self, tg_id: int) -> HandlerResult:
+        """Удалить активный турнир вместе с участниками (для дебага)."""
+        if not self._is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN)
+        active, err = self._resolve_tournament()
+        if err:
+            return err
+        title = active.title
+        self.svc.delete_tournament(active.id)
+        return HandlerResult(f"🗑 Турнир «{title}» удалён.")

@@ -257,3 +257,33 @@ async def cmd_close_tournament(update: Update, context: ContextTypes.DEFAULT_TYP
         await msg.reply_text(result.text)
     finally:
         db.close()
+
+
+async def cmd_create_tournament(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/create_tournament [название] — создаёт новый турнир в текущем чате."""
+    user = update.effective_user
+    msg = update.effective_message
+    if not user or not msg:
+        return
+    chat_id = msg.chat_id
+    title = " ".join(context.args or []).strip() or None
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_create_tournament(user.id, chat_id, title)
+        await msg.reply_text(result.text)
+    finally:
+        db.close()
+
+
+async def cmd_delete_tournament(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/delete_tournament — удаляет активный турнир и всех участников (дебаг)."""
+    user = update.effective_user
+    msg = update.effective_message
+    if not user or not msg:
+        return
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_delete_tournament(user.id)
+        await msg.reply_text(result.text)
+    finally:
+        db.close()

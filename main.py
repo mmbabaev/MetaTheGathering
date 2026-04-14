@@ -47,6 +47,8 @@ async def _set_commands(app: Application) -> None:
         BotCommand("add_player", "Записать игрока (админ)"),
         BotCommand("add_players", "Массовая запись (админ)"),
         BotCommand("close_tournament", "Закрыть турнир (админ)"),
+        BotCommand("create_tournament", "Создать турнир (админ)"),
+        BotCommand("delete_tournament", "Удалить турнир (админ/дебаг)"),
     ])
     logger.info("Bot commands registered.")
 
@@ -85,6 +87,8 @@ def main() -> None:
     app.add_handler(CommandHandler("add_players", admin.cmd_add_players))
     app.add_handler(CommandHandler("tournament_status", admin.cmd_tournament_status))
     app.add_handler(CommandHandler("close_tournament", admin.cmd_close_tournament))
+    app.add_handler(CommandHandler("create_tournament", admin.cmd_create_tournament))
+    app.add_handler(CommandHandler("delete_tournament", admin.cmd_delete_tournament))
 
     app.add_handler(
         CallbackQueryHandler(player.callback_tournament_select, pattern=f"^{CB_TOURNAMENT}:")
