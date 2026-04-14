@@ -4,3 +4,5 @@ __pycache__/
 *.pyc
 server.log
 .server.pid
+scripts/telegram_parser/session.session
+scripts/telegram_parser/session.session-journal
