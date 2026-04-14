@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import List, Optional
 
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from core import models
 from core.schemas import (
@@ -237,10 +240,12 @@ class TournamentService:
             )
             .order_by(models.Participant.created_at.desc())
         )
+        tournament_ids: list[int] = []
         for (aid,) in self.db.execute(part_stmt).all():
             if aid not in seen:
                 seen.add(aid)
                 recent_ids.append(aid)
+                tournament_ids.append(aid)
 
         # 2. Колоды из user_deck_history (DataLens import и т.п.)
         # ORDER BY id ASC сохраняет порядок вставки = порядок DataLens (наибольшее число матчей первым)
@@ -249,12 +254,23 @@ class TournamentService:
             .where(models.UserDeckHistory.user_id == user.id)
             .order_by(models.UserDeckHistory.id.asc())
         )
+        datalens_ids: list[int] = []
         for (aid,) in self.db.execute(hist_stmt).all():
             if aid not in seen:
                 seen.add(aid)
                 recent_ids.append(aid)
+                datalens_ids.append(aid)
 
         all_arch = {a.id: a for a in self.list_archetypes()}
+
+        if logger.isEnabledFor(logging.DEBUG):
+            t_names = [all_arch[i].name for i in tournament_ids if i in all_arch]
+            d_names = [all_arch[i].name for i in datalens_ids if i in all_arch]
+            logger.debug(
+                "archetype_menu tg_id=%s | tournaments(%d)=%s | datalens(%d)=%s",
+                tg_id, len(t_names), t_names, len(d_names), d_names,
+            )
+
         return [all_arch[aid] for aid in recent_ids if aid in all_arch]
 
     def list_archetypes_for_user(self, tg_id: int, total: int = 10) -> List[ArchetypeItem]:
