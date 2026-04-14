@@ -2,11 +2,16 @@ from bot.keyboards import (
     tournament_list_keyboard,
     register_button,
     archetype_keyboard,
+    admin_archetype_select_keyboard,
     CB_TOURNAMENT,
     CB_REGISTER,
     CB_ARCHETYPE,
     CB_CUSTOM_ARCHETYPE,
+    CB_ADMIN_SET_ARCH,
+    CB_ADMIN_CUSTOM_ARCH,
+    CB_ADMIN_ARCH_MORE,
 )
+from bot.deck_emoji import deck_emoji
 
 
 class TestTournamentListKeyboard:
@@ -59,6 +64,76 @@ class TestArchetypeKeyboard:
     def test_callback_data_under_64_bytes(self):
         # Telegram ограничение на callback_data — 64 байта
         markup = archetype_keyboard(99999, [(99999, "Burn")])
+        for row in markup.inline_keyboard:
+            for btn in row:
+                assert len(btn.callback_data.encode()) <= 64
+
+    def test_known_deck_label_includes_emoji(self):
+        markup = archetype_keyboard(10, [(1, "Red Kuldotha")])
+        label = markup.inline_keyboard[0][0].text
+        assert label == deck_emoji.format("Red Kuldotha")
+        assert "🔴" in label
+
+    def test_unknown_deck_label_is_plain_name(self):
+        markup = archetype_keyboard(10, [(1, "Unknown Brew")])
+        label = markup.inline_keyboard[0][0].text
+        assert label == "Unknown Brew"
+
+    def test_has_more_button_present_when_flag_true(self):
+        from bot.keyboards import CB_ARCHETYPE_MORE
+        markup = archetype_keyboard(10, [(1, "Burn")], has_more=True)
+        cbs = [b.callback_data for row in markup.inline_keyboard for b in row]
+        assert any(cb.startswith(CB_ARCHETYPE_MORE) for cb in cbs)
+
+    def test_no_more_button_when_flag_false(self):
+        from bot.keyboards import CB_ARCHETYPE_MORE
+        markup = archetype_keyboard(10, [(1, "Burn")], has_more=False)
+        cbs = [b.callback_data for row in markup.inline_keyboard for b in row]
+        assert not any(cb.startswith(CB_ARCHETYPE_MORE) for cb in cbs)
+
+
+class TestAdminArchetypeSelectKeyboard:
+    def test_one_button_per_archetype_plus_custom(self):
+        markup = admin_archetype_select_keyboard(5, [(1, "Burn"), (2, "Elves")])
+        arch_btns = [
+            b for row in markup.inline_keyboard for b in row
+            if b.callback_data.startswith(CB_ADMIN_SET_ARCH)
+        ]
+        assert len(arch_btns) == 2
+
+    def test_callback_data_format(self):
+        markup = admin_archetype_select_keyboard(5, [(7, "Burn")])
+        cb = markup.inline_keyboard[0][0].callback_data
+        assert cb == f"{CB_ADMIN_SET_ARCH}:5:7"
+
+    def test_custom_button_last(self):
+        markup = admin_archetype_select_keyboard(5, [(1, "Burn")])
+        last_cb = markup.inline_keyboard[-1][0].callback_data
+        assert last_cb.startswith(CB_ADMIN_CUSTOM_ARCH)
+
+    def test_known_deck_label_includes_emoji(self):
+        markup = admin_archetype_select_keyboard(5, [(1, "Blue Faeries")])
+        label = markup.inline_keyboard[0][0].text
+        assert label == deck_emoji.format("Blue Faeries")
+        assert "🔵" in label
+
+    def test_unknown_deck_label_is_plain_name(self):
+        markup = admin_archetype_select_keyboard(5, [(1, "Some Brew")])
+        label = markup.inline_keyboard[0][0].text
+        assert label == "Some Brew"
+
+    def test_has_more_button_when_flag_true(self):
+        markup = admin_archetype_select_keyboard(5, [(1, "Burn")], has_more=True)
+        cbs = [b.callback_data for row in markup.inline_keyboard for b in row]
+        assert any(cb.startswith(CB_ADMIN_ARCH_MORE) for cb in cbs)
+
+    def test_no_more_button_when_flag_false(self):
+        markup = admin_archetype_select_keyboard(5, [(1, "Burn")], has_more=False)
+        cbs = [b.callback_data for row in markup.inline_keyboard for b in row]
+        assert not any(cb.startswith(CB_ADMIN_ARCH_MORE) for cb in cbs)
+
+    def test_callback_data_under_64_bytes(self):
+        markup = admin_archetype_select_keyboard(99999, [(99999, "Burn")])
         for row in markup.inline_keyboard:
             for btn in row:
                 assert len(btn.callback_data.encode()) <= 64

@@ -104,8 +104,9 @@ def admin_archetype_select_keyboard(
     archetypes: list of (id, name).
     has_more: если True — добавляет кнопку «... ещё» перед «Свой вариант».
     """
+    from bot.deck_emoji import deck_emoji
     buttons = [
-        [InlineKeyboardButton(name, callback_data=f"{CB_ADMIN_SET_ARCH}:{participant_id}:{aid}")]
+        [InlineKeyboardButton(deck_emoji.format(name), callback_data=f"{CB_ADMIN_SET_ARCH}:{participant_id}:{aid}")]
         for aid, name in archetypes
     ]
     if has_more:
