@@ -20,8 +20,10 @@ from bot.telegram import common, player, admin
 from bot.telegram import settings as settings_handler
 from bot.keyboards import (
     CB_TOURNAMENT, CB_REGISTER, CB_ARCHETYPE, CB_CUSTOM_ARCHETYPE,
+    CB_ARCHETYPE_MORE,
     CB_SETTINGS_NAME, CB_TSTATUS, CB_LEAVE, CB_LEAVE_CONFIRM, CB_LEAVE_CANCEL,
-    CB_BULK_ADD,
+    CB_BULK_ADD, CB_ADMIN_PICK_ARCH, CB_ADMIN_SET_ARCH, CB_ADMIN_CUSTOM_ARCH,
+    CB_ADMIN_ARCH_MORE,
 )
 from bot.scheduler import setup_scheduler
 
@@ -91,6 +93,9 @@ def main() -> None:
         CallbackQueryHandler(player.callback_archetype, pattern=f"^{CB_ARCHETYPE}:")
     )
     app.add_handler(
+        CallbackQueryHandler(player.callback_archetype_more, pattern=f"^{CB_ARCHETYPE_MORE}:")
+    )
+    app.add_handler(
         CallbackQueryHandler(player.callback_custom_archetype, pattern=f"^{CB_CUSTOM_ARCHETYPE}:")
     )
     app.add_handler(
@@ -110,6 +115,18 @@ def main() -> None:
     )
     app.add_handler(
         CallbackQueryHandler(admin.callback_bulk_add_start, pattern=f"^{CB_BULK_ADD}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(admin.callback_admin_pick_arch, pattern=f"^{CB_ADMIN_PICK_ARCH}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(admin.callback_admin_set_arch, pattern=f"^{CB_ADMIN_SET_ARCH}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(admin.callback_admin_arch_more, pattern=f"^{CB_ADMIN_ARCH_MORE}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(admin.callback_admin_custom_arch, pattern=f"^{CB_ADMIN_CUSTOM_ARCH}:")
     )
 
     app.add_handler(

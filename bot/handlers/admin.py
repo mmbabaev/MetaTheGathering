@@ -7,6 +7,8 @@ from services.tournament import TournamentService
 from services.user import UserService
 from services import errors
 from bot.handlers.base import HandlerResult
+from bot.handlers.player import build_archetype_list
+from bot.keyboards import admin_participants_keyboard, admin_archetype_select_keyboard
 from bot.messages import (
     NOT_ADMIN,
     NO_DECK_NAME,
@@ -17,6 +19,9 @@ from bot.messages import (
     TOURNAMENT_NOT_FOUND,
     REGISTRATION_CLOSED,
     BULK_ADD_EMPTY,
+    PARTICIPANT_NOT_FOUND,
+    ADMIN_ARCH_SAVED,
+    CHOOSE_ARCHETYPE,
     format_tournament_status,
 )
 
@@ -267,6 +272,79 @@ class AdminHandler:
             else:
                 lines.append(f"⚠️ {display_name} — уже записан")
         return HandlerResult("\n".join(lines))
+
+    def handle_admin_status(self, tg_id: int, tournament_id: int) -> HandlerResult:
+        """Список участников с кнопками для редактирования колоды (admin view)."""
+        if not self._is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN)
+        try:
+            from services.utils import get_tournament
+            t = get_tournament(self.svc.db, tournament_id)
+        except errors.TournamentNotFound:
+            return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
+        participants = self.svc.list_participants_for_tournament(tournament_id)
+        text = format_tournament_status(t.title, t.status.label_ru, participants)
+        return HandlerResult(text, keyboard=admin_participants_keyboard(participants))
+
+    def _archetype_keyboard_for_participant(
+        self, participant_id: int, player_tg_id: int | None, expanded: bool = False
+    ) -> HandlerResult:
+        """Строит HandlerResult с клавиатурой архетипов для участника."""
+        if player_tg_id is not None:
+            recent = self.svc.list_user_recent_archetypes(player_tg_id)
+        else:
+            recent = []
+        top = self.svc.list_top_archetypes()
+        archetypes, has_more = build_archetype_list(recent, top, expanded)
+        arch_list = [(a.id, a.name) for a in archetypes]
+        return HandlerResult(
+            CHOOSE_ARCHETYPE,
+            keyboard=admin_archetype_select_keyboard(participant_id, arch_list, has_more),
+        )
+
+    def handle_admin_pick_arch(
+        self, tg_id: int, participant_id: int, expanded: bool = False
+    ) -> HandlerResult:
+        """Показывает выбор архетипа для конкретного участника."""
+        if not self._is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN)
+        p = self.svc.get_participant_by_id(participant_id)
+        if p is None:
+            return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
+        user = self.user_svc.get_by_id(p.user_id)
+        player_tg_id = user.tg_id if user else None
+        return self._archetype_keyboard_for_participant(participant_id, player_tg_id, expanded)
+
+    def handle_admin_arch_more(self, tg_id: int, participant_id: int) -> HandlerResult:
+        """Разворачивает полный список архетипов для участника (история + топ)."""
+        return self.handle_admin_pick_arch(tg_id, participant_id, expanded=True)
+
+    def handle_admin_set_arch(
+        self, tg_id: int, participant_id: int, archetype_id: int
+    ) -> HandlerResult:
+        """Устанавливает архетип участнику. Сбрасывает голоса."""
+        if not self._is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN)
+        archetypes = {a.id: a.name for a in self.svc.list_archetypes()}
+        arch_name = archetypes.get(archetype_id, "?")
+        try:
+            self.svc.set_participant_archetype(participant_id=participant_id, archetype_id=archetype_id)
+        except errors.ParticipantNotFound:
+            return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
+        return HandlerResult(ADMIN_ARCH_SAVED.format(archetype_name=arch_name))
+
+    def handle_admin_custom_arch_text(
+        self, tg_id: int, participant_id: int, arch_name: str
+    ) -> HandlerResult:
+        """Создаёт архетип по введённому названию и присваивает участнику."""
+        if not self._is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN)
+        try:
+            arch = self.svc.get_or_create_archetype_by_name(arch_name, is_custom=True)
+            self.svc.set_participant_archetype(participant_id=participant_id, archetype_id=arch.id)
+        except errors.ParticipantNotFound:
+            return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
+        return HandlerResult(ADMIN_ARCH_SAVED.format(archetype_name=arch.name))
 
     def handle_tournament_status(self, tg_id: int) -> HandlerResult:
         if not self._is_admin(tg_id):

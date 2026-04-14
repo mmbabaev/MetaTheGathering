@@ -182,6 +182,52 @@ class TournamentService:
         rows = self.db.execute(stmt).scalars().all()
         return [ArchetypeItem(id=a.id, name=a.name) for a in rows]
 
+    def list_top_archetypes(self, n: int = 10) -> List[ArchetypeItem]:
+        """Топ-N архетипов.
+
+        Порядок сортировки:
+        1. usage_count DESC  — больше сыгранных турниров → выше
+        2. meta_rank ASC NULLS LAST — seed-порядок при нулевом счётчике
+        3. name ASC — алфавит для остального
+        """
+        from sqlalchemy import nulls_last
+        stmt = (
+            select(
+                models.Archetype.id,
+                models.Archetype.name,
+                func.count(models.Participant.id).label("usage_count"),
+            )
+            .outerjoin(models.Participant, models.Participant.archetype_id == models.Archetype.id)
+            .where(models.Archetype.is_custom.is_(False))
+            .group_by(models.Archetype.id, models.Archetype.name, models.Archetype.meta_rank)
+            .order_by(
+                func.count(models.Participant.id).desc(),
+                nulls_last(models.Archetype.meta_rank.asc()),
+                models.Archetype.name.asc(),
+            )
+            .limit(n)
+        )
+        rows = self.db.execute(stmt).all()
+        return [ArchetypeItem(id=row.id, name=row.name) for row in rows]
+
+    def list_user_recent_archetypes(self, tg_id: int) -> List[ArchetypeItem]:
+        """История архетипов пользователя: самые свежие первыми, без дублей.
+
+        Возвращает пустой список если пользователь не найден или ничего не играл.
+        """
+        user = self.db.execute(
+            select(models.User).where(models.User.tg_id == tg_id)
+        ).scalar_one_or_none()
+        if not user:
+            return []
+
+        hist_stmt = (
+            select(models.Participant.archetype_id)
+            .where(
+                models.Participant.user_id == user.id,
+                models.Participant.archetype_id.isnot(None),
+            )
+            .order_by(models.Participant.created_at.desc())
     def list_archetypes_for_user(self, tg_id: int, total: int = 10) -> List[ArchetypeItem]:
         """Топ-N архетипов: история игрока (турниры + user_deck_history) первой, остальные по алфавиту."""
         all_archetypes = self.list_archetypes()
@@ -226,17 +272,39 @@ class TournamentService:
             [a for a in all_archetypes if a.id in recent_set],
             key=lambda a: recent_map[a.id],
         )
-        rest = [a for a in all_archetypes if a.id not in recent_set]
+        seen: set[int] = set()
+        recent_ids: list[int] = []
+        for (aid,) in self.db.execute(hist_stmt).all():
+            if aid not in seen:
+                seen.add(aid)
+                recent_ids.append(aid)
 
+        all_arch = {a.id: a for a in self.list_archetypes()}
+        return [all_arch[aid] for aid in recent_ids if aid in all_arch]
+
+    def list_archetypes_for_user(self, tg_id: int, total: int = 10) -> List[ArchetypeItem]:
+        """Устаревший метод: последние выборы пользователя первыми, остальные по алфавиту.
+
+        Оставлен для обратной совместимости тестов. Используй
+        list_user_recent_archetypes + list_top_archetypes + build_archetype_list.
+        """
+        recent = self.list_user_recent_archetypes(tg_id)
+        recent_set = {a.id for a in recent}
+        rest = [a for a in self.list_archetypes() if a.id not in recent_set]
         return (recent + rest)[:total]
 
-    def get_or_create_archetype_by_name(self, name: str) -> models.Archetype:
-        """Найти архетип по имени или создать новый."""
+    def get_or_create_archetype_by_name(self, name: str, is_custom: bool = False) -> models.Archetype:
+        """Найти архетип по имени или создать новый.
+
+        is_custom=True: архетип введён пользователем вручную («Свой вариант»).
+        Кастомные архетипы не появляются в глобальном топе list_top_archetypes,
+        но остаются в истории создателя.
+        """
         stmt = select(models.Archetype).where(models.Archetype.name == name)
         archetype = self.db.execute(stmt).scalar_one_or_none()
         if archetype:
             return archetype
-        archetype = models.Archetype(name=name.strip())
+        archetype = models.Archetype(name=name.strip(), is_custom=is_custom)
         self.db.add(archetype)
         self.db.commit()
         self.db.refresh(archetype)
@@ -367,6 +435,11 @@ class TournamentService:
         )
         participants = self.db.execute(stmt).scalars().all()
         return [ParticipantWithUserAndArchetype.model_validate(p) for p in participants]
+
+    def get_participant_by_id(self, participant_id: int) -> Optional[models.Participant]:
+        """Вернуть участника по participant.id или None."""
+        stmt = select(models.Participant).where(models.Participant.id == participant_id)
+        return self.db.execute(stmt).scalar_one_or_none()
 
     def get_participant(
         self, tournament_id: int, user_id: int

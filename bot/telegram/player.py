@@ -8,7 +8,7 @@ from services.tournament import TournamentService
 from services.user import UserService
 from bot.handlers.player import PlayerHandler
 from bot.handlers.settings import SettingsHandler
-from bot.keyboards import CB_REGISTER, CB_ARCHETYPE, CB_CUSTOM_ARCHETYPE, CB_TOURNAMENT
+from bot.keyboards import CB_REGISTER, CB_ARCHETYPE, CB_CUSTOM_ARCHETYPE, CB_TOURNAMENT, CB_ARCHETYPE_MORE
 from bot.messages import CUSTOM_ARCHETYPE_PROMPT
 from bot.handlers.admin import AdminHandler
 
@@ -16,6 +16,7 @@ USER_DATA_PENDING_CUSTOM = "pending_custom_archetype_tournament_id"
 USER_DATA_PENDING_NAME = "pending_name_for_tournament_id"
 USER_DATA_PENDING_SETTINGS_NAME = "pending_settings_name"
 USER_DATA_PENDING_BULK_ADD = "pending_bulk_add_tournament_id"
+USER_DATA_PENDING_ADMIN_CUSTOM_ARCH = "pending_admin_custom_arch_participant_id"
 
 
 def _player_handler(db) -> PlayerHandler:
@@ -114,6 +115,27 @@ async def callback_archetype(update: Update, context: ContextTypes.DEFAULT_TYPE)
         db.close()
 
 
+async def callback_archetype_more(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«... ещё» — разворачивает полный список архетипов."""
+    query = update.callback_query
+    user = update.effective_user
+    if not query or not query.data or not user:
+        return
+    try:
+        _, tid_str = query.data.split(":", 1)
+        tournament_id = int(tid_str)
+    except (ValueError, IndexError):
+        await query.answer("Ошибка данных.")
+        return
+    db = SessionLocal()
+    try:
+        result = _player_handler(db).handle_archetype_more(tournament_id, tg_id=user.id)
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+        await query.answer()
+    finally:
+        db.close()
+
+
 async def callback_custom_archetype(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     if not query or not query.data:
@@ -133,6 +155,7 @@ async def callback_custom_archetype(update: Update, context: ContextTypes.DEFAUL
 
 async def callback_tournament_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
+    user = update.effective_user
     if not query or not query.data:
         return
     try:
@@ -143,11 +166,15 @@ async def callback_tournament_status(update: Update, context: ContextTypes.DEFAU
         return
     db = SessionLocal()
     try:
-        result = _player_handler(db).handle_tournament_public_status(tournament_id)
+        admin_h = _admin_handler(db)
+        if user and admin_h._is_admin(user.id):
+            result = admin_h.handle_admin_status(user.id, tournament_id)
+        else:
+            result = _player_handler(db).handle_tournament_public_status(tournament_id)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
-        await query.edit_message_text(result.text)
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
     finally:
         db.close()
@@ -259,6 +286,21 @@ async def message_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         db = SessionLocal()
         try:
             result = _settings_handler(db).handle_settings_name_text(user.id, text)
+            await msg.reply_text(result.text)
+        finally:
+            db.close()
+        return
+
+    # State: waiting for admin custom archetype name for a specific participant
+    if USER_DATA_PENDING_ADMIN_CUSTOM_ARCH in context.user_data:
+        participant_id = context.user_data.pop(USER_DATA_PENDING_ADMIN_CUSTOM_ARCH)
+        if not text:
+            context.user_data[USER_DATA_PENDING_ADMIN_CUSTOM_ARCH] = participant_id
+            await msg.reply_text("Введите непустое название архетипа.")
+            return
+        db = SessionLocal()
+        try:
+            result = _admin_handler(db).handle_admin_custom_arch_text(user.id, participant_id, text)
             await msg.reply_text(result.text)
         finally:
             db.close()

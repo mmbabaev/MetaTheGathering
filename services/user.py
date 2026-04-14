@@ -12,6 +12,11 @@ class UserService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
+    def get_by_id(self, user_id: int) -> Optional[models.User]:
+        """Вернуть пользователя по внутреннему id или None."""
+        stmt = select(models.User).where(models.User.id == user_id)
+        return self.db.execute(stmt).scalar_one_or_none()
+
     def get_by_tg_id(self, tg_id: int) -> Optional[models.User]:
         """Вернуть пользователя по tg_id или None."""
         stmt = select(models.User).where(models.User.tg_id == tg_id)

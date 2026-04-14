@@ -571,3 +571,211 @@ class TestHandleBulkAddByName:
             tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["Мария"]
         )
         assert "✅ Мария" in result.text
+
+
+# --- handle_admin_status ---
+
+class TestHandleAdminStatus:
+    def test_non_admin_returns_not_admin(self, handler, active_tournament):
+        result = handler.handle_admin_status(tg_id=42, tournament_id=active_tournament.id)
+        assert result.text == NOT_ADMIN
+
+    def test_returns_text_with_keyboard(self, handler, admin_user, active_tournament):
+        result = handler.handle_admin_status(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+        assert "Weekly" in result.text
+        assert result.keyboard is not None
+
+    def test_tournament_not_found(self, handler, admin_user):
+        from bot.messages import TOURNAMENT_NOT_FOUND
+        result = handler.handle_admin_status(tg_id=ADMIN_TG_ID, tournament_id=99999)
+        assert result.text == TOURNAMENT_NOT_FOUND
+        assert result.is_alert
+
+    def test_keyboard_has_button_per_participant(self, handler, svc, user_svc, admin_user, active_tournament, archetype_burn):
+        user = user_svc.get_or_create(tg_id=8001, username=None, first_name="Тест")
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
+        result = handler.handle_admin_status(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+        buttons = [b for row in result.keyboard.inline_keyboard for b in row]
+        from bot.keyboards import CB_ADMIN_PICK_ARCH
+        assert any(b.callback_data.startswith(CB_ADMIN_PICK_ARCH) for b in buttons)
+
+    def test_no_archetype_participant_gets_pencil_prefix(self, handler, svc, user_svc, admin_user, active_tournament):
+        user = user_svc.get_or_create(tg_id=8002, username=None, first_name="Безколоды")
+        svc.bulk_add_participants(active_tournament.id, [(user.id, "Безколоды")])
+        result = handler.handle_admin_status(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+        buttons_text = [b.text for row in result.keyboard.inline_keyboard for b in row]
+        assert any("📝" in t for t in buttons_text)
+
+    def test_with_archetype_participant_gets_edit_prefix(self, handler, svc, user_svc, admin_user, active_tournament, archetype_burn):
+        user = user_svc.get_or_create(tg_id=8003, username=None, first_name="Сколодой")
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
+        result = handler.handle_admin_status(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+        buttons_text = [b.text for row in result.keyboard.inline_keyboard for b in row]
+        assert any("✏️" in t for t in buttons_text)
+
+
+# --- handle_admin_pick_arch ---
+
+class TestHandleAdminPickArch:
+    @pytest.fixture
+    def participant(self, svc, user_svc, active_tournament):
+        user = user_svc.get_or_create(tg_id=8100, username=None, first_name="Игрок")
+        svc.bulk_add_participants(active_tournament.id, [(user.id, "Игрок")])
+        return svc.get_participant(active_tournament.id, user.id)
+
+    def test_non_admin_returns_not_admin(self, handler, active_tournament, participant):
+        result = handler.handle_admin_pick_arch(tg_id=42, participant_id=participant.id)
+        assert result.text == NOT_ADMIN
+
+    def test_returns_archetype_keyboard(self, handler, admin_user, active_tournament, participant, archetype_burn):
+        result = handler.handle_admin_pick_arch(tg_id=ADMIN_TG_ID, participant_id=participant.id)
+        from bot.messages import CHOOSE_ARCHETYPE
+        assert result.text == CHOOSE_ARCHETYPE
+        assert result.keyboard is not None
+
+    def test_participant_not_found(self, handler, admin_user):
+        from bot.messages import PARTICIPANT_NOT_FOUND
+        result = handler.handle_admin_pick_arch(tg_id=ADMIN_TG_ID, participant_id=99999)
+        assert result.text == PARTICIPANT_NOT_FOUND
+        assert result.is_alert
+
+    def test_keyboard_uses_admin_callbacks(self, handler, admin_user, active_tournament, participant, archetype_burn):
+        result = handler.handle_admin_pick_arch(tg_id=ADMIN_TG_ID, participant_id=participant.id)
+        from bot.keyboards import CB_ADMIN_SET_ARCH
+        buttons = [b for row in result.keyboard.inline_keyboard for b in row]
+        assert any(b.callback_data.startswith(CB_ADMIN_SET_ARCH) for b in buttons)
+
+
+# --- handle_admin_set_arch ---
+
+class TestHandleAdminSetArch:
+    @pytest.fixture
+    def participant(self, svc, user_svc, active_tournament):
+        user = user_svc.get_or_create(tg_id=8200, username=None, first_name="Игрок")
+        svc.bulk_add_participants(active_tournament.id, [(user.id, "Игрок")])
+        return svc.get_participant(active_tournament.id, user.id)
+
+    def test_non_admin_returns_not_admin(self, handler, active_tournament, participant, archetype_burn):
+        result = handler.handle_admin_set_arch(tg_id=42, participant_id=participant.id, archetype_id=archetype_burn.id)
+        assert result.text == NOT_ADMIN
+
+    def test_sets_archetype_successfully(self, handler, svc, admin_user, active_tournament, participant, archetype_burn):
+        result = handler.handle_admin_set_arch(tg_id=ADMIN_TG_ID, participant_id=participant.id, archetype_id=archetype_burn.id)
+        from bot.messages import ADMIN_ARCH_SAVED
+        assert "Burn" in result.text
+        assert not result.is_alert
+        updated = svc.get_participant(active_tournament.id, participant.user_id)
+        assert updated.archetype_id == archetype_burn.id
+
+    def test_participant_not_found(self, handler, admin_user, archetype_burn):
+        from bot.messages import PARTICIPANT_NOT_FOUND
+        result = handler.handle_admin_set_arch(tg_id=ADMIN_TG_ID, participant_id=99999, archetype_id=archetype_burn.id)
+        assert result.text == PARTICIPANT_NOT_FOUND
+        assert result.is_alert
+
+
+# --- handle_admin_custom_arch_text ---
+
+class TestHandleAdminCustomArchText:
+    @pytest.fixture
+    def participant(self, svc, user_svc, active_tournament):
+        user = user_svc.get_or_create(tg_id=8300, username=None, first_name="Игрок")
+        svc.bulk_add_participants(active_tournament.id, [(user.id, "Игрок")])
+        return svc.get_participant(active_tournament.id, user.id)
+
+    def test_non_admin_returns_not_admin(self, handler, participant):
+        result = handler.handle_admin_custom_arch_text(tg_id=42, participant_id=participant.id, arch_name="Elves")
+        assert result.text == NOT_ADMIN
+
+    def test_creates_archetype_and_sets(self, handler, svc, admin_user, participant):
+        result = handler.handle_admin_custom_arch_text(tg_id=ADMIN_TG_ID, participant_id=participant.id, arch_name="Turbo Fog")
+        from bot.messages import ADMIN_ARCH_SAVED
+        assert "Turbo Fog" in result.text
+        assert not result.is_alert
+
+    def test_participant_not_found(self, handler, admin_user):
+        from bot.messages import PARTICIPANT_NOT_FOUND
+        result = handler.handle_admin_custom_arch_text(tg_id=ADMIN_TG_ID, participant_id=99999, arch_name="Elves")
+        assert result.text == PARTICIPANT_NOT_FOUND
+        assert result.is_alert
+
+
+class TestHandleAdminPickArchUsesParticipantHistory:
+    """Убеждаемся что список архетипов персонализирован под игрока, а не под админа."""
+
+    @pytest.fixture
+    def setup(self, svc, user_svc, active_tournament):
+        from core.schemas import TournamentCreate as TC
+        burn = svc.get_or_create_archetype_by_name("Burn")
+        elves = svc.get_or_create_archetype_by_name("Elves")
+
+        # Прошлый турнир: админ играл Burn
+        t_admin = svc.create_tournament(TC(title="Admin Hist", chat_id=CHAT_ID + 50, slug="ah"))
+        admin = user_svc.get_or_create(tg_id=ADMIN_TG_ID, username="admin", first_name="Admin")
+        svc.register_participant(tournament_id=t_admin.id, user_id=admin.id, archetype_id=burn.id)
+
+        # Прошлый турнир: игрок играл Elves
+        player = user_svc.get_or_create(tg_id=8888, username=None, first_name="Player")
+        t_player = svc.create_tournament(TC(title="Player Hist", chat_id=CHAT_ID + 51, slug="ph"))
+        svc.register_participant(tournament_id=t_player.id, user_id=player.id, archetype_id=elves.id)
+
+        # Активный турнир: игрок добавлен без колоды
+        svc.bulk_add_participants(active_tournament.id, [(player.id, "Player")])
+        participant = svc.get_participant(active_tournament.id, player.id)
+        return participant, burn, elves
+
+    def test_first_archetype_is_player_history_not_admin_history(self, handler, admin_user, active_tournament, setup):
+        participant, burn, elves = setup
+        result = handler.handle_admin_pick_arch(tg_id=ADMIN_TG_ID, participant_id=participant.id)
+
+        first_btn = result.keyboard.inline_keyboard[0][0]
+        # Elves — история игрока, должна стоять первой
+        assert "Elves" in first_btn.text, (
+            f"Ожидали Elves (история игрока) первым архетипом, но получили: {first_btn.text}"
+        )
+        # Burn — история админа, не должна быть первой
+        assert "Burn" not in first_btn.text
+
+    def test_bulk_added_player_no_history_gets_top_by_popularity_not_admin_order(
+        self, handler, svc, user_svc, admin_user, active_tournament
+    ):
+        """Игрок без истории (bulk add) должен получать топ по глобальной популярности,
+        а не персональный список колод админа.
+
+        Сценарий: «Zzz Deck» — колода админа (1 использование), «Aaa Deck» — сыграна
+        двумя другими игроками (2 использования). Для игрока без истории топ должен
+        показать «Aaa Deck» первой (она глобально популярнее).
+        """
+        from core.schemas import TournamentCreate as TC
+
+        aaa = svc.get_or_create_archetype_by_name("Aaa Deck")
+        zzz = svc.get_or_create_archetype_by_name("Zzz Deck")
+
+        # Прошлый турнир: админ играл Zzz (1 раз)
+        t_admin = svc.create_tournament(TC(title="Admin Z hist", chat_id=CHAT_ID + 60, slug="az"))
+        admin = user_svc.get_or_create(tg_id=ADMIN_TG_ID, username="admin", first_name="Admin")
+        svc.register_participant(tournament_id=t_admin.id, user_id=admin.id, archetype_id=zzz.id)
+
+        # Ещё два других игрока играли Aaa (больше использований у Aaa)
+        u1 = user_svc.get_or_create(tg_id=7701, username=None, first_name="Player1")
+        u2 = user_svc.get_or_create(tg_id=7702, username=None, first_name="Player2")
+        t_other = svc.create_tournament(TC(title="Other hist", chat_id=CHAT_ID + 61, slug="oh"))
+        svc.register_participant(tournament_id=t_other.id, user_id=u1.id, archetype_id=aaa.id)
+        svc.register_participant(tournament_id=t_other.id, user_id=u2.id, archetype_id=aaa.id)
+
+        # Игрок добавлен через bulk_add — нет истории архетипов
+        player = user_svc.get_or_create_by_name("Bulk", "Player")[0]
+        svc.bulk_add_participants(active_tournament.id, [(player.id, "Bulk Player")])
+        participant = svc.get_participant(active_tournament.id, player.id)
+
+        result = handler.handle_admin_pick_arch(tg_id=ADMIN_TG_ID, participant_id=participant.id)
+
+        all_btn_names = [
+            b.text for row in result.keyboard.inline_keyboard for b in row
+        ]
+        first_btn = result.keyboard.inline_keyboard[0][0]
+
+        assert "Aaa Deck" in first_btn.text, (
+            f"Ожидали 'Aaa Deck' первым (глобальный топ: 2 использования у Aaa vs 1 у Zzz), "
+            f"но получили: {first_btn.text!r}. Все кнопки: {all_btn_names}"
+        )
