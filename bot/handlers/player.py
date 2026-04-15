@@ -97,7 +97,12 @@ class PlayerHandler:
             if user:
                 is_registered = self.svc.get_participant(t.id, user.id) is not None
             is_admin = self._is_admin(tg_id)
-        text = format_tournament_card(t.title, t.status.label_ru, t.slug)
+        participants = self.svc.list_participants_for_tournament(t.id)
+        with_deck = sum(1 for p in participants if p.archetype)
+        text = format_tournament_card(
+            t.title, t.status.label_ru,
+            total=len(participants), with_deck=with_deck,
+        )
         return HandlerResult(text, keyboard=tournament_card_keyboard(t.id, is_registered, is_admin=is_admin))
 
     def _archetype_keyboard_for_player(

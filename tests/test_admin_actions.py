@@ -284,7 +284,7 @@ class TestHandleTournamentStatus:
     def test_shows_tournament_info(self, handler, admin_user, active_tournament):
         result = handler.handle_tournament_status(tg_id=ADMIN_TG_ID)
         assert "Weekly" in result.text
-        assert "Участники" in result.text
+        assert "чел." in result.text
 
     def test_shows_participants_with_archetype(self, handler, svc, admin_user, active_tournament, user_alice, archetype_burn):
         svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)

@@ -56,21 +56,44 @@ HELP_TEXT = """\
 """
 
 
-def format_tournament_card(title: str, status: str, slug: str | None = None) -> str:
-    parts = [f"Турнир: {title}", f"Статус: {status}"]
-    if slug:
-        parts.append(f"Slug: {slug}")
-    return "\n".join(parts)
+def _participant_icon(p) -> str:
+    """✅ подтверждена / 🔄 колода указана, не подтверждена / ⬜ колоды нет."""
+    if not p.archetype:
+        return "⬜"
+    return "✅" if p.confirmed else "🔄"
+
+
+def format_tournament_card(
+    title: str,
+    status: str,
+    slug: str | None = None,
+    total: int | None = None,
+    with_deck: int | None = None,
+) -> str:
+    """Компактная карточка турнира с опциональным счётчиком участников."""
+    header = f"🏆 {title} · {status}"
+    if total is not None:
+        if with_deck is not None:
+            without = total - with_deck
+            header += f" · {total} чел. ({with_deck} ✅ / {without} ⬜)"
+        else:
+            header += f" · {total} чел."
+    return header
 
 
 def format_tournament_status(title: str, status: str, participants: list) -> str:
-    """Форматирует список участников турнира для отображения игрокам."""
-    lines = [
-        f"Турнир: {title}",
-        f"Статус: {status}",
-        f"Участники ({len(participants)}):",
-    ]
-    for i, p in enumerate(participants, 1):
+    """Структурированный список участников турнира."""
+    total = len(participants)
+    with_deck = sum(1 for p in participants if p.archetype)
+    without = total - with_deck
+
+    header = f"🏆 {title} · {status} · {total} чел."
+    if total:
+        header += f"\n✅ {with_deck} с колодой  ⬜ {without} без"
+
+    lines = [header, ""]
+    for p in participants:
+        icon = _participant_icon(p)
         if p.user:
             name_parts = [n for n in (p.user.first_name, p.user.last_name) if n]
             full_name = " ".join(name_parts) if name_parts else f"id{p.user.tg_id}"
@@ -79,6 +102,5 @@ def format_tournament_status(title: str, status: str, participants: list) -> str
         else:
             display = "?"
         archetype = p.archetype.name if p.archetype else "не указана"
-        confirmed = " ✅" if p.confirmed else ""
-        lines.append(f"{i}. {display} — {archetype}{confirmed}")
+        lines.append(f"{icon} {display} — {archetype}")
     return "\n".join(lines)
