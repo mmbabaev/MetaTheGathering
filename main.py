@@ -21,7 +21,7 @@ from bot.telegram import settings as settings_handler
 from bot.keyboards import (
     CB_TOURNAMENT, CB_REGISTER, CB_ARCHETYPE, CB_CUSTOM_ARCHETYPE,
     CB_ARCHETYPE_MORE,
-    CB_SETTINGS_NAME, CB_TSTATUS, CB_LEAVE, CB_LEAVE_CONFIRM, CB_LEAVE_CANCEL,
+    CB_SETTINGS_NAME, CB_SETTINGS_PRETEND, CB_TSTATUS, CB_LEAVE, CB_LEAVE_CONFIRM, CB_LEAVE_CANCEL,
     CB_BULK_ADD, CB_ADMIN_PICK_ARCH, CB_ADMIN_SET_ARCH, CB_ADMIN_CUSTOM_ARCH,
     CB_ADMIN_ARCH_MORE,
     CB_DELETE_TOURNAMENT, CB_DELETE_TOURNAMENT_CONFIRM, CB_DELETE_TOURNAMENT_CANCEL,
@@ -120,6 +120,9 @@ def main() -> None:
     )
     app.add_handler(
         CallbackQueryHandler(settings_handler.callback_settings_name, pattern=f"^{CB_SETTINGS_NAME}$")
+    )
+    app.add_handler(
+        CallbackQueryHandler(settings_handler.callback_settings_pretend, pattern=f"^{CB_SETTINGS_PRETEND}$")
     )
     app.add_handler(
         CallbackQueryHandler(admin.callback_bulk_add_start, pattern=f"^{CB_BULK_ADD}:")

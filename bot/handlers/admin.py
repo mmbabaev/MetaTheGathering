@@ -101,6 +101,9 @@ class AdminHandler:
         self.user_svc = user_svc
 
     def _is_admin(self, tg_id: int) -> bool:
+        from core.pretend import is_pretending
+        if is_pretending(tg_id):
+            return False
         if tg_id in settings.admin_ids:
             return True
         user = self.user_svc.get_by_tg_id(tg_id)

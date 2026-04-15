@@ -38,3 +38,21 @@ async def callback_settings_name(update: Update, context: ContextTypes.DEFAULT_T
     context.user_data[USER_DATA_PENDING_SETTINGS_NAME] = True
     await query.edit_message_text(SETTINGS_CHANGE_NAME_PROMPT)
     await query.answer()
+
+
+async def callback_settings_pretend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Переключает режим 'притвориться пользователем' для администратора."""
+    query = update.callback_query
+    user = update.effective_user
+    if not query or not user:
+        return
+    db = SessionLocal()
+    try:
+        result = _settings_handler(db).handle_toggle_pretend(user.id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        await query.edit_message_text(result.text)
+        await query.answer()
+    finally:
+        db.close()

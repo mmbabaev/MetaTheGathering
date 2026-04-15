@@ -18,6 +18,7 @@ CB_ADMIN_PICK_ARCH = "adm_pick"          # adm_pick:{participant_id}
 CB_ADMIN_SET_ARCH = "adm_set"            # adm_set:{participant_id}:{archetype_id}
 CB_ADMIN_CUSTOM_ARCH = "adm_custom"      # adm_custom:{participant_id}
 CB_ADMIN_ARCH_MORE = "adm_arch_more"     # adm_arch_more:{participant_id}
+CB_SETTINGS_PRETEND = "settings_pretend"  # toggle pretend-user mode
 CB_DELETE_TOURNAMENT = "del_t"           # del_t:{tournament_id}
 CB_DELETE_TOURNAMENT_CONFIRM = "del_t_yes"  # del_t_yes:{tournament_id}
 CB_DELETE_TOURNAMENT_CANCEL = "del_t_no"    # del_t_no:{tournament_id}
@@ -91,11 +92,13 @@ def leave_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
     ])
 
 
-def settings_keyboard() -> InlineKeyboardMarkup:
-    """Меню настроек пользователя."""
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✏️ Изменить имя", callback_data=CB_SETTINGS_NAME)]
-    ])
+def settings_keyboard(is_admin: bool = False, is_pretending: bool = False) -> InlineKeyboardMarkup:
+    """Меню настроек пользователя. Для админов показывает кнопку переключения режима."""
+    rows = [[InlineKeyboardButton("✏️ Изменить имя", callback_data=CB_SETTINGS_NAME)]]
+    if is_admin or is_pretending:
+        label = "🔑 Вернуться в режим админа" if is_pretending else "🎭 Притвориться пользователем"
+        rows.append([InlineKeyboardButton(label, callback_data=CB_SETTINGS_PRETEND)])
+    return InlineKeyboardMarkup(rows)
 
 
 def admin_participants_keyboard(participants: list) -> InlineKeyboardMarkup:
