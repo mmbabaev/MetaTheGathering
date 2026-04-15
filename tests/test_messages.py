@@ -47,10 +47,12 @@ class TestFormatTournamentStatus:
         result = format_tournament_status("Cup", "Reg", [p])
         assert "✅" in result
 
-    def test_deck_without_confirmation_shows_rotation(self):
+    def test_deck_without_confirmation_shows_checkmark(self):
+        """Колода указана, но не подтверждена — показываем ✅ (подтверждение скрыто от UI)."""
         p = self._p("Иван", deck="Burn", confirmed=False)
         result = format_tournament_status("Cup", "Reg", [p])
-        assert "🔄" in result
+        assert "✅" in result
+        assert "🔄" not in result
 
     def test_no_deck_shows_empty_box(self):
         p = self._p("Иван")

@@ -57,10 +57,8 @@ HELP_TEXT = """\
 
 
 def _participant_icon(p) -> str:
-    """✅ подтверждена / 🔄 колода указана, не подтверждена / ⬜ колоды нет."""
-    if not p.archetype:
-        return "⬜"
-    return "✅" if p.confirmed else "🔄"
+    """✅ колода указана / ⬜ колоды нет."""
+    return "✅" if p.archetype else "⬜"
 
 
 def format_tournament_card(
