@@ -19,6 +19,7 @@ CB_ADMIN_SET_ARCH = "adm_set"            # adm_set:{participant_id}:{archetype_i
 CB_ADMIN_CUSTOM_ARCH = "adm_custom"      # adm_custom:{participant_id}
 CB_ADMIN_ARCH_MORE = "adm_arch_more"     # adm_arch_more:{participant_id}
 CB_SETTINGS_PRETEND = "settings_pretend"  # toggle pretend-user mode
+CB_EXPORT_EXCEL = "export_excel"          # export_excel:{tournament_id}
 CB_DELETE_TOURNAMENT = "del_t"           # del_t:{tournament_id}
 CB_DELETE_TOURNAMENT_CONFIRM = "del_t_yes"  # del_t_yes:{tournament_id}
 CB_DELETE_TOURNAMENT_CANCEL = "del_t_no"    # del_t_no:{tournament_id}
@@ -59,8 +60,11 @@ def tournament_card_keyboard(
         ])
         rows.append([
             InlineKeyboardButton(
-                "🗑 Удалить турнир", callback_data=f"{CB_DELETE_TOURNAMENT}:{tournament_id}"
-            )
+                "📊 Выгрузка Excel", callback_data=f"{CB_EXPORT_EXCEL}:{tournament_id}"
+            ),
+            InlineKeyboardButton(
+                "🗑 Удалить", callback_data=f"{CB_DELETE_TOURNAMENT}:{tournament_id}"
+            ),
         ])
     return InlineKeyboardMarkup(rows)
 

@@ -304,6 +304,37 @@ async def cmd_delete_tournament(update: Update, context: ContextTypes.DEFAULT_TY
         db.close()
 
 
+async def callback_export_excel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка «📊 Выгрузка Excel» — отправляет файл участников."""
+    query = update.callback_query
+    user = update.effective_user
+    if not query or not query.data or not user:
+        return
+    try:
+        _, tid_str = query.data.split(":", 1)
+        tournament_id = int(tid_str)
+    except (ValueError, IndexError):
+        await query.answer("Ошибка данных.")
+        return
+    await query.answer("Генерирую файл…")
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_export_excel(user.id, tournament_id)
+        if result is None:
+            await query.answer("Нет прав или турнир не найден.", show_alert=True)
+            return
+        data, filename = result
+        import io
+        await context.bot.send_document(
+            chat_id=query.message.chat_id,
+            document=io.BytesIO(data),
+            filename=filename,
+        )
+        _log("export_excel", user, tournament_id=tournament_id)
+    finally:
+        db.close()
+
+
 async def callback_delete_tournament_prompt(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
