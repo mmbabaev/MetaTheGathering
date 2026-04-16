@@ -313,7 +313,7 @@ async def message_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         db = SessionLocal()
         try:
             result = _admin_handler(db).handle_bulk_add_by_name(user.id, tournament_id, names)
-            await msg.reply_text(result.text)
+            await msg.reply_text(result.text, reply_markup=result.keyboard)
         finally:
             db.close()
         return
