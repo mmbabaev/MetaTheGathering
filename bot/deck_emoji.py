@@ -16,8 +16,10 @@ _DECK_EMOJI: dict[str, str] = {
     "Caw Gates":        "🔵⚪🦅⛩️", # синий, белый, орёл, ворота
 
     # ── Расширенный список ───────────────────────────────────────────────
-    "Red Rally":        "🔴👥",     # красный, два человечка
+    "Red Rally":        "🔴👥",
+    "Mono Red Rally":   "🔴👥",     # алиас
     "Red Burn":         "🔴🔥",
+    "Classic Burn":     "🔴🔥",     # алиас
     "Mono Blue Faeries": "🔵🧚",
     "Dimir Control":    "🔵⚫🧠",
     "Izzet Faeries":    "🔴🔵🧚",
@@ -26,17 +28,41 @@ _DECK_EMOJI: dict[str, str] = {
     "Azorius Familiars": "🔵⚪🦜",
     "Gruul Ramp":       "🔴🟢🌿",
     "White Weenie":     "⚪⚔️",
+    "White Aggro":      "⚪⚔️",     # алиас
     "Gardens":          "🟢🌸",
     "Glee Combo":       "🟢😄",
     "Jund Midrange":    "🔴🟢⚫",
-    "Cascade Tron":     "🟡⚙️",
-    "Flicker Tron":     "🟡✨",
+    "Cascade Tron":     "🟡⚙️🪑",
+    "Flicker Tron":     "🟡✨🪑",
+    "Tron":             "🟡⚙️🪑",  # алиас
+    "Red Tron":         "🔴🟡⚙️🪑",
+    "Gruul Tron":       "🔴🟢⚙️🪑",
     "Moggwarts Combo":  "🔴🧙",
     "Combo Walls":      "🧱🔵",
     "Spy":              "🕵️",
-    "Classic Burn":     "🔴🔥",
+    "Spy Combo":        "🕵️🔄",
     "Boros Synthesizer": "🔴⚪🤖",
     "Golgari Dredge":   "🟢⚫🪦",
+
+    # ── Blue Terror / Mono U семейство ───────────────────────────────────
+    "Blue Terror":      "🔵🐍🪲",
+    "Mono U Terror":    "🔵🐍🪲",
+    "Mono U Delver":    "🔵🐍🪲",
+    "Mono Blue Delver": "🔵🐍🪲",
+    "Mono Blue Terror": "🔵🐍🪲",
+
+    # ── Madness семейство ────────────────────────────────────────────────
+    "Red Madness":      "🔴👹",
+    "Mono Red Madness": "🔴👹",
+    "Rakdos Reanimator": "🔴⚫💀👹",
+
+    # ── Caw Gates алиасы ─────────────────────────────────────────────────
+    "Caw-Gates":        "🔵⚪🦅⛩️",
+
+    # ── Jund / Wildfire ──────────────────────────────────────────────────
+    "Jund Wildfire":    "🔴🟢⚫🔥",
+    "Gruul Ponza":      "🔴🟢🪨",
+    "Gruul Rhino Friends + Eldrazi": "🔴🟢🦏",
 }
 
 
