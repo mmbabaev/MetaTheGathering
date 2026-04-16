@@ -24,12 +24,11 @@ DAYS = {
 # ---------------------------------------------------------------------------
 
 def get_clubs() -> list[ClubConfig]:
-    """Возвращает список активных клубов с заполненными chat_id."""
-    all_clubs = [
+    """Возвращает список клубов. chat_id=0 означает «создать турнир, но не писать в чат»."""
+    return [
         ClubConfig(name="Goldfish",  weekday="thursday", chat_id=settings.GOLDFISH_CHAT_ID or 0,  game_time="19:30"),
         ClubConfig(name="Edinorog",  weekday="monday",   chat_id=settings.EDINOROG_CHAT_ID or 0,  game_time="19:30"),
     ]
-    return [c for c in all_clubs if c.chat_id]
 
 
 # ---------------------------------------------------------------------------
@@ -63,27 +62,31 @@ async def _create_club_tournament(bot, club: ClubConfig) -> None:
     try:
         svc = TournamentService(db)
         try:
-            active = svc.get_active_tournament_for_chat(club.chat_id)
-            if active:
-                svc.close_tournament(active.id)
-                logger.info(f"Closed previous tournament #{active.id} for club '{club.name}'")
+            if club.chat_id:
+                active = svc.get_active_tournament_for_chat(club.chat_id)
+                if active:
+                    svc.close_tournament(active.id)
+                    logger.info(f"Closed previous tournament #{active.id} for club '{club.name}'")
 
             new_t = svc.create_tournament(TournamentCreate(
                 title=title,
-                chat_id=club.chat_id,
+                chat_id=club.chat_id or 0,
                 slug=slug,
                 club=club.name,
             ))
             logger.info(f"Created tournament #{new_t.id} '{title}' for club '{club.name}'")
 
-            await bot.send_message(
-                chat_id=club.chat_id,
-                text=(
-                    f"🏆 {club.name} Pauper — сегодня в {club.game_time}\n"
-                    f"Регистрация открыта! Используйте /tournaments для записи."
-                ),
-            )
-            logger.info(f"Announcement sent to chat {club.chat_id}")
+            if club.chat_id:
+                await bot.send_message(
+                    chat_id=club.chat_id,
+                    text=(
+                        f"🏆 {club.name} Pauper — сегодня в {club.game_time}\n"
+                        f"Регистрация открыта! Используйте /tournaments для записи."
+                    ),
+                )
+                logger.info(f"Announcement sent to chat {club.chat_id}")
+            else:
+                logger.info(f"No chat_id for '{club.name}' — tournament created without announcement")
         except Exception as e:
             logger.error(f"Scheduler error for club '{club.name}': {e}", exc_info=True)
     finally:
@@ -108,11 +111,6 @@ def setup_scheduler(app: Application) -> None:
     aware_create_time = create_time.replace(tzinfo=tz)
 
     clubs = get_clubs()
-    if not clubs:
-        logger.warning(
-            "No clubs configured — set GOLDFISH_CHAT_ID and/or EDINOROG_CHAT_ID in .env"
-        )
-
     for club in clubs:
         app.job_queue.run_daily(_make_club_job(club), time=aware_create_time)
         logger.info(
