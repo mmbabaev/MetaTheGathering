@@ -7,6 +7,7 @@ from telegram.ext import ContextTypes
 
 from core.config import settings
 from core.database import SessionLocal
+from core.event_log import event_logger
 from services.tournament import TournamentService
 from services.user import UserService
 from bot.handlers.admin import AdminHandler, parse_add_player_command, parse_bulk_player_line
@@ -17,6 +18,15 @@ from bot.keyboards import CB_ADMIN_ARCH_MORE
 
 def _admin_handler(db) -> AdminHandler:
     return AdminHandler(TournamentService(db), UserService(db))
+
+
+def _log(event: str, user, **params) -> None:
+    event_logger.log(
+        event,
+        tg_id=user.id if user else None,
+        username=user.username if user else None,
+        **params,
+    )
 
 
 async def callback_bulk_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -80,7 +90,8 @@ async def callback_admin_set_arch(update: Update, context: ContextTypes.DEFAULT_
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
-        await query.edit_message_text(result.text)
+        _log("admin_set_arch", user, participant_id=participant_id, archetype_id=archetype_id)
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
     finally:
         db.close()
@@ -254,6 +265,8 @@ async def cmd_close_tournament(update: Update, context: ContextTypes.DEFAULT_TYP
     db = SessionLocal()
     try:
         result = _admin_handler(db).handle_close_tournament(user.id)
+        if not result.is_alert:
+            _log("close_tournament", user)
         await msg.reply_text(result.text)
     finally:
         db.close()
@@ -270,6 +283,8 @@ async def cmd_create_tournament(update: Update, context: ContextTypes.DEFAULT_TY
     db = SessionLocal()
     try:
         result = _admin_handler(db).handle_create_tournament(user.id, chat_id, title)
+        if not result.is_alert:
+            _log("create_tournament", user, chat_id=chat_id, title=title)
         await msg.reply_text(result.text)
     finally:
         db.close()
@@ -335,6 +350,7 @@ async def callback_delete_tournament_confirm(
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
+        _log("delete_tournament", user, tournament_id=tournament_id)
         await query.edit_message_text(result.text)
         await query.answer()
     finally:

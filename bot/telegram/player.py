@@ -4,6 +4,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from core.database import SessionLocal
+from core.event_log import event_logger
 from services.tournament import TournamentService
 from services.user import UserService
 from bot.handlers.player import PlayerHandler
@@ -11,6 +12,16 @@ from bot.handlers.settings import SettingsHandler
 from bot.keyboards import CB_REGISTER, CB_ARCHETYPE, CB_CUSTOM_ARCHETYPE, CB_TOURNAMENT, CB_ARCHETYPE_MORE
 from bot.messages import CUSTOM_ARCHETYPE_PROMPT
 from bot.handlers.admin import AdminHandler
+
+
+def _log(event: str, user, **params) -> None:
+    """Shortcut: логирует событие с данными пользователя из Telegram."""
+    event_logger.log(
+        event,
+        tg_id=user.id if user else None,
+        username=user.username if user else None,
+        **params,
+    )
 
 USER_DATA_PENDING_CUSTOM = "pending_custom_archetype_tournament_id"
 USER_DATA_PENDING_NAME = "pending_name_for_tournament_id"
@@ -109,6 +120,7 @@ async def callback_archetype(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
+        _log("register", user, tournament_id=tournament_id, archetype_id=archetype_id)
         await query.edit_message_text(result.text)
         await query.answer()
     finally:
@@ -220,6 +232,7 @@ async def callback_leave_confirm(update: Update, context: ContextTypes.DEFAULT_T
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
+        _log("leave", user, tournament_id=tournament_id)
         await query.edit_message_text(result.text)
         await query.answer()
     finally:
@@ -301,6 +314,8 @@ async def message_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         db = SessionLocal()
         try:
             result = _admin_handler(db).handle_admin_custom_arch_text(user.id, participant_id, text)
+            if not result.is_alert:
+                _log("admin_custom_arch", user, participant_id=participant_id, arch_name=text)
             await msg.reply_text(result.text)
         finally:
             db.close()
@@ -313,6 +328,7 @@ async def message_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         db = SessionLocal()
         try:
             result = _admin_handler(db).handle_bulk_add_by_name(user.id, tournament_id, names)
+            _log("bulk_add", user, tournament_id=tournament_id, names=names)
             await msg.reply_text(result.text, reply_markup=result.keyboard)
         finally:
             db.close()
