@@ -1,4 +1,4 @@
-"""Планировщик автоматического создания турниров по расписанию."""
+"""Планировщик автоматического создания турниров по расписанию клубов."""
 
 import logging
 from datetime import datetime
@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 from telegram.ext import Application, ContextTypes
 
-from core.config import settings
+from core.config import settings, ClubConfig
 from core.database import SessionLocal
 from core.schemas import TournamentCreate
 from services.tournament import TournamentService
@@ -18,28 +18,132 @@ DAYS = {
     "friday": 4, "saturday": 5, "sunday": 6,
 }
 
+# ---------------------------------------------------------------------------
+# Расписание клубов — бизнес-логика, хранится в коде
+# chat_id задаётся в .env (GOLDFISH_CHAT_ID / EDINOROG_CHAT_ID)
+# ---------------------------------------------------------------------------
+
+def get_clubs() -> list[ClubConfig]:
+    """Возвращает список активных клубов с заполненными chat_id."""
+    all_clubs = [
+        ClubConfig(name="Goldfish",  weekday="thursday", chat_id=settings.GOLDFISH_CHAT_ID or 0,  game_time="19:30"),
+        ClubConfig(name="Edinorog",  weekday="monday",   chat_id=settings.EDINOROG_CHAT_ID or 0,  game_time="19:30"),
+    ]
+    return [c for c in all_clubs if c.chat_id]
+
+
+# ---------------------------------------------------------------------------
+# Создание турнира для клуба
+# ---------------------------------------------------------------------------
+
+async def _create_club_tournament(bot, club: ClubConfig) -> None:
+    """Создаёт турнир для клуба, если сегодня нужный день."""
+    tz = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
+    now = datetime.now(tz)
+    target_weekday = DAYS.get(club.weekday.lower())
+
+    if target_weekday is None:
+        logger.error(f"Unknown weekday '{club.weekday}' for club '{club.name}'")
+        return
+
+    logger.info(
+        f"Club job fired for '{club.name}': now={now.strftime('%A %H:%M')} "
+        f"(weekday={now.weekday()}), target={target_weekday}"
+    )
+
+    if now.weekday() != target_weekday:
+        logger.info("Not the right weekday, skipping.")
+        return
+
+    date_str = now.strftime("%Y-%m-%d")
+    title = f"{club.name} Pauper {date_str}"
+    slug = f"{date_str}-{club.name.lower()}-pauper"
+
+    db = SessionLocal()
+    try:
+        svc = TournamentService(db)
+        try:
+            active = svc.get_active_tournament_for_chat(club.chat_id)
+            if active:
+                svc.close_tournament(active.id)
+                logger.info(f"Closed previous tournament #{active.id} for club '{club.name}'")
+
+            new_t = svc.create_tournament(TournamentCreate(
+                title=title,
+                chat_id=club.chat_id,
+                slug=slug,
+                club=club.name,
+            ))
+            logger.info(f"Created tournament #{new_t.id} '{title}' for club '{club.name}'")
+
+            await bot.send_message(
+                chat_id=club.chat_id,
+                text=(
+                    f"🏆 {club.name} Pauper — сегодня в {club.game_time}\n"
+                    f"Регистрация открыта! Используйте /tournaments для записи."
+                ),
+            )
+            logger.info(f"Announcement sent to chat {club.chat_id}")
+        except Exception as e:
+            logger.error(f"Scheduler error for club '{club.name}': {e}", exc_info=True)
+    finally:
+        db.close()
+
+
+def _make_club_job(club: ClubConfig):
+    async def job(context: ContextTypes.DEFAULT_TYPE) -> None:
+        await _create_club_tournament(context.bot, club)
+    job.__name__ = f"club_tournament_job[{club.name}]"
+    return job
+
+
+# ---------------------------------------------------------------------------
+# Setup
+# ---------------------------------------------------------------------------
+
+def setup_scheduler(app: Application) -> None:
+    """Регистрирует ежедневные джобы для каждого клуба."""
+    tz = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
+    create_time = datetime.strptime(settings.TOURNAMENT_CREATE_TIME, "%H:%M").time()
+    aware_create_time = create_time.replace(tzinfo=tz)
+
+    clubs = get_clubs()
+    if not clubs:
+        logger.warning(
+            "No clubs configured — set GOLDFISH_CHAT_ID and/or EDINOROG_CHAT_ID in .env"
+        )
+
+    for club in clubs:
+        app.job_queue.run_daily(_make_club_job(club), time=aware_create_time)
+        logger.info(
+            f"Scheduler: {club.name} every {club.weekday} at {settings.TOURNAMENT_CREATE_TIME} "
+            f"({settings.TOURNAMENT_TIMEZONE}), game at {club.game_time}, chat={club.chat_id}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Legacy helpers — используются в тестах планировщика
+# ---------------------------------------------------------------------------
 
 def parse_schedule(schedule_str: str) -> tuple[int, datetime.time]:
     """Парсит строку "friday 19:00" в (weekday_int, time)."""
     parts = schedule_str.lower().split()
     if len(parts) != 2:
-        raise ValueError(f"Invalid TOURNAMENT_SCHEDULE format: '{schedule_str}'. Expected 'weekday HH:MM'")
+        raise ValueError(f"Invalid schedule format: '{schedule_str}'. Expected 'weekday HH:MM'")
     day_str, time_str = parts
     if day_str not in DAYS:
         raise ValueError(f"Unknown weekday: '{day_str}'")
-    weekday = DAYS[day_str]
-    t = datetime.strptime(time_str, "%H:%M").time()
-    return weekday, t
+    return DAYS[day_str], datetime.strptime(time_str, "%H:%M").time()
 
 
 async def _create_tournaments_for_schedule(bot, schedule_entry: str) -> None:
-    """Создаёт турниры для одной записи расписания, если сегодня нужный день."""
+    """Legacy: создаёт турниры по расписанию для списка chat_ids (используется в тестах)."""
     tz = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
     now = datetime.now(tz)
     target_weekday, _ = parse_schedule(schedule_entry)
 
     logger.info(
-        f"Job fired for '{schedule_entry}': now={now.strftime('%A %H:%M')} "
+        f"Legacy job fired for '{schedule_entry}': now={now.strftime('%A %H:%M')} "
         f"(weekday={now.weekday()}), target_weekday={target_weekday}"
     )
 
@@ -48,10 +152,8 @@ async def _create_tournaments_for_schedule(bot, schedule_entry: str) -> None:
         return
 
     chat_ids = settings.chat_ids
-    logger.info(f"Target chat_ids: {chat_ids}")
-
     if not chat_ids:
-        logger.warning("TOURNAMENT_CHAT_IDS is empty — no tournaments will be created")
+        logger.warning("No chat_ids configured — skipping")
         return
 
     date_str = now.strftime("%Y-%m-%d")
@@ -63,26 +165,14 @@ async def _create_tournaments_for_schedule(bot, schedule_entry: str) -> None:
         svc = TournamentService(db)
         for chat_id in chat_ids:
             try:
-                logger.info(f"Processing chat {chat_id}...")
                 active = svc.get_active_tournament_for_chat(chat_id)
                 if active:
                     svc.close_tournament(active.id)
-                    logger.info(f"Closed previous tournament #{active.id} for chat {chat_id}")
-
-                new_t = svc.create_tournament(TournamentCreate(
-                    title=title,
-                    chat_id=chat_id,
-                    slug=slug,
-                ))
-                logger.info(f"Created tournament #{new_t.id} '{title}' for chat {chat_id}")
-
-                await bot.send_message(
-                    chat_id=chat_id,
-                    text=f"🏆 Новый турнир: {title}\nРегистрация открыта! Используйте /tournaments для записи.",
-                )
-                logger.info(f"Announcement sent to chat {chat_id}")
+                new_t = svc.create_tournament(TournamentCreate(title=title, chat_id=chat_id, slug=slug))
+                logger.info(f"Created tournament #{new_t.id} for chat {chat_id}")
+                await bot.send_message(chat_id=chat_id, text=f"🏆 Новый турнир: {title}\nРегистрация открыта! /tournaments")
             except Exception as e:
-                logger.error(f"Scheduler error for chat {chat_id}: {e}", exc_info=True)
+                logger.error(f"Error for chat {chat_id}: {e}", exc_info=True)
     finally:
         db.close()
 
@@ -92,17 +182,3 @@ def _make_job(schedule_entry: str):
         await _create_tournaments_for_schedule(context.bot, schedule_entry)
     job.__name__ = f"scheduled_tournament_job[{schedule_entry}]"
     return job
-
-
-def setup_scheduler(app: Application) -> None:
-    """Регистрирует джобы по расписанию из конфига (один джоб на каждую запись)."""
-    tz = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
-
-    for schedule_entry in settings.schedule_list:
-        _, scheduled_time = parse_schedule(schedule_entry)
-        aware_time = scheduled_time.replace(tzinfo=tz)
-        app.job_queue.run_daily(_make_job(schedule_entry), time=aware_time)
-        logger.info(
-            f"Scheduler set up: tournaments created every {schedule_entry} "
-            f"({settings.TOURNAMENT_TIMEZONE}) for chats: {settings.chat_ids}"
-        )

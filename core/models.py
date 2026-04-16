@@ -69,6 +69,7 @@ class Tournament(Base):
     slug = Column(String(64), nullable=True, index=True)   # например "2026-01-31-pauper"
 
     status = Column(Enum(TournamentStatus), default=TournamentStatus.REGISTRATION, nullable=False)
+    club = Column(String(64), nullable=True, index=True)   # "Goldfish" / "Edinorog" / None
 
     registration_open_at = Column(DateTime, nullable=True)
     registration_close_at = Column(DateTime, nullable=True)

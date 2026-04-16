@@ -211,35 +211,57 @@ class TestMakeJob:
 
 class TestSetupScheduler:
 
-    def test_registers_one_job_per_schedule_entry(self):
-        """setup_scheduler should call run_daily once for each entry in schedule_list."""
-        app = MagicMock()
-        app.job_queue = MagicMock()
-
+    def _make_mock_settings(self, clubs=None):
+        from core.config import ClubConfig
         mock_settings = MagicMock()
         mock_settings.TOURNAMENT_TIMEZONE = TZ
-        mock_settings.schedule_list = ["friday 19:00", "saturday 12:00"]
-        mock_settings.chat_ids = [CHAT_ID]
+        mock_settings.TOURNAMENT_CREATE_TIME = "10:00"
+        mock_settings.clubs = clubs if clubs is not None else []
+        mock_settings.chat_ids = [c.chat_id for c in (clubs or [])]
+        return mock_settings
 
-        with patch("bot.scheduler.settings", mock_settings):
+    def test_registers_one_job_per_club(self):
+        """setup_scheduler registers run_daily once per club."""
+        from core.config import ClubConfig
+        app = MagicMock()
+        app.job_queue = MagicMock()
+        clubs = [
+            ClubConfig(name="Goldfish", weekday="thursday", chat_id=101, game_time="19:30"),
+            ClubConfig(name="Edinorog", weekday="monday",   chat_id=102, game_time="19:30"),
+        ]
+        mock_settings = self._make_mock_settings(clubs)
+        with patch("bot.scheduler.settings", mock_settings), \
+             patch("bot.scheduler.get_clubs", return_value=clubs):
             setup_scheduler(app)
 
         assert app.job_queue.run_daily.call_count == 2
 
-    def test_registers_correct_time(self):
-        """run_daily should be called with the time= kwarg parsed from the schedule entry."""
+    def test_registers_correct_create_time(self):
+        """run_daily is called with TOURNAMENT_CREATE_TIME, not game_time."""
+        from core.config import ClubConfig
         app = MagicMock()
         app.job_queue = MagicMock()
+        clubs = [ClubConfig(name="Goldfish", weekday="thursday", chat_id=CHAT_ID, game_time="19:30")]
+        mock_settings = self._make_mock_settings(clubs)
+        mock_settings.TOURNAMENT_CREATE_TIME = "10:00"
 
-        mock_settings = MagicMock()
-        mock_settings.TOURNAMENT_TIMEZONE = TZ
-        mock_settings.schedule_list = ["friday 19:00"]
-        mock_settings.chat_ids = [CHAT_ID]
-
-        with patch("bot.scheduler.settings", mock_settings):
+        with patch("bot.scheduler.settings", mock_settings), \
+             patch("bot.scheduler.get_clubs", return_value=clubs):
             setup_scheduler(app)
 
         call_kwargs = app.job_queue.run_daily.call_args.kwargs
         scheduled_time = call_kwargs["time"]
-        assert scheduled_time.hour == 19
+        assert scheduled_time.hour == 10
         assert scheduled_time.minute == 0
+
+    def test_no_clubs_registers_no_jobs(self):
+        """When no clubs are configured, no jobs are registered."""
+        app = MagicMock()
+        app.job_queue = MagicMock()
+        mock_settings = self._make_mock_settings([])
+
+        with patch("bot.scheduler.settings", mock_settings), \
+             patch("bot.scheduler.get_clubs", return_value=[]):
+            setup_scheduler(app)
+
+        app.job_queue.run_daily.assert_not_called()

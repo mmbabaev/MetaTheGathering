@@ -108,6 +108,7 @@ class TournamentService:
             title=data.title,
             chat_id=data.chat_id,
             slug=data.slug,
+            club=data.club,
             status=models.TournamentStatus.REGISTRATION,
             created_at=models.utc_now(),
         )

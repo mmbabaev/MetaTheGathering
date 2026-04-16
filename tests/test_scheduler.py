@@ -30,7 +30,7 @@ class TestParseSchedule:
             parse_schedule("funday 19:00")
 
     def test_invalid_format_raises(self):
-        with pytest.raises(ValueError, match="Invalid TOURNAMENT_SCHEDULE format"):
+        with pytest.raises(ValueError, match="Invalid schedule format"):
             parse_schedule("friday")
 
     def test_invalid_time_raises(self):
