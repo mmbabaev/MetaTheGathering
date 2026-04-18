@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     DEBUG: bool = _app_cfg.DEBUG
     TOURNAMENT_TIMEZONE: str = _app_cfg.TOURNAMENT_TIMEZONE
     TOURNAMENT_CREATE_TIME: str = _app_cfg.TOURNAMENT_CREATE_TIME
+    VERSION: str = _app_cfg.VERSION
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
