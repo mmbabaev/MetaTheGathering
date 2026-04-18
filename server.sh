@@ -54,26 +54,38 @@ status() {
     tail -20 "$LOG_FILE" 2>/dev/null || echo "(no log file yet)"
 }
 
+# ── Remote (server via SSH) ───────────────────────────────────────────────────
+SSH_KEY="${SSH_KEY:-~/.ssh/ssh-key-kara}"
+SERVER_USER="${SERVER_USER:-mbabaev}"
+SERVER_IP="${SERVER_IP:-158.160.9.28}"
+
+remote_cmd() {
+    local env="${2:-prod}"
+    local service="meta-the-gathering"
+    [ "$env" = "debug" ] && service="meta-the-gathering-debug"
+    ssh -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no "${SERVER_USER}@${SERVER_IP}" "$1 $service"
+}
+
 case "${1:-restart}" in
-    start)
-        start
+    start)   start ;;
+    stop)    stop ;;
+    restart) stop; sleep 1; start ;;
+    status)  status ;;
+    logs)    tail -f "$LOG_FILE" ;;
+
+    remote-restart) remote_cmd "sudo systemctl restart" "${2:-prod}" ;;
+    remote-stop)    remote_cmd "sudo systemctl stop"    "${2:-prod}" ;;
+    remote-status)  remote_cmd "sudo systemctl status --no-pager -l" "${2:-prod}" ;;
+    remote-logs)
+        env="${2:-prod}"
+        service="meta-the-gathering"; [ "$env" = "debug" ] && service="meta-the-gathering-debug"
+        ssh -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no "${SERVER_USER}@${SERVER_IP}" \
+            "sudo journalctl -u $service -f"
         ;;
-    stop)
-        stop
-        ;;
-    restart)
-        stop
-        sleep 1
-        start
-        ;;
-    status)
-        status
-        ;;
-    logs)
-        tail -f "$LOG_FILE"
-        ;;
+
     *)
         echo "Usage: $0 {start|stop|restart|status|logs}"
+        echo "       $0 {remote-restart|remote-stop|remote-status|remote-logs} [prod|debug]"
         exit 1
         ;;
 esac
