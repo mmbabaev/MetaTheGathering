@@ -25,10 +25,15 @@ DAYS = {
 
 def get_clubs() -> list[ClubConfig]:
     """Возвращает список клубов. chat_id=0 означает «создать турнир, но не писать в чат»."""
-    return [
+    clubs = [
         ClubConfig(name="Goldfish",  weekday="thursday", chat_id=settings.GOLDFISH_CHAT_ID or 0,  game_time="19:30"),
         ClubConfig(name="Edinorog",  weekday="monday",   chat_id=settings.EDINOROG_CHAT_ID or 0,  game_time="19:30"),
     ]
+    if settings.DEBUG:
+        clubs.append(
+            ClubConfig(name="Debug", weekday="saturday", chat_id=settings.GOLDFISH_CHAT_ID or 0, game_time="14:10")
+        )
+    return clubs
 
 
 # ---------------------------------------------------------------------------
