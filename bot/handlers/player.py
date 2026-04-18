@@ -156,6 +156,7 @@ class PlayerHandler:
         first_name = parts[0]
         last_name = parts[1] if len(parts) > 1 else None
         self.user_svc.update_name(tg_id, first_name, last_name)
+        self.user_svc.merge_placeholder_by_name(tg_id, first_name, last_name)
         return self._archetype_keyboard_for_player(tournament_id, tg_id)
 
     def handle_archetype(

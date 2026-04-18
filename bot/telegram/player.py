@@ -5,6 +5,7 @@ from telegram.ext import ContextTypes
 
 from core.database import SessionLocal
 from core.event_log import event_logger
+from core.impersonate import ImpersonationState
 from services.tournament import TournamentService
 from services.user import UserService
 from bot.handlers.player import PlayerHandler
@@ -30,6 +31,10 @@ USER_DATA_PENDING_BULK_ADD = "pending_bulk_add_tournament_id"
 USER_DATA_PENDING_ADMIN_CUSTOM_ARCH = "pending_admin_custom_arch_participant_id"
 
 
+def _impersonation(context: ContextTypes.DEFAULT_TYPE) -> ImpersonationState:
+    return context.bot_data["impersonation"]
+
+
 def _player_handler(db) -> PlayerHandler:
     return PlayerHandler(TournamentService(db), UserService(db))
 
@@ -46,7 +51,7 @@ async def cmd_tournaments(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     user = update.effective_user
     db = SessionLocal()
     try:
-        result = _player_handler(db).handle_tournaments(tg_id=user.id if user else None)
+        result = _player_handler(db).handle_tournaments(tg_id=_impersonation(context).get_acting_tg_id(user.id) if user else None)
         await update.effective_message.reply_text(result.text, reply_markup=result.keyboard)
     finally:
         db.close()
@@ -65,7 +70,8 @@ async def callback_tournament_select(update: Update, context: ContextTypes.DEFAU
         return
     db = SessionLocal()
     try:
-        result = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id if user else None)
+        imp = _impersonation(context)
+        result = _player_handler(db).handle_tournament_select(tournament_id, tg_id=imp.get_acting_tg_id(user.id) if user else None)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
@@ -88,7 +94,8 @@ async def callback_register(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
     db = SessionLocal()
     try:
-        result = _player_handler(db).handle_register(tournament_id, tg_id=user.id if user else None)
+        imp = _impersonation(context)
+        result = _player_handler(db).handle_register(tournament_id, tg_id=imp.get_acting_tg_id(user.id) if user else None)
         if result.needs_name:
             if context.user_data is None:
                 context.user_data = {}
@@ -113,8 +120,9 @@ async def callback_archetype(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
     db = SessionLocal()
     try:
+        acting_id = _impersonation(context).get_acting_tg_id(user.id)
         result = _player_handler(db).handle_archetype(
-            user.id, user.username, user.first_name, user.last_name,
+            acting_id, None, None, None,
             tournament_id, archetype_id,
         )
         if result.is_alert:
@@ -141,7 +149,7 @@ async def callback_archetype_more(update: Update, context: ContextTypes.DEFAULT_
         return
     db = SessionLocal()
     try:
-        result = _player_handler(db).handle_archetype_more(tournament_id, tg_id=user.id)
+        result = _player_handler(db).handle_archetype_more(tournament_id, tg_id=_impersonation(context).get_acting_tg_id(user.id))
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
     finally:
@@ -205,7 +213,7 @@ async def callback_leave_tournament(update: Update, context: ContextTypes.DEFAUL
         return
     db = SessionLocal()
     try:
-        result = _player_handler(db).handle_leave_tournament(user.id, tournament_id)
+        result = _player_handler(db).handle_leave_tournament(_impersonation(context).get_acting_tg_id(user.id), tournament_id)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
@@ -228,7 +236,7 @@ async def callback_leave_confirm(update: Update, context: ContextTypes.DEFAULT_T
         return
     db = SessionLocal()
     try:
-        result = _player_handler(db).handle_leave_confirm(user.id, tournament_id)
+        result = _player_handler(db).handle_leave_confirm(_impersonation(context).get_acting_tg_id(user.id), tournament_id)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
@@ -252,7 +260,7 @@ async def callback_leave_cancel(update: Update, context: ContextTypes.DEFAULT_TY
         return
     db = SessionLocal()
     try:
-        result = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id)
+        result = _player_handler(db).handle_tournament_select(tournament_id, tg_id=_impersonation(context).get_acting_tg_id(user.id))
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
@@ -283,7 +291,7 @@ async def message_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         db = SessionLocal()
         try:
             result = _player_handler(db).handle_save_name_then_register(
-                user.id, user.username, text, tournament_id,
+                _impersonation(context).get_acting_tg_id(user.id), user.username, text, tournament_id,
             )
             await msg.reply_text(result.text, reply_markup=result.keyboard)
         finally:
@@ -345,7 +353,7 @@ async def message_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
     db = SessionLocal()
     try:
         result = _player_handler(db).handle_custom_archetype_text(
-            user.id, user.username, user.first_name, user.last_name,
+            _impersonation(context).get_acting_tg_id(user.id), None, None, None,
             tournament_id, text,
         )
         await msg.reply_text(result.text)

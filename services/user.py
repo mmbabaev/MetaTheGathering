@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update as sa_update, delete as sa_delete
 from sqlalchemy.orm import Session
 
 from core import models
@@ -49,6 +49,20 @@ class UserService:
         self.db.commit()
         self.db.refresh(user)
         return user
+
+    def get_by_username(self, username: str) -> Optional[models.User]:
+        """Найти пользователя по Telegram username (без @, без учёта регистра)."""
+        stmt = select(models.User).where(
+            models.User.username.ilike(username)
+        )
+        return self.db.execute(stmt).scalar_one_or_none()
+
+    def find_by_name(self, query: str) -> Optional[models.User]:
+        """Найти пользователя по имени/фамилии (через _find_user_flexible)."""
+        parts = query.strip().split(None, 1)
+        first = parts[0]
+        last = parts[1] if len(parts) > 1 else None
+        return self._find_user_flexible(first, last)
 
     def _find_user_flexible(
         self, first_name: str, last_name: Optional[str]
@@ -99,6 +113,23 @@ class UserService:
         real = [u for u in candidates if u.tg_id > 0]
         return real[0] if real else candidates[0]
 
+    def get_or_create_placeholder(
+        self, *, username: str
+    ) -> tuple["models.User", bool]:
+        """Найти пользователя по username или создать placeholder с отрицательным tg_id."""
+        user = self.get_by_username(username)
+        if user:
+            return user, False
+
+        min_val = self.db.execute(select(func.min(models.User.tg_id))).scalar()
+        placeholder_tg_id = (min_val - 1) if (min_val is not None and min_val < 0) else -1
+
+        user = models.User(tg_id=placeholder_tg_id, username=username)
+        self.db.add(user)
+        self.db.commit()
+        self.db.refresh(user)
+        return user, True
+
     def get_or_create_by_name(
         self,
         first_name: str,
@@ -130,6 +161,55 @@ class UserService:
         self.db.add(user)
         self.db.flush()
         return user, True
+
+    def merge_placeholder_by_name(
+        self, real_tg_id: int, first_name: str, last_name: Optional[str]
+    ) -> bool:
+        """Привязывает реального пользователя к существующему placeholder-юзеру по имени.
+
+        Когда реальный tg-пользователь впервые вводит своё имя, ищем placeholder
+        (tg_id < 0) с таким же именем. Если находим — переносим ему UserDeckHistory
+        и Participant-записи, placeholder удаляем.
+        Возвращает True если слияние произошло.
+        """
+        real_user = self.get_by_tg_id(real_tg_id)
+        if not real_user:
+            return False
+
+        placeholder = self._find_user_flexible(first_name, last_name)
+        if not placeholder or placeholder.tg_id >= 0 or placeholder.id == real_user.id:
+            return False
+
+        # Переносим историю колод
+        self.db.execute(
+            sa_update(models.UserDeckHistory)
+            .where(models.UserDeckHistory.user_id == placeholder.id)
+            .values(user_id=real_user.id)
+        )
+
+        # Переносим участие в турнирах, пропуская конфликты (тот же турнир)
+        already_in = {
+            row[0] for row in self.db.execute(
+                select(models.Participant.tournament_id)
+                .where(models.Participant.user_id == real_user.id)
+            ).all()
+        }
+        if already_in:
+            self.db.execute(
+                sa_delete(models.Participant).where(
+                    models.Participant.user_id == placeholder.id,
+                    models.Participant.tournament_id.in_(already_in),
+                )
+            )
+        self.db.execute(
+            sa_update(models.Participant)
+            .where(models.Participant.user_id == placeholder.id)
+            .values(user_id=real_user.id)
+        )
+
+        self.db.delete(placeholder)
+        self.db.commit()
+        return True
 
     def update_name(
         self,

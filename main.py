@@ -14,6 +14,7 @@ from telegram.ext import (
 
 from core.config import settings
 from core.database import SessionLocal
+from core.impersonate import ImpersonationState
 from core.schemas import TournamentCreate
 from services.tournament import TournamentService
 from bot.telegram import common, player, admin
@@ -78,6 +79,7 @@ def _debug_create_tournament() -> None:
 
 def main() -> None:
     app = Application.builder().token(settings.TELEGRAM_BOT_TOKEN).post_init(_set_commands).build()
+    app.bot_data["impersonation"] = ImpersonationState()
 
     app.add_handler(CommandHandler("start", common.cmd_start))
     app.add_handler(CommandHandler("help", common.cmd_help))
@@ -91,6 +93,8 @@ def main() -> None:
     app.add_handler(CommandHandler("close_tournament", admin.cmd_close_tournament))
     app.add_handler(CommandHandler("create_tournament", admin.cmd_create_tournament))
     app.add_handler(CommandHandler("delete_tournament", admin.cmd_delete_tournament))
+    app.add_handler(CommandHandler("impersonate", admin.cmd_impersonate))
+    app.add_handler(CommandHandler("stop_impersonate", admin.cmd_stop_impersonate))
 
     app.add_handler(
         CallbackQueryHandler(player.callback_tournament_select, pattern=f"^{CB_TOURNAMENT}:")

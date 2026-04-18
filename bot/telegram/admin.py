@@ -8,6 +8,7 @@ from telegram.ext import ContextTypes
 from core.config import settings
 from core.database import SessionLocal
 from core.event_log import event_logger
+from core.impersonate import ImpersonationState
 from services.tournament import TournamentService
 from services.user import UserService
 from bot.handlers.admin import AdminHandler, parse_add_player_command, parse_bulk_player_line
@@ -18,6 +19,10 @@ from bot.keyboards import CB_ADMIN_ARCH_MORE, CB_ADMIN_SHOW_FILLED
 
 def _admin_handler(db) -> AdminHandler:
     return AdminHandler(TournamentService(db), UserService(db))
+
+
+def _impersonation(context: ContextTypes.DEFAULT_TYPE) -> ImpersonationState:
+    return context.bot_data["impersonation"]
 
 
 def _log(event: str, user, **params) -> None:
@@ -437,5 +442,36 @@ async def callback_delete_tournament_cancel(
         result = PlayerHandler(svc, user_svc).handle_tournament_select(tournament_id, tg_id=user.id)
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
+    finally:
+        db.close()
+
+
+async def cmd_impersonate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    msg = update.effective_message
+    user = update.effective_user
+    if not msg or not user:
+        return
+    args = (context.args or [])
+    if not args:
+        await msg.reply_text("Использование: /impersonate @username или /impersonate Имя Фамилия")
+        return
+    target_query = " ".join(args)
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_impersonate(user.id, target_query, _impersonation(context))
+        await msg.reply_text(result.text)
+    finally:
+        db.close()
+
+
+async def cmd_stop_impersonate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    msg = update.effective_message
+    user = update.effective_user
+    if not msg or not user:
+        return
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_stop_impersonate(user.id, _impersonation(context))
+        await msg.reply_text(result.text)
     finally:
         db.close()
