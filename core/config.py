@@ -11,9 +11,9 @@ load_dotenv()
 
 _bot_env = os.getenv("BOT_ENV", "prod")
 if _bot_env == "debug":
-    from config import debug as _app_cfg
+    from config.debug import app_config as _app_cfg
 else:
-    from config import prod as _app_cfg
+    from config.prod import app_config as _app_cfg
 
 
 @dataclass
@@ -39,10 +39,10 @@ class Settings(BaseSettings):
     MONIUM_API_KEY: str = ""
 
     # Несекретные настройки — берутся из config/prod.py или config/debug.py
-    DEBUG: bool = _app_cfg.DEBUG
-    TOURNAMENT_TIMEZONE: str = _app_cfg.TOURNAMENT_TIMEZONE
-    TOURNAMENT_CREATE_TIME: str = _app_cfg.TOURNAMENT_CREATE_TIME
-    VERSION: str = _app_cfg.VERSION
+    DEBUG: bool = _app_cfg.debug
+    TOURNAMENT_TIMEZONE: str = _app_cfg.tournament_timezone
+    TOURNAMENT_CREATE_TIME: str = _app_cfg.tournament_create_time
+    VERSION: str = _app_cfg.version
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

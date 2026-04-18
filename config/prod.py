@@ -1,4 +1,7 @@
-DEBUG = False
-TOURNAMENT_TIMEZONE = "Europe/Moscow"
-TOURNAMENT_CREATE_TIME = "19:20"
-VERSION = "0.1.1"
+from config import AppConfig
+
+app_config = AppConfig(
+    debug=False,
+    tournament_timezone="Europe/Moscow",
+    tournament_create_time="19:20",
+)
