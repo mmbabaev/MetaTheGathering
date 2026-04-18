@@ -1,4 +1,6 @@
 .env
+bot/.env
+bot/.env.debug
 .venv/
 __pycache__/
 *.pyc

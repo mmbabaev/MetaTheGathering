@@ -1,0 +1,32 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "localhost:4317"
+      http:
+        endpoint: "localhost:4318"
+
+processors:
+  batch:
+
+exporters:
+  otlp/monium:
+    compression: zstd
+    endpoint: ingest.monium.yandex.cloud:443
+    headers:
+      Authorization: "Api-Key ${env:MONIUM_API_KEY}"
+      x-monium-project: "${env:MONIUM_PROJECT}"
+
+service:
+  pipelines:
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/monium]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/monium]
+  telemetry:
+    logs:
+      level: info

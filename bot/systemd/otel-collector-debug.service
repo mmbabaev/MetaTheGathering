@@ -1,0 +1,17 @@
+[Unit]
+Description=OpenTelemetry Collector (debug)
+After=network.target
+
+[Service]
+Type=simple
+User=mbabaev
+WorkingDirectory=/home/mbabaev/MetaTheGathering/meta_the_gatheringDebug
+EnvironmentFile=/home/mbabaev/MetaTheGathering/meta_the_gatheringDebug/bot/.env.debug
+ExecStart=/usr/local/bin/otelcol --config /home/mbabaev/MetaTheGathering/meta_the_gatheringDebug/otel-collector.yaml
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
