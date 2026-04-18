@@ -33,7 +33,7 @@ class SettingsHandler:
         real_admin = self._is_real_admin(tg_id)
 
         mode_note = "\n\n🎭 Режим: притворяешься пользователем" if pretending else ""
-        text = f"{SETTINGS_MENU}\n\nВаше имя: {current}{mode_note}"
+        text = f"{SETTINGS_MENU}\n\nВаше имя: {current}{mode_note}\n\nВерсия: {app_settings.VERSION}"
         return HandlerResult(
             text,
             keyboard=settings_keyboard(is_admin=real_admin, is_pretending=pretending),
