@@ -4,8 +4,6 @@ import re
 from datetime import datetime
 
 from core.config import settings
-from core.impersonate import ImpersonationState
-from core.pretend import is_pretending
 from core.schemas import TournamentCreate
 from services.utils import get_tournament
 from services.tournament import TournamentService
@@ -115,9 +113,6 @@ class AdminHandler:
         self.user_svc = user_svc
 
     def _is_admin(self, tg_id: int) -> bool:
-
-        if is_pretending(tg_id):
-            return False
         if tg_id in settings.admin_ids:
             return True
         user = self.user_svc.get_by_tg_id(tg_id)
@@ -521,42 +516,3 @@ class AdminHandler:
         self.svc.delete_tournament(tournament_id)
         return HandlerResult(f"🗑 Турнир «{title}» удалён.")
 
-    def handle_impersonate(
-        self, admin_tg_id: int, target_query: str, state: ImpersonationState
-    ) -> HandlerResult:
-        if not self._is_admin(admin_tg_id):
-            return HandlerResult(NOT_ADMIN)
-        is_username = target_query.startswith("@") or " " not in target_query.strip()
-        raw = target_query.lstrip("@").strip()
-
-        target = self.user_svc.get_by_username(raw)
-        if target is None:
-            target = self.user_svc.find_by_name(raw)
-
-        created = False
-        if target is None:
-            if is_username:
-                target, created = self.user_svc.get_or_create_placeholder(username=raw)
-            else:
-                parts = raw.split(None, 1)
-                target, created = self.user_svc.get_or_create_by_name(
-                    parts[0], parts[1] if len(parts) > 1 else None
-                )
-
-        state.set(admin_tg_id, target.tg_id)
-        name_parts = [p for p in [target.first_name, target.last_name] if p]
-        display = " ".join(name_parts) if name_parts else (target.username or f"id={target.tg_id}")
-        note = " — создан новый placeholder" if created else ""
-        return HandlerResult(
-            f"👤 Действуете от имени {display} (tg_id={target.tg_id}){note}.\n/stop_impersonate — выйти."
-        )
-
-    def handle_stop_impersonate(
-        self, admin_tg_id: int, state: ImpersonationState
-    ) -> HandlerResult:
-        if not self._is_admin(admin_tg_id):
-            return HandlerResult(NOT_ADMIN)
-        if not state.is_impersonating(admin_tg_id):
-            return HandlerResult("Вы не в режиме impersonate.")
-        state.clear(admin_tg_id)
-        return HandlerResult("✅ Режим impersonate отключён.")

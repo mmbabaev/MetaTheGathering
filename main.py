@@ -14,7 +14,6 @@ from telegram.ext import (
 
 from core.config import settings
 from core.database import SessionLocal
-from core.impersonate import ImpersonationState
 from core.schemas import TournamentCreate
 from services.tournament import TournamentService
 from bot.telegram import common, player, admin
@@ -22,7 +21,7 @@ from bot.telegram import settings as settings_handler
 from bot.keyboards import (
     CB_TOURNAMENT, CB_REGISTER, CB_ARCHETYPE, CB_CUSTOM_ARCHETYPE,
     CB_ARCHETYPE_MORE,
-    CB_SETTINGS_NAME, CB_SETTINGS_PRETEND, CB_TSTATUS, CB_LEAVE, CB_LEAVE_CONFIRM, CB_LEAVE_CANCEL,
+    CB_SETTINGS_NAME, CB_TSTATUS, CB_LEAVE, CB_LEAVE_CONFIRM, CB_LEAVE_CANCEL,
     CB_BULK_ADD, CB_ADMIN_PICK_ARCH, CB_ADMIN_SET_ARCH, CB_ADMIN_CUSTOM_ARCH,
     CB_ADMIN_ARCH_MORE, CB_EXPORT_EXCEL,
     CB_DELETE_TOURNAMENT, CB_DELETE_TOURNAMENT_CONFIRM, CB_DELETE_TOURNAMENT_CANCEL,
@@ -79,7 +78,6 @@ def _debug_create_tournament() -> None:
 
 def main() -> None:
     app = Application.builder().token(settings.TELEGRAM_BOT_TOKEN).post_init(_set_commands).build()
-    app.bot_data["impersonation"] = ImpersonationState()
 
     app.add_handler(CommandHandler("start", common.cmd_start))
     app.add_handler(CommandHandler("help", common.cmd_help))
@@ -93,8 +91,6 @@ def main() -> None:
     app.add_handler(CommandHandler("close_tournament", admin.cmd_close_tournament))
     app.add_handler(CommandHandler("create_tournament", admin.cmd_create_tournament))
     app.add_handler(CommandHandler("delete_tournament", admin.cmd_delete_tournament))
-    app.add_handler(CommandHandler("impersonate", admin.cmd_impersonate))
-    app.add_handler(CommandHandler("stop_impersonate", admin.cmd_stop_impersonate))
 
     app.add_handler(
         CallbackQueryHandler(player.callback_tournament_select, pattern=f"^{CB_TOURNAMENT}:")
@@ -125,9 +121,6 @@ def main() -> None:
     )
     app.add_handler(
         CallbackQueryHandler(settings_handler.callback_settings_name, pattern=f"^{CB_SETTINGS_NAME}$")
-    )
-    app.add_handler(
-        CallbackQueryHandler(settings_handler.callback_settings_pretend, pattern=f"^{CB_SETTINGS_PRETEND}$")
     )
     app.add_handler(
         CallbackQueryHandler(admin.callback_bulk_add_start, pattern=f"^{CB_BULK_ADD}:")
