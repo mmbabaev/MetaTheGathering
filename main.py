@@ -25,6 +25,7 @@ from bot.keyboards import (
     CB_BULK_ADD, CB_ADMIN_PICK_ARCH, CB_ADMIN_SET_ARCH, CB_ADMIN_CUSTOM_ARCH,
     CB_ADMIN_ARCH_MORE, CB_EXPORT_EXCEL,
     CB_DELETE_TOURNAMENT, CB_DELETE_TOURNAMENT_CONFIRM, CB_DELETE_TOURNAMENT_CANCEL,
+    CB_ADMIN_SHOW_FILLED,
 )
 from bot.scheduler import setup_scheduler
 
@@ -150,6 +151,9 @@ def main() -> None:
     )
     app.add_handler(
         CallbackQueryHandler(admin.callback_delete_tournament_cancel, pattern=f"^{CB_DELETE_TOURNAMENT_CANCEL}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(admin.callback_admin_show_filled, pattern=f"^{CB_ADMIN_SHOW_FILLED}:")
     )
 
     app.add_handler(

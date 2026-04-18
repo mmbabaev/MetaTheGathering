@@ -1,0 +1,297 @@
+python3 parse_members.py @paupermoscow
+Name                                     Username                  ID
+---------------------------------------------------------------------------
+Mikhail Babaev                           @mbabaev                  232778570
+Сергей Васильев                          (no username)             152258645
+Ivan Knyazev                             @baseposition             336067918
+Konstantin Nikonov                       @aethervial_t1            648523909
+Ринат                                    @wielder_of_mysteries     974873411
+Тимофей М                                @Akrwen                   1066718596
+Farid Gasanly                            @Dirafsan                 1028608927
+Dmitry Berezin                           @s1nl35s                  182685278
+Матвей Миценко                           @undemmm                  1468189426
+The Join Captcha Bot                     @join_captcha_bot         660783114
+Lev Malinnikov                           @Lev_m                    512914041
+Ne nado Tak                              @Nenadotaks               459539926
+Матвей                                   @vpivetvoyasilaimudrost   1341949182
+Marat                                    @enotiikk                 236025251
+Dmitry Ponomarev                         @traktorist_dez           325711476
+Roman Zuev                               @tigahposhka              768260703
+Daur Ladariya                            @daur_ladariya            252304843
+Дмитрий                                  @Kyker13                  533664061
+Камиль                                   @mcmikey101               2107799974
+Ярослав                                  @bawerus                  1494996915
+Кирилл Андреев                           @andrkirandr              1582566452
+Никита                                   @faeofwhishes             1041523781
+Денис Смирнов                            (no username)             779859298
+Юрий Пиривердиев                         (no username)             1601944958
+Артур Ожгибесов                          (no username)             1402404763
+Tony Kit                                 @tonykit91                1188551042
+Георгий                                  @georgiy153               1589391476
+Михаил Сарвира                           @reason2live              1076423606
+Mary                                     @pikachushkaa             668121448
+Александр                                @KovaIskl                 1100372434
+phoenix                                  @phoenix_sk2              5138672874
+Егор Лапин                               @egorlapin                581974841
+Егор Юрескул                             @Seadhna                  120502663
+Lunar                                    @MagictgLuNaR             6362017084
+Alexey Boronko                           @Badrus4                  219230391
+Aleksey Gorbachevskiy                    @AGorbachevskiy           298698269
+Nivnikoff                                @nivnikoff                437305911
+Andrew Wolf                              @a_wolf02                 50342417
+Anton                                    @dontgiveupskeleton       317775412
+Patrick Chekhlov                         @PatrickChekhlov          365214010
+Serj Albov                               @serjalbov                110564408
+Sergey Pedan                             @SergeyPedan              419213814
+DrG @                                    @DragoSaD                 436917214
+Влад                                     @vladnadel                310238612
+Dj Snitch                                @dj_snitch                174063073
+Евгений Карповский                       @mojitodfd                826016646
+Егор                                     @JoeTheHive               1851568165
+Mighty Lev                               @One_Goget                1750866080
+Vladimir Davydov                         @playfaster               202520174
+alexander praviliev                      @all4non                  302022735
+Sergey                                   @khripkovsergey           718801619
+Vladimir B                               @el_horobi                146942622
+Артем Т.                                 @IsNotHealthy             841954347
+Tony                                     @lack_of_talent43         6961252623
+Maksim Krivoshlyk                        @MaxMag49                 134201601
+meta_perc                                @m3t4phys1c4l_p3rc0l4t10n 397802321
+Вадим                                    @SpeedySna                982955582
+Lisa Duzhnikova                          @junlyeahs                813416559
+Eduard                                   @Edmundo16                352815833
+Илья Харин                               @ilyakharin               361311362
+хлоп хлоп                                @Hl0p_Hl0p                1048756194
+Oleg                                     @Arnakar                  405097899
+Валентин                                 @hatrediskey              997468039
+zengOo                                   @znggnz                   533723454
+TONSAVER                                 @TonSaver                 5164582096
+Тимур                                    @Byakbyak73               1014770493
+Игорь                                    @e_i_y_i_e                1391321357
+Аарне Пюльзе                             @OthalaBor                698954585
+Владимир Кременчугский                   @vkremenchugskiy          311896227
+Владимир Арановский                      @Varandru                 214351462
+Даниил Земской                           @Deneli                   405627125
+Дмитрий                                  @filindima                304142745
+Sergey                                   @chsa87                   796594892
+Dmitry Kolesnikov                        @darrick_wilson           981453394
+ilya kononov                             @LingWD                   149374136
+Denis Karpachev                          @karden3                  1875154699
+Сергей                                   @ccm787                   172054648
+Oleg                                     @olegtrntv                297050484
+Ivan Blinkov                             @DrLive7ey                560954190
+Grigorii Rybin                           @gregrybin                1180103338
+Andrey Safronov                          @Mersadi369               362329626
+ILIM                                     @IVANLimonka              1985796976
+Zorexiwnl                                @Zorexiwnl                1048272144
+.                                        @Gfyhha                   5352711867
+Наталья Храмова                          @khramovanatasha          437820317
+Vladislav                                @StarVlad03               729917119
+Ilya Larin                               @dlarian                  1838323989
+Micke                                    @clearbubble              402349559
+Андрей 💀                                 @unnamebeyond             1112609652
+Денис С                                  @X0maTG                   432560731
+Ilya Belozerov                           @levitation06             924059258
+Владимир Пичужкин                        @VladimirPichuzhkin       468988643
+Nikolay Glotov                           @Numenorez                159062402
+Лёша                                     (no username)             7309670387
+.                                        (no username)             7099805210
+Bagger                                   @Baggertiptop             1208083504
+Chieftain                                @Chieft27                 663698192
+Max                                      @MarkussRos               310877640
+Aidar Tagirov                            @atgirov                  645881465
+Антон Ильин                              (no username)             825922723
+<no name>                                (no username)             7186177666
+Droopy                                   @megajew228               1062707717
+Антотий                                  @Jinigoo                  669332545
+Вадим Рагулин                            @VadimRagulin             367993813
+<no name>                                (no username)             7927144149
+Fedor Radchenko                          @fedjkeee                 268892967
+Алексей Б.                               (no username)             1250779458
+Никита                                   @Dark12041999             874648576
+KQ 1                                     @KQNTB                    988881923
+Никита                                   @Ixidor_realitysculptor   488816137
+Artem Vlasov                             @Baneslayer55             739724487
+Сергей Лукьянов                          (no username)             201386817
+Andrey                                   @szdx1234                 391735300
+Dmitriy                                  @bulich_bulich            294098355
+Василий Плешаков                         @replekXT                 639598431
+<no name>                                (no username)             8564657288
+Игорь Курзаев                            @Buffy2005                768996151
+Oleg Denisov                             @DenisovOlegEvgenievich   1372433714
+Gwin                                     @Ellearin                 552736845
+Nikita Yermolenko                        @nikita_yer               435910043
+<no name>                                (no username)             8088318114
+Владимир Попов                           @magika40                 492648666
+AlexTr                                   @A1exTr                   971000667
+Varnery                                  @TranscendentalEtudes     1447079714
+Vigavonis                                @Vigavonis                921790043
+Roman Tonin                              (no username)             6762707926
+Данька                                   @Smehotron3000            111141802
+Fedor Tsvelenev                          @AsmoYo7                  2007407338
+sweeteklerixq                            @eqwuie                   5224405203
+Мика Поляков                             @MikkaPoliak              1319278383
+Dan                                      @Dan_Demidov7             364524187
+Илья Емельянов                           @iaemelianov              615049363
+Ger                                      @Griooooov                5184149288
+Farvater                                 @IWHBYD                   211483031
+Swawm                                    @Swawm                    109825216
+Макс                                     @maxmw01                  7440714022
+Дмитрий                                  @Timecras                 1138986774
+Даниил                                   @et1ms                    1432590100
+Yaroslav Sorokin                         @d0nt_panic               72578995
+Артём Арепин                             @ArtyomArepin             464345688
+Иван Никифоров                           @man_go_mango             85494587
+Кирюша                                   (no username)             8226130280
+Сеня Пасечник                            @senia3rs                 774358223
+Andrey Ryabinin                          @ryan_112                 329745960
+Георгий Жуков                            @GeorgijZHukov787         7936635036
+Dmitry Osipov                            @osipov_dg                371306200
+Alexey                                   @ax_episode               200007237
+Антон                                    @When_The_Aieeee          5348009903
+Artyom Lysenko                           @lysenko_artyom           158371468
+Анатолий                                 @tolik_sadovod            7068582336
+Pavel Tsaplin                            @ModnarPT                 5272413200
+Егор Карпачев                            @kregor14                 824099692
+Сергей Савёлов                           @HighIQMonster            403601700
+Fred Malinkin                            @Fred_Malinkin            509304853
+Алексей                                  @aleksei_prokaev          5040370982
+Brin                                     @BrinTroll                411080628
+Юля Романова                             @julllr1                  1659286260
+Артем                                    @temkapro1337             1915803005
+pavel zinoviev                           @kwizac                   411679094
+Светлана Александрова                    @julll89162               5512705582
+Данила Кучин                             @gadgistan4k              1348025463
+Даня                                     @oryx97                   1417898926
+Дмитрий Харитонов                        @dmitrih201               452816018
+Павел                                    @Paolo_del_Cartel         1215971093
+М                                        @mityushe4ka              390693585
+P R                                      @nasosiviti               307446963
+Борис                                    @barcissniff              787623242
+VasVac                                   @VaVasVac                 1697800432
+Zinedin                                  (no username)             474753872
+Vyacheslav Ivanov                        @holycapibara             97526283
+Rafael                                   @funnyworldplay           333473651
+Dmitry                                   @WonderfullEveryday       1742242360
+Аня                                      @wefwqs                   8049799679
+Ivan Budakva                             (no username)             6453007279
+ЭМ                                       @bitter_coldd             105869970
+Александр Курматов                       @Sawa_v1                  888260691
+Никита Покусаев                          @nikita_pokusas           1227580705
+Вениамин Адигамов                        @Lorestold                788105458
+I                                        @euiaaow                  1031137648
+Владимир Фотограф МСК                    @vladimir_photograph_msk_007 6721111890
+Evgeney Bogatyrev                        @EvgeneyBogatyrev         606150215
+Ivan Makarenko                           @makarenkoivan            135279691
+Андрей                                   (no username)             7288307371
+Marabuka                                 @Gugtjgg                  530134147
+Nikita Ilin                              @ilin_nikita_al           308563550
+☍                                        @plotnikovs1              1014728111
+Danila Korotkov                          @SENNA_CG                 731756503
+Лев                                      (no username)             603984005
+Михаил                                   @ohhlen                   594973687
+Алек                                     @thnwone                  108220932
+Кириллъ Тихомировъ                       @kirill_drashiga          249326161
+Dmitriy Granovskiy                       @GranovskiyDL             182320817
+JustBite                                 @YoursTrulyJustBite       1056180231
+Andriy                                   @aaaazAh                  7333280478
+Валерия Ларина                           (no username)             6048433765
+ЭСТЕТИКА ДОБРОТЫ                         @RebelMouse91             542711632
+Максим Медведев                          @stikermax                909837503
+Даня Волков                              @sentriplets              8041711108
+Dima Volkov                              @dvolkov198411            806256245
+m. GodjiRRa                              @YoursTrulyBongzilla      1344407600
+Константин Акишев                        @Kosjan112                468429182
+Yucon                                    @Yuc0n                    513865644
+Танюша Герасимова                        @tanyagerasimova33        6053198702
+htw                                      @hotwindlal               463399415
+pachi                                    @sadapachi                545529051
+Василий                                  @rehabKul                 88898762
+Александр                                @Turonku                  267572194
+Лю Жуйцзе                                (no username)             6601685443
+Artyom Resh                              @reshnaut                 252339921
+Ярик                                     @RangerTy                 440757838
+Никита Гвоздев                           @InnokentChaos            385256938
+<blank>                                  @PauperEnjoyer            1686916503
+Ivan                                     @AgeevIvan                316804794
+Никита Серебряков                        @asaypnz                  1005039854
+Pavel Zhuravlev                          @Izzet303                 5344629134
+Георгий Колганов                         @nonasdq                  5020403449
+Iswari 🎂🆘Stylish                         (no username)             8092332410
+Sergey                                   @sergeymaslov111          7239484234
+Николай                                  @kolian0v                 1134412124
+Anton                                    (no username)             578600733
+Grigory Likhachev                        @nejabogl                 1290520293
+Алексей                                  @Alex_Ras12               848373801
+Viktor                                   @glbili                   1020854270
+Григорий Рылов                           @vulpecuLa05              934315891
+Alexander Semkin                         @termogolf                255409956
+Ilay Shubenin                            @Illator                  437485432
+И                                        @IG1999                   530149248
+Егор                                     @Nickykrali               1167756021
+Евгений М.                               @EugeneM2024              6450935929
+Jim                                      @Jim_and_Mewtwo           183704778
+Андрей Милованов                         @Doggka                   135664752
+Sol                                      @CaptainSol               263000062
+Дмитрий Третьяков                        @Degal555                 202239840
+Rikishi                                  @siroy_kartofel           333245422
+<no name>                                (no username)             7072998325
+<no name>                                (no username)             6897100098
+Алексей Титов                            @Falltaris                829754415
+Олег Масенков                            @masoleg                  660052190
+Габриэль Дель Пино                       @Gabriel_Del_Pino         1995160546
+Vasiliy Petrykin                         @petrykin_vasiliy         491097608
+Gleb Micnovic                            @Micnovic                 974763073
+Никита                                   @NiKorostel               5242982908
+Don’t know                               @refiniment               959451407
+Никита Карягин                           @hakapaman                2130539713
+Кертис Кушида                            @kertis_kushida_1998      6958870196
+Родион Раскольников                      @Voxel_bunny              197655094
+Антон Викторович Побылица                @Zirrexz                  604062598
+CaptainFalse                             @Captain_False            1854444262
+Виталий Дикобразов                       @valeryalbert             6142847136
+Max Ostry                                @maxostry                 161493471
+Vlad Safonov                             @frypan765                1062997673
+Maks Freeman                             @Mak_Freeman              1050973470
+Георгий Гелашвили                        @ympermaira               323715624
+Nikolay Nozdrin                          @Gregil                   401103228
+Александр Боровик                        @little_ctulhu            437515095
+Pavel                                    @utwom                    44879966
+Александр Баранов                        @bantdeck                 1068021569
+Arthur A                                 @tur1cH                   201426588
+Savva Maltsev                            @Goozen                   370160538
+Даниил                                   @da_snowden               832788393
+Лев Шилов                                @leo_shiloff              466864573
+Anton                                    @tempname8900             383795783
+Malres🌚                                  @Malresion                1466476696
+мурка                                    @new_year_cat             772510002
+chernochern                              @Copchenii                828991886
+Manila Dakarov                           @Rakdos_phigastos         5114749421
+Мишаня                                   @mishanui                 1950543418
+Захар Гутаев                             @ZaharGutaev              958152567
+Mansoer                                  @callme_mans              621386353
+Leiche                                   @simple_cabbage           699447290
+Даниил Леконцев                          @dan_lentz                945947718
+Арсений Тимичев                          @timsenin                 1769425007
+Лулу                                     @Lululick                 784995512
+Игнат Мусихин                            @mushikinignat            1974998104
+Pioneer                                  @p10neer                  720777077
+Иван Бабурин                             @Torbinson                568242637
+Stas Kop                                 @ksv26                    563587613
+Olga Bugaenko                            @HaiprivOlga              1953788943
+Дмитрий Семенов                          @SeitoMitoy               708480739
+Viktor Koreysha                          @koreysha                 81286693
+Андрей М                                 @smehosmeh                361117967
+Яна Жарова                               @annyanasp                941106237
+𝗜𝗡𝗔 𝗕𝗘𝗥𝗘𝗦𝗧                               @ina_berest               895466298
+Alex Druz                                @AlexDruz314              323896893
+Владислав Антипов                        @vladaantipov             937134095
+Маша                                     @mashunya05               1177380684
+Yury Rusakov                             @BurnedPants              386943599
+danya3kg🌊                                @danya3kg                 451894378
+Dmitry Kurkin                            @Mazut1984                283942722
+Pavel                                    @lufanya                  365972048
+Semkijan                                 @Semkijan                 336508779
+Misha Yushenko                           @Yoggsar                  1342931632
+
+Total: 292 members

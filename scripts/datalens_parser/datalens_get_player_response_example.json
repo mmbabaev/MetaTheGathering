@@ -1,0 +1,174 @@
+{'sources': {'s1jvqelyx5i6f_result': {'sourceId': 's1jvqelyx5i6f_result', 'sourceType': 'bi_datasets', 'source': {'url': '/_bi_datasets/s1jvqelyx5i6f/result', 'middlewareUrl': {'sourceName': '/_request_with_dataset/', 'middlewareType': 'charts_with_dataset'
+                }, 'method': 'POST', 'sourceArgs': {'apiVersion': '2', 'shared': {'colors': [], 'colorsConfig': {}, 'datasetsIds': ['s1jvqelyx5i6f'
+                        ], 'datasetsPartialFields': [
+                            [
+                                {'guid': 'c5c2c360-8578-11ef-9ab2-b5fd1433b099', 'title': 'title-c5c2c360-8578-11ef-9ab2-b5fd1433b099', 'calc_mode': 'direct'
+                                },
+                                {'guid': 'ff8d7ec0-856c-11ef-8901-6fb67336f168', 'title': 'title-ff8d7ec0-856c-11ef-8901-6fb67336f168', 'calc_mode': 'direct'
+                                },
+                                {'guid': '8dd98d80-8569-11ef-90c9-2999d49d0630', 'title': 'title-8dd98d80-8569-11ef-90c9-2999d49d0630', 'calc_mode': 'direct'
+                                },
+                                {'guid': 'data_v9da', 'title': 'Дата', 'calc_mode': 'direct'
+                                },
+                                {'guid': 'igrok_4vy1', 'title': 'Игрок', 'calc_mode': 'direct'
+                                },
+                                {'guid': 'koloda_igroka_b1uy', 'title': 'Колода Игрока', 'calc_mode': 'direct'
+                                },
+                                {'guid': 'opponent_f82f', 'title': 'Оппонент', 'calc_mode': 'direct'
+                                },
+                                {'guid': 'koloda_opponenta_d2lf', 'title': 'Колода Оппонента', 'calc_mode': 'direct'
+                                },
+                                {'guid': 'schet_igroka_lax7', 'title': 'Счет Игрока', 'calc_mode': 'direct'
+                                },
+                                {'guid': 'schet_opponenta_gkev', 'title': 'Счет Оппонента', 'calc_mode': 'direct'
+                                },
+                                {'guid': 'klub_77wt', 'title': 'Клуб', 'calc_mode': 'direct'
+                                },
+                                {'guid': 'vinreyt_igroka_h0ft', 'title': 'Винрейт Игрока', 'calc_mode': 'direct'
+                                },
+                                {'guid': 'vinreyt_opponenta_f371', 'title': 'Винрейт Оппонента', 'calc_mode': 'direct'
+                                }
+                            ]
+                        ], 'extraSettings': {'pagination': 'on', 'limit': 100, 'titleMode': 'hide', 'indicatorTitleMode': 'by-field', 'title': 'Player winrate', 'legendMode': 'show', 'tooltipSum': 'on', 'totals': 'on', 'feed': '', 'pivotFallback': 'off', 'navigatorSettings': {'isNavigatorAvailable': False, 'selectedLines': []
+                            }, 'pivotInlineSort': 'on'
+                        }, 'filters': [], 'geopointsConfig': {}, 'hierarchies': [], 'labels': [], 'links': [], 'segments': [], 'shapes': [], 'shapesConfig': {}, 'sort': [
+                            {'guid': 'c5c2c360-8578-11ef-9ab2-b5fd1433b099', 'datasetId': 's1jvqelyx5i6f', 'fakeTitle': 'Дата', 'originalTitle': 'Дата', 'data_type': 'integer', 'title': 'title-c5c2c360-8578-11ef-9ab2-b5fd1433b099', 'source': 'A', 'direction': 'DESC', 'format': 'DD.MM.YYYY', 'type': 'MEASURE'
+                            }
+                        ], 'tooltips': [], 'type': 'datalens', 'updates': [
+                            {'action': 'add_field', 'field': {'lock_aggregation': False, 'initial_data_type': 'string', 'type': 'MEASURE', 'aggregation': 'avg', 'aggregation_locked': False, 'virtual': False, 'cast': 'float', 'hidden': False, 'description': '', 'valid': True, 'data_type': 'float', 'has_auto_aggregation': False, 'title': 'title-8dd98d80-8569-11ef-90c9-2999d49d0630', 'guid': '8dd98d80-8569-11ef-90c9-2999d49d0630', 'managed_by': 'user', 'autoaggregated': False, 'avatar_id': '1205ede0-8549-11ef-9fe0-738b1409b509', 'source': 'I', 'calc_mode': 'direct', 'formula': '', 'guid_formula': '', 'local': True, 'quickFormula': True, 'datasetId': 's1jvqelyx5i6f'
+                                }
+                            },
+                            {'action': 'add_field', 'field': {'lock_aggregation': False, 'initial_data_type': 'date', 'type': 'MEASURE', 'aggregation': 'count', 'aggregation_locked': False, 'virtual': False, 'cast': 'date', 'hidden': False, 'description': '', 'valid': True, 'data_type': 'integer', 'has_auto_aggregation': False, 'title': 'title-ff8d7ec0-856c-11ef-8901-6fb67336f168', 'guid': 'ff8d7ec0-856c-11ef-8901-6fb67336f168', 'managed_by': 'user', 'autoaggregated': False, 'avatar_id': '1205ede0-8549-11ef-9fe0-738b1409b509', 'source': 'A', 'calc_mode': 'direct', 'formula': '', 'guid_formula': '', 'local': True, 'quickFormula': True, 'datasetId': 's1jvqelyx5i6f'
+                                }
+                            },
+                            {'action': 'add_field', 'field': {'lock_aggregation': False, 'initial_data_type': 'date', 'type': 'MEASURE', 'aggregation': 'count', 'aggregation_locked': False, 'virtual': False, 'cast': 'date', 'hidden': False, 'description': '', 'valid': True, 'data_type': 'integer', 'has_auto_aggregation': False, 'title': 'title-c5c2c360-8578-11ef-9ab2-b5fd1433b099', 'guid': 'c5c2c360-8578-11ef-9ab2-b5fd1433b099', 'managed_by': 'user', 'autoaggregated': False, 'avatar_id': '1205ede0-8549-11ef-9fe0-738b1409b509', 'source': 'A', 'calc_mode': 'direct', 'formula': '', 'guid_formula': '', 'local': True, 'quickFormula': True, 'originalDateCast': 'date', 'originalTitle': 'Дата', 'fakeTitle': 'Дата', 'datasetId': 's1jvqelyx5i6f'
+                                }
+                            }
+                        ], 'version': '11', 'visualization': {'id': 'flatTable', 'type': 'table', 'name': 'label_visualization-flat-table', 'iconProps': {'id': 'visFlatTable', 'width': '24'
+                            }, 'allowFilters': True, 'allowColors': True, 'allowSort': True, 'placeholders': [
+                                {'allowedTypes': {}, 'id': 'flat-table-columns', 'type': 'flat-table-columns', 'title': 'section_columns', 'iconProps': {}, 'items': [
+                                        {'data_type': 'string', 'virtual': False, 'description': '', 'cast': 'string', 'guid': 'koloda_igroka_b1uy', 'hidden': False, 'type': 'DIMENSION', 'aggregation_locked': False, 'aggregation': 'none', 'autoaggregated': False, 'initial_data_type': 'string', 'has_auto_aggregation': False, 'lock_aggregation': False, 'valid': True, 'managed_by': 'user', 'title': 'Колода Игрока', 'source': 'C', 'avatar_id': '1205ede0-8549-11ef-9fe0-738b1409b509', 'calc_mode': 'direct', 'formula': '', 'guid_formula': '', 'datasetId': 's1jvqelyx5i6f', 'id': 'dimension-5', 'datasetName': 'Match History', 'default_value': None, 'value_constraint': None, 'fakeTitle': 'Колода', 'hideLabelMode': 'show', 'formatting': {'format': 'number', 'showRankDelimiter': True, 'prefix': '', 'postfix': '', 'labelMode': 'absolute', 'precision': 0
+                                            }, 'backgroundSettings': {'enabled': False, 'settingsId': 'ef5bfcc0-856c-11ef-8901-6fb67336f168', 'settings': {'gradientState': {}, 'paletteState': {'palette': 'classic20', 'mountedColors': {}
+                                                    }, 'isContinuous': False
+                                                }, 'colorFieldGuid': 'koloda_igroka_b1uy'
+                                            }
+                                        },
+                                        {'initial_data_type': 'date', 'valid': True, 'aggregation': 'count', 'virtual': False, 'lock_aggregation': False, 'managed_by': 'user', 'description': '', 'title': 'title-ff8d7ec0-856c-11ef-8901-6fb67336f168', 'guid': 'ff8d7ec0-856c-11ef-8901-6fb67336f168', 'has_auto_aggregation': False, 'autoaggregated': False, 'data_type': 'integer', 'aggregation_locked': False, 'type': 'MEASURE', 'cast': 'date', 'hidden': False, 'source': 'A', 'avatar_id': '1205ede0-8549-11ef-9fe0-738b1409b509', 'calc_mode': 'direct', 'formula': '', 'guid_formula': '', 'default_value': None, 'value_constraint': None, 'datasetId': 's1jvqelyx5i6f', 'id': 'measure-1', 'datasetName': 'Match History', 'format': 'DD.MM.YYYY', 'grouping': 'none', 'hideLabelMode': 'show', 'formatting': {'format': 'number', 'showRankDelimiter': True, 'prefix': '', 'postfix': '', 'labelMode': 'absolute', 'precision': 0
+                                            }, 'backgroundSettings': {'enabled': False, 'settingsId': 'fc9fd4b0-856c-11ef-8901-6fb67336f168', 'settings': {'gradientState': {'thresholdsMode': 'auto', 'gradientPalette': 'blue', 'gradientMode': '2-point', 'reversed': False
+                                                    }, 'paletteState': {}, 'isContinuous': True
+                                                }, 'colorFieldGuid': 'ff8d7ec0-856c-11ef-8901-6fb67336f168'
+                                            }, 'local': True, 'quickFormula': True, 'originalDateCast': 'date', 'originalTitle': 'Дата', 'fakeTitle': 'Матчей', 'barsSettings': {'enabled': False, 'colorSettings': {'colorType': 'two-color', 'settings': {'palette': 'classic20', 'positiveColor': '#8AD554', 'negativeColor': '#FF3D64'
+                                                    }
+                                                }, 'showLabels': True, 'align': 'default', 'scale': {'mode': 'auto'
+                                                }, 'showBarsInTotals': False
+                                            }
+                                        },
+                                        {'hidden': False, 'autoaggregated': False, 'title': 'title-8dd98d80-8569-11ef-90c9-2999d49d0630', 'guid': '8dd98d80-8569-11ef-90c9-2999d49d0630', 'cast': 'float', 'has_auto_aggregation': False, 'managed_by': 'user', 'aggregation_locked': False, 'type': 'MEASURE', 'virtual': False, 'aggregation': 'avg', 'initial_data_type': 'string', 'lock_aggregation': False, 'description': '', 'valid': True, 'data_type': 'float', 'avatar_id': '1205ede0-8549-11ef-9fe0-738b1409b509', 'source': 'I', 'calc_mode': 'direct', 'formula': '', 'guid_formula': '', 'default_value': None, 'value_constraint': None, 'datasetId': 's1jvqelyx5i6f', 'id': 'measure-2', 'datasetName': 'Match History', 'hideLabelMode': 'show', 'formatting': {'format': 'number', 'showRankDelimiter': True, 'prefix': '', 'postfix': '', 'labelMode': 'absolute', 'precision': 2
+                                            }, 'backgroundSettings': {'enabled': False, 'settingsId': '8801e2e0-8569-11ef-90c9-2999d49d0630', 'settings': {'gradientState': {'thresholdsMode': 'auto', 'gradientPalette': 'blue', 'gradientMode': '2-point', 'reversed': False
+                                                    }, 'paletteState': {}, 'isContinuous': True
+                                                }, 'colorFieldGuid': '8dd98d80-8569-11ef-90c9-2999d49d0630'
+                                            }, 'local': True, 'quickFormula': True, 'originalTitle': 'Винрейт Игрока', 'fakeTitle': 'Winrate', 'barsSettings': {'enabled': False, 'colorSettings': {'colorType': 'two-color', 'settings': {'palette': 'classic20', 'positiveColor': '#8AD554', 'negativeColor': '#FF3D64'
+                                                    }
+                                                }, 'showLabels': True, 'align': 'default', 'scale': {'mode': 'auto'
+                                                }, 'showBarsInTotals': False
+                                            }
+                                        }
+                                    ], 'required': True, 'settings': {'groupping': 'on'
+                                    }
+                                }
+                            ], 'allowLayerFilters': False
+                        }, 'sharedData': {}
+                    }, 'params': {'klub_77wt': [''
+                        ], 'data_v9da': ['__interval_2023-01-01T00: 00: 00.000Z_2026-04-14T23: 59: 59.999Z'
+                        ], 'igrok_4vy1': ['Бабаев Михаил'
+                        ], 'uchastnik_0zyi': ['Бабаев Михаил'
+                        ]
+                    }
+                }, 'data': {'fields': [
+                        {'ref': {'type': 'id', 'id': 'koloda_igroka_b1uy'
+                            }, 'block_id': 0
+                        },
+                        {'ref': {'type': 'id', 'id': 'ff8d7ec0-856c-11ef-8901-6fb67336f168'
+                            }, 'block_id': 0, 'role_spec': {'role': 'measure'
+                            }
+                        },
+                        {'ref': {'type': 'id', 'id': '8dd98d80-8569-11ef-90c9-2999d49d0630'
+                            }, 'block_id': 0, 'role_spec': {'role': 'measure'
+                            }
+                        },
+                        {'ref': {'type': 'id', 'id': 'c5c2c360-8578-11ef-9ab2-b5fd1433b099'
+                            }, 'block_id': 0, 'role_spec': {'role': 'measure'
+                            }
+                        },
+                        {'ref': {'type': 'placeholder'
+                            }, 'role_spec': {'role': 'template', 'template': ''
+                            }, 'block_id': 1
+                        },
+                        {'ref': {'type': 'id', 'id': 'ff8d7ec0-856c-11ef-8901-6fb67336f168'
+                            }, 'role_spec': {'role': 'total'
+                            }, 'block_id': 1
+                        },
+                        {'ref': {'type': 'id', 'id': '8dd98d80-8569-11ef-90c9-2999d49d0630'
+                            }, 'role_spec': {'role': 'total'
+                            }, 'block_id': 1
+                        },
+                        {'ref': {'type': 'placeholder'
+                            }, 'role_spec': {'role': 'template', 'template': ''
+                            }, 'block_id': 1
+                        }
+                    ], 'filters': [
+                        {'ref': {'type': 'id', 'id': 'data_v9da'
+                            }, 'operation': 'BETWEEN', 'values': ['2023-01-01T00: 00: 00.000Z', '2026-04-14T23: 59: 59.999Z'
+                            ]
+                        },
+                        {'ref': {'type': 'id', 'id': 'igrok_4vy1'
+                            }, 'operation': 'IN', 'values': ['Бабаев Михаил'
+                            ]
+                        },
+                        {'ref': {'type': 'id', 'id': 'uchastnik_0zyi'
+                            }, 'operation': 'IN', 'values': ['Бабаев Михаил'
+                            ]
+                        }
+                    ], 'order_by': [
+                        {'ref': {'type': 'id', 'id': 'c5c2c360-8578-11ef-9ab2-b5fd1433b099'
+                            }, 'direction': 'desc', 'block_id': 0
+                        },
+                        {'ref': {'type': 'id', 'id': 'koloda_igroka_b1uy'
+                            }, 'direction': 'asc', 'block_id': 0
+                        }
+                    ], 'parameter_values': [], 'dataset_revision_id': 'bY6Zn3gNF4QmBS9otLshBC', 'updates': [
+                        {'action': 'add_field', 'field': {'lock_aggregation': False, 'initial_data_type': 'string', 'type': 'MEASURE', 'aggregation': 'avg', 'aggregation_locked': False, 'virtual': False, 'cast': 'float', 'hidden': False, 'description': '', 'valid': True, 'data_type': 'float', 'has_auto_aggregation': False, 'title': 'title-8dd98d80-8569-11ef-90c9-2999d49d0630', 'guid': '8dd98d80-8569-11ef-90c9-2999d49d0630', 'managed_by': 'user', 'autoaggregated': False, 'avatar_id': '1205ede0-8549-11ef-9fe0-738b1409b509', 'source': 'I', 'calc_mode': 'direct', 'formula': '', 'guid_formula': '', 'local': True, 'quickFormula': True, 'datasetId': 's1jvqelyx5i6f'
+                            }
+                        },
+                        {'action': 'add_field', 'field': {'lock_aggregation': False, 'initial_data_type': 'date', 'type': 'MEASURE', 'aggregation': 'count', 'aggregation_locked': False, 'virtual': False, 'cast': 'date', 'hidden': False, 'description': '', 'valid': True, 'data_type': 'integer', 'has_auto_aggregation': False, 'title': 'title-ff8d7ec0-856c-11ef-8901-6fb67336f168', 'guid': 'ff8d7ec0-856c-11ef-8901-6fb67336f168', 'managed_by': 'user', 'autoaggregated': False, 'avatar_id': '1205ede0-8549-11ef-9fe0-738b1409b509', 'source': 'A', 'calc_mode': 'direct', 'formula': '', 'guid_formula': '', 'local': True, 'quickFormula': True, 'datasetId': 's1jvqelyx5i6f'
+                            }
+                        },
+                        {'action': 'add_field', 'field': {'lock_aggregation': False, 'initial_data_type': 'date', 'type': 'MEASURE', 'aggregation': 'count', 'aggregation_locked': False, 'virtual': False, 'cast': 'date', 'hidden': False, 'description': '', 'valid': True, 'data_type': 'integer', 'has_auto_aggregation': False, 'title': 'title-c5c2c360-8578-11ef-9ab2-b5fd1433b099', 'guid': 'c5c2c360-8578-11ef-9ab2-b5fd1433b099', 'managed_by': 'user', 'autoaggregated': False, 'avatar_id': '1205ede0-8549-11ef-9fe0-738b1409b509', 'source': 'A', 'calc_mode': 'direct', 'formula': '', 'guid_formula': '', 'local': True, 'quickFormula': True, 'originalDateCast': 'date', 'originalTitle': 'Дата', 'fakeTitle': 'Дата', 'datasetId': 's1jvqelyx5i6f'
+                            }
+                        }
+                    ], 'ignore_nonexistent_filters': True, 'limit': 100, 'offset': 0, 'with_totals': True, 'autofill_legend': True
+                }, 'datasetFields': [
+                    {'calc_mode': 'direct', 'type': 'DIMENSION', 'hidden': False, 'guid': 'data_v9da', 'ui_settings': '', 'data_type': 'date', 'title': 'Дата'
+                    },
+                    {'calc_mode': 'direct', 'type': 'DIMENSION', 'hidden': False, 'guid': 'igrok_4vy1', 'ui_settings': '', 'data_type': 'string', 'title': 'Игрок'
+                    },
+                    {'calc_mode': 'direct', 'type': 'DIMENSION', 'hidden': False, 'guid': 'koloda_igroka_b1uy', 'ui_settings': '', 'data_type': 'string', 'title': 'Колода Игрока'
+                    },
+                    {'calc_mode': 'direct', 'type': 'DIMENSION', 'hidden': False, 'guid': 'opponent_f82f', 'ui_settings': '', 'data_type': 'string', 'title': 'Оппонент'
+                    },
+                    {'calc_mode': 'direct', 'type': 'DIMENSION', 'hidden': False, 'guid': 'koloda_opponenta_d2lf', 'ui_settings': '', 'data_type': 'string', 'title': 'Колода Оппонента'
+                    },
+                    {'calc_mode': 'direct', 'type': 'DIMENSION', 'hidden': False, 'guid': 'schet_igroka_lax7', 'ui_settings': '', 'data_type': 'integer', 'title': 'Счет Игрока'
+                    },
+                    {'calc_mode': 'direct', 'type': 'DIMENSION', 'hidden': False, 'guid': 'schet_opponenta_gkev', 'ui_settings': '', 'data_type': 'integer', 'title': 'Счет Оппонента'
+                    },
+                    {'calc_mode': 'direct', 'type': 'DIMENSION', 'hidden': False, 'guid': 'klub_77wt', 'ui_settings': '', 'data_type': 'string', 'title': 'Клуб'
+                    },
+                    {'calc_mode': 'direct', 'type': 'DIMENSION', 'hidden': False, 'guid': 'vinreyt_igroka_h0ft', 'ui_settings': '', 'data_type': 'float', 'title': 'Винрейт Игрока'
+                    },
+                    {'calc_mode': 'direct', 'type': 'DIMENSION', 'hidden': False, 'guid': 'vinreyt_opponenta_f371', 'ui_settings': '', 'data_type': 'float', 'title': 'Винрейт Оппонента'
+                    }
+                ]
+            }, 'responseHeaders': {'server': 'ycalb', 'date': 'Tue,
+                14 Apr 2026 06: 42: 06 GMT', 'content-type': 'application/json; charset=utf-8', 'content-length': '5318', 'x-request-id': 'dl.b07e2_ck.ezmg4zux44--p.a4f7d34370f640d18457b02736ab0d4c', 'x-server-trace-id': '0000000000000000c8d793c19e848b30:b7a07fb18e490b92: 0: 01', 'connection': 'close'
+            }, 'status': 200, 'latency': 961, 'size': 4467, 'dataUrl': 'https: //back.datalens.cloud.yandex.net/public/api/data/v2/datasets/s1jvqelyx5i6f/result', 'datasetId': 'datasets', 'data': {'fields': [{'ref': {'type': 'id', 'id': 'koloda_igroka_b1uy'}, 'block_id': 0}, {'ref': {'type': 'id', 'id': 'ff8d7ec0-856c-11ef-8901-6fb67336f168'}, 'block_id': 0, 'role_spec': {'role': 'measure'}}, {'ref': {'type': 'id', 'id': '8dd98d80-8569-11ef-90c9-2999d49d0630'}, 'block_id': 0, 'role_spec': {'role': 'measure'}}, {'ref': {'type': 'id', 'id': 'c5c2c360-8578-11ef-9ab2-b5fd1433b099'}, 'block_id': 0, 'role_spec': {'role': 'measure'}}, {'ref': {'type': 'placeholder'}, 'role_spec': {'role': 'template', 'template': ''}, 'block_id': 1}, {'ref': {'type': 'id', 'id': 'ff8d7ec0-856c-11ef-8901-6fb67336f168'}, 'role_spec': {'role': 'total'}, 'block_id': 1}, {'ref': {'type': 'id', 'id': '8dd98d80-8569-11ef-90c9-2999d49d0630'}, 'role_spec': {'role': 'total'}, 'block_id': 1}, {'ref': {'type': 'placeholder'}, 'role_spec': {'role': 'template', 'template': ''}, 'block_id': 1}], 'filters': [{'ref': {'type': 'id', 'id': 'data_v9da'}, 'operation': 'BETWEEN', 'values': ['2023-01-01T00:00:00.000Z', '2026-04-14T23:59:59.999Z']}, {'ref': {'type': 'id', 'id': 'igrok_4vy1'}, 'operation': 'IN', 'values': ['Бабаев Михаил']}, {'ref': {'type': 'id', 'id': 'uchastnik_0zyi'}, 'operation': 'IN', 'values': ['Бабаев Михаил']}], 'order_by': [{'ref': {'type': 'id', 'id': 'c5c2c360-8578-11ef-9ab2-b5fd1433b099'}, 'direction': 'desc', 'block_id': 0}, {'ref': {'type': 'id', 'id': 'koloda_igroka_b1uy'}, 'direction': 'asc', 'block_id': 0}], 'parameter_values': [], 'dataset_revision_id': 'bY6Zn3gNF4QmBS9otLshBC', 'updates': [{'action': 'add_field', 'field': {'lock_aggregation': False, 'initial_data_type': 'string', 'type': 'MEASURE', 'aggregation': 'avg', 'aggregation_locked': False, 'virtual': False, 'cast': 'float', 'hidden': False, 'description': '', 'valid': True, 'data_type': 'float', 'has_auto_aggregation': False, 'title': 'title-8dd98d80-8569-11ef-90c9-2999d49d0630', 'guid': '8dd98d80-8569-11ef-90c9-2999d49d0630', 'managed_by': 'user', 'autoaggregated': False, 'avatar_id': '1205ede0-8549-11ef-9fe0-738b1409b509', 'source': 'I', 'calc_mode': 'direct', 'formula': '', 'guid_formula': '', 'local': True, 'quickFormula': True, 'datasetId': 's1jvqelyx5i6f'}}, {'action': 'add_field', 'field': {'lock_aggregation': False, 'initial_data_type': 'date', 'type': 'MEASURE', 'aggregation': 'count', 'aggregation_locked': False, 'virtual': False, 'cast': 'date', 'hidden': False, 'description': '', 'valid': True, 'data_type': 'integer', 'has_auto_aggregation': False, 'title': 'title-ff8d7ec0-856c-11ef-8901-6fb67336f168', 'guid': 'ff8d7ec0-856c-11ef-8901-6fb67336f168', 'managed_by': 'user', 'autoaggregated': False, 'avatar_id': '1205ede0-8549-11ef-9fe0-738b1409b509', 'source': 'A', 'calc_mode': 'direct', 'formula': '', 'guid_formula': '', 'local': True, 'quickFormula': True, 'datasetId': 's1jvqelyx5i6f'}}, {'action': 'add_field', 'field': {'lock_aggregation': False, 'initial_data_type': 'date', 'type': 'MEASURE', 'aggregation': 'count', 'aggregation_locked': False, 'virtual': False, 'cast': 'date', 'hidden': False, 'description': '', 'valid': True, 'data_type': 'integer', 'has_auto_aggregation': False, 'title': 'title-c5c2c360-8578-11ef-9ab2-b5fd1433b099', 'guid': 'c5c2c360-8578-11ef-9ab2-b5fd1433b099', 'managed_by': 'user', 'autoaggregated': False, 'avatar_id': '1205ede0-8549-11ef-9fe0-738b1409b509', 'source': 'A', 'calc_mode': 'direct', 'formula': '', 'guid_formula': '', 'local': True, 'quickFormula': True, 'originalDateCast': 'date', 'originalTitle': 'Дата', 'fakeTitle': 'Дата', 'datasetId': 's1jvqelyx5i6f'}}], 'ignore_nonexistent_filters': True, 'limit': 100, 'offset': 0, 'with_totals': True, 'autofill_legend': True}, 'url': 'https://back.datalens.cloud.yandex.net/public/api/data/v2/datasets/s1jvqelyx5i6f/result'}}, 'uiScheme': None, 'params': {'klub_77wt': [''], 'data_v9da': ['__interval_2023-01-01T00:00:00.000Z_2026-04-14T23:59:59.999Z'], 'igrok_4vy1': ['Бабаев Михаил'], 'uchastnik_0zyi': ['Бабаев Михаил'], 'koloda_igroka_b1uy': [], 'ff8d7ec0-856c-11ef-8901-6fb67336f168': [], '8dd98d80-8569-11ef-90c9-2999d49d0630': [], 'c5c2c360-8578-11ef-9ab2-b5fd1433b099': [], '__@placeholder__': [], 'opponent_f82f': [], 'koloda_opponenta_d2lf': [], 'schet_igroka_lax7': [], 'schet_opponenta_gkev': [], 'vinreyt_igroka_h0ft': [], 'vinreyt_opponenta_f371': []}, 'usedParams': {'koloda_igroka_b1uy': [], 'ff8d7ec0-856c-11ef-8901-6fb67336f168': [], '8dd98d80-8569-11ef-90c9-2999d49d0630': [], 'c5c2c360-8578-11ef-9ab2-b5fd1433b099': [], '__@placeholder__': [], 'data_v9da': ['__interval_2023-01-01T00:00:00.000Z_2026-04-14T23:59:59.999Z'], 'igrok_4vy1': ['Бабаев Михаил'], 'opponent_f82f': [], 'koloda_opponenta_d2lf': [], 'schet_igroka_lax7': [], 'schet_opponenta_gkev': [], 'klub_77wt': [''], 'vinreyt_igroka_h0ft': [], 'vinreyt_opponenta_f371': []}, 'actionParams': {}, 'widgetConfig': {'actionParams': {'enable': True}}, 'defaultParams': {}, 'extra': {'datasets': [{'id': 's1jvqelyx5i6f', 'fields': {'c5c2c360-8578-11ef-9ab2-b5fd1433b099': 'title-c5c2c360-8578-11ef-9ab2-b5fd1433b099', 'ff8d7ec0-856c-11ef-8901-6fb67336f168': 'title-ff8d7ec0-856c-11ef-8901-6fb67336f168', '8dd98d80-8569-11ef-90c9-2999d49d0630': 'title-8dd98d80-8569-11ef-90c9-2999d49d0630', 'data_v9da': 'Дата', 'igrok_4vy1': 'Игрок', 'koloda_igroka_b1uy': 'Колода Игрока', 'opponent_f82f': 'Оппонент', 'koloda_opponenta_d2lf': 'Колода Оппонента', 'schet_igroka_lax7': 'Счет Игрока', 'schet_opponenta_gkev': 'Счет Оппонента', 'klub_77wt': 'Клуб', 'vinreyt_igroka_h0ft': 'Винрейт Игрока', 'vinreyt_opponenta_f371': 'Винрейт Оппонента'}, 'fieldsList': [{'title': 'Колода Игрока', 'guid': 'koloda_igroka_b1uy', 'dataType': 'string', 'fakeTitle': 'Колода'}, {'title': 'title-ff8d7ec0-856c-11ef-8901-6fb67336f168', 'guid': 'ff8d7ec0-856c-11ef-8901-6fb67336f168', 'dataType': 'integer', 'formatting': {'format': 'number', 'showRankDelimiter': True, 'prefix': '', 'postfix': '', 'labelMode': 'absolute', 'precision': 0}, 'fakeTitle': 'Матчей'}, {'title': 'title-8dd98d80-8569-11ef-90c9-2999d49d0630', 'guid': '8dd98d80-8569-11ef-90c9-2999d49d0630', 'dataType': 'float', 'formatting': {'format': 'number', 'showRankDelimiter': True, 'prefix': '', 'postfix': '', 'labelMode': 'absolute', 'precision': 2}, 'fakeTitle': 'Winrate'}, {'title': 'title-c5c2c360-8578-11ef-9ab2-b5fd1433b099', 'guid': 'c5c2c360-8578-11ef-9ab2-b5fd1433b099', 'dataType': 'integer'}, {'title': 'Placeholder', 'guid': '__@placeholder__', 'dataType': 'string'}, {'title': 'title-ff8d7ec0-856c-11ef-8901-6fb67336f168', 'guid': 'ff8d7ec0-856c-11ef-8901-6fb67336f168', 'dataType': 'integer', 'formatting': {'format': 'number', 'showRankDelimiter': True, 'prefix': '', 'postfix': '', 'labelMode': 'absolute', 'precision': 0}, 'fakeTitle': 'Матчей'}, {'title': 'title-8dd98d80-8569-11ef-90c9-2999d49d0630', 'guid': '8dd98d80-8569-11ef-90c9-2999d49d0630', 'dataType': 'float', 'formatting': {'format': 'number', 'showRankDelimiter': True, 'prefix': '', 'postfix': '', 'labelMode': 'absolute', 'precision': 2}, 'fakeTitle': 'Winrate'}, {'title': 'Placeholder', 'guid': '__@placeholder__', 'dataType': 'string'}, {'title': 'title-c5c2c360-8578-11ef-9ab2-b5fd1433b099', 'guid': 'c5c2c360-8578-11ef-9ab2-b5fd1433b099', 'dataType': 'integer'}, {'title': 'Колода Игрока', 'guid': 'koloda_igroka_b1uy', 'dataType': 'string', 'fakeTitle': 'Колода'}, {'title': 'Дата', 'guid': 'data_v9da', 'dataType': 'date'}, {'title': 'Игрок', 'guid': 'igrok_4vy1', 'dataType': 'string'}, {'title': 'Оппонент', 'guid': 'opponent_f82f', 'dataType': 'string'}, {'title': 'Колода Оппонента', 'guid': 'koloda_opponenta_d2lf', 'dataType': 'string'}, {'title': 'Счет Игрока', 'guid': 'schet_igroka_lax7', 'dataType': 'integer'}, {'title': 'Счет Оппонента', 'guid': 'schet_opponenta_gkev', 'dataType': 'integer'}, {'title': 'Клуб', 'guid': 'klub_77wt', 'dataType': 'string'}, {'title': 'Винрейт Игрока', 'guid': 'vinreyt_igroka_h0ft', 'dataType': 'float'}, {'title': 'Винрейт Оппонента', 'guid': 'vinreyt_opponenta_f371', 'dataType': 'float'}]}], 'colors': ['#4DA2F1', '#FF3D64', '#8AD554', '#FFC636', '#FFB9DD', '#84D1EE', '#FF91A1', '#54A520', '#DB9100', '#BA74B3', '#1F68A9', '#ED65A9', '#0FA08D', '#FF7E00', '#E8B0A4', '#52A6C5', '#BE2443', '#70C1AF', '#FFB46C', '#DCA3D7']}, 'timings': {'configResolving': 17.372439, 'dataFetching': 961.177989, 'jsExecution': 3.167913}, 'data': {'head': [{'id': 'koloda_igroka_b1uy', 'name': 'Колода', 'type': 'text'}, {'id': 'ff8d7ec0-856c-11ef-8901-6fb67336f168', 'name': 'Матчей', 'type': 'number', 'formatter': {'format': 'number', 'suffix': '', 'prefix': '', 'showRankDelimiter': True}, 'view': 'number'}, {'id': '8dd98d80-8569-11ef-90c9-2999d49d0630', 'name': 'Winrate', 'type': 'number', 'formatter': {'format': 'number', 'suffix': '', 'prefix': '', 'showRankDelimiter': True, 'precision': 2}, 'view': 'number'}], 'rows': [{'cells': [{'value': 'Red Kuldotha', 'fieldId': 'koloda_igroka_b1uy'}, {'value': 82, 'fieldId': 'ff8d7ec0-856c-11ef-8901-6fb67336f168', 'type': 'number', 'custom': {'actionParams': {}}}, {'value': 59.14670731707318, 'fieldId': '8dd98d80-8569-11ef-90c9-2999d49d0630', 'type': 'number', 'custom': {'actionParams': {}}}]}, {'cells': [{'value': 'Rakdos Madness', 'fieldId': 'koloda_igroka_b1uy'}, {'value': 65, 'fieldId': 'ff8d7ec0-856c-11ef-8901-6fb67336f168', 'type': 'number', 'custom': {'actionParams': {}}}, {'value': 47.94830769230769, 'fieldId': '8dd98d80-8569-11ef-90c9-2999d49d0630', 'type': 'number', 'custom': {'actionParams': {}}}]}, {'cells': [{'value': 'Blue Delver', 'fieldId': 'koloda_igroka_b1uy'}, {'value': 47, 'fieldId': 'ff8d7ec0-856c-11ef-8901-6fb67336f168', 'type': 'number', 'custom': {'actionParams': {}}}, {'value': 53.54617021276596, 'fieldId': '8dd98d80-8569-11ef-90c9-2999d49d0630', 'type': 'number', 'custom': {'actionParams': {}}}]}, {'cells': [{'value': 'Red Rally', 'fieldId': 'koloda_igroka_b1uy'}, {'value': 30, 'fieldId': 'ff8d7ec0-856c-11ef-8901-6fb67336f168', 'type': 'number', 'custom': {'actionParams': {}}}, {'value': 67.77833333333335, 'fieldId': '8dd98d80-8569-11ef-90c9-2999d49d0630', 'type': 'number', 'custom': {'actionParams': {}}}]}, {'cells': [{'value': 'Red Burn', 'fieldId': 'koloda_igroka_b1uy'}, {'value': 15, 'fieldId': 'ff8d7ec0-856c-11ef-8901-6fb67336f168', 'type': 'number', 'custom': {'actionParams': {}}}, {'value': 45.55533333333334, 'fieldId': '8dd98d80-8569-11ef-90c9-2999d49d0630', 'type': 'number', 'custom': {'actionParams': {}}}]}, {'cells': [{'value': 'Boros Synthesizer', 'fieldId': 'koloda_igroka_b1uy'}, {'value': 4, 'fieldId': 'ff8d7ec0-856c-11ef-8901-6fb67336f168', 'type': 'number', 'custom': {'actionParams': {}}}, {'value': 50, 'fieldId': '8dd98d80-8569-11ef-90c9-2999d49d0630', 'type': 'number', 'custom': {'actionParams': {}}}]}, {'cells': [{'value': 'Golgari Dredge', 'fieldId': 'koloda_igroka_b1uy'}, {'value': 3, 'fieldId': 'ff8d7ec0-856c-11ef-8901-6fb67336f168', 'type': 'number', 'custom': {'actionParams': {}}}, {'value': 22.22, 'fieldId': '8dd98d80-8569-11ef-90c9-2999d49d0630', 'type': 'number', 'custom': {'actionParams': {}}}]}], 'footer': [{'cells': [{'value': 'Total', 'css': {'background-color': 'var(--g-color-base-generic)', 'font-weight': 500}, 'type': 'text'}, {'value': 246, 'css': {'background-color': 'var(--g-color-base-generic)', 'font-weight': 500}}, {'value': 54.74260162601626, 'css': {'background-color': 'var(--g-color-base-generic)', 'font-weight': 500}}]}]}, 'config': '{"hideHolidaysBands":true,"linesLimit":100,"tooltip":{"pin":{"altKey":true},"sort":{"enabled":true}},"preventDefaultForPointClick":false,"paginator":{"enabled":false,"limit":100},"comments":{"matchType":"intersection","matchedParams":[]},"settings":{"width":"max-content"},"events":{"click":[{"handler":{"type":"setActionParams"},"scope":"row"}]},"enableJsAndHtml":false}', 'highchartsConfig': '{}', 'dataExport': {'s1jvqelyx5i6f_result': {'basic': {'allowed': True, 'reason': None}, 'background': {'allowed': False, 'reason': ['PROHIBITED_EXPORT_TENANT']}}}, '_confStorageConfig': {'type': 'table_wizard_node', 'meta': {'stype': 'table_wizard_node'}, 'entryId': 'jsaobu3lpeos6', 'key': 'Users/khripkov-sergey/Player winrate', 'revId': '6fzyzav4du0mt'}, 'key': 'Users/khripkov-sergey/Player winrate', 'id': 'jsaobu3lpeos6', 'type': 'table_wizard_node', 'revId': '6fzyzav4du0mt'}

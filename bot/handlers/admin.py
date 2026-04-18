@@ -30,6 +30,15 @@ from bot.messages import (
 )
 
 
+def _sort_participants(participants: list) -> list:
+    """Сортирует участников: сначала незаполненные, затем заполненные; внутри — по фамилии."""
+    def _sort_key(p):
+        filled = 0 if p.archetype is None else 1
+        last = (p.user.last_name or p.user.first_name or "") if p.user else ""
+        return (filled, last.lower())
+    return sorted(participants, key=_sort_key)
+
+
 def parse_add_player_command(message_text: str, bot_username: str | None) -> tuple[str, str] | None:
     """
     Разбор текста /add_player … в (username_игрока, название_колоды).
@@ -283,28 +292,38 @@ class AdminHandler:
         return self._tournament_status_result(tournament_id, prefix="\n".join(lines))
 
     def _tournament_status_result(
-        self, tournament_id: int, prefix: str = ""
+        self, tournament_id: int, prefix: str = "", show_filled: bool = False
     ) -> HandlerResult:
         """Строит HandlerResult со статусом турнира и клавиатурой участников.
 
         prefix — необязательный текст (например, итог операции), который добавляется
         перед статусом через пустую строку.
+        show_filled — показывать кнопки заполненных участников.
         """
         from services.utils import get_tournament
         try:
             t = get_tournament(self.svc.db, tournament_id)
         except errors.TournamentNotFound:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
-        participants = self.svc.list_participants_for_tournament(tournament_id)
+        participants = _sort_participants(self.svc.list_participants_for_tournament(tournament_id))
         status_text = format_tournament_status(t.title, t.status.label_ru, participants)
         text = f"{prefix}\n\n{status_text}" if prefix else status_text
-        return HandlerResult(text, keyboard=admin_participants_keyboard(participants))
+        return HandlerResult(
+            text,
+            keyboard=admin_participants_keyboard(participants, tournament_id=tournament_id, show_filled=show_filled),
+        )
 
     def handle_admin_status(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Список участников с кнопками для редактирования колоды (admin view)."""
         if not self._is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
         return self._tournament_status_result(tournament_id)
+
+    def handle_admin_show_filled(self, tg_id: int, tournament_id: int) -> HandlerResult:
+        """Показывает кнопки заполненных участников (разворачивает скрытый список)."""
+        if not self._is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN)
+        return self._tournament_status_result(tournament_id, show_filled=True)
 
     def _archetype_keyboard_for_participant(
         self, participant_id: int, player_tg_id: int | None, expanded: bool = False
@@ -372,7 +391,7 @@ class AdminHandler:
         if not tournaments:
             return HandlerResult(NO_ACTIVE_TOURNAMENT)
         blocks = [
-            format_tournament_status(t.title, t.status.label_ru, self.svc.list_participants_for_tournament(t.id))
+            format_tournament_status(t.title, t.status.label_ru, _sort_participants(self.svc.list_participants_for_tournament(t.id)))
             for t in tournaments
         ]
         return HandlerResult("\n\n---\n\n".join(blocks))

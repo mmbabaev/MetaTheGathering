@@ -23,6 +23,7 @@ CB_EXPORT_EXCEL = "export_excel"          # export_excel:{tournament_id}
 CB_DELETE_TOURNAMENT = "del_t"           # del_t:{tournament_id}
 CB_DELETE_TOURNAMENT_CONFIRM = "del_t_yes"  # del_t_yes:{tournament_id}
 CB_DELETE_TOURNAMENT_CANCEL = "del_t_no"    # del_t_no:{tournament_id}
+CB_ADMIN_SHOW_FILLED = "adm_show_filled"    # adm_show_filled:{tournament_id}
 
 
 def tournament_list_keyboard(tournaments: list) -> InlineKeyboardMarkup:
@@ -105,10 +106,22 @@ def settings_keyboard(is_admin: bool = False, is_pretending: bool = False) -> In
     return InlineKeyboardMarkup(rows)
 
 
-def admin_participants_keyboard(participants: list) -> InlineKeyboardMarkup:
-    """Кнопка на каждого участника для редактирования колоды (admin status view)."""
+def admin_participants_keyboard(
+    participants: list,
+    tournament_id: int | None = None,
+    show_filled: bool = False,
+) -> InlineKeyboardMarkup:
+    """Кнопки участников для редактирования колоды (admin status view).
+
+    По умолчанию показывает только незаполненных + кнопку «Показать заполненных (N)».
+    При show_filled=True показывает всех участников.
+    """
+    unfilled = [p for p in participants if p.archetype is None]
+    filled = [p for p in participants if p.archetype is not None]
+
+    to_show = participants if show_filled else unfilled
     buttons = []
-    for p in participants:
+    for p in to_show:
         if p.user:
             name_parts = [n for n in (p.user.first_name, p.user.last_name) if n]
             name = " ".join(name_parts) if name_parts else f"id{p.user.tg_id}"
@@ -118,6 +131,15 @@ def admin_participants_keyboard(participants: list) -> InlineKeyboardMarkup:
         buttons.append([
             InlineKeyboardButton(f"{prefix}{name}", callback_data=f"{CB_ADMIN_PICK_ARCH}:{p.id}")
         ])
+
+    if not show_filled and filled and tournament_id is not None:
+        buttons.append([
+            InlineKeyboardButton(
+                f"Показать заполненных ({len(filled)})",
+                callback_data=f"{CB_ADMIN_SHOW_FILLED}:{tournament_id}",
+            )
+        ])
+
     return InlineKeyboardMarkup(buttons)
 
 

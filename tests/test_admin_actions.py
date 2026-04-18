@@ -591,10 +591,30 @@ class TestHandleAdminStatus:
         assert result.text == TOURNAMENT_NOT_FOUND
         assert result.is_alert
 
-    def test_keyboard_has_button_per_participant(self, handler, svc, user_svc, admin_user, active_tournament, archetype_burn):
+    def test_keyboard_unfilled_participant_visible(self, handler, svc, user_svc, admin_user, active_tournament):
+        """Незаполненный участник виден без нажатия кнопки разворота."""
+        user = user_svc.get_or_create(tg_id=8001, username=None, first_name="Тест")
+        svc.bulk_add_participants(active_tournament.id, [(user.id, "Тест")])
+        result = handler.handle_admin_status(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+        buttons = [b for row in result.keyboard.inline_keyboard for b in row]
+        from bot.keyboards import CB_ADMIN_PICK_ARCH
+        assert any(b.callback_data.startswith(CB_ADMIN_PICK_ARCH) for b in buttons)
+
+    def test_keyboard_filled_participant_hidden_by_default(self, handler, svc, user_svc, admin_user, active_tournament, archetype_burn):
+        """Заполненный участник скрыт по умолчанию, но есть кнопка «Показать заполненных»."""
         user = user_svc.get_or_create(tg_id=8001, username=None, first_name="Тест")
         svc.register_participant(tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
         result = handler.handle_admin_status(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+        buttons = [b for row in result.keyboard.inline_keyboard for b in row]
+        from bot.keyboards import CB_ADMIN_PICK_ARCH, CB_ADMIN_SHOW_FILLED
+        assert not any(b.callback_data.startswith(CB_ADMIN_PICK_ARCH) for b in buttons)
+        assert any(b.callback_data.startswith(CB_ADMIN_SHOW_FILLED) for b in buttons)
+
+    def test_keyboard_show_filled_reveals_all(self, handler, svc, user_svc, admin_user, active_tournament, archetype_burn):
+        """handle_admin_show_filled показывает кнопки заполненных участников."""
+        user = user_svc.get_or_create(tg_id=8001, username=None, first_name="Тест")
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
+        result = handler.handle_admin_show_filled(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
         buttons = [b for row in result.keyboard.inline_keyboard for b in row]
         from bot.keyboards import CB_ADMIN_PICK_ARCH
         assert any(b.callback_data.startswith(CB_ADMIN_PICK_ARCH) for b in buttons)
@@ -609,7 +629,7 @@ class TestHandleAdminStatus:
     def test_with_archetype_participant_gets_edit_prefix(self, handler, svc, user_svc, admin_user, active_tournament, archetype_burn):
         user = user_svc.get_or_create(tg_id=8003, username=None, first_name="Сколодой")
         svc.register_participant(tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
-        result = handler.handle_admin_status(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+        result = handler.handle_admin_show_filled(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
         buttons_text = [b.text for row in result.keyboard.inline_keyboard for b in row]
         assert any("✏️" in t for t in buttons_text)
 
@@ -864,13 +884,14 @@ class TestStatusReturnedAfterSetArch:
     def test_result_has_participants_keyboard(
         self, handler, admin_user, active_tournament, participant, archetype_burn
     ):
-        from bot.keyboards import CB_ADMIN_PICK_ARCH
+        from bot.keyboards import CB_ADMIN_SHOW_FILLED
         result = handler.handle_admin_set_arch(
             tg_id=ADMIN_TG_ID, participant_id=participant.id, archetype_id=archetype_burn.id
         )
         assert result.keyboard is not None
+        # After setting archetype the participant is "filled" → hidden behind toggle button
         cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
-        assert any(cb.startswith(CB_ADMIN_PICK_ARCH) for cb in cbs)
+        assert any(cb.startswith(CB_ADMIN_SHOW_FILLED) for cb in cbs)
 
     def test_arch_saved_message_comes_before_status(
         self, handler, admin_user, active_tournament, participant, archetype_burn
@@ -894,9 +915,16 @@ class TestStatusReturnedAfterSetArch:
     def test_keyboard_button_has_edit_prefix_after_arch_set(
         self, handler, admin_user, active_tournament, participant, archetype_burn
     ):
-        """После назначения колоды кнопка участника должна иметь prefix ✏️."""
-        result = handler.handle_admin_set_arch(
+        """После назначения колоды кнопка участника видна через show_filled и имеет prefix ✏️."""
+        result = handler.handle_admin_show_filled(
+            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id
+        )
+        # set arch first so participant is filled
+        handler.handle_admin_set_arch(
             tg_id=ADMIN_TG_ID, participant_id=participant.id, archetype_id=archetype_burn.id
+        )
+        result = handler.handle_admin_show_filled(
+            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id
         )
         btns = [b for row in result.keyboard.inline_keyboard for b in row]
         participant_btn = next(
