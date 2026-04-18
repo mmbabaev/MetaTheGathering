@@ -3,7 +3,7 @@
 import asyncio
 import logging
 
-from telegram import BotCommand
+from telegram import BotCommand, BotCommandScopeDefault, BotCommandScopeChat
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -14,7 +14,6 @@ from telegram.ext import (
 
 from core.config import settings
 from core.database import SessionLocal
-from core.impersonate import ImpersonationState
 from core.schemas import TournamentCreate
 from services.tournament import TournamentService
 from bot.telegram import common, player, admin
@@ -22,7 +21,7 @@ from bot.telegram import settings as settings_handler
 from bot.keyboards import (
     CB_TOURNAMENT, CB_REGISTER, CB_ARCHETYPE, CB_CUSTOM_ARCHETYPE,
     CB_ARCHETYPE_MORE,
-    CB_SETTINGS_NAME, CB_SETTINGS_PRETEND, CB_TSTATUS, CB_LEAVE, CB_LEAVE_CONFIRM, CB_LEAVE_CANCEL,
+    CB_SETTINGS_NAME, CB_TSTATUS, CB_LEAVE, CB_LEAVE_CONFIRM, CB_LEAVE_CANCEL,
     CB_BULK_ADD, CB_ADMIN_PICK_ARCH, CB_ADMIN_SET_ARCH, CB_ADMIN_CUSTOM_ARCH,
     CB_ADMIN_ARCH_MORE, CB_EXPORT_EXCEL,
     CB_DELETE_TOURNAMENT, CB_DELETE_TOURNAMENT_CONFIRM, CB_DELETE_TOURNAMENT_CANCEL,
@@ -40,20 +39,52 @@ if settings.DEBUG:
     logging.getLogger("services.tournament").setLevel(logging.DEBUG)
 
 
+_USER_COMMANDS = [
+    BotCommand("tournaments", "Активные турниры и запись"),
+    BotCommand("settings", "Настройки профиля"),
+    BotCommand("help", "Справка по командам"),
+]
+
+_ADMIN_COMMANDS = _USER_COMMANDS + [
+    BotCommand("tournament_status", "Участники турниров"),
+    BotCommand("add_me", "Записать себя"),
+    BotCommand("add_player", "Записать игрока"),
+    BotCommand("add_players", "Массовая запись"),
+    BotCommand("close_tournament", "Закрыть турнир"),
+    BotCommand("create_tournament", "Создать турнир"),
+    BotCommand("delete_tournament", "Удалить турнир"),
+]
+
+
 async def _set_commands(app: Application) -> None:
-    await app.bot.set_my_commands([
-        BotCommand("tournaments", "Активные турниры и запись"),
-        BotCommand("settings", "Настройки профиля"),
-        BotCommand("help", "Справка по командам"),
-        BotCommand("tournament_status", "Участники турниров (админ)"),
-        BotCommand("add_me", "Записать себя (админ)"),
-        BotCommand("add_player", "Записать игрока (админ)"),
-        BotCommand("add_players", "Массовая запись (админ)"),
-        BotCommand("close_tournament", "Закрыть турнир (админ)"),
-        BotCommand("create_tournament", "Создать турнир (админ)"),
-        BotCommand("delete_tournament", "Удалить турнир (админ/дебаг)"),
-    ])
-    logger.info("Bot commands registered.")
+    # Обычным пользователям — только пользовательские команды
+    await app.bot.set_my_commands(_USER_COMMANDS, scope=BotCommandScopeDefault())
+
+    # Каждому известному админу — полный список в личном чате с ботом
+    from core.database import SessionLocal as SL
+    from sqlalchemy import select
+    from core import models
+    db = SL()
+    try:
+        db_admins = db.execute(
+            select(models.User.tg_id).where(
+                models.User.tg_id > 0,
+                (models.User.is_admin == True) | (models.User.is_superadmin == True),
+            )
+        ).scalars().all()
+    finally:
+        db.close()
+
+    admin_ids = set(settings.admin_ids) | set(db_admins)
+    for admin_id in admin_ids:
+        try:
+            await app.bot.set_my_commands(
+                _ADMIN_COMMANDS, scope=BotCommandScopeChat(chat_id=admin_id)
+            )
+        except Exception:
+            pass  # пользователь ещё не открывал чат с ботом
+
+    logger.info(f"Bot commands registered. Admins with full menu: {admin_ids}")
 
 
 def _debug_create_tournament() -> None:
@@ -79,7 +110,6 @@ def _debug_create_tournament() -> None:
 
 def main() -> None:
     app = Application.builder().token(settings.TELEGRAM_BOT_TOKEN).post_init(_set_commands).build()
-    app.bot_data["impersonation"] = ImpersonationState()
 
     app.add_handler(CommandHandler("start", common.cmd_start))
     app.add_handler(CommandHandler("help", common.cmd_help))
@@ -93,8 +123,6 @@ def main() -> None:
     app.add_handler(CommandHandler("close_tournament", admin.cmd_close_tournament))
     app.add_handler(CommandHandler("create_tournament", admin.cmd_create_tournament))
     app.add_handler(CommandHandler("delete_tournament", admin.cmd_delete_tournament))
-    app.add_handler(CommandHandler("impersonate", admin.cmd_impersonate))
-    app.add_handler(CommandHandler("stop_impersonate", admin.cmd_stop_impersonate))
 
     app.add_handler(
         CallbackQueryHandler(player.callback_tournament_select, pattern=f"^{CB_TOURNAMENT}:")
@@ -125,9 +153,6 @@ def main() -> None:
     )
     app.add_handler(
         CallbackQueryHandler(settings_handler.callback_settings_name, pattern=f"^{CB_SETTINGS_NAME}$")
-    )
-    app.add_handler(
-        CallbackQueryHandler(settings_handler.callback_settings_pretend, pattern=f"^{CB_SETTINGS_PRETEND}$")
     )
     app.add_handler(
         CallbackQueryHandler(admin.callback_bulk_add_start, pattern=f"^{CB_BULK_ADD}:")
