@@ -31,7 +31,7 @@ def get_clubs() -> list[ClubConfig]:
     ]
     if settings.DEBUG:
         clubs.append(
-            ClubConfig(name="Debug", weekday="saturday", chat_id=settings.GOLDFISH_CHAT_ID or 0, game_time="14:15")
+            ClubConfig(name="Debug", weekday="saturday", chat_id=settings.GOLDFISH_CHAT_ID or 0, game_time="14:20")
         )
     return clubs
 
