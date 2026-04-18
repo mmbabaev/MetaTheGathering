@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update as sa_update, delete as sa_delete
 from sqlalchemy.orm import Session
 
 from core import models
@@ -144,6 +144,55 @@ class UserService:
         self.db.add(user)
         self.db.flush()
         return user, True
+
+    def merge_placeholder_by_name(
+        self, real_tg_id: int, first_name: str, last_name: Optional[str]
+    ) -> bool:
+        """Привязывает реального пользователя к существующему placeholder-юзеру по имени.
+
+        Когда реальный tg-пользователь впервые вводит своё имя, ищем placeholder
+        (tg_id < 0) с таким же именем. Если находим — переносим ему UserDeckHistory
+        и Participant-записи, placeholder удаляем.
+        Возвращает True если слияние произошло.
+        """
+        real_user = self.get_by_tg_id(real_tg_id)
+        if not real_user:
+            return False
+
+        placeholder = self._find_user_flexible(first_name, last_name)
+        if not placeholder or placeholder.tg_id >= 0 or placeholder.id == real_user.id:
+            return False
+
+        # Переносим историю колод
+        self.db.execute(
+            sa_update(models.UserDeckHistory)
+            .where(models.UserDeckHistory.user_id == placeholder.id)
+            .values(user_id=real_user.id)
+        )
+
+        # Переносим участие в турнирах, пропуская конфликты (тот же турнир)
+        already_in = {
+            row[0] for row in self.db.execute(
+                select(models.Participant.tournament_id)
+                .where(models.Participant.user_id == real_user.id)
+            ).all()
+        }
+        if already_in:
+            self.db.execute(
+                sa_delete(models.Participant).where(
+                    models.Participant.user_id == placeholder.id,
+                    models.Participant.tournament_id.in_(already_in),
+                )
+            )
+        self.db.execute(
+            sa_update(models.Participant)
+            .where(models.Participant.user_id == placeholder.id)
+            .values(user_id=real_user.id)
+        )
+
+        self.db.delete(placeholder)
+        self.db.commit()
+        return True
 
     def update_name(
         self,
