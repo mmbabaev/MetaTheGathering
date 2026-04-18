@@ -14,7 +14,7 @@ info()  { echo -e "${GREEN}[deploy]${NC} $1"; }
 error() { echo -e "${RED}[error]${NC} $1"; exit 1; }
 
 # ── Config ────────────────────────────────────────────────────────────────────
-SSH_KEY="~/.ssh/ssh-key-kara"
+SSH_KEY="${SSH_KEY:-~/.ssh/ssh-key-kara}"
 SERVER_USER="mbabaev"
 SERVER_IP="158.160.9.28"
 
@@ -37,7 +37,7 @@ fi
 
 # ── Validate ──────────────────────────────────────────────────────────────────
 [ ! -f "$ENV_FILE" ] && error "Файл $ENV_FILE не найден"
-[ ! -f "${SSH_KEY/#\~//Users/mbabaev}" ] && error "SSH-ключ $SSH_KEY не найден"
+[ ! -f "${SSH_KEY/#\~/$HOME}" ] && error "SSH-ключ $SSH_KEY не найден"
 
 # ── Archive ───────────────────────────────────────────────────────────────────
 ARCHIVE="/tmp/meta-the-gathering-deploy-$(date +%Y%m%d%H%M%S).tar.gz"
@@ -59,9 +59,9 @@ info "Архив создан: $(du -sh $ARCHIVE | cut -f1)"
 
 # ── Copy to server ────────────────────────────────────────────────────────────
 info "Копируем на сервер..."
-scp -i "${SSH_KEY/#\~//Users/mbabaev}" -o StrictHostKeyChecking=no \
+scp -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no \
     "$ARCHIVE" "${SERVER_USER}@${SERVER_IP}:/tmp/"
-scp -i "${SSH_KEY/#\~//Users/mbabaev}" -o StrictHostKeyChecking=no \
+scp -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no \
     "$ENV_FILE" "${SERVER_USER}@${SERVER_IP}:/tmp/.env.deploy"
 
 # ── Remote install ────────────────────────────────────────────────────────────
@@ -80,7 +80,7 @@ else
     OTEL_SERVICE_NAME="otel-collector-debug"
 fi
 
-ssh -i "${SSH_KEY/#\~//Users/mbabaev}" -o StrictHostKeyChecking=no "${SERVER_USER}@${SERVER_IP}" \
+ssh -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no "${SERVER_USER}@${SERVER_IP}" \
     ARCHIVE_NAME="$ARCHIVE_NAME" REMOTE_DIR="$REMOTE_DIR" SERVICE_NAME="$SERVICE_NAME" \
     ENV_DEST="$ENV_DEST" SYSTEMD_SERVICE_FILE="$SYSTEMD_SERVICE_FILE" \
     OTEL_SERVICE_FILE="$OTEL_SERVICE_FILE" OTEL_SERVICE_NAME="$OTEL_SERVICE_NAME" \
@@ -130,11 +130,11 @@ REMOTE
 
 # ── Status ────────────────────────────────────────────────────────────────────
 info "Статус сервиса:"
-ssh -i "${SSH_KEY/#\~//Users/mbabaev}" -o StrictHostKeyChecking=no "${SERVER_USER}@${SERVER_IP}" \
+ssh -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no "${SERVER_USER}@${SERVER_IP}" \
     "sudo systemctl status $SERVICE_NAME --no-pager -l | head -30"
 
 info "Последние логи:"
-ssh -i "${SSH_KEY/#\~//Users/mbabaev}" -o StrictHostKeyChecking=no "${SERVER_USER}@${SERVER_IP}" \
+ssh -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no "${SERVER_USER}@${SERVER_IP}" \
     "sudo journalctl -u $SERVICE_NAME -n 20 --no-pager"
 
 rm -f "$ARCHIVE"
