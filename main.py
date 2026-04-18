@@ -3,7 +3,7 @@
 import asyncio
 import logging
 
-from telegram import BotCommand
+from telegram import BotCommand, BotCommandScopeDefault, BotCommandScopeChat
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -39,20 +39,52 @@ if settings.DEBUG:
     logging.getLogger("services.tournament").setLevel(logging.DEBUG)
 
 
+_USER_COMMANDS = [
+    BotCommand("tournaments", "Активные турниры и запись"),
+    BotCommand("settings", "Настройки профиля"),
+    BotCommand("help", "Справка по командам"),
+]
+
+_ADMIN_COMMANDS = _USER_COMMANDS + [
+    BotCommand("tournament_status", "Участники турниров"),
+    BotCommand("add_me", "Записать себя"),
+    BotCommand("add_player", "Записать игрока"),
+    BotCommand("add_players", "Массовая запись"),
+    BotCommand("close_tournament", "Закрыть турнир"),
+    BotCommand("create_tournament", "Создать турнир"),
+    BotCommand("delete_tournament", "Удалить турнир"),
+]
+
+
 async def _set_commands(app: Application) -> None:
-    await app.bot.set_my_commands([
-        BotCommand("tournaments", "Активные турниры и запись"),
-        BotCommand("settings", "Настройки профиля"),
-        BotCommand("help", "Справка по командам"),
-        BotCommand("tournament_status", "Участники турниров (админ)"),
-        BotCommand("add_me", "Записать себя (админ)"),
-        BotCommand("add_player", "Записать игрока (админ)"),
-        BotCommand("add_players", "Массовая запись (админ)"),
-        BotCommand("close_tournament", "Закрыть турнир (админ)"),
-        BotCommand("create_tournament", "Создать турнир (админ)"),
-        BotCommand("delete_tournament", "Удалить турнир (админ/дебаг)"),
-    ])
-    logger.info("Bot commands registered.")
+    # Обычным пользователям — только пользовательские команды
+    await app.bot.set_my_commands(_USER_COMMANDS, scope=BotCommandScopeDefault())
+
+    # Каждому известному админу — полный список в личном чате с ботом
+    from core.database import SessionLocal as SL
+    from sqlalchemy import select
+    from core import models
+    db = SL()
+    try:
+        db_admins = db.execute(
+            select(models.User.tg_id).where(
+                models.User.tg_id > 0,
+                (models.User.is_admin == True) | (models.User.is_superadmin == True),
+            )
+        ).scalars().all()
+    finally:
+        db.close()
+
+    admin_ids = set(settings.admin_ids) | set(db_admins)
+    for admin_id in admin_ids:
+        try:
+            await app.bot.set_my_commands(
+                _ADMIN_COMMANDS, scope=BotCommandScopeChat(chat_id=admin_id)
+            )
+        except Exception:
+            pass  # пользователь ещё не открывал чат с ботом
+
+    logger.info(f"Bot commands registered. Admins with full menu: {admin_ids}")
 
 
 def _debug_create_tournament() -> None:
