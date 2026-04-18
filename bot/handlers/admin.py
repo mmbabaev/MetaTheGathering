@@ -526,17 +526,29 @@ class AdminHandler:
     ) -> HandlerResult:
         if not self._is_admin(admin_tg_id):
             return HandlerResult(NOT_ADMIN)
-        target_query = target_query.lstrip("@").strip()
-        target = self.user_svc.get_by_username(target_query)
+        is_username = target_query.startswith("@") or " " not in target_query.strip()
+        raw = target_query.lstrip("@").strip()
+
+        target = self.user_svc.get_by_username(raw)
         if target is None:
-            target = self.user_svc.find_by_name(target_query)
+            target = self.user_svc.find_by_name(raw)
+
+        created = False
         if target is None:
-            return HandlerResult(f"Пользователь «{target_query}» не найден в базе.")
+            if is_username:
+                target, created = self.user_svc.get_or_create_placeholder(username=raw)
+            else:
+                parts = raw.split(None, 1)
+                target, created = self.user_svc.get_or_create_by_name(
+                    parts[0], parts[1] if len(parts) > 1 else None
+                )
+
         state.set(admin_tg_id, target.tg_id)
         name_parts = [p for p in [target.first_name, target.last_name] if p]
         display = " ".join(name_parts) if name_parts else (target.username or f"id={target.tg_id}")
+        note = " — создан новый placeholder" if created else ""
         return HandlerResult(
-            f"👤 Действуете от имени {display} (tg_id={target.tg_id}).\n/stop_impersonate — выйти."
+            f"👤 Действуете от имени {display} (tg_id={target.tg_id}){note}.\n/stop_impersonate — выйти."
         )
 
     def handle_stop_impersonate(

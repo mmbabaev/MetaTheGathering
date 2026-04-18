@@ -113,6 +113,23 @@ class UserService:
         real = [u for u in candidates if u.tg_id > 0]
         return real[0] if real else candidates[0]
 
+    def get_or_create_placeholder(
+        self, *, username: str
+    ) -> tuple["models.User", bool]:
+        """Найти пользователя по username или создать placeholder с отрицательным tg_id."""
+        user = self.get_by_username(username)
+        if user:
+            return user, False
+
+        min_val = self.db.execute(select(func.min(models.User.tg_id))).scalar()
+        placeholder_tg_id = (min_val - 1) if (min_val is not None and min_val < 0) else -1
+
+        user = models.User(tg_id=placeholder_tg_id, username=username)
+        self.db.add(user)
+        self.db.commit()
+        self.db.refresh(user)
+        return user, True
+
     def get_or_create_by_name(
         self,
         first_name: str,

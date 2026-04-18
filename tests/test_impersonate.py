@@ -95,10 +95,17 @@ class TestHandleImpersonate:
         result = handler.handle_impersonate(ADMIN_TG_ID, "Иван Петров", state)
         assert state.get_acting_tg_id(ADMIN_TG_ID) == USER2_TG_ID
 
-    def test_unknown_user_returns_error(self, handler, state, admin_user):
-        result = handler.handle_impersonate(ADMIN_TG_ID, "nobody", state)
-        assert "не найден" in result.text
-        assert not state.is_impersonating(ADMIN_TG_ID)
+    def test_unknown_username_creates_placeholder(self, handler, state, admin_user):
+        result = handler.handle_impersonate(ADMIN_TG_ID, "@newuser", state)
+        assert "placeholder" in result.text
+        assert state.is_impersonating(ADMIN_TG_ID)
+        assert state.get_acting_tg_id(ADMIN_TG_ID) < 0
+
+    def test_unknown_name_creates_placeholder(self, handler, state, admin_user):
+        result = handler.handle_impersonate(ADMIN_TG_ID, "Новый Игрок", state)
+        assert "placeholder" in result.text
+        assert state.is_impersonating(ADMIN_TG_ID)
+        assert state.get_acting_tg_id(ADMIN_TG_ID) < 0
 
 
 class TestHandleStopImpersonate:
