@@ -50,6 +50,20 @@ class UserService:
         self.db.refresh(user)
         return user
 
+    def get_by_username(self, username: str) -> Optional[models.User]:
+        """Найти пользователя по Telegram username (без @, без учёта регистра)."""
+        stmt = select(models.User).where(
+            models.User.username.ilike(username)
+        )
+        return self.db.execute(stmt).scalar_one_or_none()
+
+    def find_by_name(self, query: str) -> Optional[models.User]:
+        """Найти пользователя по имени/фамилии (через _find_user_flexible)."""
+        parts = query.strip().split(None, 1)
+        first = parts[0]
+        last = parts[1] if len(parts) > 1 else None
+        return self._find_user_flexible(first, last)
+
     def _find_user_flexible(
         self, first_name: str, last_name: Optional[str]
     ) -> Optional[models.User]:
