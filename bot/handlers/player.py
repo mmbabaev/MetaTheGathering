@@ -95,7 +95,12 @@ class PlayerHandler:
             t.title, t.status.label_ru,
             total=len(participants), with_deck=with_deck,
         )
-        return HandlerResult(text, keyboard=tournament_card_keyboard(t.id, is_registered, is_admin=is_admin))
+        return HandlerResult(
+            text,
+            keyboard=tournament_card_keyboard(
+                t.id, is_registered, is_admin=is_admin, decks_hidden=t.decks_hidden
+            ),
+        )
 
     def _archetype_keyboard_for_player(
         self, tournament_id: int, tg_id: int | None, expanded: bool = False
@@ -215,8 +220,9 @@ class PlayerHandler:
         except errors.TournamentNotFound:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
         participants = self.svc.list_participants_for_tournament(tournament_id)
-        text = format_tournament_status(t.title, t.status.label_ru, participants)
-        return HandlerResult(text)
+        text = format_tournament_status(t.title, t.status.label_ru, participants, decks_hidden=t.decks_hidden)
+        parse_mode = "HTML" if t.decks_hidden else None
+        return HandlerResult(text, parse_mode=parse_mode)
 
     def handle_leave_tournament(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Показывает подтверждение выхода из турнира."""

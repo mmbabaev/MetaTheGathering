@@ -23,6 +23,7 @@ CB_DELETE_TOURNAMENT = "del_t"           # del_t:{tournament_id}
 CB_DELETE_TOURNAMENT_CONFIRM = "del_t_yes"  # del_t_yes:{tournament_id}
 CB_DELETE_TOURNAMENT_CANCEL = "del_t_no"    # del_t_no:{tournament_id}
 CB_ADMIN_SHOW_FILLED = "adm_show_filled"    # adm_show_filled:{tournament_id}
+CB_REVEAL_DECKS = "reveal_decks"            # reveal_decks:{tournament_id}
 
 
 def tournament_list_keyboard(tournaments: list) -> InlineKeyboardMarkup:
@@ -38,6 +39,7 @@ def tournament_card_keyboard(
     tournament_id: int,
     is_registered: bool,
     is_admin: bool = False,
+    decks_hidden: bool = True,
 ) -> InlineKeyboardMarkup:
     """Кнопки для карточки турнира — зависят от статуса регистрации и роли пользователя."""
     if is_registered:
@@ -53,6 +55,12 @@ def tournament_card_keyboard(
     )
     rows = [[action_btn], [status_btn]]
     if is_admin:
+        if decks_hidden:
+            rows.append([
+                InlineKeyboardButton(
+                    "👁 Показать колоды", callback_data=f"{CB_REVEAL_DECKS}:{tournament_id}"
+                )
+            ])
         rows.append([
             InlineKeyboardButton(
                 "➕ Добавить участников", callback_data=f"{CB_BULK_ADD}:{tournament_id}"

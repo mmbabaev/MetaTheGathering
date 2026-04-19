@@ -26,6 +26,7 @@ from bot.keyboards import (
     CB_ADMIN_ARCH_MORE, CB_EXPORT_EXCEL,
     CB_DELETE_TOURNAMENT, CB_DELETE_TOURNAMENT_CONFIRM, CB_DELETE_TOURNAMENT_CANCEL,
     CB_ADMIN_SHOW_FILLED,
+    CB_REVEAL_DECKS,
 )
 from bot.scheduler import setup_scheduler
 
@@ -183,6 +184,9 @@ def main() -> None:
     )
     app.add_handler(
         CallbackQueryHandler(admin.callback_admin_show_filled, pattern=f"^{CB_ADMIN_SHOW_FILLED}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(admin.callback_reveal_decks, pattern=f"^{CB_REVEAL_DECKS}:")
     )
 
     app.add_handler(

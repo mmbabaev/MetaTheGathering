@@ -67,6 +67,7 @@ class TournamentCreate(TournamentBase):
 class TournamentRead(TournamentBase):
     id: int
     status: TournamentStatus
+    decks_hidden: bool = True
     registration_open_at: Optional[datetime] = None
     registration_close_at: Optional[datetime] = None
     started_at: Optional[datetime] = None
