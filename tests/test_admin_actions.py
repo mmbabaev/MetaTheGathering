@@ -332,26 +332,26 @@ class TestHandleCloseTournament:
         assert result.text == MULTIPLE_TOURNAMENTS_MSG
 
 
-# --- _is_admin via settings.admin_ids ---
+# --- UserService.is_admin ---
 
 class TestIsAdminViaSettings:
     def test_admin_via_settings_ids(self, handler):
         from unittest.mock import patch
-        with patch("bot.handlers.admin.settings") as mock_settings:
+        with patch("services.user.settings") as mock_settings:
             mock_settings.admin_ids = [555]
-            assert handler._is_admin(tg_id=555) is True
+            assert handler.user_svc.is_admin(tg_id=555) is True
 
     def test_non_admin_not_in_settings_or_db(self, handler):
         from unittest.mock import patch
-        with patch("bot.handlers.admin.settings") as mock_settings:
+        with patch("services.user.settings") as mock_settings:
             mock_settings.admin_ids = []
-            assert handler._is_admin(tg_id=42) is False
+            assert handler.user_svc.is_admin(tg_id=42) is False
 
     def test_admin_via_db_is_admin_flag(self, handler, admin_user):
         from unittest.mock import patch
-        with patch("bot.handlers.admin.settings") as mock_settings:
+        with patch("services.user.settings") as mock_settings:
             mock_settings.admin_ids = []
-            assert handler._is_admin(tg_id=ADMIN_TG_ID) is True
+            assert handler.user_svc.is_admin(tg_id=ADMIN_TG_ID) is True
 
 
 # --- handle_add_me: TournamentInvalidState ---

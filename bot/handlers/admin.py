@@ -3,7 +3,6 @@
 import re
 from datetime import datetime
 
-from core.config import settings
 from core.schemas import TournamentCreate
 from services.utils import get_tournament
 from services.tournament import TournamentService
@@ -112,12 +111,6 @@ class AdminHandler:
         self.svc = svc
         self.user_svc = user_svc
 
-    def _is_admin(self, tg_id: int) -> bool:
-        if tg_id in settings.admin_ids:
-            return True
-        user = self.user_svc.get_by_tg_id(tg_id)
-        return user is not None and (user.is_admin or user.is_superadmin)
-
     def _resolve_tournament(self):
         """Возвращает (tournament, error_result). Один из них None."""
         try:
@@ -135,7 +128,7 @@ class AdminHandler:
         last_name: str | None,
         deck_name: str,
     ) -> HandlerResult:
-        if not self._is_admin(tg_id):
+        if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
         if not deck_name:
             return HandlerResult(NO_DECK_NAME)
@@ -176,7 +169,7 @@ class AdminHandler:
         target_first_name: str | None = None,
         target_last_name: str | None = None,
     ) -> HandlerResult:
-        if not self._is_admin(tg_id):
+        if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
         active, err = self._resolve_tournament()
         if err:
@@ -212,7 +205,7 @@ class AdminHandler:
         entries: list[tuple[int, str | None, str | None, str]],
     ) -> HandlerResult:
         """entries: (target_tg_id, username, first_name, deck_name) — после резолва в Telegram."""
-        if not self._is_admin(tg_id):
+        if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
         if not entries:
             return HandlerResult("Нет данных для обработки.")
@@ -254,7 +247,7 @@ class AdminHandler:
         Игроки ищутся в БД по имени; если не найдены — создаются с placeholder tg_id.
         Уже зарегистрированные пропускаются.
         """
-        if not self._is_admin(tg_id):
+        if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
 
         parsed: list[tuple[str, str | None]] = []
@@ -314,13 +307,13 @@ class AdminHandler:
 
     def handle_admin_status(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Список участников с кнопками для редактирования колоды (admin view)."""
-        if not self._is_admin(tg_id):
+        if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
         return self._tournament_status_result(tournament_id)
 
     def handle_admin_show_filled(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Показывает кнопки заполненных участников (разворачивает скрытый список)."""
-        if not self._is_admin(tg_id):
+        if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
         return self._tournament_status_result(tournament_id, show_filled=True)
 
@@ -338,7 +331,7 @@ class AdminHandler:
         self, tg_id: int, participant_id: int, expanded: bool = False
     ) -> HandlerResult:
         """Показывает выбор архетипа для конкретного участника."""
-        if not self._is_admin(tg_id):
+        if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
         p = self.svc.get_participant_by_id(participant_id)
         if p is None:
@@ -355,7 +348,7 @@ class AdminHandler:
         self, tg_id: int, participant_id: int, archetype_id: int
     ) -> HandlerResult:
         """Устанавливает архетип участнику, затем возвращает обновлённый статус турнира."""
-        if not self._is_admin(tg_id):
+        if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
         p = self.svc.get_participant_by_id(participant_id)
         if p is None:
@@ -374,7 +367,7 @@ class AdminHandler:
         self, tg_id: int, participant_id: int, arch_name: str
     ) -> HandlerResult:
         """Создаёт архетип по введённому названию и присваивает участнику."""
-        if not self._is_admin(tg_id):
+        if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
         try:
             arch = self.svc.get_or_create_archetype_by_name(arch_name, is_custom=True)
@@ -384,7 +377,7 @@ class AdminHandler:
         return HandlerResult(ADMIN_ARCH_SAVED.format(archetype_name=arch.name))
 
     def handle_tournament_status(self, tg_id: int) -> HandlerResult:
-        if not self._is_admin(tg_id):
+        if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
         tournaments = self.svc.list_all_active_tournaments()
         if not tournaments:
@@ -396,7 +389,7 @@ class AdminHandler:
         return HandlerResult("\n\n---\n\n".join(blocks))
 
     def handle_close_tournament(self, tg_id: int) -> HandlerResult:
-        if not self._is_admin(tg_id):
+        if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
         active, err = self._resolve_tournament()
         if err:
@@ -408,7 +401,7 @@ class AdminHandler:
         self, tg_id: int, chat_id: int, title: str | None = None
     ) -> HandlerResult:
         """Создать новый турнир в текущем чате."""
-        if not self._is_admin(tg_id):
+        if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
         if not title:
             title = f"Pauper {datetime.now().strftime('%Y-%m-%d')}"
@@ -417,7 +410,7 @@ class AdminHandler:
 
     def handle_delete_tournament(self, tg_id: int) -> HandlerResult:
         """Удалить активный турнир вместе с участниками (для дебага, через /delete_tournament)."""
-        if not self._is_admin(tg_id):
+        if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
         active, err = self._resolve_tournament()
         if err:
@@ -435,7 +428,7 @@ class AdminHandler:
         import io
         import openpyxl
 
-        if not self._is_admin(tg_id):
+        if not self.user_svc.is_admin(tg_id):
             return None
 
         try:
@@ -489,7 +482,7 @@ class AdminHandler:
         self, tg_id: int, tournament_id: int
     ) -> HandlerResult:
         """Показывает запрос подтверждения удаления турнира."""
-        if not self._is_admin(tg_id):
+        if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
         try:
             t = get_tournament(self.svc.db, tournament_id)
@@ -506,7 +499,7 @@ class AdminHandler:
         self, tg_id: int, tournament_id: int
     ) -> HandlerResult:
         """Выполняет удаление после подтверждения."""
-        if not self._is_admin(tg_id):
+        if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
         try:
             t = get_tournament(self.svc.db, tournament_id)

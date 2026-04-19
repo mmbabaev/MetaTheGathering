@@ -11,12 +11,6 @@ class SettingsHandler:
     def __init__(self, user_svc: UserService) -> None:
         self.user_svc = user_svc
 
-    def _is_admin(self, tg_id: int) -> bool:
-        if tg_id in app_settings.admin_ids:
-            return True
-        user = self.user_svc.get_by_tg_id(tg_id)
-        return user is not None and (user.is_admin or user.is_superadmin)
-
     def handle_settings(self, tg_id: int) -> HandlerResult:
         user = self.user_svc.get_by_tg_id(tg_id)
         name_parts = []
@@ -26,7 +20,7 @@ class SettingsHandler:
             name_parts.append(user.last_name)
         current = " ".join(name_parts) if name_parts else "не указано"
         text = f"{SETTINGS_MENU}\n\nВаше имя: {current}\n\nВерсия: {app_settings.VERSION}"
-        return HandlerResult(text, keyboard=settings_keyboard(is_admin=self._is_admin(tg_id)))
+        return HandlerResult(text, keyboard=settings_keyboard(is_admin=self.user_svc.is_admin(tg_id)))
 
     def handle_settings_name_text(self, tg_id: int, name_text: str) -> HandlerResult:
         parts = name_text.strip().split(None, 1)
