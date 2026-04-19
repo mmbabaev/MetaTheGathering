@@ -441,6 +441,7 @@ class AdminHandler:
         """
         import io
         import openpyxl
+        from openpyxl.styles import PatternFill, Font, Alignment
 
         if not self.user_svc.is_admin(tg_id):
             return None
@@ -469,13 +470,8 @@ class AdminHandler:
         # Данные
         for row, p in enumerate(participants, 2):
             username = f"@{p.user.username}" if p.user and p.user.username else ""
-            name_parts = []
-            if p.user:
-                if p.user.first_name:
-                    name_parts.append(p.user.first_name)
-                if p.user.last_name:
-                    name_parts.append(p.user.last_name)
-            full_name = " ".join(name_parts)
+            from bot.messages import format_participant_name
+            full_name = format_participant_name(p.user.first_name if p.user else None, p.user.last_name if p.user else None)
             deck = p.archetype.name if p.archetype else ""
 
             ws.cell(row=row, column=1, value=username)
