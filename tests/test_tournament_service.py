@@ -12,6 +12,7 @@ from services.errors import (
     VotingNotAllowed,
 )
 from services.tournament import CONFIRM_THRESHOLD, REJECT_THRESHOLD
+from services.stats import StatsService
 
 
 # ===== Tournament lifecycle =====
@@ -281,20 +282,20 @@ class TestResetVotes:
 # ===== Meta aggregation =====
 
 class TestGetTournamentMeta:
-    def test_meta_aggregates_by_archetype(self, svc, user_svc, tournament, user_alice, user_bob, archetype_burn, archetype_affinity):
+    def test_meta_aggregates_by_archetype(self, db, svc, user_svc, tournament, user_alice, user_bob, archetype_burn, archetype_affinity):
         u3 = user_svc.get_or_create(tg_id=1003, username="carol")
         svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
         svc.register_participant(tournament_id=tournament.id, user_id=user_bob.id, archetype_id=archetype_burn.id)
         svc.register_participant(tournament_id=tournament.id, user_id=u3.id, archetype_id=archetype_affinity.id)
 
-        meta = svc.get_tournament_meta(tournament.id)
+        meta = StatsService(db).get_tournament_meta(tournament.id)
         by_name = {row.archetype_name: row for row in meta}
 
         assert by_name["Burn"].count == 2
         assert by_name["Affinity"].count == 1
 
-    def test_meta_empty_for_no_participants(self, svc, tournament):
-        meta = svc.get_tournament_meta(tournament.id)
+    def test_meta_empty_for_no_participants(self, db, svc, tournament):
+        meta = StatsService(db).get_tournament_meta(tournament.id)
         assert meta == []
 
 

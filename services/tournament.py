@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from datetime import timedelta
 from typing import List, Optional
 
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -29,15 +28,7 @@ CHANGE_VOTE_COOLDOWN = timedelta(seconds=30)
 
 
 from services.archetype import ArchetypeItem  # re-export
-
-
-@dataclass
-class MetaRow:
-    archetype_id: int
-    archetype_name: str
-    count: int
-    upvotes_sum: int
-    downvotes_sum: int
+from services.stats import MetaRow  # re-export
 
 
 class TournamentService:
@@ -464,31 +455,3 @@ class TournamentService:
 
         self.db.commit()
 
-    # ===== meta =====
-
-    def get_tournament_meta(self, tournament_id: int) -> List[MetaRow]:
-        stmt = (
-            select(
-                models.Archetype.id.label("archetype_id"),
-                models.Archetype.name.label("archetype_name"),
-                func.count(models.Participant.id).label("count"),
-                func.sum(models.Participant.upvotes_count).label("upvotes_sum"),
-                func.sum(models.Participant.downvotes_count).label("downvotes_sum"),
-            )
-            .join(models.Participant, models.Participant.archetype_id == models.Archetype.id)
-            .where(models.Participant.tournament_id == tournament_id)
-            .group_by(models.Archetype.id, models.Archetype.name)
-            .order_by(func.count(models.Participant.id).desc())
-        )
-
-        rows = self.db.execute(stmt).all()
-        return [
-            MetaRow(
-                archetype_id=row.archetype_id,
-                archetype_name=row.archetype_name,
-                count=row.count or 0,
-                upvotes_sum=row.upvotes_sum or 0,
-                downvotes_sum=row.downvotes_sum or 0,
-            )
-            for row in rows
-        ]

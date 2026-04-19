@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from core import models
 from services.utils import get_tournament
+from services.stats import StatsService
 
 
 ExportFormat = Literal["csv", "markdown"]
@@ -112,8 +113,6 @@ class ExportService:
         Markdown‑таблица метагейма: архетип, количество игроков, суммарные голоса.
         Удобно кидать в Telegram / на сайт как текст.[web:61][web:67]
         """
-        from services.stats import StatsService
-
         stats = StatsService(self.db)
         meta = stats.get_tournament_meta(tournament_id)
 
