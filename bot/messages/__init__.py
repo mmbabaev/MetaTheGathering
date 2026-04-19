@@ -96,7 +96,7 @@ def format_tournament_status(
     for p in participants:
         icon = _participant_icon(p)
         if p.user:
-            name_parts = [n for n in (p.user.first_name, p.user.last_name) if n]
+            name_parts = [n for n in (p.user.last_name, p.user.first_name) if n]
             full_name = " ".join(name_parts) if name_parts else f"id{p.user.tg_id}"
             username_hint = f" (@{p.user.username})" if p.user.username else ""
             display = f"{full_name}{username_hint}"

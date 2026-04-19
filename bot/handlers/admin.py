@@ -267,7 +267,7 @@ class AdminHandler:
         entries: list[tuple[int, str]] = []
         for first_name, last_name in parsed:
             user, _ = self.user_svc.get_or_create_by_name(first_name, last_name)
-            display = f"{first_name} {last_name}" if last_name else first_name
+            display = f"{last_name} {first_name}" if last_name else first_name
             if user.username:
                 display += f" (@{user.username})"
             entries.append((user.id, display))

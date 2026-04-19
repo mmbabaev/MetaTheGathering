@@ -521,7 +521,7 @@ class TestHandleBulkAddByName:
         result = handler.handle_bulk_add_by_name(
             tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["Иван Иванов"]
         )
-        assert "✅ Иван Иванов" in result.text
+        assert "✅ Иванов Иван" in result.text
         user = user_svc.get_or_create_by_name("Иван", "Иванов")
         assert user is not None
 
@@ -531,7 +531,7 @@ class TestHandleBulkAddByName:
         result = handler.handle_bulk_add_by_name(
             tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["Мария Петрова"]
         )
-        assert "✅ Мария Петрова" in result.text
+        assert "✅ Петрова Мария" in result.text
 
     def test_skips_already_registered(self, handler, svc, user_svc, admin_user, active_tournament, archetype_burn):
         user = user_svc.get_or_create(tg_id=7001, username=None, first_name="Алекс")
@@ -549,7 +549,7 @@ class TestHandleBulkAddByName:
             names=["Борис", "Вера Новая"],
         )
         assert "⚠️ Борис — уже записан" in result.text
-        assert "✅ Вера Новая" in result.text
+        assert "✅ Новая Вера" in result.text
 
     def test_tournament_not_found(self, handler, admin_user):
         from bot.messages import TOURNAMENT_NOT_FOUND
@@ -812,7 +812,7 @@ class TestStatusReturnedAfterBulkAdd:
         result = handler.handle_bulk_add_by_name(
             tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["Иван Иванов"]
         )
-        assert "✅ Иван Иванов" in result.text
+        assert "✅ Иванов Иван" in result.text
 
     def test_result_contains_tournament_status(self, handler, admin_user, active_tournament):
         """После добавления текст содержит заголовок турнира."""
@@ -836,7 +836,7 @@ class TestStatusReturnedAfterBulkAdd:
         result = handler.handle_bulk_add_by_name(
             tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["Пётр Петров"]
         )
-        pos_add = result.text.index("✅ Пётр Петров")
+        pos_add = result.text.index("✅ Петров Пётр")
         pos_title = result.text.index(active_tournament.title)
         assert pos_add < pos_title
 
@@ -845,8 +845,8 @@ class TestStatusReturnedAfterBulkAdd:
             tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id,
             names=["Анна Первая", "Борис Второй"],
         )
-        assert "✅ Анна Первая" in result.text
-        assert "✅ Борис Второй" in result.text
+        assert "✅ Первая Анна" in result.text
+        assert "✅ Второй Борис" in result.text
         from bot.keyboards import CB_ADMIN_PICK_ARCH
         cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
         assert sum(1 for cb in cbs if cb.startswith(CB_ADMIN_PICK_ARCH)) == 2

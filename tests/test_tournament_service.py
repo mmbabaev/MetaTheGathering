@@ -689,7 +689,7 @@ class TestGetOrCreateByName:
             result = handler.handle_bulk_add_by_name(
                 tg_id=0, tournament_id=t.id, names=["Антон Ильин"]
             )
-        assert "✅ Антон Ильин" in result.text
+        assert "✅ Ильин Антон" in result.text
 
         # Участник должен быть привязан к правильному пользователю (с историей)
         participant = svc.get_participant(t.id, u.id)
