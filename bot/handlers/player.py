@@ -221,8 +221,7 @@ class PlayerHandler:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
         participants = self.svc.list_participants_for_tournament(tournament_id)
         text = format_tournament_status(t.title, t.status.label_ru, participants, decks_hidden=t.decks_hidden)
-        parse_mode = "HTML" if t.decks_hidden else None
-        return HandlerResult(text, parse_mode=parse_mode)
+        return HandlerResult(text)
 
     def handle_leave_tournament(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Показывает подтверждение выхода из турнира."""

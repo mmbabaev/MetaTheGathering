@@ -45,14 +45,14 @@ class TestSetDecksHidden:
 # ===== format_tournament_status with decks_hidden =====
 
 class TestFormatTournamentStatus:
-    def test_hidden_wraps_archetype_in_spoiler(self, db, svc, user_svc, arch_svc, tournament, archetype_burn):
+    def test_hidden_shows_placeholder(self, db, svc, user_svc, arch_svc, tournament, archetype_burn):
         user = user_svc.get_or_create(tg_id=4001, username="u", first_name="Ivan")
         svc.register_participant(tournament_id=tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
         participants = svc.list_participants_for_tournament(tournament.id)
 
         text = format_tournament_status("T", "Регистрация", participants, decks_hidden=True)
-        assert "<tg-spoiler>Burn</tg-spoiler>" in text
-        assert "Burn" in text  # name still present inside tag
+        assert "▓▓▓" in text
+        assert "Burn" not in text
 
     def test_not_hidden_shows_plain_archetype(self, db, svc, user_svc, arch_svc, tournament, archetype_burn):
         user = user_svc.get_or_create(tg_id=4002, username="u2", first_name="Maria")
@@ -60,10 +60,10 @@ class TestFormatTournamentStatus:
         participants = svc.list_participants_for_tournament(tournament.id)
 
         text = format_tournament_status("T", "Регистрация", participants, decks_hidden=False)
-        assert "<tg-spoiler>" not in text
+        assert "▓▓▓" not in text
         assert "Burn" in text
 
-    def test_no_archetype_never_wrapped(self, db, svc, user_svc, tournament):
+    def test_no_archetype_never_has_placeholder(self, db, svc, user_svc, tournament):
         user = user_svc.get_or_create(tg_id=4003, username="u3", first_name="Oleg")
         from core import models
         db.add(models.Participant(tournament_id=tournament.id, user_id=user.id))
@@ -71,29 +71,28 @@ class TestFormatTournamentStatus:
         participants = svc.list_participants_for_tournament(tournament.id)
 
         text = format_tournament_status("T", "Регистрация", participants, decks_hidden=True)
-        assert "<tg-spoiler>" not in text
+        assert "▓▓▓" not in text
         assert "не указана" in text
 
 
 # ===== PlayerHandler.handle_tournament_public_status =====
 
 class TestHandleTournamentPublicStatus:
-    def test_decks_hidden_returns_html_parse_mode(self, handler, svc, user_svc, arch_svc, tournament, archetype_burn):
+    def test_decks_hidden_shows_placeholder(self, handler, svc, user_svc, arch_svc, tournament, archetype_burn):
         user = user_svc.get_or_create(tg_id=5001, username="p", first_name="Player")
         svc.register_participant(tournament_id=tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
 
         result = handler.handle_tournament_public_status(tournament.id)
-        assert result.parse_mode == "HTML"
-        assert "<tg-spoiler>" in result.text
+        assert "▓▓▓" in result.text
+        assert "Burn" not in result.text
 
-    def test_decks_revealed_no_parse_mode(self, handler, svc, user_svc, arch_svc, tournament, archetype_burn):
+    def test_decks_revealed_shows_name(self, handler, svc, user_svc, arch_svc, tournament, archetype_burn):
         svc.set_decks_hidden(tournament.id, hidden=False)
         user = user_svc.get_or_create(tg_id=5002, username="p2", first_name="Player2")
         svc.register_participant(tournament_id=tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
 
         result = handler.handle_tournament_public_status(tournament.id)
-        assert result.parse_mode is None
-        assert "<tg-spoiler>" not in result.text
+        assert "▓▓▓" not in result.text
         assert "Burn" in result.text
 
 
@@ -123,6 +122,35 @@ class TestTournamentCardKeyboard:
         result = handler.handle_tournaments(tg_id=99999)
         buttons_flat = [btn for row in result.keyboard.inline_keyboard for btn in row]
         assert not any(b.callback_data.startswith(CB_REVEAL_DECKS) for b in buttons_flat)
+
+
+# ===== Admin view also respects decks_hidden =====
+
+class TestAdminViewDecksHidden:
+    def test_admin_status_hides_decks_when_hidden(self, admin_handler, svc, user_svc, tournament, archetype_burn):
+        from unittest.mock import patch
+        user = user_svc.get_or_create(tg_id=7001, username="p", first_name="Player")
+        svc.register_participant(tournament_id=tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
+
+        with patch("services.user.settings") as mock_settings:
+            mock_settings.admin_ids = [8888]
+            result = admin_handler.handle_admin_status(tg_id=8888, tournament_id=tournament.id)
+
+        assert "▓▓▓" in result.text
+        assert "Burn" not in result.text
+
+    def test_admin_status_shows_decks_after_reveal(self, admin_handler, svc, user_svc, tournament, archetype_burn):
+        from unittest.mock import patch
+        svc.set_decks_hidden(tournament.id, hidden=False)
+        user = user_svc.get_or_create(tg_id=7002, username="p2", first_name="Player2")
+        svc.register_participant(tournament_id=tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
+
+        with patch("services.user.settings") as mock_settings:
+            mock_settings.admin_ids = [8888]
+            result = admin_handler.handle_admin_status(tg_id=8888, tournament_id=tournament.id)
+
+        assert "▓▓▓" not in result.text
+        assert "Burn" in result.text
 
 
 # ===== AdminHandler.handle_reveal_decks =====

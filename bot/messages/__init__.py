@@ -103,8 +103,7 @@ def format_tournament_status(
         else:
             display = "?"
         if p.archetype:
-            arch_name = p.archetype.name
-            archetype = f"<tg-spoiler>{arch_name}</tg-spoiler>" if decks_hidden else arch_name
+            archetype = "▓▓▓" if decks_hidden else p.archetype.name
         else:
             archetype = "не указана"
         lines.append(f"{icon} {display} — {archetype}")
