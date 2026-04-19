@@ -10,3 +10,4 @@ class HandlerResult:
     keyboard: Optional[InlineKeyboardMarkup] = None
     is_alert: bool = False
     needs_name: bool = False  # wrapper должен запросить имя перед продолжением
+    parse_mode: Optional[str] = None

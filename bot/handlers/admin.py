@@ -28,6 +28,7 @@ from bot.messages import (
     BULK_ADD_EMPTY,
     PARTICIPANT_NOT_FOUND,
     ADMIN_ARCH_SAVED,
+    DECKS_REVEALED,
     CHOOSE_ARCHETYPE,
     format_tournament_status,
 )
@@ -300,7 +301,7 @@ class AdminHandler:
         except errors.TournamentNotFound:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
         participants = _sort_participants(self.svc.list_participants_for_tournament(tournament_id))
-        status_text = format_tournament_status(t.title, t.status.label_ru, participants)
+        status_text = format_tournament_status(t.title, t.status.label_ru, participants, decks_hidden=t.decks_hidden)
         text = f"{prefix}\n\n{status_text}" if prefix else status_text
         return HandlerResult(
             text,
@@ -318,6 +319,16 @@ class AdminHandler:
         if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
         return self._tournament_status_result(tournament_id, show_filled=True)
+
+    def handle_reveal_decks(self, tg_id: int, tournament_id: int) -> HandlerResult:
+        """Снимает скрытие колод — делает их видимыми для всех."""
+        if not self.user_svc.is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN, is_alert=True)
+        try:
+            self.svc.set_decks_hidden(tournament_id, hidden=False)
+        except errors.TournamentNotFound:
+            return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
+        return self._tournament_status_result(tournament_id, prefix=DECKS_REVEALED)
 
     def _archetype_keyboard_for_participant(
         self, participant_id: int, player_tg_id: int | None, expanded: bool = False

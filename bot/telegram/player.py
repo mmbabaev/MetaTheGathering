@@ -185,7 +185,7 @@ async def callback_tournament_status(update: Update, context: ContextTypes.DEFAU
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
-        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+        await query.edit_message_text(result.text, reply_markup=result.keyboard, parse_mode=result.parse_mode)
         await query.answer()
     finally:
         db.close()

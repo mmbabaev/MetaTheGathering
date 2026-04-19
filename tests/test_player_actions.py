@@ -232,6 +232,7 @@ class TestHandleTournamentPublicStatus:
         assert not result.is_alert
 
     def test_shows_participants(self, handler, svc, user_svc, active_tournament, archetype_burn):
+        svc.set_decks_hidden(active_tournament.id, hidden=False)
         user = user_svc.get_or_create(tg_id=3010, username=None, first_name="Алиса")
         svc.register_participant(
             tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id

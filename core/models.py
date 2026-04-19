@@ -77,6 +77,8 @@ class Tournament(Base):
     started_at = Column(DateTime, nullable=True)
     ended_at = Column(DateTime, nullable=True)
 
+    decks_hidden = Column(Boolean, nullable=False, default=True, server_default="true")
+
     created_at = Column(DateTime, default=utc_now, nullable=False)
 
     participants = relationship("Participant", back_populates="tournament", cascade="all, delete-orphan")

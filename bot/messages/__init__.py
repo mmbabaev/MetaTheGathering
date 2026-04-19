@@ -40,6 +40,7 @@ BULK_ADD_PROMPT = (
 BULK_ADD_EMPTY = "Список игроков пустой."
 PARTICIPANT_NOT_FOUND = "Участник не найден."
 ADMIN_ARCH_SAVED = "✅ Колода обновлена: {archetype_name}"
+DECKS_REVEALED = "👁 Колоды участников теперь видны всем."
 
 
 HELP_TEXT = """\
@@ -79,7 +80,9 @@ def format_tournament_card(
     return header
 
 
-def format_tournament_status(title: str, status: str, participants: list) -> str:
+def format_tournament_status(
+    title: str, status: str, participants: list, decks_hidden: bool = False
+) -> str:
     """Структурированный список участников турнира."""
     total = len(participants)
     with_deck = sum(1 for p in participants if p.archetype)
@@ -99,6 +102,9 @@ def format_tournament_status(title: str, status: str, participants: list) -> str
             display = f"{full_name}{username_hint}"
         else:
             display = "?"
-        archetype = p.archetype.name if p.archetype else "не указана"
+        if p.archetype:
+            archetype = "▓▓▓" if decks_hidden else p.archetype.name
+        else:
+            archetype = "не указана"
         lines.append(f"{icon} {display} — {archetype}")
     return "\n".join(lines)

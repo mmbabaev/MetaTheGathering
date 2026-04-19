@@ -168,6 +168,13 @@ class TournamentService:
         rows = self.db.execute(stmt).scalars().all()
         return [TournamentRead.model_validate(t) for t in rows]
 
+    def set_decks_hidden(self, tournament_id: int, hidden: bool) -> TournamentRead:
+        tournament = get_tournament(self.db, tournament_id)
+        tournament.decks_hidden = hidden
+        self.db.commit()
+        self.db.refresh(tournament)
+        return TournamentRead.model_validate(tournament)
+
     def open_registration(self, tournament_id: int) -> TournamentRead:
         tournament = get_tournament(self.db, tournament_id)
         tournament.status = models.TournamentStatus.REGISTRATION

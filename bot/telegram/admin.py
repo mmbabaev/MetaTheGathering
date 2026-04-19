@@ -14,7 +14,7 @@ from services.user import UserService
 from bot.handlers.admin import AdminHandler, parse_add_player_command, parse_bulk_player_line
 from bot.telegram.player import USER_DATA_PENDING_BULK_ADD, USER_DATA_PENDING_ADMIN_CUSTOM_ARCH
 from bot.messages import TELEGRAM_USER_LOOKUP_FAILED, ADD_PLAYERS_USAGE, BULK_ADD_PROMPT
-from bot.keyboards import CB_ADMIN_ARCH_MORE, CB_ADMIN_SHOW_FILLED
+from bot.keyboards import CB_ADMIN_ARCH_MORE, CB_ADMIN_SHOW_FILLED, CB_REVEAL_DECKS
 
 
 def _admin_handler(db) -> AdminHandler:
@@ -438,6 +438,30 @@ async def callback_delete_tournament_cancel(
         svc = TournamentService(db)
         user_svc = UserService(db)
         result = PlayerHandler(svc, user_svc, ArchetypeService(db)).handle_tournament_select(tournament_id, tg_id=user.id)
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+        await query.answer()
+    finally:
+        db.close()
+
+
+async def callback_reveal_decks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка «👁 Показать колоды» — снимает скрытие колод для всех."""
+    query = update.callback_query
+    user = update.effective_user
+    if not query or not query.data or not user:
+        return
+    try:
+        _, tid_str = query.data.split(":", 1)
+        tournament_id = int(tid_str)
+    except (ValueError, IndexError):
+        await query.answer("Ошибка данных.")
+        return
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_reveal_decks(user.id, tournament_id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
     finally:
