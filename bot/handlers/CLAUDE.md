@@ -54,7 +54,7 @@ Rules:
 - Extracts primitives from `Update` / `context`, opens a DB session, instantiates the handler, calls `handle_xxx`, sends the result
 - Closes the DB session in `finally`
 - **No business logic** — only Telegram I/O and `user_data` state management
-- Not unit-tested (requires Telegram mocks)
+- Unit-tested in `tests/test_telegram_player.py` using `AsyncMock` / `MagicMock` — mock `Update`, `Context`, `SessionLocal`, and handler classes; leave `bot_data` empty to catch accidental state access
 
 ## HandlerResult flags
 
@@ -94,5 +94,6 @@ def test_foo(handler, active_tournament):
 1. Write `FooHandler` class in `bot/handlers/foo.py` — pure logic, constructor-injected deps
 2. Add a `_foo_handler(db)` factory and `cmd_xxx` / `callback_xxx` wrappers in `bot/telegram/foo.py`
 3. Register in `main.py` (imports from `bot.telegram`)
-4. Write tests in `tests/test_foo.py` using a handler fixture
-5. Add any new `user_data` keys as named constants in `bot/telegram/`, document them in the table above
+4. Write handler tests in `tests/test_foo.py` using a handler fixture (real SQLite services)
+5. Write wrapper tests in `tests/test_telegram_foo.py` using `AsyncMock`/`MagicMock`
+6. Add any new `user_data` keys as named constants in `bot/telegram/`, document them in the table above
