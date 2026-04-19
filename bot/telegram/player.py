@@ -6,6 +6,7 @@ from telegram.ext import ContextTypes
 from core.database import SessionLocal
 from core.event_log import event_logger
 from services.tournament import TournamentService
+from services.archetype import ArchetypeService
 from services.user import UserService
 from bot.handlers.player import PlayerHandler
 from bot.handlers.settings import SettingsHandler
@@ -30,13 +31,13 @@ USER_DATA_PENDING_ADMIN_CUSTOM_ARCH = "pending_admin_custom_arch_participant_id"
 
 
 def _player_handler(db) -> PlayerHandler:
-    return PlayerHandler(TournamentService(db), UserService(db))
+    return PlayerHandler(TournamentService(db), UserService(db), ArchetypeService(db))
 
 def _settings_handler(db) -> SettingsHandler:
     return SettingsHandler(UserService(db))
 
 def _admin_handler(db) -> AdminHandler:
-    return AdminHandler(TournamentService(db), UserService(db))
+    return AdminHandler(TournamentService(db), UserService(db), ArchetypeService(db))
 
 
 async def cmd_tournaments(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

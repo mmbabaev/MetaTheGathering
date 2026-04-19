@@ -7,6 +7,7 @@ import core.models  # noqa: F401 — регистрирует все модел�
 from core.models import TournamentStatus, VoteType
 from core.schemas import TournamentCreate
 from services.tournament import TournamentService
+from services.archetype import ArchetypeService
 from services.user import UserService
 
 
@@ -58,10 +59,15 @@ def user_bob(user_svc):
 
 
 @pytest.fixture
-def archetype_burn(svc):
-    return svc.get_or_create_archetype_by_name("Burn")
+def arch_svc(db):
+    return ArchetypeService(db)
 
 
 @pytest.fixture
-def archetype_affinity(svc):
-    return svc.get_or_create_archetype_by_name("Affinity")
+def archetype_burn(arch_svc):
+    return arch_svc.get_or_create_by_name("Burn")
+
+
+@pytest.fixture
+def archetype_affinity(arch_svc):
+    return arch_svc.get_or_create_by_name("Affinity")

@@ -6,6 +6,7 @@ from datetime import datetime
 from core.schemas import TournamentCreate
 from services.utils import get_tournament
 from services.tournament import TournamentService
+from services.archetype import ArchetypeService
 from services.user import UserService
 from services import errors
 from bot.handlers.base import HandlerResult
@@ -107,9 +108,10 @@ def _player_display_label(username: str | None, first_name: str | None, tg_id: i
 
 
 class AdminHandler:
-    def __init__(self, svc: TournamentService, user_svc: UserService) -> None:
+    def __init__(self, svc: TournamentService, user_svc: UserService, arch_svc: ArchetypeService) -> None:
         self.svc = svc
         self.user_svc = user_svc
+        self.arch_svc = arch_svc
 
     def _resolve_tournament(self):
         """Возвращает (tournament, error_result). Один из них None."""
@@ -142,7 +144,7 @@ class AdminHandler:
                 first_name=first_name,
                 last_name=last_name,
             )
-            archetype = self.svc.get_or_create_archetype_by_name(deck_name)
+            archetype = self.arch_svc.get_or_create_by_name(deck_name)
             self.svc.register_participant(
                 tournament_id=active.id,
                 user_id=db_user.id,
@@ -181,7 +183,7 @@ class AdminHandler:
                 first_name=target_first_name,
                 last_name=target_last_name,
             )
-            archetype = self.svc.get_or_create_archetype_by_name(deck_name)
+            archetype = self.arch_svc.get_or_create_by_name(deck_name)
             self.svc.register_participant(
                 tournament_id=active.id,
                 user_id=target_user.id,
@@ -221,7 +223,7 @@ class AdminHandler:
                     username=uname,
                     first_name=fname,
                 )
-                archetype = self.svc.get_or_create_archetype_by_name(deck_name)
+                archetype = self.arch_svc.get_or_create_by_name(deck_name)
                 self.svc.register_participant(
                     tournament_id=active.id,
                     user_id=target_user.id,
@@ -321,7 +323,7 @@ class AdminHandler:
         self, participant_id: int, player_tg_id: int | None, expanded: bool = False
     ) -> HandlerResult:
         """Строит HandlerResult с клавиатурой архетипов для участника."""
-        arch_list, has_more = build_archetype_menu(self.svc, player_tg_id, expanded)
+        arch_list, has_more = build_archetype_menu(self.arch_svc, player_tg_id, expanded)
         return HandlerResult(
             CHOOSE_ARCHETYPE,
             keyboard=admin_archetype_select_keyboard(participant_id, arch_list, has_more),
@@ -353,7 +355,7 @@ class AdminHandler:
         p = self.svc.get_participant_by_id(participant_id)
         if p is None:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
-        archetypes = {a.id: a.name for a in self.svc.list_archetypes()}
+        archetypes = {a.id: a.name for a in self.arch_svc.list_archetypes()}
         arch_name = archetypes.get(archetype_id, "?")
         try:
             self.svc.set_participant_archetype(participant_id=participant_id, archetype_id=archetype_id)
@@ -370,7 +372,7 @@ class AdminHandler:
         if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
         try:
-            arch = self.svc.get_or_create_archetype_by_name(arch_name, is_custom=True)
+            arch = self.arch_svc.get_or_create_by_name(arch_name, is_custom=True)
             self.svc.set_participant_archetype(participant_id=participant_id, archetype_id=arch.id)
         except errors.ParticipantNotFound:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)

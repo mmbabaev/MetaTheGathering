@@ -6,6 +6,7 @@ from sqlalchemy import select
 from core import models
 from services.user import UserService
 from services.tournament import TournamentService
+from services.archetype import ArchetypeService
 from core.schemas import TournamentCreate
 
 REAL_TG_ID = 555_000
@@ -14,8 +15,7 @@ REAL_TG_ID = 555_000
 @pytest.fixture
 def placeholder(db):
     """Placeholder user (bulk-added, no tg_id) with deck history."""
-    svc = TournamentService(db)
-    arch = svc.get_or_create_archetype_by_name("Burn")
+    arch = ArchetypeService(db).get_or_create_by_name("Burn")
     user = models.User(tg_id=-1, first_name="Сергей", last_name="Крипков")
     db.add(user)
     db.flush()
@@ -68,11 +68,11 @@ class TestMergePlaceholderByName:
         result = user_svc.merge_placeholder_by_name(222, "Иван", "Петров")
         assert result is False  # u1 has positive tg_id — not a placeholder
 
-    def test_participants_transferred(self, db, placeholder):
+    def test_participants_transferred(self, db, placeholder, arch_svc):
         """Участие в прошлых турнирах переходит к реальному пользователю."""
         tsvc = TournamentService(db)
         usvc = UserService(db)
-        arch = tsvc.get_or_create_archetype_by_name("Burn")
+        arch = arch_svc.get_or_create_by_name("Burn")
         t = tsvc.create_tournament(TournamentCreate(title="Old tourney", chat_id=1, slug="old"))
         part = models.Participant(tournament_id=t.id, user_id=placeholder.id, archetype_id=arch.id)
         db.add(part)
@@ -89,11 +89,11 @@ class TestMergePlaceholderByName:
         ).scalars().all()
         assert len(participants) == 1
 
-    def test_no_duplicate_participants_on_conflict(self, db, placeholder):
+    def test_no_duplicate_participants_on_conflict(self, db, placeholder, arch_svc):
         """Если реальный юзер уже зарегистрирован на тот же турнир — дубликат не создаётся."""
         tsvc = TournamentService(db)
         usvc = UserService(db)
-        arch = tsvc.get_or_create_archetype_by_name("Burn")
+        arch = arch_svc.get_or_create_by_name("Burn")
         t = tsvc.create_tournament(TournamentCreate(title="Same tourney", chat_id=1, slug="same"))
 
         real = models.User(tg_id=REAL_TG_ID)

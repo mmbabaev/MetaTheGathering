@@ -27,8 +27,8 @@ def active_tournament(svc):
 
 
 @pytest.fixture
-def handler(svc, user_svc):
-    return PlayerHandler(svc, user_svc)
+def handler(svc, user_svc, arch_svc):
+    return PlayerHandler(svc, user_svc, arch_svc)
 
 
 # --- handle_tournaments ---
