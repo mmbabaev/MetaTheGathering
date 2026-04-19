@@ -24,6 +24,7 @@ from bot.messages import (
     MULTIPLE_TOURNAMENTS_MSG,
     PLAYER_ADDED,
     TOURNAMENT_CLOSED_MSG,
+    TOURNAMENT_ALREADY_EXISTS_MSG,
     TOURNAMENT_NOT_FOUND,
     REGISTRATION_CLOSED,
     BULK_ADD_EMPTY,
@@ -419,7 +420,10 @@ class AdminHandler:
             return HandlerResult(NOT_ADMIN)
         if not title:
             title = f"Pauper {datetime.now().strftime('%Y-%m-%d')}"
-        t = self.svc.create_tournament(TournamentCreate(title=title, chat_id=chat_id))
+        try:
+            t = self.svc.create_tournament(TournamentCreate(title=title, chat_id=chat_id))
+        except errors.TournamentAlreadyExists:
+            return HandlerResult(TOURNAMENT_ALREADY_EXISTS_MSG, is_alert=True)
         return HandlerResult(f"✅ Турнир создан: «{t.title}» (id={t.id})")
 
     def handle_delete_tournament(self, tg_id: int) -> HandlerResult:
