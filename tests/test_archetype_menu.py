@@ -11,7 +11,8 @@
 import pytest
 from core import models
 from core.schemas import TournamentCreate
-from services.tournament import TournamentService, ArchetypeItem
+from services.tournament import TournamentService
+from services.archetype import ArchetypeService, ArchetypeItem
 from services.user import UserService
 from bot.handlers.player import PlayerHandler, build_archetype_list, ARCHETYPE_COLLAPSED_COUNT
 from bot.handlers.admin import AdminHandler
@@ -52,13 +53,18 @@ def admin_user(svc, user_svc):
 
 
 @pytest.fixture
-def player_handler(svc, user_svc):
-    return PlayerHandler(svc, user_svc)
+def arch_svc(svc):
+    return ArchetypeService(svc.db)
 
 
 @pytest.fixture
-def admin_handler(svc, user_svc):
-    return AdminHandler(svc, user_svc)
+def player_handler(svc, user_svc, arch_svc):
+    return PlayerHandler(svc, user_svc, arch_svc)
+
+
+@pytest.fixture
+def admin_handler(svc, user_svc, arch_svc):
+    return AdminHandler(svc, user_svc, arch_svc)
 
 
 # ---------------------------------------------------------------------------
@@ -66,13 +72,13 @@ def admin_handler(svc, user_svc):
 # ---------------------------------------------------------------------------
 
 class TestListTopArchetypes:
-    def test_empty_db_returns_empty(self, svc):
-        assert svc.list_top_archetypes() == []
+    def test_empty_db_returns_empty(self, svc, arch_svc):
+        assert arch_svc.list_top_archetypes() == []
 
-    def test_returns_archetypes_ordered_by_usage_count_desc(self, svc, user_svc):
+    def test_returns_archetypes_ordered_by_usage_count_desc(self, svc, user_svc, arch_svc):
         """Архетип с большим числом участников должен быть первым (только CLOSED-турниры)."""
-        burn = svc.get_or_create_archetype_by_name("Burn")
-        elves = svc.get_or_create_archetype_by_name("Elves")
+        burn = arch_svc.get_or_create_by_name("Burn")
+        elves = arch_svc.get_or_create_by_name("Elves")
 
         t1 = svc.create_tournament(TournamentCreate(title="T1", chat_id=CHAT_ID + 1))
         t2 = svc.create_tournament(TournamentCreate(title="T2", chat_id=CHAT_ID + 2))
@@ -93,14 +99,14 @@ class TestListTopArchetypes:
         for t in [t1, t2, t3]:
             close_tournament(svc, t.id)
 
-        result = svc.list_top_archetypes()
+        result = arch_svc.list_top_archetypes()
         assert result[0].name == "Elves"
         assert result[1].name == "Burn"
 
-    def test_tie_resolved_alphabetically(self, svc, user_svc):
+    def test_tie_resolved_alphabetically(self, svc, user_svc, arch_svc):
         """При одинаковом числе использований — сортировка по алфавиту."""
-        burn = svc.get_or_create_archetype_by_name("Burn")
-        affinity = svc.get_or_create_archetype_by_name("Affinity")
+        burn = arch_svc.get_or_create_by_name("Burn")
+        affinity = arch_svc.get_or_create_by_name("Affinity")
 
         t1 = svc.create_tournament(TournamentCreate(title="T1", chat_id=CHAT_ID + 10))
         u1 = user_svc.get_or_create(tg_id=301, username=None, first_name="P1")
@@ -109,30 +115,30 @@ class TestListTopArchetypes:
         svc.register_participant(tournament_id=t1.id, user_id=u2.id, archetype_id=affinity.id)
         close_tournament(svc, t1.id)
 
-        result = svc.list_top_archetypes()
+        result = arch_svc.list_top_archetypes()
         assert result[0].name == "Affinity"   # 'A' < 'B'
         assert result[1].name == "Burn"
 
-    def test_never_used_archetype_is_included_after_used_ones(self, svc, user_svc):
+    def test_never_used_archetype_is_included_after_used_ones(self, svc, user_svc, arch_svc):
         """Архетипы без использования тоже попадают в топ (после использованных)."""
-        burn = svc.get_or_create_archetype_by_name("Burn")
-        unused = svc.get_or_create_archetype_by_name("Zzz Unused")
+        burn = arch_svc.get_or_create_by_name("Burn")
+        unused = arch_svc.get_or_create_by_name("Zzz Unused")
 
         t1 = svc.create_tournament(TournamentCreate(title="T1", chat_id=CHAT_ID + 20))
         u = user_svc.get_or_create(tg_id=401, username=None, first_name="P")
         svc.register_participant(tournament_id=t1.id, user_id=u.id, archetype_id=burn.id)
         close_tournament(svc, t1.id)
 
-        result = svc.list_top_archetypes()
+        result = arch_svc.list_top_archetypes()
         names = [a.name for a in result]
         assert "Burn" in names
         assert "Zzz Unused" in names
         assert names.index("Burn") < names.index("Zzz Unused")
 
-    def test_registration_phase_participants_excluded_from_top(self, svc, user_svc):
+    def test_registration_phase_participants_excluded_from_top(self, svc, user_svc, arch_svc):
         """Участники в REGISTRATION-турнире не влияют на рейтинг — это баг-фикс."""
-        burn = svc.get_or_create_archetype_by_name("Burn")
-        elves = svc.get_or_create_archetype_by_name("Elves")
+        burn = arch_svc.get_or_create_by_name("Burn")
+        elves = arch_svc.get_or_create_by_name("Elves")
 
         # Исторический (CLOSED) турнир: Elves сыгран 3 раза
         hist = svc.create_tournament(TournamentCreate(title="Historical", chat_id=CHAT_ID + 21))
@@ -147,40 +153,40 @@ class TestListTopArchetypes:
         svc.register_participant(tournament_id=active.id, user_id=u_new.id, archetype_id=burn.id)
         # НЕ закрываем — остаётся в REGISTRATION
 
-        result = svc.list_top_archetypes()
+        result = arch_svc.list_top_archetypes()
         # Elves (3 из истории) должна быть выше Burn (0 из истории, только в REGISTRATION)
         names = [a.name for a in result]
         assert names.index("Elves") < names.index("Burn")
 
-    def test_respects_n_limit(self, svc):
+    def test_respects_n_limit(self, svc, arch_svc):
         for i in range(15):
-            svc.get_or_create_archetype_by_name(f"Arch{i:02d}")
-        result = svc.list_top_archetypes(n=5)
+            arch_svc.get_or_create_by_name(f"Arch{i:02d}")
+        result = arch_svc.list_top_archetypes(n=5)
         assert len(result) == 5
 
-    def test_returns_archetype_item_instances(self, svc):
-        svc.get_or_create_archetype_by_name("Burn")
-        result = svc.list_top_archetypes()
+    def test_returns_archetype_item_instances(self, svc, arch_svc):
+        arch_svc.get_or_create_by_name("Burn")
+        result = arch_svc.list_top_archetypes()
         assert all(isinstance(a, ArchetypeItem) for a in result)
 
-    def test_custom_archetype_excluded_from_top(self, svc, user_svc):
+    def test_custom_archetype_excluded_from_top(self, svc, user_svc, arch_svc):
         """Кастомный архетип (is_custom=True) не появляется в глобальном топе."""
-        public = svc.get_or_create_archetype_by_name("Public Deck", is_custom=False)
-        custom = svc.get_or_create_archetype_by_name("My Weird Deck", is_custom=True)
+        public = arch_svc.get_or_create_by_name("Public Deck", is_custom=False)
+        custom = arch_svc.get_or_create_by_name("My Weird Deck", is_custom=True)
 
-        top = svc.list_top_archetypes()
+        top = arch_svc.list_top_archetypes()
         names = [a.name for a in top]
         assert "Public Deck" in names
         assert "My Weird Deck" not in names
 
-    def test_custom_archetype_stays_in_user_history(self, svc, user_svc):
+    def test_custom_archetype_stays_in_user_history(self, svc, user_svc, arch_svc):
         """Кастомный архетип остаётся в истории пользователя, который его использовал."""
-        custom = svc.get_or_create_archetype_by_name("My Weird Deck", is_custom=True)
+        custom = arch_svc.get_or_create_by_name("My Weird Deck", is_custom=True)
         u = user_svc.get_or_create(tg_id=PLAYER_TG_ID, username=None, first_name="Player")
         t = svc.create_tournament(TournamentCreate(title="T", chat_id=CHAT_ID + 5))
         svc.register_participant(tournament_id=t.id, user_id=u.id, archetype_id=custom.id)
 
-        history = svc.list_user_recent_archetypes(PLAYER_TG_ID)
+        history = arch_svc.list_user_recent_archetypes(PLAYER_TG_ID)
         assert any(a.name == "My Weird Deck" for a in history)
 
 
@@ -189,31 +195,31 @@ class TestListTopArchetypes:
 # ---------------------------------------------------------------------------
 
 class TestListUserRecentArchetypes:
-    def test_unknown_user_returns_empty(self, svc):
-        assert svc.list_user_recent_archetypes(tg_id=99999) == []
+    def test_unknown_user_returns_empty(self, svc, arch_svc):
+        assert arch_svc.list_user_recent_archetypes(tg_id=99999) == []
 
-    def test_user_with_no_participation_returns_empty(self, svc, user_svc):
+    def test_user_with_no_participation_returns_empty(self, svc, user_svc, arch_svc):
         user_svc.get_or_create(tg_id=PLAYER_TG_ID, username=None, first_name="Player")
-        assert svc.list_user_recent_archetypes(PLAYER_TG_ID) == []
+        assert arch_svc.list_user_recent_archetypes(PLAYER_TG_ID) == []
 
-    def test_returns_recent_archetype_first(self, svc, user_svc):
-        burn = svc.get_or_create_archetype_by_name("Burn")
+    def test_returns_recent_archetype_first(self, svc, user_svc, arch_svc):
+        burn = arch_svc.get_or_create_by_name("Burn")
         t = svc.create_tournament(TournamentCreate(title="T", chat_id=CHAT_ID + 30))
         u = user_svc.get_or_create(tg_id=PLAYER_TG_ID, username=None, first_name="Player")
         svc.register_participant(tournament_id=t.id, user_id=u.id, archetype_id=burn.id)
 
-        result = svc.list_user_recent_archetypes(PLAYER_TG_ID)
+        result = arch_svc.list_user_recent_archetypes(PLAYER_TG_ID)
         assert len(result) == 1
         assert result[0].name == "Burn"
 
-    def test_most_recent_comes_first(self, svc, user_svc, db):
+    def test_most_recent_comes_first(self, svc, user_svc, db, arch_svc):
         """Из нескольких колод — самая последняя первая."""
         import core.models as m
         from datetime import timedelta
         from core.models import utc_now
 
-        burn = svc.get_or_create_archetype_by_name("Burn")
-        elves = svc.get_or_create_archetype_by_name("Elves")
+        burn = arch_svc.get_or_create_by_name("Burn")
+        elves = arch_svc.get_or_create_by_name("Elves")
         u = user_svc.get_or_create(tg_id=PLAYER_TG_ID, username=None, first_name="Player")
 
         t1 = svc.create_tournament(TournamentCreate(title="T1", chat_id=CHAT_ID + 31))
@@ -230,12 +236,12 @@ class TestListUserRecentArchetypes:
         db.add(p2)
         db.commit()
 
-        result = svc.list_user_recent_archetypes(PLAYER_TG_ID)
+        result = arch_svc.list_user_recent_archetypes(PLAYER_TG_ID)
         assert result[0].name == "Elves"
         assert result[1].name == "Burn"
 
-    def test_deduplicates_same_archetype(self, svc, user_svc):
-        burn = svc.get_or_create_archetype_by_name("Burn")
+    def test_deduplicates_same_archetype(self, svc, user_svc, arch_svc):
+        burn = arch_svc.get_or_create_by_name("Burn")
         u = user_svc.get_or_create(tg_id=PLAYER_TG_ID, username=None, first_name="Player")
 
         t1 = svc.create_tournament(TournamentCreate(title="T1", chat_id=CHAT_ID + 40))
@@ -243,16 +249,16 @@ class TestListUserRecentArchetypes:
         svc.register_participant(tournament_id=t1.id, user_id=u.id, archetype_id=burn.id)
         svc.register_participant(tournament_id=t2.id, user_id=u.id, archetype_id=burn.id)
 
-        result = svc.list_user_recent_archetypes(PLAYER_TG_ID)
+        result = arch_svc.list_user_recent_archetypes(PLAYER_TG_ID)
         assert [a.name for a in result].count("Burn") == 1
 
-    def test_returns_archetype_item_instances(self, svc, user_svc):
-        burn = svc.get_or_create_archetype_by_name("Burn")
+    def test_returns_archetype_item_instances(self, svc, user_svc, arch_svc):
+        burn = arch_svc.get_or_create_by_name("Burn")
         u = user_svc.get_or_create(tg_id=PLAYER_TG_ID, username=None, first_name="Player")
         t = svc.create_tournament(TournamentCreate(title="T", chat_id=CHAT_ID + 42))
         svc.register_participant(tournament_id=t.id, user_id=u.id, archetype_id=burn.id)
 
-        result = svc.list_user_recent_archetypes(PLAYER_TG_ID)
+        result = arch_svc.list_user_recent_archetypes(PLAYER_TG_ID)
         assert all(isinstance(a, ArchetypeItem) for a in result)
 
 
@@ -346,9 +352,9 @@ class TestBuildArchetypeList:
 # ---------------------------------------------------------------------------
 
 class TestHandleRegisterArchetypeMenu:
-    def test_new_player_no_history_sees_top(self, svc, user_svc, player_handler, active_tournament):
+    def test_new_player_no_history_sees_top(self, svc, user_svc, player_handler, active_tournament, arch_svc):
         """Новый игрок (нет истории) видит топ-архетипы."""
-        popular = svc.get_or_create_archetype_by_name("Popular")
+        popular = arch_svc.get_or_create_by_name("Popular")
         t_other = svc.create_tournament(TournamentCreate(title="Other", chat_id=CHAT_ID + 50))
         for tg in [501, 502, 503]:
             u = user_svc.get_or_create(tg_id=tg, username=None, first_name=f"P{tg}")
@@ -361,9 +367,9 @@ class TestHandleRegisterArchetypeMenu:
         btn_names = [b.text for row in result.keyboard.inline_keyboard for b in row]
         assert "Popular" in btn_names
 
-    def test_new_player_no_more_button(self, svc, user_svc, player_handler, active_tournament):
+    def test_new_player_no_more_button(self, svc, user_svc, player_handler, active_tournament, arch_svc):
         """Без истории кнопки «... ещё» нет."""
-        svc.get_or_create_archetype_by_name("Burn")
+        arch_svc.get_or_create_by_name("Burn")
         user_svc.get_or_create(tg_id=PLAYER_TG_ID, username=None, first_name="NewPlayer")
         result = player_handler.handle_register(active_tournament.id, tg_id=PLAYER_TG_ID)
 
@@ -374,9 +380,9 @@ class TestHandleRegisterArchetypeMenu:
         ]
         assert not any(cb.startswith(CB_ARCHETYPE_MORE) for cb in btn_callbacks)
 
-    def test_player_with_history_shows_collapsed(self, svc, user_svc, player_handler, active_tournament):
+    def test_player_with_history_shows_collapsed(self, svc, user_svc, player_handler, active_tournament, arch_svc):
         """Игрок с историей видит ARCHETYPE_COLLAPSED_COUNT колод + «... ещё»."""
-        archs = [svc.get_or_create_archetype_by_name(f"Deck{i}") for i in range(1, 6)]
+        archs = [arch_svc.get_or_create_by_name(f"Deck{i}") for i in range(1, 6)]
         u = user_svc.get_or_create(tg_id=PLAYER_TG_ID, username=None, first_name="Player")
         for i, arch in enumerate(archs):
             t = svc.create_tournament(TournamentCreate(title=f"T{i}", chat_id=CHAT_ID + 51 + i))
@@ -396,8 +402,8 @@ class TestHandleRegisterArchetypeMenu:
         assert len(arch_btns) == ARCHETYPE_COLLAPSED_COUNT
         assert len(more_btns) == 1
 
-    def test_player_with_history_always_has_custom_button(self, svc, user_svc, player_handler, active_tournament):
-        burn = svc.get_or_create_archetype_by_name("Burn")
+    def test_player_with_history_always_has_custom_button(self, svc, user_svc, player_handler, active_tournament, arch_svc):
+        burn = arch_svc.get_or_create_by_name("Burn")
         u = user_svc.get_or_create(tg_id=PLAYER_TG_ID, username=None, first_name="Player")
         t = svc.create_tournament(TournamentCreate(title="T", chat_id=CHAT_ID + 60))
         svc.register_participant(tournament_id=t.id, user_id=u.id, archetype_id=burn.id)
@@ -415,8 +421,8 @@ class TestHandleRegisterArchetypeMenu:
 
 class TestHandleArchetypeMore:
     @pytest.fixture
-    def player_with_history(self, svc, user_svc, active_tournament):
-        archs = [svc.get_or_create_archetype_by_name(f"Deck{i}") for i in range(1, 6)]
+    def player_with_history(self, svc, user_svc, arch_svc, active_tournament):
+        archs = [arch_svc.get_or_create_by_name(f"Deck{i}") for i in range(1, 6)]
         u = user_svc.get_or_create(tg_id=PLAYER_TG_ID, username=None, first_name="Player")
         for i, arch in enumerate(archs):
             t = svc.create_tournament(TournamentCreate(title=f"HT{i}", chat_id=CHAT_ID + 70 + i))
@@ -445,9 +451,9 @@ class TestHandleArchetypeMore:
         btns = [b for row in result.keyboard.inline_keyboard for b in row]
         assert not any(b.callback_data.startswith(CB_ARCHETYPE_MORE) for b in btns)
 
-    def test_expanded_deduplicates_history_and_top(self, svc, user_svc, player_handler, active_tournament):
+    def test_expanded_deduplicates_history_and_top(self, svc, user_svc, player_handler, active_tournament, arch_svc):
         """Колоды из истории не дублируются в топ-части развёрнутого списка."""
-        burn = svc.get_or_create_archetype_by_name("Burn")
+        burn = arch_svc.get_or_create_by_name("Burn")
 
         # Игрок играл Burn
         u = user_svc.get_or_create(tg_id=PLAYER_TG_ID, username=None, first_name="Player")
@@ -473,9 +479,9 @@ class TestAdminPickArchMenu:
         return svc.get_participant(active_tournament.id, player.id)
 
     def test_player_no_history_sees_top(
-        self, admin_handler, svc, user_svc, admin_user, active_tournament, bulk_participant
+        self, admin_handler, svc, user_svc, arch_svc, admin_user, active_tournament, bulk_participant
     ):
-        popular = svc.get_or_create_archetype_by_name("Popular")
+        popular = arch_svc.get_or_create_by_name("Popular")
         t_other = svc.create_tournament(TournamentCreate(title="TO", chat_id=CHAT_ID + 90))
         for tg in [901, 902]:
             u = user_svc.get_or_create(tg_id=tg, username=None, first_name=f"P{tg}")
@@ -486,9 +492,9 @@ class TestAdminPickArchMenu:
         assert "Popular" in btn_names
 
     def test_player_no_history_no_more_button(
-        self, admin_handler, svc, admin_user, active_tournament, bulk_participant
+        self, admin_handler, svc, arch_svc, admin_user, active_tournament, bulk_participant
     ):
-        svc.get_or_create_archetype_by_name("Burn")
+        arch_svc.get_or_create_by_name("Burn")
         result = admin_handler.handle_admin_pick_arch(ADMIN_TG_ID, bulk_participant.id)
 
         from bot.keyboards import CB_ADMIN_ARCH_MORE
@@ -496,10 +502,10 @@ class TestAdminPickArchMenu:
         assert not any(b.callback_data.startswith(CB_ADMIN_ARCH_MORE) for b in btns)
 
     def test_player_with_history_shows_collapsed_and_more(
-        self, admin_handler, svc, user_svc, admin_user, active_tournament
+        self, admin_handler, svc, user_svc, arch_svc, admin_user, active_tournament
     ):
         """Участник с историей: ARCHETYPE_COLLAPSED_COUNT кнопок + «... ещё»."""
-        archs = [svc.get_or_create_archetype_by_name(f"Deck{i}") for i in range(1, 6)]
+        archs = [arch_svc.get_or_create_by_name(f"Deck{i}") for i in range(1, 6)]
         p_user = user_svc.get_or_create(tg_id=2222, username=None, first_name="Player")
         for i, arch in enumerate(archs):
             t = svc.create_tournament(TournamentCreate(title=f"PH{i}", chat_id=CHAT_ID + 91 + i))
@@ -528,8 +534,8 @@ class TestAdminPickArchMenu:
 
 class TestAdminArchMore:
     @pytest.fixture
-    def participant_with_history(self, svc, user_svc, active_tournament):
-        archs = [svc.get_or_create_archetype_by_name(f"Deck{i}") for i in range(1, 6)]
+    def participant_with_history(self, svc, user_svc, arch_svc, active_tournament):
+        archs = [arch_svc.get_or_create_by_name(f"Deck{i}") for i in range(1, 6)]
         p_user = user_svc.get_or_create(tg_id=3333, username=None, first_name="Player")
         for i, arch in enumerate(archs):
             t = svc.create_tournament(TournamentCreate(title=f"AM{i}", chat_id=CHAT_ID + 101 + i))
@@ -608,12 +614,12 @@ class TestTournamentFillScenario:
         return p1, p2
 
     def test_assigning_deck_to_p1_does_not_affect_p2_top(
-        self, svc, user_svc, admin_handler, fill_admin, fill_tournament, two_participants
+        self, svc, user_svc, arch_svc, admin_handler, fill_admin, fill_tournament, two_participants
     ):
         """Баг-регрессия: назначение колоды игроку1 не должно менять меню игрока2."""
         p1, p2 = two_participants
-        burn = svc.get_or_create_archetype_by_name("Burn")
-        elves = svc.get_or_create_archetype_by_name("Elves")
+        burn = arch_svc.get_or_create_by_name("Burn")
+        elves = arch_svc.get_or_create_by_name("Elves")
 
         # Снимаем фиксацию порядка: оба на 0, алфавит → Burn < Elves
         top_before = admin_handler.handle_admin_pick_arch(self.FILL_ADMIN, p2.id)
@@ -632,12 +638,12 @@ class TestTournamentFillScenario:
         assert btn_names_before == btn_names_after
 
     def test_registration_deck_not_at_top_when_historical_alternative_exists(
-        self, svc, user_svc, admin_handler, fill_admin, fill_tournament, two_participants
+        self, svc, user_svc, arch_svc, admin_handler, fill_admin, fill_tournament, two_participants
     ):
         """Колода из REGISTRATION не вытесняет популярную историческую колоду из топа."""
         p1, p2 = two_participants
-        popular = svc.get_or_create_archetype_by_name("Aaaaa Popular")  # 'A' гарантирует алфавитный приоритет
-        rare_deck = svc.get_or_create_archetype_by_name("Zzz Rare Deck")
+        popular = arch_svc.get_or_create_by_name("Aaaaa Popular")  # 'A' гарантирует алфавитный приоритет
+        rare_deck = arch_svc.get_or_create_by_name("Zzz Rare Deck")
 
         # Историческая популярная колода (3 игрока в закрытом турнире)
         hist = svc.create_tournament(TournamentCreate(title="Hist", chat_id=self.FILL_CHAT + 10))
@@ -662,12 +668,12 @@ class TestTournamentFillScenario:
         )
 
     def test_historical_deck_ranks_above_registration_deck(
-        self, svc, user_svc, admin_handler, fill_admin, fill_tournament, two_participants
+        self, svc, user_svc, arch_svc, admin_handler, fill_admin, fill_tournament, two_participants
     ):
         """Колода из закрытого турнира стоит выше колоды из текущей регистрации."""
         p1, p2 = two_participants
-        popular = svc.get_or_create_archetype_by_name("Popular Historical")
-        new_deck  = svc.get_or_create_archetype_by_name("New Registration Deck")
+        popular = arch_svc.get_or_create_by_name("Popular Historical")
+        new_deck  = arch_svc.get_or_create_by_name("New Registration Deck")
 
         # Исторический закрытый турнир: popular сыгран 5 раз
         hist = svc.create_tournament(TournamentCreate(title="Hist", chat_id=self.FILL_CHAT + 1))
@@ -697,11 +703,11 @@ class TestTournamentFillScenario:
         assert pos_popular < pos_new
 
     def test_player_own_history_unaffected_by_other_players_assignment(
-        self, svc, user_svc, admin_handler, fill_admin, fill_tournament
+        self, svc, user_svc, arch_svc, admin_handler, fill_admin, fill_tournament
     ):
         """История игрока (из DataLens/турниров) не зависит от назначений другим игрокам."""
-        elves = svc.get_or_create_archetype_by_name("Elves")
-        burn  = svc.get_or_create_archetype_by_name("Burn")
+        elves = arch_svc.get_or_create_by_name("Elves")
+        burn  = arch_svc.get_or_create_by_name("Burn")
 
         # Игрок A — есть история (Elves из прошлого турнира)
         player_a = user_svc.get_or_create(tg_id=800, username=None, first_name="PlayerA")

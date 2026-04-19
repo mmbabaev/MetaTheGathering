@@ -1,6 +1,7 @@
 # Регистрация, выбор колоды — чистая бизнес-логика
 
-from services.tournament import TournamentService, ArchetypeItem
+from services.tournament import TournamentService
+from services.archetype import ArchetypeService, ArchetypeItem
 from services.user import UserService
 from services import errors
 from services.utils import get_tournament
@@ -31,7 +32,7 @@ ARCHETYPE_COLLAPSED_COUNT = 3
 
 
 def build_archetype_menu(
-    svc: "TournamentService",
+    arch_svc: "ArchetypeService",
     player_tg_id: int | None,
     expanded: bool = False,
 ) -> tuple[list[tuple[int, str]], bool]:
@@ -42,8 +43,8 @@ def build_archetype_menu(
 
     Возвращает (arch_list, has_more), где arch_list = [(id, name), ...].
     """
-    recent = svc.list_user_recent_archetypes(player_tg_id) if player_tg_id is not None else []
-    top = svc.list_top_archetypes()
+    recent = arch_svc.list_user_recent_archetypes(player_tg_id) if player_tg_id is not None else []
+    top = arch_svc.list_top_archetypes()
     archetypes, has_more = build_archetype_list(recent, top, expanded)
     return [(a.id, a.name) for a in archetypes], has_more
 
@@ -75,9 +76,10 @@ def build_archetype_list(
 
 
 class PlayerHandler:
-    def __init__(self, svc: TournamentService, user_svc: UserService) -> None:
+    def __init__(self, svc: TournamentService, user_svc: UserService, arch_svc: ArchetypeService) -> None:
         self.svc = svc
         self.user_svc = user_svc
+        self.arch_svc = arch_svc
 
     def _tournament_card(self, t, tg_id: int | None) -> HandlerResult:
         is_registered = False
@@ -99,7 +101,7 @@ class PlayerHandler:
         self, tournament_id: int, tg_id: int | None, expanded: bool = False
     ) -> HandlerResult:
         """Строит HandlerResult с клавиатурой архетипов для игрока."""
-        arch_list, has_more = build_archetype_menu(self.svc, tg_id, expanded)
+        arch_list, has_more = build_archetype_menu(self.arch_svc, tg_id, expanded)
         return HandlerResult(CHOOSE_ARCHETYPE, keyboard=archetype_keyboard(tournament_id, arch_list, has_more))
 
     def handle_tournaments(self, tg_id: int | None = None) -> HandlerResult:
@@ -170,7 +172,7 @@ class PlayerHandler:
                 user_id=db_user.id,
                 archetype_id=archetype_id,
             )
-            archetypes = {a.id: a.name for a in self.svc.list_archetypes()}
+            archetypes = {a.id: a.name for a in self.arch_svc.list_archetypes()}
             name = archetypes.get(archetype_id, "?")
             return HandlerResult(REGISTERED_AS.format(archetype_name=name))
         except errors.ParticipantAlreadyRegistered:
@@ -188,7 +190,7 @@ class PlayerHandler:
         name: str,
     ) -> HandlerResult:
         try:
-            archetype = self.svc.get_or_create_archetype_by_name(name, is_custom=True)
+            archetype = self.arch_svc.get_or_create_by_name(name, is_custom=True)
             db_user = self.user_svc.get_or_create(
                 tg_id=tg_id,
                 username=username,

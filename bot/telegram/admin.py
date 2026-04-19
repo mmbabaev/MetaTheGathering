@@ -9,6 +9,7 @@ from core.config import settings
 from core.database import SessionLocal
 from core.event_log import event_logger
 from services.tournament import TournamentService
+from services.archetype import ArchetypeService
 from services.user import UserService
 from bot.handlers.admin import AdminHandler, parse_add_player_command, parse_bulk_player_line
 from bot.telegram.player import USER_DATA_PENDING_BULK_ADD, USER_DATA_PENDING_ADMIN_CUSTOM_ARCH
@@ -17,7 +18,7 @@ from bot.keyboards import CB_ADMIN_ARCH_MORE, CB_ADMIN_SHOW_FILLED
 
 
 def _admin_handler(db) -> AdminHandler:
-    return AdminHandler(TournamentService(db), UserService(db))
+    return AdminHandler(TournamentService(db), UserService(db), ArchetypeService(db))
 
 
 
@@ -429,13 +430,14 @@ async def callback_delete_tournament_cancel(
         return
     from core.database import SessionLocal as SL
     from services.tournament import TournamentService
+    from services.archetype import ArchetypeService
     from services.user import UserService
     from bot.handlers.player import PlayerHandler
     db = SL()
     try:
         svc = TournamentService(db)
         user_svc = UserService(db)
-        result = PlayerHandler(svc, user_svc).handle_tournament_select(tournament_id, tg_id=user.id)
+        result = PlayerHandler(svc, user_svc, ArchetypeService(db)).handle_tournament_select(tournament_id, tg_id=user.id)
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
     finally:

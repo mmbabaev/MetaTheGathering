@@ -175,18 +175,18 @@ class TestCastVote:
 # ===== Confirmation thresholds =====
 
 class TestConfirmationThreshold:
-    def _make_voters(self, svc, user_svc, tournament, count):
+    def _make_voters(self, svc, user_svc, arch_svc, tournament, count):
         voters = []
         for i in range(count):
             u = user_svc.get_or_create(tg_id=2000 + i, username=f"voter{i}")
-            archetype = svc.get_or_create_archetype_by_name(f"Deck{i}")
+            archetype = arch_svc.get_or_create_by_name(f"Deck{i}")
             svc.register_participant(tournament_id=tournament.id, user_id=u.id, archetype_id=archetype.id)
             voters.append(u)
         return voters
 
-    def test_confirmed_after_enough_upvotes(self, svc, user_svc, db, tournament, user_alice, archetype_burn):
+    def test_confirmed_after_enough_upvotes(self, svc, user_svc, arch_svc, db, tournament, user_alice, archetype_burn):
         p = svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
-        voters = self._make_voters(svc, user_svc, tournament, CONFIRM_THRESHOLD)
+        voters = self._make_voters(svc, user_svc, arch_svc, tournament, CONFIRM_THRESHOLD)
         svc.open_voting(tournament.id)
 
         for v in voters:
@@ -195,9 +195,9 @@ class TestConfirmationThreshold:
         participant = svc._get_participant(p.id)
         assert participant.confirmed is True
 
-    def test_not_confirmed_below_threshold(self, svc, user_svc, db, tournament, user_alice, archetype_burn):
+    def test_not_confirmed_below_threshold(self, svc, user_svc, arch_svc, db, tournament, user_alice, archetype_burn):
         p = svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
-        voters = self._make_voters(svc, user_svc, tournament, CONFIRM_THRESHOLD - 1)
+        voters = self._make_voters(svc, user_svc, arch_svc, tournament, CONFIRM_THRESHOLD - 1)
         svc.open_voting(tournament.id)
 
         for v in voters:
@@ -206,9 +206,9 @@ class TestConfirmationThreshold:
         participant = svc._get_participant(p.id)
         assert participant.confirmed is False
 
-    def test_rejected_after_enough_downvotes(self, svc, user_svc, db, tournament, user_alice, archetype_burn):
+    def test_rejected_after_enough_downvotes(self, svc, user_svc, arch_svc, db, tournament, user_alice, archetype_burn):
         p = svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
-        voters = self._make_voters(svc, user_svc, tournament, REJECT_THRESHOLD)
+        voters = self._make_voters(svc, user_svc, arch_svc, tournament, REJECT_THRESHOLD)
         svc.open_voting(tournament.id)
 
         for v in voters:
@@ -231,13 +231,13 @@ class TestGetOrCreate:
         u2 = user_svc.get_or_create(tg_id=9999, username="newuser")
         assert u1.id == u2.id
 
-    def test_get_or_create_archetype_creates_new(self, svc):
-        a = svc.get_or_create_archetype_by_name("Bogles")
+    def test_get_or_create_archetype_creates_new(self, svc, arch_svc):
+        a = arch_svc.get_or_create_by_name("Bogles")
         assert a.name == "Bogles"
 
-    def test_get_or_create_archetype_returns_existing(self, svc):
-        a1 = svc.get_or_create_archetype_by_name("Bogles")
-        a2 = svc.get_or_create_archetype_by_name("Bogles")
+    def test_get_or_create_archetype_returns_existing(self, svc, arch_svc):
+        a1 = arch_svc.get_or_create_by_name("Bogles")
+        a2 = arch_svc.get_or_create_by_name("Bogles")
         assert a1.id == a2.id
 
 
@@ -299,20 +299,20 @@ class TestGetTournamentMeta:
 
 
 class TestListArchetypesForUser:
-    def test_unknown_user_returns_top10_alphabetically(self, svc):
+    def test_unknown_user_returns_top10_alphabetically(self, svc, arch_svc):
         for name in ("Burn", "Affinity", "Elves"):
-            svc.get_or_create_archetype_by_name(name)
-        result = svc.list_archetypes_for_user(tg_id=9999)
+            arch_svc.get_or_create_by_name(name)
+        result = arch_svc.list_archetypes_for_user(tg_id=9999)
         names = [a.name for a in result]
         assert names == sorted(names)
         assert len(result) <= 10
 
-    def test_recent_choice_comes_first(self, svc, tournament, user_alice, archetype_burn, archetype_affinity):
+    def test_recent_choice_comes_first(self, svc, tournament, user_alice, archetype_burn, archetype_affinity, arch_svc):
         svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
-        result = svc.list_archetypes_for_user(tg_id=user_alice.tg_id)
+        result = arch_svc.list_archetypes_for_user(tg_id=user_alice.tg_id)
         assert result[0].name == "Burn"
 
-    def test_most_recent_choice_wins(self, svc, db, user_alice, archetype_burn, archetype_affinity):
+    def test_most_recent_choice_wins(self, svc, db, user_alice, archetype_burn, archetype_affinity, arch_svc):
         from core.schemas import TournamentCreate
         import core.models as m
         t1 = svc.create_tournament(TournamentCreate(title="T1", chat_id=1))
@@ -327,23 +327,23 @@ class TestListArchetypesForUser:
         )
         db.add(p2)
         db.commit()
-        result = svc.list_archetypes_for_user(tg_id=user_alice.tg_id)
+        result = arch_svc.list_archetypes_for_user(tg_id=user_alice.tg_id)
         assert result[0].name == "Affinity"
         assert result[1].name == "Burn"
 
-    def test_deduplicates_repeated_choices(self, svc, db, user_alice, archetype_burn):
+    def test_deduplicates_repeated_choices(self, svc, db, user_alice, archetype_burn, arch_svc):
         from core.schemas import TournamentCreate
         t1 = svc.create_tournament(TournamentCreate(title="T1", chat_id=1))
         t2 = svc.create_tournament(TournamentCreate(title="T2", chat_id=2))
         svc.register_participant(tournament_id=t1.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
         svc.register_participant(tournament_id=t2.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
-        result = svc.list_archetypes_for_user(tg_id=user_alice.tg_id)
+        result = arch_svc.list_archetypes_for_user(tg_id=user_alice.tg_id)
         assert [a.name for a in result].count("Burn") == 1
 
-    def test_caps_at_total(self, svc):
+    def test_caps_at_total(self, svc, arch_svc):
         for i in range(15):
-            svc.get_or_create_archetype_by_name(f"Arch{i:02d}")
-        result = svc.list_archetypes_for_user(tg_id=9999, total=10)
+            arch_svc.get_or_create_by_name(f"Arch{i:02d}")
+        result = arch_svc.list_archetypes_for_user(tg_id=9999, total=10)
         assert len(result) == 10
 
 
@@ -417,13 +417,13 @@ class TestGetParticipantNotFound:
 
 class TestCastVoteEdgeCases:
     @pytest.fixture
-    def voting_setup(self, svc, user_svc):
+    def voting_setup(self, svc, user_svc, arch_svc):
         """Two chats each with their own tournament in VOTING state."""
         t1 = svc.create_tournament(TournamentCreate(title="T1", chat_id=400, slug="t1"))
         t2 = svc.create_tournament(TournamentCreate(title="T2", chat_id=401, slug="t2"))
         ua = user_svc.get_or_create(tg_id=4001, username="ua", first_name="UA")
         ub = user_svc.get_or_create(tg_id=4002, username="ub", first_name="UB")
-        arch = svc.get_or_create_archetype_by_name("Burn")
+        arch = arch_svc.get_or_create_by_name("Burn")
         # Register participant before opening voting
         p = svc.register_participant(tournament_id=t1.id, user_id=ua.id, archetype_id=arch.id)
         svc.open_voting(t1.id)
@@ -633,7 +633,7 @@ class TestGetOrCreateByName:
         assert created is False
         assert u1.id == u2.id
 
-    def test_prefers_user_with_deck_history(self, user_svc, db, svc):
+    def test_prefers_user_with_deck_history(self, user_svc, db, svc, arch_svc):
         """Когда два совпадения — возвращает того, у кого есть история колод."""
         from core import models
         # Два пользователя с одинаковыми именами (разный порядок слов)
@@ -643,7 +643,7 @@ class TestGetOrCreateByName:
         db.commit()
 
         # Даём u_with_hist историю колод
-        arch = svc.get_or_create_archetype_by_name("Burn")
+        arch = arch_svc.get_or_create_by_name("Burn")
         db.add(models.UserDeckHistory(user_id=u_with_hist.id, archetype_id=arch.id, source="test"))
         db.commit()
 
@@ -661,7 +661,7 @@ class TestGetOrCreateByName:
         assert created is False
         assert u1.id == u2.id
 
-    def test_bulk_add_uses_flexible_search(self, user_svc, db, svc):
+    def test_bulk_add_uses_flexible_search(self, user_svc, db, svc, arch_svc):
         """handle_bulk_add_by_name находит игрока даже при перестановке имени и фамилии."""
         from bot.handlers.admin import AdminHandler
         from core import models as m
@@ -672,7 +672,7 @@ class TestGetOrCreateByName:
         db.commit()
 
         # Назначаем ему историю (чтобы убедиться что нашли правильного)
-        arch = svc.get_or_create_archetype_by_name("Elves")
+        arch = arch_svc.get_or_create_by_name("Elves")
         db.add(m.UserDeckHistory(user_id=u.id, archetype_id=arch.id, source="test"))
         db.commit()
 
@@ -680,7 +680,7 @@ class TestGetOrCreateByName:
         t = svc.create_tournament(TournamentCreate(title="T", chat_id=9999))
 
         from unittest.mock import patch
-        handler = AdminHandler(svc, user_svc)
+        handler = AdminHandler(svc, user_svc, arch_svc)
 
         # Добавляем в порядке Имя Фамилия (как вводит оператор)
         with patch("services.user.settings") as mock_settings:

@@ -103,8 +103,8 @@ def active_tournament(svc):
 
 
 @pytest.fixture
-def handler(svc, user_svc):
-    return AdminHandler(svc, user_svc)
+def handler(svc, user_svc, arch_svc):
+    return AdminHandler(svc, user_svc, arch_svc)
 
 
 # --- handle_add_me ---
@@ -724,10 +724,10 @@ class TestHandleAdminPickArchUsesParticipantHistory:
     """Убеждаемся что список архетипов персонализирован под игрока, а не под админа."""
 
     @pytest.fixture
-    def setup(self, svc, user_svc, active_tournament):
+    def setup(self, svc, user_svc, arch_svc, active_tournament):
         from core.schemas import TournamentCreate as TC
-        burn = svc.get_or_create_archetype_by_name("Burn")
-        elves = svc.get_or_create_archetype_by_name("Elves")
+        burn = arch_svc.get_or_create_by_name("Burn")
+        elves = arch_svc.get_or_create_by_name("Elves")
 
         # Прошлый турнир: админ играл Burn
         t_admin = svc.create_tournament(TC(title="Admin Hist", chat_id=CHAT_ID + 50, slug="ah"))
@@ -757,7 +757,7 @@ class TestHandleAdminPickArchUsesParticipantHistory:
         assert "Burn" not in first_btn.text
 
     def test_bulk_added_player_no_history_gets_top_by_popularity_not_admin_order(
-        self, handler, svc, user_svc, admin_user, active_tournament
+        self, handler, svc, user_svc, arch_svc, admin_user, active_tournament
     ):
         """Игрок без истории (bulk add) должен получать топ по глобальной популярности,
         а не персональный список колод админа.
@@ -768,8 +768,8 @@ class TestHandleAdminPickArchUsesParticipantHistory:
         """
         from core.schemas import TournamentCreate as TC
 
-        aaa = svc.get_or_create_archetype_by_name("Aaa Deck")
-        zzz = svc.get_or_create_archetype_by_name("Zzz Deck")
+        aaa = arch_svc.get_or_create_by_name("Aaa Deck")
+        zzz = arch_svc.get_or_create_by_name("Zzz Deck")
 
         # Прошлый турнир: админ играл Zzz (1 раз)
         t_admin = svc.create_tournament(TC(title="Admin Z hist", chat_id=CHAT_ID + 60, slug="az"))
@@ -862,8 +862,8 @@ class TestStatusReturnedAfterSetArch:
         return svc.get_participant(active_tournament.id, user.id)
 
     @pytest.fixture
-    def archetype_burn(self, svc):
-        return svc.get_or_create_archetype_by_name("Burn")
+    def archetype_burn(self, arch_svc):
+        return arch_svc.get_or_create_by_name("Burn")
 
     def test_result_contains_arch_name(
         self, handler, admin_user, active_tournament, participant, archetype_burn
