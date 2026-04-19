@@ -5,7 +5,6 @@ from telegram.ext import ContextTypes
 
 from core.database import SessionLocal
 from core.event_log import event_logger
-from core.impersonate import ImpersonationState
 from services.tournament import TournamentService
 from services.user import UserService
 from bot.handlers.player import PlayerHandler
@@ -16,7 +15,6 @@ from bot.handlers.admin import AdminHandler
 
 
 def _log(event: str, user, **params) -> None:
-    """Shortcut: логирует событие с данными пользователя из Telegram."""
     event_logger.log(
         event,
         tg_id=user.id if user else None,
@@ -29,10 +27,6 @@ USER_DATA_PENDING_NAME = "pending_name_for_tournament_id"
 USER_DATA_PENDING_SETTINGS_NAME = "pending_settings_name"
 USER_DATA_PENDING_BULK_ADD = "pending_bulk_add_tournament_id"
 USER_DATA_PENDING_ADMIN_CUSTOM_ARCH = "pending_admin_custom_arch_participant_id"
-
-
-def _impersonation(context: ContextTypes.DEFAULT_TYPE) -> ImpersonationState:
-    return context.bot_data["impersonation"]
 
 
 def _player_handler(db) -> PlayerHandler:
@@ -51,7 +45,7 @@ async def cmd_tournaments(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     user = update.effective_user
     db = SessionLocal()
     try:
-        result = _player_handler(db).handle_tournaments(tg_id=_impersonation(context).get_acting_tg_id(user.id) if user else None)
+        result = _player_handler(db).handle_tournaments(tg_id=user.id if user else None)
         await update.effective_message.reply_text(result.text, reply_markup=result.keyboard)
     finally:
         db.close()
@@ -70,8 +64,7 @@ async def callback_tournament_select(update: Update, context: ContextTypes.DEFAU
         return
     db = SessionLocal()
     try:
-        imp = _impersonation(context)
-        result = _player_handler(db).handle_tournament_select(tournament_id, tg_id=imp.get_acting_tg_id(user.id) if user else None)
+        result = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id if user else None)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
@@ -94,8 +87,7 @@ async def callback_register(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
     db = SessionLocal()
     try:
-        imp = _impersonation(context)
-        result = _player_handler(db).handle_register(tournament_id, tg_id=imp.get_acting_tg_id(user.id) if user else None)
+        result = _player_handler(db).handle_register(tournament_id, tg_id=user.id if user else None)
         if result.needs_name:
             if context.user_data is None:
                 context.user_data = {}
@@ -120,9 +112,8 @@ async def callback_archetype(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
     db = SessionLocal()
     try:
-        acting_id = _impersonation(context).get_acting_tg_id(user.id)
         result = _player_handler(db).handle_archetype(
-            acting_id, None, None, None,
+            user.id, None, None, None,
             tournament_id, archetype_id,
         )
         if result.is_alert:
@@ -136,7 +127,6 @@ async def callback_archetype(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def callback_archetype_more(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """«... ещё» — разворачивает полный список архетипов."""
     query = update.callback_query
     user = update.effective_user
     if not query or not query.data or not user:
@@ -149,7 +139,7 @@ async def callback_archetype_more(update: Update, context: ContextTypes.DEFAULT_
         return
     db = SessionLocal()
     try:
-        result = _player_handler(db).handle_archetype_more(tournament_id, tg_id=_impersonation(context).get_acting_tg_id(user.id))
+        result = _player_handler(db).handle_archetype_more(tournament_id, tg_id=user.id)
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
     finally:
@@ -213,7 +203,7 @@ async def callback_leave_tournament(update: Update, context: ContextTypes.DEFAUL
         return
     db = SessionLocal()
     try:
-        result = _player_handler(db).handle_leave_tournament(_impersonation(context).get_acting_tg_id(user.id), tournament_id)
+        result = _player_handler(db).handle_leave_tournament(user.id, tournament_id)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
@@ -236,7 +226,7 @@ async def callback_leave_confirm(update: Update, context: ContextTypes.DEFAULT_T
         return
     db = SessionLocal()
     try:
-        result = _player_handler(db).handle_leave_confirm(_impersonation(context).get_acting_tg_id(user.id), tournament_id)
+        result = _player_handler(db).handle_leave_confirm(user.id, tournament_id)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
@@ -260,7 +250,7 @@ async def callback_leave_cancel(update: Update, context: ContextTypes.DEFAULT_TY
         return
     db = SessionLocal()
     try:
-        result = _player_handler(db).handle_tournament_select(tournament_id, tg_id=_impersonation(context).get_acting_tg_id(user.id))
+        result = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
@@ -271,7 +261,6 @@ async def callback_leave_cancel(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 async def message_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Единый обработчик текстовых сообщений для всех состояний user_data."""
     msg = update.effective_message
     user = update.effective_user
     if not msg or not msg.text or not user:
@@ -281,7 +270,6 @@ async def message_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     text = msg.text.strip()
 
-    # State: waiting for name to complete registration
     if USER_DATA_PENDING_NAME in context.user_data:
         tournament_id = context.user_data.pop(USER_DATA_PENDING_NAME)
         if not text:
@@ -291,14 +279,13 @@ async def message_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         db = SessionLocal()
         try:
             result = _player_handler(db).handle_save_name_then_register(
-                _impersonation(context).get_acting_tg_id(user.id), user.username, text, tournament_id,
+                user.id, user.username, text, tournament_id,
             )
             await msg.reply_text(result.text, reply_markup=result.keyboard)
         finally:
             db.close()
         return
 
-    # State: waiting for name change from /settings
     if context.user_data.pop(USER_DATA_PENDING_SETTINGS_NAME, None):
         if not text:
             context.user_data[USER_DATA_PENDING_SETTINGS_NAME] = True
@@ -312,7 +299,6 @@ async def message_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
             db.close()
         return
 
-    # State: waiting for admin custom archetype name for a specific participant
     if USER_DATA_PENDING_ADMIN_CUSTOM_ARCH in context.user_data:
         participant_id = context.user_data.pop(USER_DATA_PENDING_ADMIN_CUSTOM_ARCH)
         if not text:
@@ -329,7 +315,6 @@ async def message_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
             db.close()
         return
 
-    # State: waiting for bulk add player names (admin)
     if USER_DATA_PENDING_BULK_ADD in context.user_data:
         tournament_id = context.user_data.pop(USER_DATA_PENDING_BULK_ADD)
         names = [line.strip() for line in text.splitlines() if line.strip()]
@@ -342,7 +327,6 @@ async def message_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
             db.close()
         return
 
-    # State: waiting for custom archetype name
     tournament_id = context.user_data.pop(USER_DATA_PENDING_CUSTOM, None)
     if tournament_id is None:
         return
@@ -353,7 +337,7 @@ async def message_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
     db = SessionLocal()
     try:
         result = _player_handler(db).handle_custom_archetype_text(
-            _impersonation(context).get_acting_tg_id(user.id), None, None, None,
+            user.id, None, None, None,
             tournament_id, text,
         )
         await msg.reply_text(result.text)
