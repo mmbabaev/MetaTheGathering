@@ -18,6 +18,7 @@ from bot.keyboards import (
 )
 from bot.messages import (
     NOT_ADMIN,
+    family_name_sort_key,
     NO_DECK_NAME,
     NO_ACTIVE_TOURNAMENT,
     MULTIPLE_TOURNAMENTS_MSG,
@@ -38,8 +39,8 @@ def _sort_participants(participants: list) -> list:
     """Сортирует участников: сначала незаполненные, затем заполненные; внутри — по фамилии."""
     def _sort_key(p):
         filled = 0 if p.archetype is None else 1
-        last = (p.user.last_name or p.user.first_name or "") if p.user else ""
-        return (filled, last.lower())
+        last = family_name_sort_key(p.user.first_name if p.user else None, p.user.last_name if p.user else None)
+        return (filled, last)
     return sorted(participants, key=_sort_key)
 
 

@@ -62,6 +62,51 @@ def _participant_icon(p) -> str:
     return "✅" if p.archetype else "⬜"
 
 
+# Типичные окончания русских фамилий
+_FAMILY_SUFFIXES = (
+    "ов", "ев", "ёв", "ин", "ын", "ый", "ий", "ой",
+    "ский", "цкий", "ской", "ная", "ная",
+    "ных", "ых", "ина", "ева", "ова", "ская",
+)
+
+
+def _looks_like_family_name(word: str) -> bool:
+    w = word.lower()
+    return any(w.endswith(s) for s in _FAMILY_SUFFIXES)
+
+
+def format_participant_name(first_name: str | None, last_name: str | None) -> str:
+    """Возвращает имя в формате «Фамилия Имя».
+
+    Если оба поля заполнены — просто last_name + first_name.
+    Если только first_name (Telegram-юзер с именем в одном поле) — применяет эвристику:
+    если последнее слово выглядит как фамилия (суффикс -ов/-ин/-ский и т.п.),
+    переставляет слова; иначе оставляет как есть (первое слово уже фамилия).
+    """
+    if last_name and first_name:
+        return f"{last_name} {first_name}"
+    if last_name:
+        return last_name
+    if not first_name:
+        return ""
+    words = first_name.split()
+    if len(words) == 2 and _looks_like_family_name(words[1]):
+        return f"{words[1]} {words[0]}"
+    return first_name
+
+
+def family_name_sort_key(first_name: str | None, last_name: str | None) -> str:
+    """Возвращает фамилию в нижнем регистре для сортировки."""
+    if last_name:
+        return last_name.lower()
+    if not first_name:
+        return ""
+    words = first_name.split()
+    if len(words) == 2 and _looks_like_family_name(words[1]):
+        return words[1].lower()
+    return (words[0] if words else "").lower()
+
+
 def format_tournament_card(
     title: str,
     status: str,
@@ -96,8 +141,7 @@ def format_tournament_status(
     for p in participants:
         icon = _participant_icon(p)
         if p.user:
-            name_parts = [n for n in (p.user.last_name, p.user.first_name) if n]
-            full_name = " ".join(name_parts) if name_parts else f"id{p.user.tg_id}"
+            full_name = format_participant_name(p.user.first_name, p.user.last_name) or f"id{p.user.tg_id}"
             username_hint = f" (@{p.user.username})" if p.user.username else ""
             display = f"{full_name}{username_hint}"
         else:
