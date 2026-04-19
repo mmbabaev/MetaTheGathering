@@ -6,6 +6,7 @@ from sqlalchemy import select, func, update as sa_update, delete as sa_delete
 from sqlalchemy.orm import Session
 
 from core import models
+from core.config import settings
 
 
 def _normalize_name(s: str) -> str:
@@ -210,6 +211,12 @@ class UserService:
         self.db.delete(placeholder)
         self.db.commit()
         return True
+
+    def is_admin(self, tg_id: int) -> bool:
+        if tg_id in settings.admin_ids:
+            return True
+        user = self.get_by_tg_id(tg_id)
+        return user is not None and (user.is_admin or user.is_superadmin)
 
     def update_name(
         self,

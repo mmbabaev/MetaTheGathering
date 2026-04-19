@@ -177,7 +177,7 @@ async def callback_tournament_status(update: Update, context: ContextTypes.DEFAU
     db = SessionLocal()
     try:
         admin_h = _admin_handler(db)
-        if user and admin_h._is_admin(user.id):
+        if user and admin_h.user_svc.is_admin(user.id):
             result = admin_h.handle_admin_status(user.id, tournament_id)
         else:
             result = _player_handler(db).handle_tournament_public_status(tournament_id)

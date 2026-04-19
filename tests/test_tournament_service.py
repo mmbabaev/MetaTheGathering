@@ -679,15 +679,15 @@ class TestGetOrCreateByName:
         # Турнир
         t = svc.create_tournament(TournamentCreate(title="T", chat_id=9999))
 
-        class FakeAdminHandler(AdminHandler):
-            def _is_admin(self, tg_id): return True
-
-        handler = FakeAdminHandler(svc, user_svc)
+        from unittest.mock import patch
+        handler = AdminHandler(svc, user_svc)
 
         # Добавляем в порядке Имя Фамилия (как вводит оператор)
-        result = handler.handle_bulk_add_by_name(
-            tg_id=0, tournament_id=t.id, names=["Антон Ильин"]
-        )
+        with patch("services.user.settings") as mock_settings:
+            mock_settings.admin_ids = [0]
+            result = handler.handle_bulk_add_by_name(
+                tg_id=0, tournament_id=t.id, names=["Антон Ильин"]
+            )
         assert "✅ Антон Ильин" in result.text
 
         # Участник должен быть привязан к правильному пользователю (с историей)
