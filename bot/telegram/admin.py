@@ -42,6 +42,8 @@ async def callback_bulk_add_start(update: Update, context: ContextTypes.DEFAULT_
     except (ValueError, IndexError):
         await query.answer("Ошибка данных.")
         return
+    user = update.effective_user
+    _log("bulk_add_start", user, tournament_id=tournament_id)
     if context.user_data is None:
         context.user_data = {}
     context.user_data[USER_DATA_PENDING_BULK_ADD] = tournament_id
@@ -456,6 +458,7 @@ async def callback_reveal_decks(update: Update, context: ContextTypes.DEFAULT_TY
     except (ValueError, IndexError):
         await query.answer("Ошибка данных.")
         return
+    _log("reveal_decks", user, tournament_id=tournament_id)
     db = SessionLocal()
     try:
         result = _admin_handler(db).handle_reveal_decks(user.id, tournament_id)
