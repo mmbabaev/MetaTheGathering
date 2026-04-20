@@ -461,6 +461,21 @@ class AdminHandler:
         )
         return HandlerResult(text, keyboard=delete_tournament_confirm_keyboard(tournament_id))
 
+    def handle_create_poll(self, tg_id: int, tournament_id: int) -> HandlerResult:
+        """Проверяет возможность создания опроса, возвращает HandlerResult("ok") или ошибку.
+        Реальная отправка опроса выполняется Telegram-обёрткой после этого вызова.
+        """
+        if not self.user_svc.is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN, is_alert=True)
+        from services.poll import PollService
+        if PollService(self.svc.db).get_poll_for_tournament(tournament_id):
+            return HandlerResult("⚠️ Для этого турнира уже есть опрос.", is_alert=True)
+        try:
+            t = get_tournament(self.svc.db, tournament_id)
+        except errors.TournamentNotFound:
+            return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
+        return HandlerResult(t.title)
+
     def handle_delete_tournament_confirm(
         self, tg_id: int, tournament_id: int
     ) -> HandlerResult:

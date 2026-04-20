@@ -24,6 +24,8 @@ CB_DELETE_TOURNAMENT_CONFIRM = "del_t_yes"  # del_t_yes:{tournament_id}
 CB_DELETE_TOURNAMENT_CANCEL = "del_t_no"    # del_t_no:{tournament_id}
 CB_ADMIN_SHOW_FILLED = "adm_show_filled"    # adm_show_filled:{tournament_id}
 CB_REVEAL_DECKS = "reveal_decks"            # reveal_decks:{tournament_id}
+CB_CREATE_POLL = "create_poll"              # create_poll:{tournament_id}
+CB_NOTIFY_NO_DECK = "notify_no_deck"        # notify_no_deck:{tournament_id}
 
 
 def tournament_list_keyboard(tournaments: list) -> InlineKeyboardMarkup:
@@ -65,6 +67,14 @@ def tournament_card_keyboard(
             InlineKeyboardButton(
                 "➕ Добавить участников", callback_data=f"{CB_BULK_ADD}:{tournament_id}"
             )
+        ])
+        rows.append([
+            InlineKeyboardButton(
+                "📊 Голосование", callback_data=f"{CB_CREATE_POLL}:{tournament_id}"
+            ),
+            InlineKeyboardButton(
+                "📣 Без колоды", callback_data=f"{CB_NOTIFY_NO_DECK}:{tournament_id}"
+            ),
         ])
         rows.append([
             InlineKeyboardButton(
