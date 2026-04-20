@@ -44,6 +44,7 @@ async def cmd_tournaments(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not update.effective_message:
         return
     user = update.effective_user
+    _log("cmd_tournaments", user)
     db = SessionLocal()
     try:
         result = _player_handler(db).handle_tournaments(tg_id=user.id if user else None)
@@ -63,6 +64,7 @@ async def callback_tournament_select(update: Update, context: ContextTypes.DEFAU
     except (ValueError, IndexError):
         await query.answer("Ошибка данных.")
         return
+    _log("view_tournament", user, tournament_id=tournament_id)
     db = SessionLocal()
     try:
         result = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id if user else None)
@@ -86,6 +88,7 @@ async def callback_register(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     except (ValueError, IndexError):
         await query.answer("Ошибка данных.")
         return
+    _log("register_start", user, tournament_id=tournament_id)
     db = SessionLocal()
     try:
         result = _player_handler(db).handle_register(tournament_id, tg_id=user.id if user else None)
@@ -175,6 +178,7 @@ async def callback_tournament_status(update: Update, context: ContextTypes.DEFAU
     except (ValueError, IndexError):
         await query.answer("Ошибка данных.")
         return
+    _log("view_status", user, tournament_id=tournament_id)
     db = SessionLocal()
     try:
         admin_h = _admin_handler(db)
@@ -202,6 +206,7 @@ async def callback_leave_tournament(update: Update, context: ContextTypes.DEFAUL
     except (ValueError, IndexError):
         await query.answer("Ошибка данных.")
         return
+    _log("leave_start", user, tournament_id=tournament_id)
     db = SessionLocal()
     try:
         result = _player_handler(db).handle_leave_tournament(user.id, tournament_id)
