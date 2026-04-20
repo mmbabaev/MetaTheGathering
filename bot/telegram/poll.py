@@ -13,6 +13,7 @@ from services.archetype import ArchetypeService
 from services.poll import PollService
 from services.utils import get_tournament
 from bot.handlers.admin import AdminHandler
+from bot.keyboards import fill_deck_keyboard
 from bot.telegram.common import log_event as _log, parse_callback_ints
 
 logger = logging.getLogger(__name__)
@@ -127,15 +128,23 @@ async def callback_notify_no_deck(update: Update, context: ContextTypes.DEFAULT_
             return
 
         sent = 0
+        notified_ids = []
+        keyboard = fill_deck_keyboard(tournament_id)
         for tg_id in voters:
             if not _is_notify_allowed(tg_id):
                 logger.info(f"[poll] skip notify tg_id={tg_id} (not in allowed list)")
                 continue
             try:
-                await context.bot.send_message(chat_id=tg_id, text=_DM_NO_DECK)
+                await context.bot.send_message(
+                    chat_id=tg_id, text=_DM_NO_DECK, reply_markup=keyboard
+                )
+                notified_ids.append(tg_id)
                 sent += 1
             except Exception as e:
                 logger.warning(f"[poll] Could not DM tg_id={tg_id}: {e}")
+
+        if notified_ids:
+            PollService(db).mark_notified(tournament_id, notified_ids)
 
         _log("notify_no_deck", user, tournament_id=tournament_id, sent=sent, total=len(voters))
         await query.answer(f"Отправлено {sent} из {len(voters)} игроков.")

@@ -142,6 +142,7 @@ class Participant(Base):
 
     created_at = Column(DateTime, default=utc_now, nullable=False)
     updated_at = Column(DateTime, default=utc_now, nullable=False)
+    last_dm_at = Column(DateTime, nullable=True)
 
     tournament = relationship("Tournament", back_populates="participants")
     user = relationship("User", back_populates="participants")

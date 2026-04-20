@@ -104,6 +104,13 @@ def register_button(tournament_id: int) -> InlineKeyboardMarkup:
     return tournament_card_keyboard(tournament_id, is_registered=False)
 
 
+def fill_deck_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
+    """Кнопка в DM-уведомлении — ведёт сразу к выбору колоды."""
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("🃏 Выбрать колоду", callback_data=f"{CB_REGISTER}:{tournament_id}")
+    ]])
+
+
 def leave_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
     """Кнопки подтверждения выхода из турнира."""
     return InlineKeyboardMarkup([

@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
 from core import models
+from core.models import utc_now
+
+DM_COOLDOWN_SECONDS = 3600
 
 
 class PollService:
@@ -60,7 +64,7 @@ class PollService:
         self.db.commit()
 
     def get_yes_voters_without_deck(self, tournament_id: int) -> list[int]:
-        """tg_user_ids who voted «пойду» (choice=0) but have no archetype in the tournament."""
+        """tg_user_ids who voted «пойду» (choice=0), have no archetype, and are not on DM cooldown."""
         poll = self.get_poll_for_tournament(tournament_id)
         if not poll:
             return []
@@ -88,4 +92,35 @@ class PollService:
             ).scalars().all()
         )
 
-        return list(yes_voter_ids - registered_with_deck)
+        cooldown_cutoff = utc_now() - timedelta(seconds=DM_COOLDOWN_SECONDS)
+        recently_notified = set(
+            self.db.execute(
+                select(models.User.tg_id)
+                .join(models.Participant, models.Participant.user_id == models.User.id)
+                .where(
+                    models.Participant.tournament_id == tournament_id,
+                    models.Participant.last_dm_at.isnot(None),
+                    models.Participant.last_dm_at > cooldown_cutoff,
+                    models.User.tg_id.in_(yes_voter_ids),
+                )
+            ).scalars().all()
+        )
+
+        return list(yes_voter_ids - registered_with_deck - recently_notified)
+
+    def mark_notified(self, tournament_id: int, tg_user_ids: list[int]) -> None:
+        """Записывает время последнего DM для участников турнира."""
+        if not tg_user_ids:
+            return
+        now = utc_now()
+        rows = self.db.execute(
+            select(models.Participant)
+            .join(models.User, models.User.id == models.Participant.user_id)
+            .where(
+                models.Participant.tournament_id == tournament_id,
+                models.User.tg_id.in_(tg_user_ids),
+            )
+        ).scalars().all()
+        for p in rows:
+            p.last_dm_at = now
+        self.db.commit()

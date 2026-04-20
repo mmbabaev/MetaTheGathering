@@ -1,11 +1,14 @@
 """Tests for PollService and AdminHandler.handle_create_poll."""
 
+from datetime import timedelta
+
 import pytest
 
-from services.poll import PollService
+from services.poll import PollService, DM_COOLDOWN_SECONDS
 from services.user import UserService
 from services.archetype import ArchetypeService
 from services.tournament import TournamentService
+from core.models import utc_now
 from bot.handlers.admin import AdminHandler
 from bot.handlers.base import HandlerResult
 
@@ -126,6 +129,49 @@ class TestYesVotersWithoutDeck:
         result = poll_svc.get_yes_voters_without_deck(tournament.id)
         assert user_alice.tg_id in result
         assert user_bob.tg_id not in result
+
+
+# ── PollService.mark_notified + DM cooldown ─────────────────────────────────
+
+class TestDmCooldown:
+    def test_mark_notified_sets_last_dm_at(self, poll_svc, svc, tournament, user_alice):
+        svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id)
+        poll_svc.mark_notified(tournament.id, [user_alice.tg_id])
+        from sqlalchemy import select
+        from core.models import Participant
+        p = poll_svc.db.execute(
+            select(Participant).where(
+                Participant.tournament_id == tournament.id,
+                Participant.user_id == user_alice.id,
+            )
+        ).scalar_one()
+        assert p.last_dm_at is not None
+
+    def test_recently_notified_excluded(self, poll_svc, svc, tournament, user_alice):
+        poll = poll_svc.create_poll(tournament.id, 100, "p1", 1)
+        poll_svc.upsert_vote(poll.id, user_alice.tg_id, choice=0)
+        svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id)
+        poll_svc.mark_notified(tournament.id, [user_alice.tg_id])
+        result = poll_svc.get_yes_voters_without_deck(tournament.id)
+        assert user_alice.tg_id not in result
+
+    def test_old_notification_not_excluded(self, poll_svc, svc, tournament, user_alice):
+        poll = poll_svc.create_poll(tournament.id, 100, "p1", 1)
+        poll_svc.upsert_vote(poll.id, user_alice.tg_id, choice=0)
+        svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id)
+        # Simulate old notification
+        from sqlalchemy import select
+        from core.models import Participant
+        p = poll_svc.db.execute(
+            select(Participant).where(Participant.tournament_id == tournament.id)
+        ).scalar_one()
+        p.last_dm_at = utc_now() - timedelta(seconds=DM_COOLDOWN_SECONDS + 60)
+        poll_svc.db.commit()
+        result = poll_svc.get_yes_voters_without_deck(tournament.id)
+        assert user_alice.tg_id in result
+
+    def test_mark_notified_no_ids_is_noop(self, poll_svc, tournament):
+        poll_svc.mark_notified(tournament.id, [])  # should not raise
 
 
 # ── AdminHandler.handle_create_poll ─────────────────────────────────────────
