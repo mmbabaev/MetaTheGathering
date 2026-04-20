@@ -179,7 +179,11 @@ async def test_callback_archetype_success():
         await callback_archetype(update, _make_context())
 
     mock_ph.return_value.handle_archetype.assert_called_once_with(
-        update.effective_user.id, None, None, None, 3, 12
+        update.effective_user.id,
+        update.effective_user.username,
+        update.effective_user.first_name,
+        update.effective_user.last_name,
+        3, 12,
     )
     update.callback_query.edit_message_text.assert_called_once_with("Вы записаны как Burn.")
 

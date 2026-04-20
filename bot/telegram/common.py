@@ -9,6 +9,18 @@ from services.user import UserService
 from bot.messages import HELP_TEXT
 
 
+async def parse_callback_ints(query, count: int) -> tuple[int, ...] | None:
+    """Парсит callback_data вида 'PREFIX:int1:int2...'. Возвращает кортеж int или None при ошибке."""
+    if not query or not query.data:
+        return None
+    try:
+        parts = query.data.split(":", count)
+        return tuple(int(p) for p in parts[1:count + 1])
+    except (ValueError, IndexError):
+        await query.answer("Ошибка данных.")
+        return None
+
+
 def log_event(event: str, user, **params) -> None:
     event_logger.log(
         event,

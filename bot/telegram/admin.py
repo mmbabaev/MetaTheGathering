@@ -14,7 +14,7 @@ from bot.handlers.admin import AdminHandler, parse_add_player_command, parse_bul
 from bot.telegram.player import USER_DATA_PENDING_BULK_ADD, USER_DATA_PENDING_ADMIN_CUSTOM_ARCH
 from bot.messages import TELEGRAM_USER_LOOKUP_FAILED, ADD_PLAYERS_USAGE, BULK_ADD_PROMPT
 from bot.keyboards import CB_ADMIN_ARCH_MORE, CB_ADMIN_SHOW_FILLED, CB_REVEAL_DECKS
-from bot.telegram.common import log_event as _log
+from bot.telegram.common import log_event as _log, parse_callback_ints
 
 
 def _admin_handler(db) -> AdminHandler:
@@ -24,14 +24,10 @@ def _admin_handler(db) -> AdminHandler:
 async def callback_bulk_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Кнопка «➕ Добавить участников» на карточке турнира."""
     query = update.callback_query
-    if not query or not query.data:
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
         return
-    try:
-        _, tid_str = query.data.split(":", 1)
-        tournament_id = int(tid_str)
-    except (ValueError, IndexError):
-        await query.answer("Ошибка данных.")
-        return
+    (tournament_id,) = ids
     user = update.effective_user
     _log("bulk_add_start", user, tournament_id=tournament_id)
     if context.user_data is None:
@@ -45,14 +41,12 @@ async def callback_admin_pick_arch(update: Update, context: ContextTypes.DEFAULT
     """Нажатие на участника в admin status → показывает выбор архетипа."""
     query = update.callback_query
     user = update.effective_user
-    if not query or not query.data or not user:
+    if not user:
         return
-    try:
-        _, pid_str = query.data.split(":", 1)
-        participant_id = int(pid_str)
-    except (ValueError, IndexError):
-        await query.answer("Ошибка данных.")
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
         return
+    (participant_id,) = ids
     db = SessionLocal()
     try:
         result = _admin_handler(db).handle_admin_pick_arch(user.id, participant_id)
@@ -69,15 +63,12 @@ async def callback_admin_set_arch(update: Update, context: ContextTypes.DEFAULT_
     """Выбор конкретного архетипа для участника."""
     query = update.callback_query
     user = update.effective_user
-    if not query or not query.data or not user:
+    if not user:
         return
-    try:
-        _, pid_str, aid_str = query.data.split(":", 2)
-        participant_id = int(pid_str)
-        archetype_id = int(aid_str)
-    except (ValueError, IndexError):
-        await query.answer("Ошибка данных.")
+    ids = await parse_callback_ints(query, 2)
+    if ids is None:
         return
+    participant_id, archetype_id = ids
     db = SessionLocal()
     try:
         result = _admin_handler(db).handle_admin_set_arch(user.id, participant_id, archetype_id)
@@ -95,14 +86,12 @@ async def callback_admin_arch_more(update: Update, context: ContextTypes.DEFAULT
     """«... ещё» в admin pick arch — разворачивает полный список архетипов."""
     query = update.callback_query
     user = update.effective_user
-    if not query or not query.data or not user:
+    if not user:
         return
-    try:
-        _, pid_str = query.data.split(":", 1)
-        participant_id = int(pid_str)
-    except (ValueError, IndexError):
-        await query.answer("Ошибка данных.")
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
         return
+    (participant_id,) = ids
     db = SessionLocal()
     try:
         result = _admin_handler(db).handle_admin_arch_more(user.id, participant_id)
@@ -118,14 +107,10 @@ async def callback_admin_arch_more(update: Update, context: ContextTypes.DEFAULT
 async def callback_admin_custom_arch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """«Свой вариант» — ждём текст с названием архетипа."""
     query = update.callback_query
-    if not query or not query.data:
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
         return
-    try:
-        _, pid_str = query.data.split(":", 1)
-        participant_id = int(pid_str)
-    except (ValueError, IndexError):
-        await query.answer("Ошибка данных.")
-        return
+    (participant_id,) = ids
     if context.user_data is None:
         context.user_data = {}
     context.user_data[USER_DATA_PENDING_ADMIN_CUSTOM_ARCH] = participant_id
@@ -137,14 +122,12 @@ async def callback_admin_show_filled(update: Update, context: ContextTypes.DEFAU
     """Кнопка «Показать заполненных (N)» — разворачивает список заполненных участников."""
     query = update.callback_query
     user = update.effective_user
-    if not query or not query.data or not user:
+    if not user:
         return
-    try:
-        _, tid_str = query.data.split(":", 1)
-        tournament_id = int(tid_str)
-    except (ValueError, IndexError):
-        await query.answer("Ошибка данных.")
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
         return
+    (tournament_id,) = ids
     db = SessionLocal()
     try:
         result = _admin_handler(db).handle_admin_show_filled(user.id, tournament_id)
@@ -326,14 +309,12 @@ async def callback_export_excel(update: Update, context: ContextTypes.DEFAULT_TY
     """Кнопка «📊 Выгрузка Excel» — отправляет файл участников."""
     query = update.callback_query
     user = update.effective_user
-    if not query or not query.data or not user:
+    if not user:
         return
-    try:
-        _, tid_str = query.data.split(":", 1)
-        tournament_id = int(tid_str)
-    except (ValueError, IndexError):
-        await query.answer("Ошибка данных.")
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
         return
+    (tournament_id,) = ids
     await query.answer("Генерирую файл…")
     db = SessionLocal()
     try:
@@ -359,14 +340,12 @@ async def callback_delete_tournament_prompt(
     """Кнопка «🗑 Удалить турнир» — показывает запрос подтверждения."""
     query = update.callback_query
     user = update.effective_user
-    if not query or not query.data or not user:
+    if not user:
         return
-    try:
-        _, tid_str = query.data.split(":", 1)
-        tournament_id = int(tid_str)
-    except (ValueError, IndexError):
-        await query.answer("Ошибка данных.")
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
         return
+    (tournament_id,) = ids
     db = SessionLocal()
     try:
         result = _admin_handler(db).handle_delete_tournament_prompt(user.id, tournament_id)
@@ -385,14 +364,12 @@ async def callback_delete_tournament_confirm(
     """Подтверждение удаления турнира."""
     query = update.callback_query
     user = update.effective_user
-    if not query or not query.data or not user:
+    if not user:
         return
-    try:
-        _, tid_str = query.data.split(":", 1)
-        tournament_id = int(tid_str)
-    except (ValueError, IndexError):
-        await query.answer("Ошибка данных.")
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
         return
+    (tournament_id,) = ids
     db = SessionLocal()
     try:
         result = _admin_handler(db).handle_delete_tournament_confirm(user.id, tournament_id)
@@ -412,14 +389,12 @@ async def callback_delete_tournament_cancel(
     """Отмена удаления — возвращает карточку турнира."""
     query = update.callback_query
     user = update.effective_user
-    if not query or not query.data or not user:
+    if not user:
         return
-    try:
-        _, tid_str = query.data.split(":", 1)
-        tournament_id = int(tid_str)
-    except (ValueError, IndexError):
-        await query.answer("Отменено.")
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
         return
+    (tournament_id,) = ids
     from core.database import SessionLocal as SL
     from services.tournament import TournamentService
     from services.archetype import ArchetypeService
@@ -440,14 +415,12 @@ async def callback_reveal_decks(update: Update, context: ContextTypes.DEFAULT_TY
     """Кнопка «👁 Показать колоды» — снимает скрытие колод для всех."""
     query = update.callback_query
     user = update.effective_user
-    if not query or not query.data or not user:
+    if not user:
         return
-    try:
-        _, tid_str = query.data.split(":", 1)
-        tournament_id = int(tid_str)
-    except (ValueError, IndexError):
-        await query.answer("Ошибка данных.")
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
         return
+    (tournament_id,) = ids
     _log("reveal_decks", user, tournament_id=tournament_id)
     db = SessionLocal()
     try:

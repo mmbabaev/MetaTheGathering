@@ -12,7 +12,7 @@ from bot.handlers.settings import SettingsHandler
 from bot.keyboards import CB_REGISTER, CB_ARCHETYPE, CB_CUSTOM_ARCHETYPE, CB_TOURNAMENT, CB_ARCHETYPE_MORE
 from bot.messages import CUSTOM_ARCHETYPE_PROMPT
 from bot.handlers.admin import AdminHandler
-from bot.telegram.common import log_event as _log
+from bot.telegram.common import log_event as _log, parse_callback_ints
 
 USER_DATA_PENDING_CUSTOM = "pending_custom_archetype_tournament_id"
 USER_DATA_PENDING_NAME = "pending_name_for_tournament_id"
@@ -47,14 +47,10 @@ async def cmd_tournaments(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 async def callback_tournament_select(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     user = update.effective_user
-    if not query or not query.data:
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
         return
-    try:
-        _, tid_str = query.data.split(":", 1)
-        tournament_id = int(tid_str)
-    except (ValueError, IndexError):
-        await query.answer("Ошибка данных.")
-        return
+    (tournament_id,) = ids
     _log("view_tournament", user, tournament_id=tournament_id)
     db = SessionLocal()
     try:
@@ -71,14 +67,10 @@ async def callback_tournament_select(update: Update, context: ContextTypes.DEFAU
 async def callback_register(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     user = update.effective_user
-    if not query or not query.data:
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
         return
-    try:
-        _, tid_str = query.data.split(":", 1)
-        tournament_id = int(tid_str)
-    except (ValueError, IndexError):
-        await query.answer("Ошибка данных.")
-        return
+    (tournament_id,) = ids
     _log("register_start", user, tournament_id=tournament_id)
     db = SessionLocal()
     try:
@@ -96,19 +88,16 @@ async def callback_register(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 async def callback_archetype(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     user = update.effective_user
-    if not query or not query.data or not user:
+    if not user:
         return
-    try:
-        _, tid_str, aid_str = query.data.split(":", 2)
-        tournament_id = int(tid_str)
-        archetype_id = int(aid_str)
-    except (ValueError, IndexError):
-        await query.answer("Ошибка данных.")
+    ids = await parse_callback_ints(query, 2)
+    if ids is None:
         return
+    tournament_id, archetype_id = ids
     db = SessionLocal()
     try:
         result = _player_handler(db).handle_archetype(
-            user.id, None, None, None,
+            user.id, user.username, user.first_name, user.last_name,
             tournament_id, archetype_id,
         )
         if result.is_alert:
@@ -124,14 +113,12 @@ async def callback_archetype(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def callback_archetype_more(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     user = update.effective_user
-    if not query or not query.data or not user:
+    if not user:
         return
-    try:
-        _, tid_str = query.data.split(":", 1)
-        tournament_id = int(tid_str)
-    except (ValueError, IndexError):
-        await query.answer("Ошибка данных.")
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
         return
+    (tournament_id,) = ids
     db = SessionLocal()
     try:
         result = _player_handler(db).handle_archetype_more(tournament_id, tg_id=user.id)
@@ -143,14 +130,10 @@ async def callback_archetype_more(update: Update, context: ContextTypes.DEFAULT_
 
 async def callback_custom_archetype(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
-    if not query or not query.data:
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
         return
-    try:
-        _, tid_str = query.data.split(":", 1)
-        tournament_id = int(tid_str)
-    except (ValueError, IndexError):
-        await query.answer("Ошибка данных.")
-        return
+    (tournament_id,) = ids
     if context.user_data is None:
         context.user_data = {}
     context.user_data[USER_DATA_PENDING_CUSTOM] = tournament_id
@@ -161,14 +144,10 @@ async def callback_custom_archetype(update: Update, context: ContextTypes.DEFAUL
 async def callback_tournament_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     user = update.effective_user
-    if not query or not query.data:
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
         return
-    try:
-        _, tid_str = query.data.split(":", 1)
-        tournament_id = int(tid_str)
-    except (ValueError, IndexError):
-        await query.answer("Ошибка данных.")
-        return
+    (tournament_id,) = ids
     _log("view_status", user, tournament_id=tournament_id)
     db = SessionLocal()
     try:
@@ -189,14 +168,12 @@ async def callback_tournament_status(update: Update, context: ContextTypes.DEFAU
 async def callback_leave_tournament(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     user = update.effective_user
-    if not query or not query.data or not user:
+    if not user:
         return
-    try:
-        _, tid_str = query.data.split(":", 1)
-        tournament_id = int(tid_str)
-    except (ValueError, IndexError):
-        await query.answer("Ошибка данных.")
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
         return
+    (tournament_id,) = ids
     _log("leave_start", user, tournament_id=tournament_id)
     db = SessionLocal()
     try:
@@ -213,14 +190,12 @@ async def callback_leave_tournament(update: Update, context: ContextTypes.DEFAUL
 async def callback_leave_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     user = update.effective_user
-    if not query or not query.data or not user:
+    if not user:
         return
-    try:
-        _, tid_str = query.data.split(":", 1)
-        tournament_id = int(tid_str)
-    except (ValueError, IndexError):
-        await query.answer("Ошибка данных.")
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
         return
+    (tournament_id,) = ids
     db = SessionLocal()
     try:
         result = _player_handler(db).handle_leave_confirm(user.id, tournament_id)
@@ -237,14 +212,12 @@ async def callback_leave_confirm(update: Update, context: ContextTypes.DEFAULT_T
 async def callback_leave_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     user = update.effective_user
-    if not query or not query.data or not user:
+    if not user:
         return
-    try:
-        _, tid_str = query.data.split(":", 1)
-        tournament_id = int(tid_str)
-    except (ValueError, IndexError):
-        await query.answer("Ошибка данных.")
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
         return
+    (tournament_id,) = ids
     db = SessionLocal()
     try:
         result = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id)

@@ -5,10 +5,13 @@ import io
 from datetime import datetime
 from typing import Iterable, List, Literal
 
+import openpyxl
+from openpyxl.styles import Alignment, Font, PatternFill
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from core import models
+from bot.messages import format_participant_name
 from services.utils import get_tournament
 from services.stats import StatsService
 
@@ -107,6 +110,47 @@ class ExportService:
                 ]
             )
         return buf.getvalue()
+
+    def export_participants_excel(self, tournament_id: int) -> tuple[bytes, str]:
+        """Возвращает (bytes, filename) для Excel-файла списка участников."""
+        t = get_tournament(self.db, tournament_id)
+        participants = (
+            self.db.query(models.Participant)
+            .filter_by(tournament_id=tournament_id)
+            .all()
+        )
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Участники"
+
+        header_fill = PatternFill(start_color="2E7D32", end_color="2E7D32", fill_type="solid")
+        header_font = Font(color="FFFFFF", bold=True)
+        for col, h in enumerate(["@Ник", "Имя Фамилия", "Колода"], 1):
+            cell = ws.cell(row=1, column=col, value=h)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center")
+
+        for row, p in enumerate(participants, 2):
+            username = f"@{p.user.username}" if p.user and p.user.username else ""
+            full_name = format_participant_name(
+                p.user.first_name if p.user else None,
+                p.user.last_name if p.user else None,
+            )
+            deck = p.archetype.name if p.archetype else ""
+            ws.cell(row=row, column=1, value=username)
+            ws.cell(row=row, column=2, value=full_name)
+            ws.cell(row=row, column=3, value=deck)
+
+        ws.column_dimensions["A"].width = 22
+        ws.column_dimensions["B"].width = 28
+        ws.column_dimensions["C"].width = 30
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        filename = f"{t.title.replace(' ', '_')}.xlsx"
+        return buf.getvalue(), filename
 
     def export_meta_markdown(self, tournament_id: int) -> str:
         """
