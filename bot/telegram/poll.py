@@ -52,12 +52,20 @@ async def callback_create_poll(update: Update, context: ContextTypes.DEFAULT_TYP
         t = get_tournament(db, tournament_id)
         chat_id = t.chat_id
         tournament_title = t.title
-        msg = await context.bot.send_poll(
-            chat_id=chat_id,
-            question=f"{_POLL_QUESTION} ({tournament_title})",
-            options=_POLL_OPTIONS,
-            is_anonymous=False,
-        )
+
+        from telegram.error import TelegramError
+        try:
+            msg = await context.bot.send_poll(
+                chat_id=chat_id,
+                question=f"{_POLL_QUESTION} ({tournament_title})",
+                options=_POLL_OPTIONS,
+                is_anonymous=False,
+            )
+        except TelegramError as e:
+            logger.error(f"[poll] send_poll failed for chat_id={chat_id}: {e}")
+            await query.answer(f"❌ Не удалось создать опрос в чате {chat_id}: {e}", show_alert=True)
+            return
+
         PollService(db).create_poll(
             tournament_id=tournament_id,
             chat_id=chat_id,
