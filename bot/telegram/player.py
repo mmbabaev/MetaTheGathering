@@ -4,7 +4,6 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from core.database import SessionLocal
-from core.event_log import event_logger
 from services.tournament import TournamentService
 from services.archetype import ArchetypeService
 from services.user import UserService
@@ -13,15 +12,7 @@ from bot.handlers.settings import SettingsHandler
 from bot.keyboards import CB_REGISTER, CB_ARCHETYPE, CB_CUSTOM_ARCHETYPE, CB_TOURNAMENT, CB_ARCHETYPE_MORE
 from bot.messages import CUSTOM_ARCHETYPE_PROMPT
 from bot.handlers.admin import AdminHandler
-
-
-def _log(event: str, user, **params) -> None:
-    event_logger.log(
-        event,
-        tg_id=user.id if user else None,
-        username=user.username if user else None,
-        **params,
-    )
+from bot.telegram.common import log_event as _log
 
 USER_DATA_PENDING_CUSTOM = "pending_custom_archetype_tournament_id"
 USER_DATA_PENDING_NAME = "pending_name_for_tournament_id"

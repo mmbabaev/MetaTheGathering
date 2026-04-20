@@ -7,7 +7,6 @@ from telegram.ext import ContextTypes
 
 from core.config import settings
 from core.database import SessionLocal
-from core.event_log import event_logger
 from services.tournament import TournamentService
 from services.archetype import ArchetypeService
 from services.user import UserService
@@ -15,20 +14,11 @@ from bot.handlers.admin import AdminHandler, parse_add_player_command, parse_bul
 from bot.telegram.player import USER_DATA_PENDING_BULK_ADD, USER_DATA_PENDING_ADMIN_CUSTOM_ARCH
 from bot.messages import TELEGRAM_USER_LOOKUP_FAILED, ADD_PLAYERS_USAGE, BULK_ADD_PROMPT
 from bot.keyboards import CB_ADMIN_ARCH_MORE, CB_ADMIN_SHOW_FILLED, CB_REVEAL_DECKS
+from bot.telegram.common import log_event as _log
 
 
 def _admin_handler(db) -> AdminHandler:
     return AdminHandler(TournamentService(db), UserService(db), ArchetypeService(db))
-
-
-
-def _log(event: str, user, **params) -> None:
-    event_logger.log(
-        event,
-        tg_id=user.id if user else None,
-        username=user.username if user else None,
-        **params,
-    )
 
 
 async def callback_bulk_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -9,13 +9,16 @@ from services.user import UserService
 from bot.messages import HELP_TEXT
 
 
-def _log(event: str, user, **params) -> None:
+def log_event(event: str, user, **params) -> None:
     event_logger.log(
         event,
         tg_id=user.id if user else None,
         username=user.username if user else None,
         **params,
     )
+
+
+_log = log_event  # backward-compat alias within this module
 
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
