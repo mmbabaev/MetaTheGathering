@@ -26,6 +26,7 @@ from bot.messages import (
     NOT_REGISTERED_IN_TOURNAMENT,
     format_tournament_card,
     format_tournament_status,
+    sort_participants,
 )
 
 ARCHETYPE_COLLAPSED_COUNT = 3
@@ -220,7 +221,7 @@ class PlayerHandler:
             t = get_tournament(self.svc.db, tournament_id)
         except errors.TournamentNotFound:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
-        participants = self.svc.list_participants_for_tournament(tournament_id)
+        participants = sort_participants(self.svc.list_participants_for_tournament(tournament_id))
         text = format_tournament_status(t.title, t.status.label_ru, participants, decks_hidden=t.decks_hidden)
         return HandlerResult(text)
 

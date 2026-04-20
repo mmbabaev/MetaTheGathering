@@ -68,7 +68,7 @@ class TestParticipantSortOrder:
     def test_sort_order(self, db, svc, user_svc, arch_svc):
         from core.schemas import TournamentCreate
         from core import models
-        from bot.handlers.admin import _sort_participants
+        from bot.messages import sort_participants as _sort_participants
 
         t = svc.create_tournament(TournamentCreate(title="T", chat_id=500, slug="t"))
         arch = arch_svc.get_or_create_by_name("Burn")
