@@ -27,8 +27,8 @@ def get_clubs() -> list[ClubConfig]:
     """Возвращает список клубов. chat_id=0 означает «создать турнир, но не писать в чат»."""
     clubs = [
         ClubConfig(name="Goldfish",  weekday="thursday", chat_id=settings.GOLDFISH_CHAT_ID or 0,  game_time="19:30"),
-        ClubConfig(name="Edinorog",  weekday="sunday",   chat_id=settings.EDINOROG_CHAT_ID or 0,  game_time="19:30",
-                   create_time="11:15", title_prefix="🦄 "),
+        ClubConfig(name="Edinorog",  weekday="monday",  chat_id=settings.EDINOROG_CHAT_ID or 0,  game_time="19:30",
+                   create_time="11:30", title_prefix="🦄 "),
     ]
     if settings.DEBUG:
         clubs.append(
