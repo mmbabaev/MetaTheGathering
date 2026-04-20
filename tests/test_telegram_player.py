@@ -289,7 +289,11 @@ async def test_message_text_input_custom_archetype():
         await message_text_input(update, ctx)
 
     mock_ph.return_value.handle_custom_archetype_text.assert_called_once_with(
-        update.effective_user.id, None, None, None, 5, "My Custom Deck"
+        update.effective_user.id,
+        update.effective_user.username,
+        update.effective_user.first_name,
+        update.effective_user.last_name,
+        5, "My Custom Deck",
     )
 
 
