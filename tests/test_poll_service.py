@@ -63,6 +63,15 @@ class TestCreatePoll:
     def test_get_poll_by_tg_id_not_found(self, poll_svc):
         assert poll_svc.get_poll_by_tg_id("nonexistent") is None
 
+    def test_get_latest_poll_for_chat(self, poll_svc, tournament):
+        poll_svc.create_poll(tournament.id, 100, "p_only", 1)
+        latest = poll_svc.get_latest_poll_for_chat(100)
+        assert latest is not None
+        assert latest.tg_poll_id == "p_only"
+
+    def test_get_latest_poll_for_chat_no_poll(self, poll_svc):
+        assert poll_svc.get_latest_poll_for_chat(999) is None
+
 
 # ── PollService.upsert_vote ──────────────────────────────────────────────────
 

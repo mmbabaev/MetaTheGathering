@@ -21,6 +21,15 @@ class PollService:
             )
         ).scalar_one_or_none()
 
+    def get_latest_poll_for_chat(self, chat_id: int) -> models.TournamentPoll | None:
+        """Последний созданный опрос для данного chat_id."""
+        return self.db.execute(
+            select(models.TournamentPoll)
+            .where(models.TournamentPoll.chat_id == chat_id)
+            .order_by(models.TournamentPoll.created_at.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+
     def get_poll_by_tg_id(self, tg_poll_id: str) -> models.TournamentPoll | None:
         return self.db.execute(
             select(models.TournamentPoll).where(

@@ -137,14 +137,20 @@ async def callback_notify_no_deck(update: Update, context: ContextTypes.DEFAULT_
             await query.answer("Нет прав.", show_alert=True)
             return
 
-        voters = PollService(db).get_yes_voters_without_deck(tournament_id)
+        # Берём последний опрос для чата турнира (fallback на tournament_id если опроса нет)
+        t = get_tournament(db, tournament_id)
+        poll_svc = PollService(db)
+        latest_poll = poll_svc.get_latest_poll_for_chat(t.chat_id)
+        effective_tournament_id = latest_poll.tournament_id if latest_poll else tournament_id
+
+        voters = poll_svc.get_yes_voters_without_deck(effective_tournament_id)
         if not voters:
             await query.answer("Все «пойду» уже заполнили колоду.", show_alert=True)
             return
 
         sent = 0
         notified_ids = []
-        keyboard = fill_deck_keyboard(tournament_id)
+        keyboard = fill_deck_keyboard(effective_tournament_id)
         for tg_id in voters:
             if not _is_notify_allowed(tg_id):
                 logger.info(f"[poll] skip notify tg_id={tg_id} (not in allowed list)")
@@ -159,7 +165,7 @@ async def callback_notify_no_deck(update: Update, context: ContextTypes.DEFAULT_
                 logger.warning(f"[poll] Could not DM tg_id={tg_id}: {e}")
 
         if notified_ids:
-            PollService(db).mark_notified(tournament_id, notified_ids)
+            poll_svc.mark_notified(effective_tournament_id, notified_ids)
 
         _log("notify_no_deck", user, tournament_id=tournament_id, sent=sent, total=len(voters))
         await query.answer(f"Отправлено {sent} из {len(voters)} игроков.")
