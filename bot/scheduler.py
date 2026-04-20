@@ -68,11 +68,10 @@ async def _create_club_tournament(bot, club: ClubConfig) -> None:
     try:
         svc = TournamentService(db)
         try:
-            if club.chat_id:
-                active = svc.get_active_tournament_for_chat(club.chat_id)
-                if active:
-                    svc.close_tournament(active.id)
-                    logger.info(f"Closed previous tournament #{active.id} for club '{club.name}'")
+            active = svc.get_active_tournament_for_chat(club.chat_id or 0)
+            if active:
+                svc.close_tournament(active.id)
+                logger.info(f"Closed previous tournament #{active.id} for club '{club.name}'")
 
             new_t = svc.create_tournament(TournamentCreate(
                 title=title,
