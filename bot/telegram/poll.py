@@ -11,6 +11,7 @@ from services.user import UserService
 from services.tournament import TournamentService
 from services.archetype import ArchetypeService
 from services.poll import PollService
+from services.utils import get_tournament
 from bot.handlers.admin import AdminHandler
 from bot.telegram.common import log_event as _log, parse_callback_ints
 
@@ -48,8 +49,9 @@ async def callback_create_poll(update: Update, context: ContextTypes.DEFAULT_TYP
             await query.answer(result.text, show_alert=True)
             return
 
-        tournament_title = result.text
-        chat_id = query.message.chat_id
+        t = get_tournament(db, tournament_id)
+        chat_id = t.chat_id
+        tournament_title = t.title
         msg = await context.bot.send_poll(
             chat_id=chat_id,
             question=f"{_POLL_QUESTION} ({tournament_title})",
