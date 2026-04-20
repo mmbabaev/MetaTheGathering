@@ -87,7 +87,7 @@ class TestHandleSettingsNameText:
 
     def test_saves_first_and_last_name(self, handler, user_svc):
         user_svc.get_or_create(tg_id=8011, username="u", first_name="Old")
-        result = handler.handle_settings_name_text(tg_id=8011, name_text="Иван Петров")
+        result = handler.handle_settings_name_text(tg_id=8011, name_text="Петров Иван")
         assert "Иван" in result.text
         assert "Петров" in result.text
         user = user_svc.get_by_tg_id(8011)

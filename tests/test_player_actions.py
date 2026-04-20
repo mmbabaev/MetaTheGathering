@@ -180,7 +180,7 @@ class TestHandleCustomArchetypeText:
 class TestHandleSaveNameThenRegister:
     def test_saves_name_and_returns_archetype_keyboard(self, handler, user_svc, active_tournament, archetype_burn):
         result = handler.handle_save_name_then_register(
-            tg_id=7010, username="u", name_text="Иван Петров",
+            tg_id=7010, username="u", name_text="Петров Иван",
             tournament_id=active_tournament.id,
         )
         assert result.text == CHOOSE_ARCHETYPE

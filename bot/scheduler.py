@@ -27,7 +27,8 @@ def get_clubs() -> list[ClubConfig]:
     """Возвращает список клубов. chat_id=0 означает «создать турнир, но не писать в чат»."""
     clubs = [
         ClubConfig(name="Goldfish",  weekday="thursday", chat_id=settings.GOLDFISH_CHAT_ID or 0,  game_time="19:30"),
-        ClubConfig(name="Edinorog",  weekday="monday",   chat_id=settings.EDINOROG_CHAT_ID or 0,  game_time="19:30"),
+        ClubConfig(name="Edinorog",  weekday="sunday",   chat_id=settings.EDINOROG_CHAT_ID or 0,  game_time="19:30",
+                   create_time="11:00", title_prefix="🦄 "),
     ]
     if settings.DEBUG:
         clubs.append(
@@ -60,7 +61,7 @@ async def _create_club_tournament(bot, club: ClubConfig) -> None:
         return
 
     date_str = now.strftime("%Y-%m-%d")
-    title = f"{club.name} Pauper {date_str}"
+    title = f"{club.title_prefix}{club.name} Pauper {date_str}"
     slug = f"{date_str}-{club.name.lower()}-pauper"
 
     db = SessionLocal()
@@ -112,14 +113,15 @@ def _make_club_job(club: ClubConfig):
 def setup_scheduler(app: Application) -> None:
     """Регистрирует ежедневные джобы для каждого клуба."""
     tz = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
-    create_time = datetime.strptime(settings.TOURNAMENT_CREATE_TIME, "%H:%M").time()
-    aware_create_time = create_time.replace(tzinfo=tz)
 
     clubs = get_clubs()
     for club in clubs:
+        time_str = club.create_time or settings.TOURNAMENT_CREATE_TIME
+        create_time = datetime.strptime(time_str, "%H:%M").time()
+        aware_create_time = create_time.replace(tzinfo=tz)
         app.job_queue.run_daily(_make_club_job(club), time=aware_create_time)
         logger.info(
-            f"Scheduler: {club.name} every {club.weekday} at {settings.TOURNAMENT_CREATE_TIME} "
+            f"Scheduler: {club.name} every {club.weekday} at {time_str} "
             f"({settings.TOURNAMENT_TIMEZONE}), game at {club.game_time}, chat={club.chat_id}"
         )
 

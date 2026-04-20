@@ -519,9 +519,9 @@ class TestHandleBulkAddByName:
 
     def test_creates_new_user_and_adds(self, handler, admin_user, active_tournament, user_svc):
         result = handler.handle_bulk_add_by_name(
-            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["Иван Иванов"]
+            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["Иванов Иван"]
         )
-        assert "✅ Иван Иванов" in result.text
+        assert "✅ Иванов Иван" in result.text
         user = user_svc.get_or_create_by_name("Иван", "Иванов")
         assert user is not None
 
@@ -529,9 +529,9 @@ class TestHandleBulkAddByName:
         user_svc.get_or_create_by_name("Мария", "Петрова")
         user_svc.db.commit()
         result = handler.handle_bulk_add_by_name(
-            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["Мария Петрова"]
+            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["Петрова Мария"]
         )
-        assert "✅ Мария Петрова" in result.text
+        assert "✅ Петрова Мария" in result.text
 
     def test_skips_already_registered(self, handler, svc, user_svc, admin_user, active_tournament, archetype_burn):
         user = user_svc.get_or_create(tg_id=7001, username=None, first_name="Алекс")
@@ -546,10 +546,10 @@ class TestHandleBulkAddByName:
         svc.register_participant(tournament_id=active_tournament.id, user_id=existing.id, archetype_id=archetype_burn.id)
         result = handler.handle_bulk_add_by_name(
             tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id,
-            names=["Борис", "Вера Новая"],
+            names=["Борис", "Новая Вера"],
         )
         assert "⚠️ Борис — уже записан" in result.text
-        assert "✅ Вера Новая" in result.text
+        assert "✅ Новая Вера" in result.text
 
     def test_tournament_not_found(self, handler, admin_user):
         from bot.messages import TOURNAMENT_NOT_FOUND
@@ -618,6 +618,15 @@ class TestHandleAdminStatus:
         buttons = [b for row in result.keyboard.inline_keyboard for b in row]
         from bot.keyboards import CB_ADMIN_PICK_ARCH
         assert any(b.callback_data.startswith(CB_ADMIN_PICK_ARCH) for b in buttons)
+
+    def test_button_label_shows_familiya_imya_order(self, handler, svc, user_svc, admin_user, active_tournament):
+        """Кнопка участника показывает «Фамилия Имя», а не «Имя Фамилия»."""
+        user = user_svc.get_or_create(tg_id=8005, username=None, first_name="Антон", last_name="Ильин")
+        svc.bulk_add_participants(active_tournament.id, [(user.id, "Тест")])
+        result = handler.handle_admin_status(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+        buttons_text = [b.text for row in result.keyboard.inline_keyboard for b in row]
+        assert any("Ильин Антон" in t for t in buttons_text)
+        assert not any("Антон Ильин" in t for t in buttons_text)
 
     def test_no_archetype_participant_gets_pencil_prefix(self, handler, svc, user_svc, admin_user, active_tournament):
         user = user_svc.get_or_create(tg_id=8002, username=None, first_name="Безколоды")
@@ -810,14 +819,14 @@ class TestStatusReturnedAfterBulkAdd:
 
     def test_result_contains_add_summary(self, handler, admin_user, active_tournament):
         result = handler.handle_bulk_add_by_name(
-            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["Иван Иванов"]
+            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["Иванов Иван"]
         )
-        assert "✅ Иван Иванов" in result.text
+        assert "✅ Иванов Иван" in result.text
 
     def test_result_contains_tournament_status(self, handler, admin_user, active_tournament):
         """После добавления текст содержит заголовок турнира."""
         result = handler.handle_bulk_add_by_name(
-            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["Иван Иванов"]
+            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["Иванов Иван"]
         )
         assert active_tournament.title in result.text
 
@@ -825,7 +834,7 @@ class TestStatusReturnedAfterBulkAdd:
         """После добавления клавиатура содержит кнопки участников."""
         from bot.keyboards import CB_ADMIN_PICK_ARCH
         result = handler.handle_bulk_add_by_name(
-            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["Иван Иванов"]
+            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["Иванов Иван"]
         )
         assert result.keyboard is not None
         cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
@@ -834,19 +843,19 @@ class TestStatusReturnedAfterBulkAdd:
     def test_add_summary_comes_before_status(self, handler, admin_user, active_tournament):
         """Строки добавления идут перед блоком статуса."""
         result = handler.handle_bulk_add_by_name(
-            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["Пётр Петров"]
+            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["Петров Пётр"]
         )
-        pos_add = result.text.index("✅ Пётр Петров")
+        pos_add = result.text.index("✅ Петров Пётр")
         pos_title = result.text.index(active_tournament.title)
         assert pos_add < pos_title
 
     def test_multiple_players_all_in_text_and_keyboard(self, handler, admin_user, active_tournament):
         result = handler.handle_bulk_add_by_name(
             tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id,
-            names=["Анна Первая", "Борис Второй"],
+            names=["Первая Анна", "Второй Борис"],
         )
-        assert "✅ Анна Первая" in result.text
-        assert "✅ Борис Второй" in result.text
+        assert "✅ Первая Анна" in result.text
+        assert "✅ Второй Борис" in result.text
         from bot.keyboards import CB_ADMIN_PICK_ARCH
         cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
         assert sum(1 for cb in cbs if cb.startswith(CB_ADMIN_PICK_ARCH)) == 2

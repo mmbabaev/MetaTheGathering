@@ -36,6 +36,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+async def _error_handler(update: object, context) -> None:
+    logger.exception("Unhandled exception", exc_info=context.error)
+    from telegram import Update as TGUpdate
+    if isinstance(update, TGUpdate) and update.effective_message:
+        try:
+            await update.effective_message.reply_text("⚠️ Внутренняя ошибка. Попробуйте ещё раз.")
+        except Exception:
+            pass
+
 if settings.DEBUG:
     logging.getLogger("services.tournament").setLevel(logging.DEBUG)
 
@@ -192,6 +202,8 @@ def main() -> None:
     app.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, player.message_text_input)
     )
+
+    app.add_error_handler(_error_handler)
 
     setup_scheduler(app)
 

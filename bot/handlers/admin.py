@@ -18,11 +18,13 @@ from bot.keyboards import (
 )
 from bot.messages import (
     NOT_ADMIN,
+    family_name_sort_key,
     NO_DECK_NAME,
     NO_ACTIVE_TOURNAMENT,
     MULTIPLE_TOURNAMENTS_MSG,
     PLAYER_ADDED,
     TOURNAMENT_CLOSED_MSG,
+    TOURNAMENT_ALREADY_EXISTS_MSG,
     TOURNAMENT_NOT_FOUND,
     REGISTRATION_CLOSED,
     BULK_ADD_EMPTY,
@@ -38,8 +40,8 @@ def _sort_participants(participants: list) -> list:
     """Сортирует участников: сначала незаполненные, затем заполненные; внутри — по фамилии."""
     def _sort_key(p):
         filled = 0 if p.archetype is None else 1
-        last = (p.user.last_name or p.user.first_name or "") if p.user else ""
-        return (filled, last.lower())
+        last = family_name_sort_key(p.user.first_name if p.user else None, p.user.last_name if p.user else None)
+        return (filled, last)
     return sorted(participants, key=_sort_key)
 
 
@@ -259,7 +261,11 @@ class AdminHandler:
             if not raw:
                 continue
             parts = raw.split(None, 1)
-            parsed.append((parts[0], parts[1] if len(parts) > 1 else None))
+            # Input format: "Фамилия Имя" — first word is last_name, second is first_name
+            if len(parts) == 2:
+                parsed.append((parts[1], parts[0]))  # (first_name, last_name)
+            else:
+                parsed.append((parts[0], None))
 
         if not parsed:
             return HandlerResult(BULK_ADD_EMPTY)
@@ -267,7 +273,7 @@ class AdminHandler:
         entries: list[tuple[int, str]] = []
         for first_name, last_name in parsed:
             user, _ = self.user_svc.get_or_create_by_name(first_name, last_name)
-            display = f"{first_name} {last_name}" if last_name else first_name
+            display = f"{last_name} {first_name}" if last_name else first_name
             if user.username:
                 display += f" (@{user.username})"
             entries.append((user.id, display))
@@ -418,7 +424,10 @@ class AdminHandler:
             return HandlerResult(NOT_ADMIN)
         if not title:
             title = f"Pauper {datetime.now().strftime('%Y-%m-%d')}"
-        t = self.svc.create_tournament(TournamentCreate(title=title, chat_id=chat_id))
+        try:
+            t = self.svc.create_tournament(TournamentCreate(title=title, chat_id=chat_id))
+        except errors.TournamentAlreadyExists:
+            return HandlerResult(TOURNAMENT_ALREADY_EXISTS_MSG, is_alert=True)
         return HandlerResult(f"✅ Турнир создан: «{t.title}» (id={t.id})")
 
     def handle_delete_tournament(self, tg_id: int) -> HandlerResult:
@@ -440,6 +449,7 @@ class AdminHandler:
         """
         import io
         import openpyxl
+        from openpyxl.styles import PatternFill, Font, Alignment
 
         if not self.user_svc.is_admin(tg_id):
             return None
@@ -468,13 +478,8 @@ class AdminHandler:
         # Данные
         for row, p in enumerate(participants, 2):
             username = f"@{p.user.username}" if p.user and p.user.username else ""
-            name_parts = []
-            if p.user:
-                if p.user.first_name:
-                    name_parts.append(p.user.first_name)
-                if p.user.last_name:
-                    name_parts.append(p.user.last_name)
-            full_name = " ".join(name_parts)
+            from bot.messages import format_participant_name
+            full_name = format_participant_name(p.user.first_name if p.user else None, p.user.last_name if p.user else None)
             deck = p.archetype.name if p.archetype else ""
 
             ws.cell(row=row, column=1, value=username)

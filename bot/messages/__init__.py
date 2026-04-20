@@ -14,13 +14,13 @@ NOT_REGISTERED_IN_TOURNAMENT = "Вы не записаны на этот тур�
 
 
 # Name prompts
-ASK_NAME = "Как вас зовут? Введите имя (или имя и фамилию через пробел):"
+ASK_NAME = "Как вас зовут? Введите фамилию и имя через пробел (например: Иванов Иван):"
 NAME_SAVED = "Имя сохранено: {full_name}"
-NAME_REQUIRED_FOR_REGISTRATION = "Для записи на турнир нужно указать ваше имя.\n\nКак вас зовут? Введите имя (или имя и фамилию через пробел):"
+NAME_REQUIRED_FOR_REGISTRATION = "Для записи на турнир нужно указать ваше имя.\n\nВведите фамилию и имя через пробел (например: Иванов Иван):"
 
 # Settings
 SETTINGS_MENU = "⚙️ Настройки"
-SETTINGS_CHANGE_NAME_PROMPT = "Введите новое имя (или имя и фамилию через пробел):"
+SETTINGS_CHANGE_NAME_PROMPT = "Введите фамилию и имя через пробел (например: Иванов Иван):"
 
 # Admin messages
 NOT_ADMIN = "У вас нет прав администратора."
@@ -29,13 +29,14 @@ NO_ACTIVE_TOURNAMENT = "Нет активного турнира в этом ч�
 PLAYER_ADDED = "✅ {user} добавлен как {archetype_name}."
 TELEGRAM_USER_LOOKUP_FAILED = "Не удалось найти @{username} в Telegram. Проверьте @username."
 TOURNAMENT_CLOSED_MSG = "Турнир закрыт."
+TOURNAMENT_ALREADY_EXISTS_MSG = "В этом чате уже есть активный турнир."
 MULTIPLE_TOURNAMENTS_MSG = "Активных турниров несколько. Используйте /tournament_status чтобы увидеть их ID."
 ADD_PLAYERS_USAGE = (
     "Формат:\n/add_players\n@username1 Название колоды\n@username2 Другая колода"
 )
 BULK_ADD_PROMPT = (
-    "Введите список игроков — по одному на строке (Имя Фамилия):\n\n"
-    "Пример:\nИван Иванов\nМария Петрова\nАлексей"
+    "Введите список игроков — по одному на строке (Фамилия Имя):\n\n"
+    "Пример:\nИванов Иван\nПетрова Мария\nАлексей"
 )
 BULK_ADD_EMPTY = "Список игроков пустой."
 PARTICIPANT_NOT_FOUND = "Участник не найден."
@@ -60,6 +61,51 @@ HELP_TEXT = """\
 def _participant_icon(p) -> str:
     """✅ колода указана / ⬜ колоды нет."""
     return "✅" if p.archetype else "⬜"
+
+
+# Типичные окончания русских фамилий
+_FAMILY_SUFFIXES = (
+    "ов", "ев", "ёв", "ин", "ын", "ый", "ий", "ой",
+    "ский", "цкий", "ской", "ная", "ная",
+    "ных", "ых", "ина", "ева", "ова", "ская",
+)
+
+
+def _looks_like_family_name(word: str) -> bool:
+    w = word.lower()
+    return any(w.endswith(s) for s in _FAMILY_SUFFIXES)
+
+
+def format_participant_name(first_name: str | None, last_name: str | None) -> str:
+    """Возвращает имя в формате «Фамилия Имя».
+
+    Если оба поля заполнены — просто last_name + first_name.
+    Если только first_name (Telegram-юзер с именем в одном поле) — применяет эвристику:
+    если последнее слово выглядит как фамилия (суффикс -ов/-ин/-ский и т.п.),
+    переставляет слова; иначе оставляет как есть (первое слово уже фамилия).
+    """
+    if last_name and first_name:
+        return f"{last_name} {first_name}"
+    if last_name:
+        return last_name
+    if not first_name:
+        return ""
+    words = first_name.split()
+    if len(words) == 2 and _looks_like_family_name(words[1]):
+        return f"{words[1]} {words[0]}"
+    return first_name
+
+
+def family_name_sort_key(first_name: str | None, last_name: str | None) -> str:
+    """Возвращает фамилию в нижнем регистре для сортировки."""
+    if last_name:
+        return last_name.lower()
+    if not first_name:
+        return ""
+    words = first_name.split()
+    if len(words) == 2 and _looks_like_family_name(words[1]):
+        return words[1].lower()
+    return (words[0] if words else "").lower()
 
 
 def format_tournament_card(
@@ -96,8 +142,7 @@ def format_tournament_status(
     for p in participants:
         icon = _participant_icon(p)
         if p.user:
-            name_parts = [n for n in (p.user.first_name, p.user.last_name) if n]
-            full_name = " ".join(name_parts) if name_parts else f"id{p.user.tg_id}"
+            full_name = format_participant_name(p.user.first_name, p.user.last_name) or f"id{p.user.tg_id}"
             username_hint = f" (@{p.user.username})" if p.user.username else ""
             display = f"{full_name}{username_hint}"
         else:
