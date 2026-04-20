@@ -33,9 +33,9 @@ class Settings(BaseSettings):
     # Через запятую в .env: ADMIN_IDS=123,456
     ADMIN_IDS: str = ""
 
-    # Chat ID для каждого клуба — задаются в .env
-    GOLDFISH_CHAT_ID: Optional[int] = None
-    EDINOROG_CHAT_ID: Optional[int] = None
+    # Chat ID для каждого клуба — задаются в .env или берутся из config/debug.py
+    GOLDFISH_CHAT_ID: Optional[int] = _app_cfg.goldfish_chat_id
+    EDINOROG_CHAT_ID: Optional[int] = _app_cfg.edinorog_chat_id
 
     MONIUM_PROJECT: str = ""
     MONIUM_API_KEY: str = ""
