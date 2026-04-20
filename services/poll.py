@@ -72,16 +72,24 @@ class PollService:
             ))
         self.db.commit()
 
-    def get_yes_voters_without_deck(self, tournament_id: int) -> list[int]:
-        """tg_user_ids who voted «пойду» (choice=0), have no archetype, and are not on DM cooldown."""
-        poll = self.get_poll_for_tournament(tournament_id)
-        if not poll:
-            return []
+    def get_yes_voters_without_deck(
+        self, tournament_id: int, poll_id: int | None = None
+    ) -> list[int]:
+        """tg_user_ids who voted «пойду» (choice=0), have no archetype, and are not on DM cooldown.
+
+        poll_id — если указан, голоса берутся из этого опроса (не обязательно привязанного
+        к tournament_id). Колода и cooldown всегда проверяются по tournament_id.
+        """
+        if poll_id is None:
+            poll = self.get_poll_for_tournament(tournament_id)
+            if not poll:
+                return []
+            poll_id = poll.id
 
         yes_voter_ids = set(
             self.db.execute(
                 select(models.PollVote.tg_user_id).where(
-                    models.PollVote.poll_id == poll.id,
+                    models.PollVote.poll_id == poll_id,
                     models.PollVote.choice == 0,
                 )
             ).scalars().all()

@@ -130,6 +130,22 @@ class TestYesVotersWithoutDeck:
         result = poll_svc.get_yes_voters_without_deck(tournament.id)
         assert user_alice.tg_id in result
 
+    def test_cross_tournament_poll(self, poll_svc, svc, db, user_alice):
+        """Голоса из старого опроса, колода проверяется по новому турниру."""
+        from core.schemas import TournamentCreate
+        old_t = svc.create_tournament(TournamentCreate(title="Old", chat_id=100))
+        old_poll = poll_svc.create_poll(old_t.id, 100, "old_p", 1)
+        poll_svc.upsert_vote(old_poll.id, user_alice.tg_id, choice=0)
+        # Alice has deck in old tournament
+        svc.register_participant(tournament_id=old_t.id, user_id=user_alice.id, archetype_id=None)
+        # Close old, create new tournament
+        svc.close_tournament(old_t.id)
+        new_t = svc.create_tournament(TournamentCreate(title="New", chat_id=100))
+        # No poll for new tournament — use old poll_id explicitly
+        result = poll_svc.get_yes_voters_without_deck(new_t.id, poll_id=old_poll.id)
+        # Alice voted yes in old poll and has NO deck in NEW tournament → should be notified
+        assert user_alice.tg_id in result
+
     def test_mixed_voters(self, poll_svc, svc, tournament, user_alice, user_bob, archetype_burn):
         poll = poll_svc.create_poll(tournament.id, 100, "p1", 1)
         poll_svc.upsert_vote(poll.id, user_alice.tg_id, choice=0)  # пойду, без колоды
