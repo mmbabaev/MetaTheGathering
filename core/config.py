@@ -40,10 +40,6 @@ class Settings(BaseSettings):
     MONIUM_PROJECT: str = ""
     MONIUM_API_KEY: str = ""
 
-    # Через запятую в .env: NOTIFY_ALLOWED_IDS=123,456
-    # Если пусто — уведомления рассылаются всем (прод-режим)
-    NOTIFY_ALLOWED_IDS: str = ""
-
     # Несекретные настройки — берутся из config/prod.py или config/debug.py
     DEBUG: bool = _app_cfg.debug
     TOURNAMENT_TIMEZONE: str = _app_cfg.tournament_timezone
@@ -59,9 +55,7 @@ class Settings(BaseSettings):
     @property
     def notify_allowed_ids(self) -> Optional[List[int]]:
         """None = все разрешены (прод). Список = только указанные (дебаг)."""
-        if not self.NOTIFY_ALLOWED_IDS.strip():
-            return None
-        return [int(x.strip()) for x in self.NOTIFY_ALLOWED_IDS.split(",") if x.strip()]
+        return _app_cfg.notify_allowed_ids
 
     @property
     def chat_ids(self) -> List[int]:
