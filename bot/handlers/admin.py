@@ -18,7 +18,7 @@ from bot.keyboards import (
 )
 from bot.messages import (
     NOT_ADMIN,
-    family_name_sort_key,
+    sort_participants,
     NO_DECK_NAME,
     NO_ACTIVE_TOURNAMENT,
     MULTIPLE_TOURNAMENTS_MSG,
@@ -35,14 +35,6 @@ from bot.messages import (
     format_tournament_status,
 )
 
-
-def _sort_participants(participants: list) -> list:
-    """Сортирует участников: сначала незаполненные, затем заполненные; внутри — по фамилии."""
-    def _sort_key(p):
-        filled = 0 if p.archetype is None else 1
-        last = family_name_sort_key(p.user.first_name if p.user else None, p.user.last_name if p.user else None)
-        return (filled, last)
-    return sorted(participants, key=_sort_key)
 
 
 def parse_add_player_command(message_text: str, bot_username: str | None) -> tuple[str, str] | None:
@@ -306,7 +298,7 @@ class AdminHandler:
             t = get_tournament(self.svc.db, tournament_id)
         except errors.TournamentNotFound:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
-        participants = _sort_participants(self.svc.list_participants_for_tournament(tournament_id))
+        participants = sort_participants(self.svc.list_participants_for_tournament(tournament_id))
         status_text = format_tournament_status(t.title, t.status.label_ru, participants, decks_hidden=t.decks_hidden)
         text = f"{prefix}\n\n{status_text}" if prefix else status_text
         return HandlerResult(
@@ -402,7 +394,7 @@ class AdminHandler:
         if not tournaments:
             return HandlerResult(NO_ACTIVE_TOURNAMENT)
         blocks = [
-            format_tournament_status(t.title, t.status.label_ru, _sort_participants(self.svc.list_participants_for_tournament(t.id)))
+            format_tournament_status(t.title, t.status.label_ru, sort_participants(self.svc.list_participants_for_tournament(t.id)))
             for t in tournaments
         ]
         return HandlerResult("\n\n---\n\n".join(blocks))

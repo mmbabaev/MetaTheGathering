@@ -108,6 +108,18 @@ def family_name_sort_key(first_name: str | None, last_name: str | None) -> str:
     return (words[0] if words else "").lower()
 
 
+def sort_participants(participants: list) -> list:
+    """Сортирует участников: сначала без колоды, затем с колодой; внутри — по фамилии."""
+    def _key(p):
+        filled = 0 if p.archetype is None else 1
+        name = family_name_sort_key(
+            p.user.first_name if p.user else None,
+            p.user.last_name if p.user else None,
+        )
+        return (filled, name)
+    return sorted(participants, key=_key)
+
+
 def format_tournament_card(
     title: str,
     status: str,
