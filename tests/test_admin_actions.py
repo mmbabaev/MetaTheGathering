@@ -619,6 +619,15 @@ class TestHandleAdminStatus:
         from bot.keyboards import CB_ADMIN_PICK_ARCH
         assert any(b.callback_data.startswith(CB_ADMIN_PICK_ARCH) for b in buttons)
 
+    def test_button_label_shows_familiya_imya_order(self, handler, svc, user_svc, admin_user, active_tournament):
+        """Кнопка участника показывает «Фамилия Имя», а не «Имя Фамилия»."""
+        user = user_svc.get_or_create(tg_id=8005, username=None, first_name="Антон", last_name="Ильин")
+        svc.bulk_add_participants(active_tournament.id, [(user.id, "Тест")])
+        result = handler.handle_admin_status(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+        buttons_text = [b.text for row in result.keyboard.inline_keyboard for b in row]
+        assert any("Ильин Антон" in t for t in buttons_text)
+        assert not any("Антон Ильин" in t for t in buttons_text)
+
     def test_no_archetype_participant_gets_pencil_prefix(self, handler, svc, user_svc, admin_user, active_tournament):
         user = user_svc.get_or_create(tg_id=8002, username=None, first_name="Безколоды")
         svc.bulk_add_participants(active_tournament.id, [(user.id, "Безколоды")])

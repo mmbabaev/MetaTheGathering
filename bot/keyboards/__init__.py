@@ -126,8 +126,8 @@ def admin_participants_keyboard(
     buttons = []
     for p in to_show:
         if p.user:
-            name_parts = [n for n in (p.user.first_name, p.user.last_name) if n]
-            name = " ".join(name_parts) if name_parts else f"id{p.user.tg_id}"
+            from bot.messages import format_participant_name
+            name = format_participant_name(p.user.first_name, p.user.last_name) or f"id{p.user.tg_id}"
         else:
             name = f"id{p.id}"
         prefix = "📝 " if p.archetype is None else "✏️ "
