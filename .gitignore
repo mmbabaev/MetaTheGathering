@@ -1,4 +1,5 @@
 .env
+.env.debug
 bot/.env
 bot/.env.debug
 .venv/

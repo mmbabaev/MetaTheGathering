@@ -32,10 +32,18 @@ start() {
         rm "$PID_FILE"
     fi
 
+    local env_file="$SCRIPT_DIR/.env.debug"
+    if [ ! -f "$env_file" ]; then
+        echo "ERROR: .env.debug not found. Create it with a debug bot token to avoid conflicting with prod."
+        echo "  Example: cp .env .env.debug  # then replace TELEGRAM_BOT_TOKEN with a test token"
+        return 1
+    fi
+
     cd "$SCRIPT_DIR"
-    nohup "$VENV_PYTHON" main.py >> "$LOG_FILE" 2>&1 &
+    set -a; source "$env_file"; set +a
+    BOT_ENV=debug nohup "$VENV_PYTHON" main.py >> "$LOG_FILE" 2>&1 &
     echo $! > "$PID_FILE"
-    echo "Server started (PID $!), logging to $LOG_FILE"
+    echo "Server started in DEBUG mode (PID $!), logging to $LOG_FILE"
 }
 
 status() {
