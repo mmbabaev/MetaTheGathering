@@ -257,86 +257,114 @@ async def callback_leave_cancel(update: Update, context: ContextTypes.DEFAULT_TY
         db.close()
 
 
-async def message_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    msg = update.effective_message
-    user = update.effective_user
-    if not msg or not msg.text or not user:
-        return
-    if context.user_data is None:
-        return
-
-    text = msg.text.strip()
-
-    if USER_DATA_PENDING_NAME in context.user_data:
-        tournament_id = context.user_data.pop(USER_DATA_PENDING_NAME)
-        if not text:
-            context.user_data[USER_DATA_PENDING_NAME] = tournament_id
-            await msg.reply_text("Введите непустое имя.")
-            return
-        db = SessionLocal()
-        try:
-            result = _player_handler(db).handle_save_name_then_register(
-                user.id, user.username, text, tournament_id,
-            )
-            await msg.reply_text(result.text, reply_markup=result.keyboard)
-        finally:
-            db.close()
-        return
-
-    if context.user_data.pop(USER_DATA_PENDING_SETTINGS_NAME, None):
-        if not text:
-            context.user_data[USER_DATA_PENDING_SETTINGS_NAME] = True
-            await msg.reply_text("Введите непустое имя.")
-            return
-        db = SessionLocal()
-        try:
-            result = _settings_handler(db).handle_settings_name_text(user.id, text)
-            await msg.reply_text(result.text)
-        finally:
-            db.close()
-        return
-
-    if USER_DATA_PENDING_ADMIN_CUSTOM_ARCH in context.user_data:
-        participant_id = context.user_data.pop(USER_DATA_PENDING_ADMIN_CUSTOM_ARCH)
-        if not text:
-            context.user_data[USER_DATA_PENDING_ADMIN_CUSTOM_ARCH] = participant_id
-            await msg.reply_text("Введите непустое название архетипа.")
-            return
-        db = SessionLocal()
-        try:
-            result = _admin_handler(db).handle_admin_custom_arch_text(user.id, participant_id, text)
-            if not result.is_alert:
-                _log("admin_custom_arch", user, participant_id=participant_id, arch_name=text)
-            await msg.reply_text(result.text)
-        finally:
-            db.close()
-        return
-
-    if USER_DATA_PENDING_BULK_ADD in context.user_data:
-        tournament_id = context.user_data.pop(USER_DATA_PENDING_BULK_ADD)
-        names = [line.strip() for line in text.splitlines() if line.strip()]
-        db = SessionLocal()
-        try:
-            result = _admin_handler(db).handle_bulk_add_by_name(user.id, tournament_id, names)
-            _log("bulk_add", user, tournament_id=tournament_id, names=names)
-            await msg.reply_text(result.text, reply_markup=result.keyboard)
-        finally:
-            db.close()
-        return
-
-    tournament_id = context.user_data.pop(USER_DATA_PENDING_CUSTOM, None)
+async def _handle_pending_name(msg, user, text, context) -> bool:
+    tournament_id = context.user_data.get(USER_DATA_PENDING_NAME)
     if tournament_id is None:
-        return
+        return False
     if not text:
-        context.user_data[USER_DATA_PENDING_CUSTOM] = tournament_id
+        await msg.reply_text("Введите непустое имя.")
+        return True
+    context.user_data.pop(USER_DATA_PENDING_NAME)
+    db = SessionLocal()
+    try:
+        result = _player_handler(db).handle_save_name_then_register(
+            user.id, user.username, text, tournament_id,
+        )
+        await msg.reply_text(result.text, reply_markup=result.keyboard)
+    finally:
+        db.close()
+    return True
+
+
+async def _handle_pending_settings_name(msg, user, text, context) -> bool:
+    if not context.user_data.get(USER_DATA_PENDING_SETTINGS_NAME):
+        return False
+    if not text:
+        await msg.reply_text("Введите непустое имя.")
+        return True
+    context.user_data.pop(USER_DATA_PENDING_SETTINGS_NAME)
+    db = SessionLocal()
+    try:
+        result = _settings_handler(db).handle_settings_name_text(user.id, text)
+        await msg.reply_text(result.text)
+    finally:
+        db.close()
+    return True
+
+
+async def _handle_pending_admin_custom_arch(msg, user, text, context) -> bool:
+    participant_id = context.user_data.get(USER_DATA_PENDING_ADMIN_CUSTOM_ARCH)
+    if participant_id is None:
+        return False
+    if not text:
         await msg.reply_text("Введите непустое название архетипа.")
-        return
+        return True
+    context.user_data.pop(USER_DATA_PENDING_ADMIN_CUSTOM_ARCH)
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_admin_custom_arch_text(user.id, participant_id, text)
+        if not result.is_alert:
+            _log("admin_custom_arch", user, participant_id=participant_id, arch_name=text)
+        await msg.reply_text(result.text)
+    finally:
+        db.close()
+    return True
+
+
+async def _handle_pending_bulk_add(msg, user, text, context) -> bool:
+    tournament_id = context.user_data.get(USER_DATA_PENDING_BULK_ADD)
+    if tournament_id is None:
+        return False
+    context.user_data.pop(USER_DATA_PENDING_BULK_ADD)
+    names = [line.strip() for line in text.splitlines() if line.strip()]
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_bulk_add_by_name(user.id, tournament_id, names)
+        _log("bulk_add", user, tournament_id=tournament_id, names=names)
+        await msg.reply_text(result.text, reply_markup=result.keyboard)
+    finally:
+        db.close()
+    return True
+
+
+async def _handle_pending_custom_arch(msg, user, text, context) -> bool:
+    tournament_id = context.user_data.get(USER_DATA_PENDING_CUSTOM)
+    if tournament_id is None:
+        return False
+    if not text:
+        await msg.reply_text("Введите непустое название архетипа.")
+        return True
+    context.user_data.pop(USER_DATA_PENDING_CUSTOM)
     db = SessionLocal()
     try:
         result = _player_handler(db).handle_custom_archetype_text(
-            user.id, None, None, None,
+            user.id, user.username, user.first_name, user.last_name,
             tournament_id, text,
         )
         await msg.reply_text(result.text)
     finally:
         db.close()
+    return True
+
+
+_TEXT_INPUT_HANDLERS = [
+    _handle_pending_name,
+    _handle_pending_settings_name,
+    _handle_pending_admin_custom_arch,
+    _handle_pending_bulk_add,
+    _handle_pending_custom_arch,
+]
+
+
+async def message_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    msg = update.effective_message
+    user = update.effective_user
+    if not msg or not msg.text or not user:
+        return
+    if not context.user_data:
+        return
+
+    text = msg.text.strip()
+    for handler in _TEXT_INPUT_HANDLERS:
+        if await handler(msg, user, text, context):
+            return
