@@ -683,11 +683,11 @@ class TestGetOrCreateByName:
         from unittest.mock import patch
         handler = AdminHandler(svc, user_svc, arch_svc)
 
-        # Добавляем в порядке Имя Фамилия (как вводит оператор)
+        # Добавляем в порядке Фамилия Имя (как вводит оператор)
         with patch("services.user.settings") as mock_settings:
             mock_settings.admin_ids = [0]
             result = handler.handle_bulk_add_by_name(
-                tg_id=0, tournament_id=t.id, names=["Антон Ильин"]
+                tg_id=0, tournament_id=t.id, names=["Ильин Антон"]
             )
         assert "✅ Ильин Антон" in result.text
 

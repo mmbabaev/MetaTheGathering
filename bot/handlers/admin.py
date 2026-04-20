@@ -261,7 +261,11 @@ class AdminHandler:
             if not raw:
                 continue
             parts = raw.split(None, 1)
-            parsed.append((parts[0], parts[1] if len(parts) > 1 else None))
+            # Input format: "Фамилия Имя" — first word is last_name, second is first_name
+            if len(parts) == 2:
+                parsed.append((parts[1], parts[0]))  # (first_name, last_name)
+            else:
+                parsed.append((parts[0], None))
 
         if not parsed:
             return HandlerResult(BULK_ADD_EMPTY)

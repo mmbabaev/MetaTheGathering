@@ -150,10 +150,11 @@ class PlayerHandler:
     ) -> HandlerResult:
         """Сохраняет имя пользователя и возвращает выбор архетипа."""
         parts = name_text.strip().split(None, 1)
-        first_name = parts[0]
-        last_name = parts[1] if len(parts) > 1 else None
-        self.user_svc.update_name(tg_id, first_name, last_name)
-        self.user_svc.merge_placeholder_by_name(tg_id, first_name, last_name)
+        # Input format: "Фамилия Имя" — first word is last_name, second is first_name
+        last_name = parts[0]
+        first_name = parts[1] if len(parts) > 1 else None
+        self.user_svc.update_name(tg_id, first_name or last_name, last_name if first_name else None)
+        self.user_svc.merge_placeholder_by_name(tg_id, first_name or last_name, last_name if first_name else None)
         return self._archetype_keyboard_for_player(tournament_id, tg_id)
 
     def handle_archetype(
