@@ -23,6 +23,17 @@ _POLL_OPTIONS = ["Пойду", "Не пойду"]
 _DM_NO_DECK = "Привет! Ты записался на турнир, но ещё не выбрал колоду. Зайди в /tournaments и заполни её."
 
 
+def _poll_message_link(chat_id: int, message_id: int) -> str | None:
+    """Ссылка на сообщение в группе. Работает только для супергрупп (chat_id < -1000000000)."""
+    if chat_id >= 0:
+        return None
+    # Супергруппы: chat_id вида -100XXXXXXXXX → убираем -100
+    bare_id = str(abs(chat_id))
+    if bare_id.startswith("100"):
+        bare_id = bare_id[3:]
+    return f"https://t.me/c/{bare_id}/{message_id}"
+
+
 def _admin_handler(db) -> AdminHandler:
     return AdminHandler(TournamentService(db), UserService(db), ArchetypeService(db))
 
@@ -74,7 +85,11 @@ async def callback_create_poll(update: Update, context: ContextTypes.DEFAULT_TYP
             message_id=msg.message_id,
         )
         _log("create_poll", user, tournament_id=tournament_id)
-        await query.answer("Опрос создан!")
+        poll_link = _poll_message_link(chat_id, msg.message_id)
+        await query.answer()
+        await query.message.reply_text(
+            f"✅ Опрос создан!\n{poll_link}" if poll_link else "✅ Опрос создан!"
+        )
     finally:
         db.close()
 
