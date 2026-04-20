@@ -28,7 +28,7 @@ def get_clubs() -> list[ClubConfig]:
     clubs = [
         ClubConfig(name="Goldfish",  weekday="thursday", chat_id=settings.GOLDFISH_CHAT_ID or 0,  game_time="19:30"),
         ClubConfig(name="Edinorog",  weekday="monday",  chat_id=settings.EDINOROG_CHAT_ID or 0,  game_time="19:30",
-                   create_time="11:40", title_prefix="🦄 "),
+                   create_time="12:00", title_prefix="🦄 "),
     ]
     if settings.DEBUG:
         clubs.append(

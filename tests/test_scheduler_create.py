@@ -1,4 +1,4 @@
-"""Tests for _create_tournaments_for_schedule and setup_scheduler."""
+"""Tests for _create_club_tournament, _create_tournaments_for_schedule, and setup_scheduler."""
 
 import asyncio
 from datetime import datetime, time, timedelta
@@ -10,7 +10,8 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session
 
 import core.models  # noqa: F401
-from bot.scheduler import _create_tournaments_for_schedule, _make_job, setup_scheduler
+from bot.scheduler import _create_club_tournament, _create_tournaments_for_schedule, _make_job, setup_scheduler
+from core.config import ClubConfig
 from core.database import Base
 from core.models import TournamentStatus
 from core.models import Tournament as TournamentModel
@@ -66,6 +67,122 @@ def _patch_now(weekday: int, hour: int = 19, minute: int = 0):
     mock_dt.now = MagicMock(return_value=fixed)
     mock_dt.strptime = datetime.strptime
     return patch("bot.scheduler.datetime", mock_dt)
+
+
+# ---------------------------------------------------------------------------
+# Tests for _create_club_tournament
+# ---------------------------------------------------------------------------
+
+class TestCreateClubTournament:
+
+    def _club(self, weekday="monday", chat_id=0, prefix="🦄 "):
+        return ClubConfig(
+            name="Edinorog", weekday=weekday, chat_id=chat_id,
+            game_time="19:30", create_time="12:00", title_prefix=prefix,
+        )
+
+    def _mock_settings(self):
+        s = MagicMock()
+        s.TOURNAMENT_TIMEZONE = TZ
+        return s
+
+    async def _run(self, db, bot, club, weekday, hour=12):
+        with _patch_now(weekday=weekday, hour=hour), \
+             patch("bot.scheduler.settings", self._mock_settings()), \
+             patch("bot.scheduler.SessionLocal", return_value=db):
+            await _create_club_tournament(bot, club)
+
+    def test_wrong_weekday_skips(self):
+        db = _make_db()
+        bot = _make_bot()
+        club = self._club(weekday="monday")
+        asyncio.run(self._run(db, bot, club, weekday=2))  # wednesday
+
+        bot.send_message.assert_not_called()
+        assert TournamentService(db).get_active_tournament_for_chat(0) is None
+        db.close()
+
+    def test_correct_weekday_creates_tournament(self):
+        db = _make_db()
+        bot = _make_bot()
+        club = self._club(weekday="monday", chat_id=0, prefix="🦄 ")
+        asyncio.run(self._run(db, bot, club, weekday=0))  # monday
+
+        active = TournamentService(db).get_active_tournament_for_chat(0)
+        assert active is not None
+        assert active.status == TournamentStatus.REGISTRATION
+        assert "Edinorog Pauper" in active.title
+        assert active.title.startswith("🦄 ")
+        db.close()
+
+    def test_title_contains_date(self):
+        db = _make_db()
+        bot = _make_bot()
+        club = self._club(weekday="monday")
+        asyncio.run(self._run(db, bot, club, weekday=0))
+
+        active = TournamentService(db).get_active_tournament_for_chat(0)
+        import re
+        assert re.search(r"\d{4}-\d{2}-\d{2}", active.title)
+        db.close()
+
+    def test_closes_existing_tournament_before_creating(self):
+        db = _make_db()
+        bot = _make_bot()
+        svc = TournamentService(db)
+        old = svc.create_tournament(TournamentCreate(title="Old", chat_id=0, slug="old"))
+
+        club = self._club(weekday="monday", chat_id=0)
+        asyncio.run(self._run(db, bot, club, weekday=0))
+
+        assert db.get(TournamentModel, old.id).status == TournamentStatus.CLOSED
+        active = svc.get_active_tournament_for_chat(0)
+        assert active is not None
+        assert active.id != old.id
+        db.close()
+
+    def test_no_announcement_when_chat_id_zero(self):
+        db = _make_db()
+        bot = _make_bot()
+        club = self._club(weekday="monday", chat_id=0)
+        asyncio.run(self._run(db, bot, club, weekday=0))
+
+        bot.send_message.assert_not_called()
+        db.close()
+
+    def test_announcement_sent_when_chat_id_set(self):
+        db = _make_db()
+        bot = _make_bot()
+        club = self._club(weekday="monday", chat_id=CHAT_ID)
+        asyncio.run(self._run(db, bot, club, weekday=0))
+
+        bot.send_message.assert_awaited_once()
+        assert bot.send_message.await_args.kwargs["chat_id"] == CHAT_ID
+        db.close()
+
+    def test_closes_existing_with_real_chat_id_too(self):
+        db = _make_db()
+        bot = _make_bot()
+        svc = TournamentService(db)
+        old = svc.create_tournament(TournamentCreate(title="Old", chat_id=CHAT_ID, slug="old"))
+
+        club = self._club(weekday="monday", chat_id=CHAT_ID)
+        asyncio.run(self._run(db, bot, club, weekday=0))
+
+        assert db.get(TournamentModel, old.id).status == TournamentStatus.CLOSED
+        active = svc.get_active_tournament_for_chat(CHAT_ID)
+        assert active is not None and active.id != old.id
+        db.close()
+
+    def test_no_prefix_club(self):
+        db = _make_db()
+        bot = _make_bot()
+        club = ClubConfig(name="Goldfish", weekday="thursday", chat_id=0, game_time="19:30", title_prefix="")
+        asyncio.run(self._run(db, bot, club, weekday=3))  # thursday
+
+        active = TournamentService(db).get_active_tournament_for_chat(0)
+        assert active.title.startswith("Goldfish Pauper")
+        db.close()
 
 
 # ---------------------------------------------------------------------------
