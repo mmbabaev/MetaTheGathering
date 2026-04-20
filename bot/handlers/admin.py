@@ -434,59 +434,15 @@ class AdminHandler:
         return HandlerResult(f"🗑 Турнир «{title}» удалён.")
 
     def handle_export_excel(self, tg_id: int, tournament_id: int) -> tuple[bytes, str] | None:
-        """Генерирует Excel-файл со списком участников.
-
-        Возвращает (bytes, filename) или None если нет прав.
-        Формат: Ник | Имя Фамилия | Колода (без эмодзи)
-        """
-        import io
-        import openpyxl
-        from openpyxl.styles import PatternFill, Font, Alignment
+        """Возвращает (bytes, filename) или None если нет прав."""
+        from services.export import ExportService
 
         if not self.user_svc.is_admin(tg_id):
             return None
-
         try:
-            t = get_tournament(self.svc.db, tournament_id)
+            return ExportService(self.svc.db).export_participants_excel(tournament_id)
         except errors.TournamentNotFound:
             return None
-
-        participants = self.svc.list_participants_for_tournament(tournament_id)
-
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Участники"
-
-        # Заголовок
-        header_fill = PatternFill(start_color="2E7D32", end_color="2E7D32", fill_type="solid")
-        header_font = Font(color="FFFFFF", bold=True)
-        headers = ["@Ник", "Имя Фамилия", "Колода"]
-        for col, h in enumerate(headers, 1):
-            cell = ws.cell(row=1, column=col, value=h)
-            cell.fill = header_fill
-            cell.font = header_font
-            cell.alignment = Alignment(horizontal="center")
-
-        # Данные
-        for row, p in enumerate(participants, 2):
-            username = f"@{p.user.username}" if p.user and p.user.username else ""
-            from bot.messages import format_participant_name
-            full_name = format_participant_name(p.user.first_name if p.user else None, p.user.last_name if p.user else None)
-            deck = p.archetype.name if p.archetype else ""
-
-            ws.cell(row=row, column=1, value=username)
-            ws.cell(row=row, column=2, value=full_name)
-            ws.cell(row=row, column=3, value=deck)
-
-        # Ширина колонок
-        ws.column_dimensions["A"].width = 22
-        ws.column_dimensions["B"].width = 28
-        ws.column_dimensions["C"].width = 30
-
-        buf = io.BytesIO()
-        wb.save(buf)
-        filename = f"{t.title.replace(' ', '_')}.xlsx"
-        return buf.getvalue(), filename
 
     def handle_delete_tournament_prompt(
         self, tg_id: int, tournament_id: int
