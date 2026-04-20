@@ -18,10 +18,12 @@ else:
 
 @dataclass
 class ClubConfig:
-    name: str        # "Goldfish"
-    weekday: str     # "thursday"
+    name: str                        # "Goldfish"
+    weekday: str                     # "thursday"
     chat_id: int
-    game_time: str   # "19:30" — время самого турнира (для заголовка)
+    game_time: str                   # "19:30" — время самого турнира (для заголовка)
+    create_time: Optional[str] = None  # переопределяет TOURNAMENT_CREATE_TIME
+    title_prefix: str = ""           # эмодзи/префикс перед именем клуба в заголовке
 
 
 class Settings(BaseSettings):
