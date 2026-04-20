@@ -24,14 +24,11 @@ _DM_NO_DECK = "Привет! Ты записался на турнир, но е�
 
 
 def _poll_message_link(chat_id: int, message_id: int) -> str | None:
-    """Ссылка на сообщение в группе. Работает только для супергрупп (chat_id < -1000000000)."""
-    if chat_id >= 0:
-        return None
-    # Супергруппы: chat_id вида -100XXXXXXXXX → убираем -100
+    """Ссылка на сообщение. Работает только для супергрупп (chat_id вида -100XXXXXXXXX)."""
     bare_id = str(abs(chat_id))
-    if bare_id.startswith("100"):
-        bare_id = bare_id[3:]
-    return f"https://t.me/c/{bare_id}/{message_id}"
+    if not bare_id.startswith("100") or len(bare_id) < 12:
+        return None
+    return f"https://t.me/c/{bare_id[3:]}/{message_id}"
 
 
 def _admin_handler(db) -> AdminHandler:
