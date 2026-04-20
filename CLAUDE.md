@@ -8,6 +8,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Running
 
+> **WARNING:** Never run `python main.py` or `./server.sh` locally with the production token (`TELEGRAM_BOT_TOKEN` from `.env`). A local instance polling the same token causes continuous `Conflict: terminated by other getUpdates request` errors on the production server, making the bot intermittently unresponsive. This is hard to diagnose. Use a separate test bot token for local development.
+>
+> **Deployment must go through GitHub Actions** (push to `main` → prod deploy, open PR → debug deploy). Manual `deploy_bot.sh` is a last resort only.
+
 ```bash
 # Run bot (polling mode)
 python main.py
