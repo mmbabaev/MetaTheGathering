@@ -411,9 +411,11 @@ class AdminHandler:
     def handle_close_tournament_by_id(self, tg_id: int, tournament_id: int) -> HandlerResult:
         if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN, is_alert=True)
-        participants = self.svc.list_participants_for_tournament(tournament_id)
-        if not participants:
-            return HandlerResult("⚠️ Нельзя закрыть пустой турнир — сначала добавьте участников.", is_alert=True)
+        from core.config import settings
+        if not settings.DEBUG:
+            participants = self.svc.list_participants_for_tournament(tournament_id)
+            if not participants:
+                return HandlerResult("⚠️ Нельзя закрыть пустой турнир — сначала добавьте участников.", is_alert=True)
         try:
             self.svc.close_tournament(tournament_id)
         except errors.TournamentNotFound:
