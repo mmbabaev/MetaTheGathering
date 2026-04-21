@@ -168,6 +168,17 @@ class TournamentService:
         rows = self.db.execute(stmt).scalars().all()
         return [TournamentRead.model_validate(t) for t in rows]
 
+    def list_closed_tournaments(self, limit: int = 20) -> List[TournamentRead]:
+        """Закрытые турниры, по убыванию created_at."""
+        stmt = (
+            select(models.Tournament)
+            .where(models.Tournament.status == models.TournamentStatus.CLOSED)
+            .order_by(models.Tournament.created_at.desc())
+            .limit(limit)
+        )
+        rows = self.db.execute(stmt).scalars().all()
+        return [TournamentRead.model_validate(t) for t in rows]
+
     def set_decks_hidden(self, tournament_id: int, hidden: bool) -> TournamentRead:
         tournament = get_tournament(self.db, tournament_id)
         tournament.decks_hidden = hidden

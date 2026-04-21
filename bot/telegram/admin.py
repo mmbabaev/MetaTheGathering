@@ -243,6 +243,20 @@ async def cmd_add_players(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         db.close()
 
 
+async def cmd_archive(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/archive — последние закрытые турниры."""
+    user = update.effective_user
+    msg = update.effective_message
+    if not user or not msg:
+        return
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_archive(user.id)
+        await msg.reply_text(result.text)
+    finally:
+        db.close()
+
+
 async def cmd_tournament_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """/tournament_status — все активные турниры и их участники."""
     user = update.effective_user

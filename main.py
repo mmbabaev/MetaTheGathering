@@ -71,6 +71,7 @@ _USER_COMMANDS = [
 
 _ADMIN_COMMANDS = _USER_COMMANDS + [
     BotCommand("tournament_status", "Участники турниров"),
+    BotCommand("archive", "Архив закрытых турниров"),
     BotCommand("add_me", "Записать себя"),
     BotCommand("add_player", "Записать игрока"),
     BotCommand("add_players", "Массовая запись"),
@@ -143,6 +144,7 @@ def main() -> None:
     app.add_handler(CommandHandler("add_player", admin.cmd_add_player))
     app.add_handler(CommandHandler("add_players", admin.cmd_add_players))
     app.add_handler(CommandHandler("tournament_status", admin.cmd_tournament_status))
+    app.add_handler(CommandHandler("archive", admin.cmd_archive))
     app.add_handler(CommandHandler("create_tournament", admin.cmd_create_tournament))
     app.add_handler(CommandHandler("delete_tournament", admin.cmd_delete_tournament))
 

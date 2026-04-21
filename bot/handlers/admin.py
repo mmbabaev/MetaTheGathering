@@ -387,6 +387,20 @@ class AdminHandler:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
         return HandlerResult(ADMIN_ARCH_SAVED.format(archetype_name=arch.name))
 
+    def handle_archive(self, tg_id: int) -> HandlerResult:
+        """Последние 20 закрытых турниров."""
+        if not self.user_svc.is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN)
+        tournaments = self.svc.list_closed_tournaments()
+        if not tournaments:
+            return HandlerResult("Архив пуст — закрытых турниров нет.")
+        lines = []
+        for t in tournaments:
+            date = t.created_at.strftime("%Y-%m-%d")
+            participants = self.svc.list_participants_for_tournament(t.id)
+            lines.append(f"• {t.title} ({date}) — {len(participants)} чел.")
+        return HandlerResult("📁 Архив турниров:\n\n" + "\n".join(lines))
+
     def handle_tournament_status(self, tg_id: int) -> HandlerResult:
         if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
