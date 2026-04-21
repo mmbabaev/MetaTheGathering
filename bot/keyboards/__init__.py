@@ -34,6 +34,7 @@ CB_AETHERHUB_IMPORT = "ah_import"           # ah_import:{tournament_id}
 CB_AETHERHUB_CONFIRM = "ah_confirm"         # ah_confirm:{tournament_id}
 CB_AETHERHUB_CANCEL = "ah_cancel"           # ah_cancel:{tournament_id}
 CB_ADMIN_MORE = "adm_more"                  # adm_more:{tournament_id}
+CB_CLOSE_TOURNAMENT = "close_t"             # close_t:{tournament_id}
 
 
 def tournament_list_keyboard(tournaments: list) -> InlineKeyboardMarkup:
@@ -95,6 +96,9 @@ def admin_more_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(
             "➕ Добавить участников", callback_data=f"{CB_BULK_ADD}:{tournament_id}"
+        )],
+        [InlineKeyboardButton(
+            "🔒 Закрыть турнир", callback_data=f"{CB_CLOSE_TOURNAMENT}:{tournament_id}"
         )],
         [InlineKeyboardButton(
             "🗑 Удалить турнир", callback_data=f"{CB_DELETE_TOURNAMENT}:{tournament_id}"

@@ -39,6 +39,7 @@ from bot.keyboards import (
     CB_AETHERHUB_CONFIRM,
     CB_AETHERHUB_CANCEL,
     CB_ADMIN_MORE,
+    CB_CLOSE_TOURNAMENT,
 )
 from bot.scheduler import setup_scheduler
 
@@ -73,7 +74,6 @@ _ADMIN_COMMANDS = _USER_COMMANDS + [
     BotCommand("add_me", "Записать себя"),
     BotCommand("add_player", "Записать игрока"),
     BotCommand("add_players", "Массовая запись"),
-    BotCommand("close_tournament", "Закрыть турнир"),
     BotCommand("create_tournament", "Создать турнир"),
     BotCommand("delete_tournament", "Удалить турнир"),
 ]
@@ -143,7 +143,6 @@ def main() -> None:
     app.add_handler(CommandHandler("add_player", admin.cmd_add_player))
     app.add_handler(CommandHandler("add_players", admin.cmd_add_players))
     app.add_handler(CommandHandler("tournament_status", admin.cmd_tournament_status))
-    app.add_handler(CommandHandler("close_tournament", admin.cmd_close_tournament))
     app.add_handler(CommandHandler("create_tournament", admin.cmd_create_tournament))
     app.add_handler(CommandHandler("delete_tournament", admin.cmd_delete_tournament))
 
@@ -239,6 +238,9 @@ def main() -> None:
     )
     app.add_handler(
         CallbackQueryHandler(admin.callback_admin_more, pattern=f"^{CB_ADMIN_MORE}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(admin.callback_close_tournament, pattern=f"^{CB_CLOSE_TOURNAMENT}:")
     )
     app.add_handler(PollAnswerHandler(poll_handler.handle_poll_answer))
 

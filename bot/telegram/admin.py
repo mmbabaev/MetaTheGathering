@@ -13,7 +13,7 @@ from services.user import UserService
 from bot.handlers.admin import AdminHandler, parse_add_player_command, parse_bulk_player_line
 from bot.telegram.player import USER_DATA_PENDING_BULK_ADD, USER_DATA_PENDING_ADMIN_CUSTOM_ARCH
 from bot.messages import TELEGRAM_USER_LOOKUP_FAILED, ADD_PLAYERS_USAGE, BULK_ADD_PROMPT
-from bot.keyboards import CB_ADMIN_ARCH_MORE, CB_ADMIN_SHOW_FILLED, CB_REVEAL_DECKS, admin_more_keyboard
+from bot.keyboards import CB_ADMIN_ARCH_MORE, CB_ADMIN_SHOW_FILLED, CB_REVEAL_DECKS, admin_more_keyboard, CB_CLOSE_TOURNAMENT
 from bot.telegram.common import log_event as _log, parse_callback_ints
 
 
@@ -409,6 +409,29 @@ async def callback_delete_tournament_cancel(
         user_svc = UserService(db)
         result = PlayerHandler(svc, user_svc, ArchetypeService(db)).handle_tournament_select(tournament_id, tg_id=user.id)
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
+        await query.answer()
+    finally:
+        db.close()
+
+
+async def callback_close_tournament(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка «🔒 Закрыть турнир» в меню «• • •»."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_close_tournament_by_id(user.id, tournament_id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        _log("close_tournament", user, tournament_id=tournament_id)
+        await query.edit_message_text(result.text)
         await query.answer()
     finally:
         db.close()
