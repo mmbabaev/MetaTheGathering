@@ -57,6 +57,13 @@ class PollService:
         self.db.refresh(poll)
         return poll
 
+    def link_poll_to_tournament(self, poll_id: int, tournament_id: int) -> models.TournamentPoll:
+        poll = self.db.get(models.TournamentPoll, poll_id)
+        poll.tournament_id = tournament_id
+        self.db.commit()
+        self.db.refresh(poll)
+        return poll
+
     def remove_vote(self, poll_id: int, tg_user_id: int) -> None:
         """Удаляет голос пользователя (когда он убрал выбор в опросе)."""
         existing = self.db.execute(

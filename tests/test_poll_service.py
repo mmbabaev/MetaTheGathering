@@ -293,3 +293,33 @@ class TestChatMigration:
         poll_svc.create_poll(tournament.id, self.OLD_CHAT_ID, "p_old", 1)
         assert poll_svc.get_latest_poll_for_chat(self.NEW_CHAT_ID) is None
         assert poll_svc.get_latest_poll_for_chat(self.OLD_CHAT_ID) is not None
+
+
+# ── PollService.link_poll_to_tournament ──────────────────────────────────────
+
+class TestLinkPollToTournament:
+    def test_links_poll_to_tournament(self, poll_svc, svc, db):
+        from core.schemas import TournamentCreate
+        t1 = svc.create_tournament(TournamentCreate(title="T1", chat_id=100))
+        poll = poll_svc.create_poll(t1.id, 100, "p1", 1)
+        svc.close_tournament(t1.id)
+        t2 = svc.create_tournament(TournamentCreate(title="T2", chat_id=100))
+        assert poll.tournament_id == t1.id
+        updated = poll_svc.link_poll_to_tournament(poll.id, t2.id)
+        assert updated.tournament_id == t2.id
+        assert poll_svc.get_poll_for_tournament(t2.id) is not None
+        assert poll_svc.get_poll_for_tournament(t1.id) is None
+
+    def test_auto_link_via_chat_when_no_tournament_poll(self, poll_svc, svc, db):
+        """Simulates callback_poll_menu auto-linking logic."""
+        from core.schemas import TournamentCreate
+        old_t = svc.create_tournament(TournamentCreate(title="Old", chat_id=100))
+        poll = poll_svc.create_poll(old_t.id, 100, "p1", 1)
+        svc.close_tournament(old_t.id)
+        new_t = svc.create_tournament(TournamentCreate(title="New", chat_id=100))
+        # New tournament has no poll — auto-link the latest from chat
+        assert poll_svc.get_poll_for_tournament(new_t.id) is None
+        latest = poll_svc.get_latest_poll_for_chat(100)
+        assert latest is not None
+        poll_svc.link_poll_to_tournament(latest.id, new_t.id)
+        assert poll_svc.get_poll_for_tournament(new_t.id).id == poll.id
