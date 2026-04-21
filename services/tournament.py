@@ -4,7 +4,7 @@ import logging
 from datetime import timedelta
 from typing import List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -180,8 +180,11 @@ class TournamentService:
         return [TournamentRead.model_validate(t) for t in rows]
 
     def set_aetherhub_url(self, tournament_id: int, url: str) -> None:
-        tournament = get_tournament(self.db, tournament_id)
-        tournament.aetherhub_url = url
+        self.db.execute(
+            update(models.Tournament)
+            .where(models.Tournament.id == tournament_id)
+            .values(aetherhub_url=url)
+        )
         self.db.commit()
 
     def set_decks_hidden(self, tournament_id: int, hidden: bool) -> TournamentRead:
