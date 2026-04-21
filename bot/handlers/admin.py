@@ -388,18 +388,15 @@ class AdminHandler:
         return HandlerResult(ADMIN_ARCH_SAVED.format(archetype_name=arch.name))
 
     def handle_archive(self, tg_id: int) -> HandlerResult:
-        """Последние 20 закрытых турниров."""
+        """Последние 20 закрытых турниров — список кнопок как в /tournaments."""
         if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
+        from bot.keyboards import tournament_list_keyboard
         tournaments = self.svc.list_closed_tournaments()
         if not tournaments:
             return HandlerResult("Архив пуст — закрытых турниров нет.")
-        lines = []
-        for t in tournaments:
-            date = t.created_at.strftime("%Y-%m-%d")
-            participants = self.svc.list_participants_for_tournament(t.id)
-            lines.append(f"• {t.title} ({date}) — {len(participants)} чел.")
-        return HandlerResult("📁 Архив турниров:\n\n" + "\n".join(lines))
+        tour_list = [(t.id, t.title) for t in tournaments]
+        return HandlerResult("📁 Архив турниров:", keyboard=tournament_list_keyboard(tour_list))
 
     def handle_tournament_status(self, tg_id: int) -> HandlerResult:
         if not self.user_svc.is_admin(tg_id):
