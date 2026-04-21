@@ -134,7 +134,7 @@ async def callback_aetherhub_confirm(update: Update, context: ContextTypes.DEFAU
     try:
         card = PlayerHandler(
             TournamentService(db2), UserService(db2), ArchetypeService(db2)
-        ).handle_tournament_select(tournament_id, tg_id=user.id)
+        ).handle_tournament_select(tournament_id, tg_id=user.id, has_pairings=True)
     finally:
         db2.close()
     await query.message.reply_text(card.text, reply_markup=card.keyboard)

@@ -162,7 +162,7 @@ async def test_callback_tournament_select_edits_message():
         await callback_tournament_select(update, _make_context())
 
     mock_ph.return_value.handle_tournament_select.assert_called_once_with(
-        5, tg_id=update.effective_user.id
+        5, tg_id=update.effective_user.id, has_pairings=False
     )
     update.callback_query.edit_message_text.assert_called_once()
 

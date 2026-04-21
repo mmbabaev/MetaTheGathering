@@ -387,6 +387,55 @@ class AdminHandler:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
         return HandlerResult(ADMIN_ARCH_SAVED.format(archetype_name=arch.name))
 
+    def handle_admin_opponents(self, tg_id: int, tournament_id: int) -> HandlerResult:
+        """Показывает незаполненных оппонентов администратора из AetherHub-пейрингов."""
+        if not self.user_svc.is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN, is_alert=True)
+
+        admin_user = self.user_svc.get_by_tg_id(tg_id)
+        if not admin_user:
+            return HandlerResult("Профиль не найден.", is_alert=True)
+
+        from services.aetherhub_import import AetherhubImportService
+        import_svc = AetherhubImportService(self.svc.db)
+        pairings = import_svc.get_pairings(tournament_id)
+
+        # Find which pairing player_name corresponds to this admin
+        opponent_names: set[str] = set()
+        seen: dict[str, bool] = {}
+        for p in pairings:
+            name = p.player_name
+            if name not in seen:
+                matched = import_svc._find_user_by_name(name)
+                seen[name] = (matched is not None and matched.id == admin_user.id)
+            if seen[name] and p.opponent_name:
+                opponent_names.add(p.opponent_name)
+
+        if not opponent_names:
+            return HandlerResult("У вас нет оппонентов из импорта AetherHub.", is_alert=True)
+
+        # Match opponent names to registered participants without archetype
+        participants = self.svc.list_participants_for_tournament(tournament_id)
+        opponent_participants = []
+        for p in participants:
+            if p.archetype is not None:
+                continue
+            if p.user is None:
+                continue
+            for opp_name in opponent_names:
+                matched = import_svc._find_user_by_name(opp_name)
+                if matched and matched.id == p.user_id:
+                    opponent_participants.append(p)
+                    break
+
+        if not opponent_participants:
+            return HandlerResult("Все оппоненты уже заполнены.", is_alert=True)
+
+        return HandlerResult(
+            "Выберите оппонента для записи колоды:",
+            keyboard=admin_participants_keyboard(opponent_participants),
+        )
+
     def handle_archive(self, tg_id: int) -> HandlerResult:
         """Последние 20 закрытых турниров — список кнопок как в /tournaments."""
         if not self.user_svc.is_admin(tg_id):

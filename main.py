@@ -40,6 +40,7 @@ from bot.keyboards import (
     CB_AETHERHUB_CANCEL,
     CB_ADMIN_MORE,
     CB_CLOSE_TOURNAMENT,
+    CB_ADMIN_OPPONENTS,
 )
 from bot.scheduler import setup_scheduler
 
@@ -243,6 +244,9 @@ def main() -> None:
     )
     app.add_handler(
         CallbackQueryHandler(admin.callback_close_tournament, pattern=f"^{CB_CLOSE_TOURNAMENT}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(admin.callback_admin_opponents, pattern=f"^{CB_ADMIN_OPPONENTS}:")
     )
     app.add_handler(PollAnswerHandler(poll_handler.handle_poll_answer))
 

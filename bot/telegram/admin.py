@@ -428,6 +428,28 @@ async def callback_delete_tournament_cancel(
         db.close()
 
 
+async def callback_admin_opponents(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка «👥 Записать оппонентов» — показывает незаполненных оппонентов."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_admin_opponents(user.id, tournament_id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+        await query.answer()
+    finally:
+        db.close()
+
+
 async def callback_close_tournament(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Кнопка «🔒 Закрыть турнир» в меню «• • •»."""
     query = update.callback_query

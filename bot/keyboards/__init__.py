@@ -35,6 +35,7 @@ CB_AETHERHUB_CONFIRM = "ah_confirm"         # ah_confirm:{tournament_id}
 CB_AETHERHUB_CANCEL = "ah_cancel"           # ah_cancel:{tournament_id}
 CB_ADMIN_MORE = "adm_more"                  # adm_more:{tournament_id}
 CB_CLOSE_TOURNAMENT = "close_t"             # close_t:{tournament_id}
+CB_ADMIN_OPPONENTS = "adm_opps"             # adm_opps:{tournament_id}
 
 
 def tournament_list_keyboard(tournaments: list) -> InlineKeyboardMarkup:
@@ -51,6 +52,7 @@ def tournament_card_keyboard(
     is_registered: bool,
     is_admin: bool = False,
     decks_hidden: bool = True,
+    has_pairings: bool = False,
 ) -> InlineKeyboardMarkup:
     """Кнопки для карточки турнира — зависят от статуса регистрации и роли пользователя."""
     if is_registered:
@@ -66,6 +68,12 @@ def tournament_card_keyboard(
     )
     rows = [[action_btn], [status_btn]]
     if is_admin:
+        if is_registered and has_pairings:
+            rows.append([
+                InlineKeyboardButton(
+                    "👥 Записать оппонентов", callback_data=f"{CB_ADMIN_OPPONENTS}:{tournament_id}"
+                )
+            ])
         if decks_hidden:
             rows.append([
                 InlineKeyboardButton(

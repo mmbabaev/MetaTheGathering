@@ -82,7 +82,7 @@ class PlayerHandler:
         self.user_svc = user_svc
         self.arch_svc = arch_svc
 
-    def _tournament_card(self, t, tg_id: int | None) -> HandlerResult:
+    def _tournament_card(self, t, tg_id: int | None, has_pairings: bool = False) -> HandlerResult:
         is_registered = False
         is_admin = False
         if tg_id is not None:
@@ -99,7 +99,8 @@ class PlayerHandler:
         return HandlerResult(
             text,
             keyboard=tournament_card_keyboard(
-                t.id, is_registered, is_admin=is_admin, decks_hidden=t.decks_hidden
+                t.id, is_registered, is_admin=is_admin, decks_hidden=t.decks_hidden,
+                has_pairings=has_pairings,
             ),
         )
 
@@ -120,13 +121,13 @@ class PlayerHandler:
         return HandlerResult("Выберите турнир:", keyboard=tournament_list_keyboard(tour_list))
 
     def handle_tournament_select(
-        self, tournament_id: int, tg_id: int | None = None
+        self, tournament_id: int, tg_id: int | None = None, has_pairings: bool = False
     ) -> HandlerResult:
         try:
             t = get_tournament(self.svc.db, tournament_id)
         except errors.TournamentNotFound:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
-        return self._tournament_card(t, tg_id)
+        return self._tournament_card(t, tg_id, has_pairings=has_pairings)
 
     def handle_register(
         self, tournament_id: int, tg_id: int | None = None

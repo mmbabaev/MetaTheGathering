@@ -54,7 +54,11 @@ async def callback_tournament_select(update: Update, context: ContextTypes.DEFAU
     _log("view_tournament", user, tournament_id=tournament_id)
     db = SessionLocal()
     try:
-        result = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id if user else None)
+        from services.aetherhub_import import AetherhubImportService
+        has_pairings = bool(AetherhubImportService(db).get_pairings(tournament_id))
+        result = _player_handler(db).handle_tournament_select(
+            tournament_id, tg_id=user.id if user else None, has_pairings=has_pairings
+        )
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
