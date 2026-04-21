@@ -122,7 +122,7 @@ class TestHandleArchetype:
         assert "Burn" in result.text
         assert not result.is_alert
 
-    def test_already_registered_returns_alert(self, handler, active_tournament, archetype_burn):
+    def test_already_registered_with_deck_returns_alert(self, handler, active_tournament, archetype_burn):
         handler.handle_archetype(
             tg_id=1001, username="alice", first_name="Alice", last_name=None,
             tournament_id=active_tournament.id, archetype_id=archetype_burn.id,
@@ -133,6 +133,20 @@ class TestHandleArchetype:
         )
         assert result.text == ALREADY_REGISTERED
         assert result.is_alert
+
+    def test_already_registered_without_deck_updates_archetype(
+        self, handler, svc, user_svc, active_tournament, archetype_burn
+    ):
+        user = user_svc.get_or_create(tg_id=1001, username="alice", first_name="Alice")
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user.id)
+        result = handler.handle_archetype(
+            tg_id=1001, username="alice", first_name="Alice", last_name=None,
+            tournament_id=active_tournament.id, archetype_id=archetype_burn.id,
+        )
+        assert "Burn" in result.text
+        assert not result.is_alert
+        participant = svc.get_participant(active_tournament.id, user.id)
+        assert participant.archetype_id == archetype_burn.id
 
     def test_registration_closed_returns_alert(self, handler, svc, active_tournament, archetype_burn):
         svc.close_tournament(active_tournament.id)

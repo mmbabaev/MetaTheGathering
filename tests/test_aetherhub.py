@@ -206,6 +206,21 @@ class TestFindUserByName:
     def test_returns_none_for_empty(self, import_svc):
         assert import_svc.find_user_by_name("") is None
 
+    def test_finds_user_with_reversed_name_order(self, import_svc, db):
+        from services.user import UserService
+        UserService(db).get_or_create(tg_id=9001, username=None, first_name="Михаил", last_name="Бабаев")
+        result = import_svc.find_user_by_name("Бабаев Михаил")
+        assert result is not None
+        assert result.first_name == "Михаил"
+        assert result.last_name == "Бабаев"
+
+    def test_finds_user_with_canonical_name_order(self, import_svc, db):
+        from services.user import UserService
+        UserService(db).get_or_create(tg_id=9002, username=None, first_name="Иван", last_name="Петров")
+        result = import_svc.find_user_by_name("Иван Петров")
+        assert result is not None
+        assert result.first_name == "Иван"
+
 
 # ── TestSavePairings ─────────────────────────────────────────────────────────
 
@@ -321,3 +336,79 @@ class TestGetOpponent:
         data = _make_data(players=[], rounds_pairings=[[("Alice", None)]])
         import_svc.import_tournament(tournament.id, data)
         assert import_svc.get_opponent(tournament.id, "Alice", 1) is None
+
+
+# ── TestGetUnfilledOpponents ─────────────────────────────────────────────────
+
+class TestGetUnfilledOpponents:
+    """Tests for get_unfilled_opponents — covers all error keys and success path."""
+
+    def _setup(self, import_svc, svc, tournament, db, player_name: str, opponent_name: str):
+        """Import pairings and register both players; return (player_user, opponent_participant)."""
+        from services.user import UserService
+        data = _make_data(
+            players=[player_name, opponent_name],
+            rounds_pairings=[[(player_name, opponent_name), (opponent_name, player_name)]],
+        )
+        import_svc.import_tournament(tournament.id, data)
+        user_svc = UserService(db)
+        player = user_svc.find_by_name(player_name) or user_svc.get_or_create(
+            tg_id=5001, username=None, first_name=player_name
+        )
+        opponent = user_svc.find_by_name(opponent_name) or user_svc.get_or_create(
+            tg_id=5002, username=None, first_name=opponent_name
+        )
+        participants = svc.list_participants_for_tournament(tournament.id)
+        return player, opponent, participants
+
+    def test_no_pairings_returns_error_key(self, import_svc, svc, tournament):
+        participants = svc.list_participants_for_tournament(tournament.id)
+        result, err = import_svc.get_unfilled_opponents(tournament.id, 999, participants)
+        assert result == []
+        assert err == 'no_pairings'
+
+    def test_not_in_pairings_returns_error_key(self, import_svc, svc, tournament, user_alice, db):
+        data = _make_data(players=["Bob"], rounds_pairings=[[("Bob", None)]])
+        import_svc.import_tournament(tournament.id, data)
+        participants = svc.list_participants_for_tournament(tournament.id)
+        # user_alice is not in pairings
+        result, err = import_svc.get_unfilled_opponents(tournament.id, user_alice.id, participants)
+        assert result == []
+        assert err == 'not_in_pairings'
+
+    def test_all_filled_returns_error_key(self, import_svc, svc, tournament, db):
+        from services.user import UserService
+        from services.archetype import ArchetypeService
+        data = _make_data(
+            players=["PlayerA", "PlayerB"],
+            rounds_pairings=[[("PlayerA", "PlayerB"), ("PlayerB", "PlayerA")]],
+        )
+        import_svc.import_tournament(tournament.id, data)
+        user_svc = UserService(db)
+        arch_svc = ArchetypeService(db)
+        player_a = user_svc.find_by_name("PlayerA")
+        player_b = user_svc.find_by_name("PlayerB")
+        arch = arch_svc.get_or_create_by_name("Burn")
+        # Give opponent (PlayerB) an archetype
+        p_b = svc.get_participant(tournament.id, player_b.id)
+        svc.set_participant_archetype(participant_id=p_b.id, archetype_id=arch.id)
+        participants = svc.list_participants_for_tournament(tournament.id)
+        result, err = import_svc.get_unfilled_opponents(tournament.id, player_a.id, participants)
+        assert result == []
+        assert err == 'all_filled'
+
+    def test_returns_unfilled_opponents(self, import_svc, svc, tournament, db):
+        from services.user import UserService
+        data = _make_data(
+            players=["PlayerA", "PlayerB"],
+            rounds_pairings=[[("PlayerA", "PlayerB"), ("PlayerB", "PlayerA")]],
+        )
+        import_svc.import_tournament(tournament.id, data)
+        user_svc = UserService(db)
+        player_a = user_svc.find_by_name("PlayerA")
+        player_b = user_svc.find_by_name("PlayerB")
+        participants = svc.list_participants_for_tournament(tournament.id)
+        result, err = import_svc.get_unfilled_opponents(tournament.id, player_a.id, participants)
+        assert err is None
+        assert len(result) == 1
+        assert result[0].user_id == player_b.id

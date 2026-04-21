@@ -1,6 +1,7 @@
 from bot.keyboards import (
     tournament_list_keyboard,
     register_button,
+    tournament_card_keyboard,
     archetype_keyboard,
     admin_archetype_select_keyboard,
     CB_TOURNAMENT,
@@ -142,3 +143,36 @@ class TestAdminArchetypeSelectKeyboard:
         for row in markup.inline_keyboard:
             for btn in row:
                 assert len(btn.callback_data.encode()) <= 64
+
+
+class TestTournamentCardKeyboard:
+    def _all_texts(self, markup):
+        return [b.text for row in markup.inline_keyboard for b in row]
+
+    def test_registered_without_deck_shows_choose_deck_button(self):
+        markup = tournament_card_keyboard(1, is_registered=True, has_deck=False)
+        texts = self._all_texts(markup)
+        assert any("Выбрать колоду" in t for t in texts)
+
+    def test_registered_with_deck_no_choose_deck_button(self):
+        markup = tournament_card_keyboard(1, is_registered=True, has_deck=True)
+        texts = self._all_texts(markup)
+        assert not any("Выбрать колоду" in t for t in texts)
+
+    def test_unregistered_no_choose_deck_button(self):
+        markup = tournament_card_keyboard(1, is_registered=False, has_deck=False)
+        texts = self._all_texts(markup)
+        assert not any("Выбрать колоду" in t for t in texts)
+
+    def test_aetherhub_url_stored_shows_refresh_emoji(self):
+        markup = tournament_card_keyboard(
+            1, is_registered=False, is_admin=True,
+            aetherhub_url="https://aetherhub.com/Tourney/RoundTourney/1"
+        )
+        texts = self._all_texts(markup)
+        assert any("🔄" in t and "AetherHub" in t for t in texts)
+
+    def test_no_aetherhub_url_shows_import_emoji(self):
+        markup = tournament_card_keyboard(1, is_registered=False, is_admin=True)
+        texts = self._all_texts(markup)
+        assert any("📥" in t and "AetherHub" in t for t in texts)
