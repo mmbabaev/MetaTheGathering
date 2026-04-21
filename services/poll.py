@@ -57,6 +57,18 @@ class PollService:
         self.db.refresh(poll)
         return poll
 
+    def remove_vote(self, poll_id: int, tg_user_id: int) -> None:
+        """Удаляет голос пользователя (когда он убрал выбор в опросе)."""
+        existing = self.db.execute(
+            select(models.PollVote).where(
+                models.PollVote.poll_id == poll_id,
+                models.PollVote.tg_user_id == tg_user_id,
+            )
+        ).scalar_one_or_none()
+        if existing:
+            self.db.delete(existing)
+            self.db.commit()
+
     def upsert_vote(self, poll_id: int, tg_user_id: int, choice: int) -> None:
         existing = self.db.execute(
             select(models.PollVote).where(

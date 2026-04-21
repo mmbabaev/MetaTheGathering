@@ -94,6 +94,21 @@ class TestUpsertVote:
         ).scalar_one()
         assert vote.choice == 0
 
+    def test_remove_vote_deletes_record(self, poll_svc, tournament):
+        poll = poll_svc.create_poll(tournament.id, 100, "p1", 1)
+        poll_svc.upsert_vote(poll.id, 555, choice=0)
+        poll_svc.remove_vote(poll.id, 555)
+        from sqlalchemy import select
+        from core.models import PollVote
+        count = len(poll_svc.db.execute(
+            select(PollVote).where(PollVote.poll_id == poll.id, PollVote.tg_user_id == 555)
+        ).scalars().all())
+        assert count == 0
+
+    def test_remove_vote_nonexistent_is_noop(self, poll_svc, tournament):
+        poll = poll_svc.create_poll(tournament.id, 100, "p1", 1)
+        poll_svc.remove_vote(poll.id, 9999)  # should not raise
+
     def test_updates_existing_vote(self, poll_svc, tournament):
         poll = poll_svc.create_poll(tournament.id, 100, "p1", 1)
         poll_svc.upsert_vote(poll.id, 555, choice=0)

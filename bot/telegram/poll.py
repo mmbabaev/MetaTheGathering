@@ -115,16 +115,17 @@ async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
 
     option_ids = poll_answer.option_ids
-    if not option_ids:
-        return
-    choice = option_ids[0]  # 0 = пойду, 1 = не пойду
 
     db = SessionLocal()
     try:
-        poll = PollService(db).get_poll_by_tg_id(poll_answer.poll_id)
+        poll_svc = PollService(db)
+        poll = poll_svc.get_poll_by_tg_id(poll_answer.poll_id)
         if poll is None:
             return
-        PollService(db).upsert_vote(poll.id, tg_user_id, choice)
+        if not option_ids:
+            poll_svc.remove_vote(poll.id, tg_user_id)
+        else:
+            poll_svc.upsert_vote(poll.id, tg_user_id, option_ids[0])
     finally:
         db.close()
 
