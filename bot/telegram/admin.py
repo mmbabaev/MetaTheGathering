@@ -11,9 +11,9 @@ from services.tournament import TournamentService
 from services.archetype import ArchetypeService
 from services.user import UserService
 from bot.handlers.admin import AdminHandler, parse_add_player_command, parse_bulk_player_line
-from bot.telegram.player import USER_DATA_PENDING_BULK_ADD, USER_DATA_PENDING_ADMIN_CUSTOM_ARCH
+from bot.telegram.player import USER_DATA_PENDING_BULK_ADD, USER_DATA_PENDING_ADMIN_CUSTOM_ARCH, USER_DATA_OPPONENTS_MODE
 from bot.messages import TELEGRAM_USER_LOOKUP_FAILED, ADD_PLAYERS_USAGE, BULK_ADD_PROMPT
-from bot.keyboards import CB_ADMIN_ARCH_MORE, CB_ADMIN_SHOW_FILLED, CB_REVEAL_DECKS
+from bot.keyboards import CB_ADMIN_ARCH_MORE, CB_ADMIN_SHOW_FILLED, CB_REVEAL_DECKS, admin_more_keyboard, CB_CLOSE_TOURNAMENT
 from bot.telegram.common import log_event as _log, parse_callback_ints
 
 
@@ -76,8 +76,28 @@ async def callback_admin_set_arch(update: Update, context: ContextTypes.DEFAULT_
             await query.answer(result.text, show_alert=True)
             return
         _log("admin_set_arch", user, participant_id=participant_id, archetype_id=archetype_id)
-        await query.edit_message_text(result.text, reply_markup=result.keyboard)
-        await query.answer()
+
+        opponents_tournament_id = (context.user_data or {}).get(USER_DATA_OPPONENTS_MODE)
+        if opponents_tournament_id is not None:
+            await query.edit_message_text(result.text)
+            await query.answer()
+            opponents_result = _admin_handler(db).handle_admin_opponents(user.id, opponents_tournament_id)
+            if opponents_result.is_alert:
+                context.user_data.pop(USER_DATA_OPPONENTS_MODE, None)
+                from services.aetherhub_import import AetherhubImportService
+                from services.tournament import TournamentService
+                from services.archetype import ArchetypeService
+                from bot.handlers.player import PlayerHandler
+                has_pairings = bool(AetherhubImportService(db).get_pairings(opponents_tournament_id))
+                card = PlayerHandler(
+                    TournamentService(db), UserService(db), ArchetypeService(db)
+                ).handle_tournament_select(opponents_tournament_id, tg_id=user.id, has_pairings=has_pairings)
+                await query.message.reply_text(card.text, reply_markup=card.keyboard)
+            else:
+                await query.message.reply_text(opponents_result.text, reply_markup=opponents_result.keyboard)
+        else:
+            await query.edit_message_text(result.text, reply_markup=result.keyboard)
+            await query.answer()
     finally:
         db.close()
 
@@ -243,6 +263,20 @@ async def cmd_add_players(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         db.close()
 
 
+async def cmd_archive(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/archive — последние закрытые турниры."""
+    user = update.effective_user
+    msg = update.effective_message
+    if not user or not msg:
+        return
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_archive(user.id)
+        await msg.reply_text(result.text, reply_markup=result.keyboard)
+    finally:
+        db.close()
+
+
 async def cmd_tournament_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """/tournament_status — все активные турниры и их участники."""
     user = update.effective_user
@@ -287,9 +321,18 @@ async def cmd_create_tournament(update: Update, context: ContextTypes.DEFAULT_TY
     db = SessionLocal()
     try:
         result = _admin_handler(db).handle_create_tournament(user.id, chat_id, title)
-        if not result.is_alert:
-            _log("create_tournament", user, chat_id=chat_id, title=title)
+        if result.is_alert:
+            await msg.reply_text(result.text)
+            return
+        _log("create_tournament", user, chat_id=chat_id, title=title)
         await msg.reply_text(result.text)
+        from services.tournament import TournamentService
+        from services.archetype import ArchetypeService
+        from bot.handlers.player import PlayerHandler
+        card = PlayerHandler(
+            TournamentService(db), UserService(db), ArchetypeService(db)
+        ).handle_tournament_select(result.tournament_id, tg_id=user.id)
+        await msg.reply_text(card.text, reply_markup=card.keyboard)
     finally:
         db.close()
 
@@ -412,6 +455,86 @@ async def callback_delete_tournament_cancel(
         await query.answer()
     finally:
         db.close()
+
+
+async def callback_admin_opponents(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка «👥 Записать оппонентов» — показывает незаполненных оппонентов."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_admin_opponents(user.id, tournament_id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        if context.user_data is None:
+            context.user_data = {}
+        context.user_data[USER_DATA_OPPONENTS_MODE] = tournament_id
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+        await query.answer()
+    finally:
+        db.close()
+
+
+async def callback_close_tournament(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка «🔒 Закрыть турнир» в меню «• • •»."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_close_tournament_by_id(
+            user.id, tournament_id, allow_empty=settings.DEBUG
+        )
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        _log("close_tournament", user, tournament_id=tournament_id)
+        await query.edit_message_text(result.text)
+        await query.answer()
+    finally:
+        db.close()
+
+
+async def callback_admin_more(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка «• • •» — показывает скрытые admin-действия."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+    from services.tournament import TournamentService
+    from services.utils import get_tournament
+    from services import errors as svc_errors
+    from core.models import TournamentStatus
+    db = SessionLocal()
+    try:
+        if not UserService(db).is_admin(user.id):
+            await query.answer("Нет прав.", show_alert=True)
+            return
+        try:
+            t = get_tournament(TournamentService(db).db, tournament_id)
+            is_closed = t.status == TournamentStatus.CLOSED
+        except svc_errors.TournamentNotFound:
+            is_closed = False
+    finally:
+        db.close()
+    await query.edit_message_text("Действия с турниром:", reply_markup=admin_more_keyboard(tournament_id, is_closed=is_closed))
+    await query.answer()
 
 
 async def callback_reveal_decks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

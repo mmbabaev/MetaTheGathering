@@ -78,6 +78,7 @@ class Tournament(Base):
     ended_at = Column(DateTime, nullable=True)
 
     decks_hidden = Column(Boolean, nullable=False, default=True, server_default="true")
+    aetherhub_url = Column(String(512), nullable=True)
 
     created_at = Column(DateTime, default=utc_now, nullable=False)
 
@@ -133,6 +134,9 @@ class Participant(Base):
 
     # был добавлен самим игроком или админом
     added_by_admin = Column(Boolean, default=False, nullable=False)
+
+    # tg_id того, кто записал колоду (сам игрок, админ или оппонент)
+    deck_added_by_tg_id = Column(BigInteger, nullable=True)
 
     # подтверждена ли колода (по голосованию или руками админа)
     confirmed = Column(Boolean, default=False, nullable=False)
@@ -240,4 +244,20 @@ class PollVote(Base):
 
     __table_args__ = (
         UniqueConstraint("poll_id", "tg_user_id", name="uq_poll_vote_unique"),
+    )
+
+
+class RoundPairing(Base):
+    """Паринг одного игрока в конкретном раунде турнира (импорт из AetherHub)."""
+
+    __tablename__ = "round_pairings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tournament_id = Column(Integer, ForeignKey("tournaments.id", ondelete="CASCADE"), nullable=False)
+    round_number = Column(Integer, nullable=False)
+    player_name = Column(String(255), nullable=False)
+    opponent_name = Column(String(255), nullable=True)  # NULL = bye
+
+    __table_args__ = (
+        UniqueConstraint("tournament_id", "round_number", "player_name", name="uq_round_pairing"),
     )

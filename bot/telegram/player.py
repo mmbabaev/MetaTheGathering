@@ -19,6 +19,7 @@ USER_DATA_PENDING_NAME = "pending_name_for_tournament_id"
 USER_DATA_PENDING_SETTINGS_NAME = "pending_settings_name"
 USER_DATA_PENDING_BULK_ADD = "pending_bulk_add_tournament_id"
 USER_DATA_PENDING_ADMIN_CUSTOM_ARCH = "pending_admin_custom_arch_participant_id"
+USER_DATA_OPPONENTS_MODE = "opponents_tournament_id"
 
 
 def _player_handler(db) -> PlayerHandler:
@@ -54,7 +55,11 @@ async def callback_tournament_select(update: Update, context: ContextTypes.DEFAU
     _log("view_tournament", user, tournament_id=tournament_id)
     db = SessionLocal()
     try:
-        result = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id if user else None)
+        from services.aetherhub_import import AetherhubImportService
+        has_pairings = bool(AetherhubImportService(db).get_pairings(tournament_id))
+        result = _player_handler(db).handle_tournament_select(
+            tournament_id, tg_id=user.id if user else None, has_pairings=has_pairings
+        )
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
@@ -106,6 +111,12 @@ async def callback_archetype(update: Update, context: ContextTypes.DEFAULT_TYPE)
         _log("register", user, tournament_id=tournament_id, archetype_id=archetype_id)
         await query.edit_message_text(result.text)
         await query.answer()
+        from services.aetherhub_import import AetherhubImportService
+        has_pairings = bool(AetherhubImportService(db).get_pairings(tournament_id))
+        card = _player_handler(db).handle_tournament_select(
+            tournament_id, tg_id=user.id, has_pairings=has_pairings
+        )
+        await query.message.reply_text(card.text, reply_markup=card.keyboard)
     finally:
         db.close()
 
@@ -315,12 +326,20 @@ async def _handle_pending_custom_arch(msg, user, text, context) -> bool:
             tournament_id, text,
         )
         await msg.reply_text(result.text)
+        if not result.is_alert:
+            from services.aetherhub_import import AetherhubImportService
+            has_pairings = bool(AetherhubImportService(db).get_pairings(tournament_id))
+            card = _player_handler(db).handle_tournament_select(
+                tournament_id, tg_id=user.id, has_pairings=has_pairings
+            )
+            await msg.reply_text(card.text, reply_markup=card.keyboard)
     finally:
         db.close()
     return True
 
 
 from bot.telegram.poll import handle_pending_link_poll as _handle_pending_link_poll
+from bot.telegram.aetherhub import handle_pending_aetherhub_url as _handle_pending_aetherhub_url
 
 _TEXT_INPUT_HANDLERS = [
     _handle_pending_name,
@@ -329,6 +348,7 @@ _TEXT_INPUT_HANDLERS = [
     _handle_pending_bulk_add,
     _handle_pending_custom_arch,
     _handle_pending_link_poll,
+    _handle_pending_aetherhub_url,
 ]
 
 

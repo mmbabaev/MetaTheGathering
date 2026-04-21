@@ -4,7 +4,7 @@ import logging
 from datetime import timedelta
 from typing import List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -168,6 +168,25 @@ class TournamentService:
         rows = self.db.execute(stmt).scalars().all()
         return [TournamentRead.model_validate(t) for t in rows]
 
+    def list_closed_tournaments(self, limit: int = 20) -> List[TournamentRead]:
+        """Закрытые турниры, по убыванию created_at."""
+        stmt = (
+            select(models.Tournament)
+            .where(models.Tournament.status == models.TournamentStatus.CLOSED)
+            .order_by(models.Tournament.created_at.desc())
+            .limit(limit)
+        )
+        rows = self.db.execute(stmt).scalars().all()
+        return [TournamentRead.model_validate(t) for t in rows]
+
+    def set_aetherhub_url(self, tournament_id: int, url: str) -> None:
+        self.db.execute(
+            update(models.Tournament)
+            .where(models.Tournament.id == tournament_id)
+            .values(aetherhub_url=url)
+        )
+        self.db.commit()
+
     def set_decks_hidden(self, tournament_id: int, hidden: bool) -> TournamentRead:
         tournament = get_tournament(self.db, tournament_id)
         tournament.decks_hidden = hidden
@@ -244,6 +263,7 @@ class TournamentService:
         user_id: int,
         archetype_id: Optional[int] = None,
         added_by_admin: bool = False,
+        deck_added_by_tg_id: Optional[int] = None,
     ) -> ParticipantRead:
         tournament = get_tournament(self.db, tournament_id)
         ensure_tournament_status(tournament, allowed=[models.TournamentStatus.REGISTRATION])
@@ -263,6 +283,7 @@ class TournamentService:
             user_id=user_id,
             archetype_id=archetype_id,
             added_by_admin=added_by_admin,
+            deck_added_by_tg_id=deck_added_by_tg_id if archetype_id else None,
             created_at=models.utc_now(),
             updated_at=models.utc_now(),
         )
@@ -277,12 +298,15 @@ class TournamentService:
         participant_id: int,
         archetype_id: Optional[int],
         reset_votes: bool = True,
+        deck_added_by_tg_id: Optional[int] = None,
     ) -> ParticipantRead:
         participant = self._get_participant(participant_id)
 
         participant.archetype_id = archetype_id
         participant.confirmed = False
         participant.updated_at = models.utc_now()
+        if deck_added_by_tg_id is not None:
+            participant.deck_added_by_tg_id = deck_added_by_tg_id
 
         if reset_votes:
             self.db.query(models.Vote).filter(

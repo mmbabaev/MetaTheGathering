@@ -387,6 +387,45 @@ class AdminHandler:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
         return HandlerResult(ADMIN_ARCH_SAVED.format(archetype_name=arch.name))
 
+    def handle_admin_opponents(self, tg_id: int, tournament_id: int) -> HandlerResult:
+        """Показывает незаполненных оппонентов пользователя из AetherHub-пейрингов."""
+        if not self.user_svc.is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN, is_alert=True)
+
+        user = self.user_svc.get_by_tg_id(tg_id)
+        if not user:
+            return HandlerResult("Профиль не найден.", is_alert=True)
+
+        from services.aetherhub_import import AetherhubImportService
+        participants = self.svc.list_participants_for_tournament(tournament_id)
+        opponent_participants, err = AetherhubImportService(self.svc.db).get_unfilled_opponents(
+            tournament_id, user.id, participants
+        )
+
+        _errors = {
+            'no_pairings': "Пейринги AetherHub не импортированы для этого турнира.",
+            'not_in_pairings': "Ваше имя не найдено в пейрингах AetherHub.",
+            'all_filled': "Все оппоненты уже заполнены.",
+        }
+        if err:
+            return HandlerResult(_errors.get(err, err), is_alert=True)
+
+        return HandlerResult(
+            "Выберите оппонента для записи колоды:",
+            keyboard=admin_participants_keyboard(opponent_participants),
+        )
+
+    def handle_archive(self, tg_id: int) -> HandlerResult:
+        """Последние 20 закрытых турниров — список кнопок как в /tournaments."""
+        if not self.user_svc.is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN)
+        from bot.keyboards import tournament_list_keyboard
+        tournaments = self.svc.list_closed_tournaments()
+        if not tournaments:
+            return HandlerResult("Архив пуст — закрытых турниров нет.")
+        tour_list = [(t.id, t.title) for t in tournaments]
+        return HandlerResult("📁 Архив турниров:", keyboard=tournament_list_keyboard(tour_list))
+
     def handle_tournament_status(self, tg_id: int) -> HandlerResult:
         if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
@@ -408,6 +447,21 @@ class AdminHandler:
         self.svc.close_tournament(active.id)
         return HandlerResult(TOURNAMENT_CLOSED_MSG)
 
+    def handle_close_tournament_by_id(
+        self, tg_id: int, tournament_id: int, allow_empty: bool = False
+    ) -> HandlerResult:
+        if not self.user_svc.is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN, is_alert=True)
+        if not allow_empty:
+            participants = self.svc.list_participants_for_tournament(tournament_id)
+            if not participants:
+                return HandlerResult("⚠️ Нельзя закрыть пустой турнир — сначала добавьте участников.", is_alert=True)
+        try:
+            self.svc.close_tournament(tournament_id)
+        except errors.TournamentNotFound:
+            return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
+        return HandlerResult(TOURNAMENT_CLOSED_MSG)
+
     def handle_create_tournament(
         self, tg_id: int, chat_id: int, title: str | None = None
     ) -> HandlerResult:
@@ -420,7 +474,7 @@ class AdminHandler:
             t = self.svc.create_tournament(TournamentCreate(title=title, chat_id=chat_id))
         except errors.TournamentAlreadyExists:
             return HandlerResult(TOURNAMENT_ALREADY_EXISTS_MSG, is_alert=True)
-        return HandlerResult(f"✅ Турнир создан: «{t.title}» (id={t.id})")
+        return HandlerResult(f"✅ Турнир создан: «{t.title}»", tournament_id=t.id)
 
     def handle_delete_tournament(self, tg_id: int) -> HandlerResult:
         """Удалить активный турнир вместе с участниками (для дебага, через /delete_tournament)."""

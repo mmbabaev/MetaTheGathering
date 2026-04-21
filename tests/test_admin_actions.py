@@ -941,3 +941,127 @@ class TestStatusReturnedAfterSetArch:
         )
         assert participant_btn is not None
         assert participant_btn.text.startswith("✏️")
+
+
+# ── handle_close_tournament_by_id ────────────────────────────────────────────
+
+class TestCloseTournamentById:
+    def test_non_admin_returns_alert(self, handler, active_tournament):
+        result = handler.handle_close_tournament_by_id(tg_id=1, tournament_id=active_tournament.id)
+        assert result.is_alert
+        assert NOT_ADMIN in result.text
+
+    def test_empty_tournament_blocked_by_default(self, handler, admin_user, active_tournament):
+        result = handler.handle_close_tournament_by_id(
+            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id
+        )
+        assert result.is_alert
+        assert "пустой" in result.text
+
+    def test_allow_empty_bypasses_check(self, handler, admin_user, active_tournament):
+        result = handler.handle_close_tournament_by_id(
+            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, allow_empty=True
+        )
+        assert not result.is_alert
+        assert TOURNAMENT_CLOSED_MSG in result.text
+
+    def test_closes_tournament_with_participants(self, handler, svc, user_svc, admin_user, active_tournament):
+        user = user_svc.get_or_create(tg_id=5500, username=None, first_name="Боец")
+        svc.bulk_add_participants(active_tournament.id, [(user.id, "Боец")])
+        result = handler.handle_close_tournament_by_id(
+            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id
+        )
+        assert not result.is_alert
+        assert TOURNAMENT_CLOSED_MSG in result.text
+
+    def test_not_found_returns_alert(self, handler, admin_user):
+        result = handler.handle_close_tournament_by_id(tg_id=ADMIN_TG_ID, tournament_id=99999)
+        assert result.is_alert
+
+
+# ── handle_archive ────────────────────────────────────────────────────────────
+
+class TestHandleArchive:
+    def test_non_admin_blocked(self, handler):
+        result = handler.handle_archive(tg_id=1)
+        assert NOT_ADMIN in result.text
+
+    def test_empty_archive(self, handler, admin_user):
+        result = handler.handle_archive(tg_id=ADMIN_TG_ID)
+        assert "пуст" in result.text
+
+    def test_shows_closed_tournaments_as_buttons(self, handler, svc, admin_user):
+        t = svc.create_tournament(TournamentCreate(title="Old Pauper", chat_id=CHAT_ID))
+        svc.close_tournament(t.id)
+        result = handler.handle_archive(tg_id=ADMIN_TG_ID)
+        assert result.keyboard is not None
+        cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
+        assert any(str(t.id) in cb for cb in cbs)
+
+    def test_active_tournament_not_in_archive(self, handler, svc, admin_user, active_tournament):
+        result = handler.handle_archive(tg_id=ADMIN_TG_ID)
+        if result.keyboard:
+            cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
+            assert not any(str(active_tournament.id) in cb for cb in cbs)
+
+
+# ── handle_admin_opponents ───────────────────────────────────────────────────
+
+class TestHandleAdminOpponents:
+    @pytest.fixture
+    def admin_user_obj(self, user_svc):
+        return user_svc.get_or_create(tg_id=ADMIN_TG_ID, username="admin", first_name="Admin", last_name="User")
+
+    @pytest.fixture
+    def opponent_user(self, user_svc):
+        return user_svc.get_or_create(tg_id=8800, username=None, first_name="Bob", last_name="Smith")
+
+    def test_non_admin_blocked(self, handler):
+        result = handler.handle_admin_opponents(tg_id=1, tournament_id=1)
+        assert result.is_alert
+
+    def test_no_pairings_returns_alert(self, handler, admin_user, active_tournament):
+        result = handler.handle_admin_opponents(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+        assert result.is_alert
+
+    def test_returns_unfilled_opponents(self, db, handler, svc, user_svc, admin_user, active_tournament):
+        from services.aetherhub_import import AetherhubImportService
+        from services.aetherhub import AetherhubRound, AetherhubPairing, AetherhubTournamentData
+        # admin_user fixture creates first_name="Admin" (no last_name) — match by single word
+        opp = user_svc.get_or_create(tg_id=8800, username=None, first_name="Bob", last_name="Smith")
+        import_svc = AetherhubImportService(db)
+        data = AetherhubTournamentData(
+            url="http://x",
+            players=["Admin", "Bob Smith"],
+            rounds=[AetherhubRound(number=1, pairings=[
+                AetherhubPairing(player="Admin", opponent="Bob Smith"),
+                AetherhubPairing(player="Bob Smith", opponent="Admin"),
+            ])],
+        )
+        import_svc.import_tournament(active_tournament.id, data)
+        result = handler.handle_admin_opponents(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+        assert not result.is_alert
+        from bot.keyboards import CB_ADMIN_PICK_ARCH
+        cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
+        assert any(cb.startswith(CB_ADMIN_PICK_ARCH) for cb in cbs)
+
+    def test_all_filled_returns_alert(self, db, handler, svc, user_svc, arch_svc, admin_user, active_tournament):
+        from services.aetherhub_import import AetherhubImportService
+        from services.aetherhub import AetherhubRound, AetherhubPairing, AetherhubTournamentData
+        opp = user_svc.get_or_create(tg_id=8800, username=None, first_name="Bob", last_name="Smith")
+        import_svc = AetherhubImportService(db)
+        data = AetherhubTournamentData(
+            url="http://x",
+            players=["Admin", "Bob Smith"],
+            rounds=[AetherhubRound(number=1, pairings=[
+                AetherhubPairing(player="Admin", opponent="Bob Smith"),
+                AetherhubPairing(player="Bob Smith", opponent="Admin"),
+            ])],
+        )
+        import_svc.import_tournament(active_tournament.id, data)
+        burn = arch_svc.get_or_create_by_name("Burn")
+        p = svc.get_participant(active_tournament.id, opp.id)
+        svc.set_participant_archetype(participant_id=p.id, archetype_id=burn.id)
+        result = handler.handle_admin_opponents(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+        assert result.is_alert
+        assert "заполнены" in result.text

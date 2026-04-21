@@ -1,6 +1,7 @@
 from bot.keyboards import (
     tournament_list_keyboard,
     register_button,
+    tournament_card_keyboard,
     archetype_keyboard,
     admin_archetype_select_keyboard,
     CB_TOURNAMENT,
@@ -49,17 +50,22 @@ class TestArchetypeKeyboard:
     def test_one_button_per_archetype_plus_custom(self):
         archetypes = [(1, "Burn"), (2, "Affinity")]
         markup = archetype_keyboard(10, archetypes)
-        assert len(markup.inline_keyboard) == 3  # 2 архетипа + «Свой вариант»
+        assert len(markup.inline_keyboard) == 4  # 2 архетипа + «Свой вариант» + «Назад»
 
     def test_archetype_callback_data_format(self):
         markup = archetype_keyboard(10, [(5, "Burn")])
         cb = markup.inline_keyboard[0][0].callback_data
         assert cb == f"{CB_ARCHETYPE}:10:5"
 
-    def test_custom_archetype_button_last(self):
+    def test_custom_archetype_button_second_to_last(self):
         markup = archetype_keyboard(10, [(1, "Burn"), (2, "Affinity")])
+        second_last_cb = markup.inline_keyboard[-2][0].callback_data
+        assert second_last_cb == f"{CB_CUSTOM_ARCHETYPE}:10"
+
+    def test_back_button_last(self):
+        markup = archetype_keyboard(10, [(1, "Burn")])
         last_cb = markup.inline_keyboard[-1][0].callback_data
-        assert last_cb == f"{CB_CUSTOM_ARCHETYPE}:10"
+        assert last_cb == f"{CB_TOURNAMENT}:10"
 
     def test_callback_data_under_64_bytes(self):
         # Telegram ограничение на callback_data — 64 байта
@@ -137,3 +143,36 @@ class TestAdminArchetypeSelectKeyboard:
         for row in markup.inline_keyboard:
             for btn in row:
                 assert len(btn.callback_data.encode()) <= 64
+
+
+class TestTournamentCardKeyboard:
+    def _all_texts(self, markup):
+        return [b.text for row in markup.inline_keyboard for b in row]
+
+    def test_registered_without_deck_shows_choose_deck_button(self):
+        markup = tournament_card_keyboard(1, is_registered=True, has_deck=False)
+        texts = self._all_texts(markup)
+        assert any("Выбрать колоду" in t for t in texts)
+
+    def test_registered_with_deck_no_choose_deck_button(self):
+        markup = tournament_card_keyboard(1, is_registered=True, has_deck=True)
+        texts = self._all_texts(markup)
+        assert not any("Выбрать колоду" in t for t in texts)
+
+    def test_unregistered_no_choose_deck_button(self):
+        markup = tournament_card_keyboard(1, is_registered=False, has_deck=False)
+        texts = self._all_texts(markup)
+        assert not any("Выбрать колоду" in t for t in texts)
+
+    def test_aetherhub_url_stored_shows_refresh_emoji(self):
+        markup = tournament_card_keyboard(
+            1, is_registered=False, is_admin=True,
+            aetherhub_url="https://aetherhub.com/Tourney/RoundTourney/1"
+        )
+        texts = self._all_texts(markup)
+        assert any("🔄" in t and "AetherHub" in t for t in texts)
+
+    def test_no_aetherhub_url_shows_import_emoji(self):
+        markup = tournament_card_keyboard(1, is_registered=False, is_admin=True)
+        texts = self._all_texts(markup)
+        assert any("📥" in t and "AetherHub" in t for t in texts)

@@ -19,6 +19,7 @@ from core.schemas import TournamentCreate
 from services.tournament import TournamentService
 from bot.telegram import common, player, admin, poll as poll_handler
 from bot.telegram import settings as settings_handler
+from bot.telegram import aetherhub as aetherhub_handler
 from bot.keyboards import (
     CB_TOURNAMENT, CB_REGISTER, CB_ARCHETYPE, CB_CUSTOM_ARCHETYPE,
     CB_ARCHETYPE_MORE,
@@ -34,6 +35,12 @@ from bot.keyboards import (
     CB_NOTIFY_NO_DECK,
     CB_NOTIFY_CONFIRM,
     CB_NOTIFY_CANCEL,
+    CB_AETHERHUB_IMPORT,
+    CB_AETHERHUB_CONFIRM,
+    CB_AETHERHUB_CANCEL,
+    CB_ADMIN_MORE,
+    CB_CLOSE_TOURNAMENT,
+    CB_ADMIN_OPPONENTS,
 )
 from bot.scheduler import setup_scheduler
 
@@ -65,10 +72,10 @@ _USER_COMMANDS = [
 
 _ADMIN_COMMANDS = _USER_COMMANDS + [
     BotCommand("tournament_status", "Участники турниров"),
+    BotCommand("archive", "Архив закрытых турниров"),
     BotCommand("add_me", "Записать себя"),
     BotCommand("add_player", "Записать игрока"),
     BotCommand("add_players", "Массовая запись"),
-    BotCommand("close_tournament", "Закрыть турнир"),
     BotCommand("create_tournament", "Создать турнир"),
     BotCommand("delete_tournament", "Удалить турнир"),
 ]
@@ -138,7 +145,7 @@ def main() -> None:
     app.add_handler(CommandHandler("add_player", admin.cmd_add_player))
     app.add_handler(CommandHandler("add_players", admin.cmd_add_players))
     app.add_handler(CommandHandler("tournament_status", admin.cmd_tournament_status))
-    app.add_handler(CommandHandler("close_tournament", admin.cmd_close_tournament))
+    app.add_handler(CommandHandler("archive", admin.cmd_archive))
     app.add_handler(CommandHandler("create_tournament", admin.cmd_create_tournament))
     app.add_handler(CommandHandler("delete_tournament", admin.cmd_delete_tournament))
 
@@ -222,6 +229,24 @@ def main() -> None:
     )
     app.add_handler(
         CallbackQueryHandler(poll_handler.callback_notify_cancel, pattern=f"^{CB_NOTIFY_CANCEL}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(aetherhub_handler.callback_aetherhub_import_prompt, pattern=f"^{CB_AETHERHUB_IMPORT}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(aetherhub_handler.callback_aetherhub_confirm, pattern=f"^{CB_AETHERHUB_CONFIRM}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(aetherhub_handler.callback_aetherhub_cancel, pattern=f"^{CB_AETHERHUB_CANCEL}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(admin.callback_admin_more, pattern=f"^{CB_ADMIN_MORE}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(admin.callback_close_tournament, pattern=f"^{CB_CLOSE_TOURNAMENT}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(admin.callback_admin_opponents, pattern=f"^{CB_ADMIN_OPPONENTS}:")
     )
     app.add_handler(PollAnswerHandler(poll_handler.handle_poll_answer))
 

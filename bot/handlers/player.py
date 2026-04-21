@@ -82,13 +82,17 @@ class PlayerHandler:
         self.user_svc = user_svc
         self.arch_svc = arch_svc
 
-    def _tournament_card(self, t, tg_id: int | None) -> HandlerResult:
+    def _tournament_card(self, t, tg_id: int | None, has_pairings: bool = False) -> HandlerResult:
         is_registered = False
         is_admin = False
+        has_deck = True
         if tg_id is not None:
             user = self.user_svc.get_by_tg_id(tg_id)
             if user:
-                is_registered = self.svc.get_participant(t.id, user.id) is not None
+                participant = self.svc.get_participant(t.id, user.id)
+                is_registered = participant is not None
+                if participant is not None:
+                    has_deck = participant.archetype_id is not None
             is_admin = self.user_svc.is_admin(tg_id)
         participants = self.svc.list_participants_for_tournament(t.id)
         with_deck = sum(1 for p in participants if p.archetype)
@@ -99,7 +103,9 @@ class PlayerHandler:
         return HandlerResult(
             text,
             keyboard=tournament_card_keyboard(
-                t.id, is_registered, is_admin=is_admin, decks_hidden=t.decks_hidden
+                t.id, is_registered, is_admin=is_admin, decks_hidden=t.decks_hidden,
+                has_pairings=has_pairings, has_deck=has_deck,
+                aetherhub_url=getattr(t, 'aetherhub_url', None),
             ),
         )
 
@@ -120,13 +126,13 @@ class PlayerHandler:
         return HandlerResult("Выберите турнир:", keyboard=tournament_list_keyboard(tour_list))
 
     def handle_tournament_select(
-        self, tournament_id: int, tg_id: int | None = None
+        self, tournament_id: int, tg_id: int | None = None, has_pairings: bool = False
     ) -> HandlerResult:
         try:
             t = get_tournament(self.svc.db, tournament_id)
         except errors.TournamentNotFound:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
-        return self._tournament_card(t, tg_id)
+        return self._tournament_card(t, tg_id, has_pairings=has_pairings)
 
     def handle_register(
         self, tournament_id: int, tg_id: int | None = None
@@ -174,16 +180,23 @@ class PlayerHandler:
                 first_name=first_name,
                 last_name=last_name,
             )
-            self.svc.register_participant(
-                tournament_id=tournament_id,
-                user_id=db_user.id,
-                archetype_id=archetype_id,
-            )
+            try:
+                self.svc.register_participant(
+                    tournament_id=tournament_id,
+                    user_id=db_user.id,
+                    archetype_id=archetype_id,
+                )
+            except errors.ParticipantAlreadyRegistered:
+                participant = self.svc.get_participant(tournament_id, db_user.id)
+                if participant is None or participant.archetype_id is not None:
+                    return HandlerResult(ALREADY_REGISTERED, is_alert=True)
+                self.svc.set_participant_archetype(
+                    participant_id=participant.id,
+                    archetype_id=archetype_id,
+                )
             archetypes = {a.id: a.name for a in self.arch_svc.list_archetypes()}
             name = archetypes.get(archetype_id, "?")
             return HandlerResult(REGISTERED_AS.format(archetype_name=name))
-        except errors.ParticipantAlreadyRegistered:
-            return HandlerResult(ALREADY_REGISTERED, is_alert=True)
         except errors.TournamentInvalidState:
             return HandlerResult(REGISTRATION_CLOSED, is_alert=True)
 
@@ -204,14 +217,21 @@ class PlayerHandler:
                 first_name=first_name,
                 last_name=last_name,
             )
-            self.svc.register_participant(
-                tournament_id=tournament_id,
-                user_id=db_user.id,
-                archetype_id=archetype.id,
-            )
+            try:
+                self.svc.register_participant(
+                    tournament_id=tournament_id,
+                    user_id=db_user.id,
+                    archetype_id=archetype.id,
+                )
+            except errors.ParticipantAlreadyRegistered:
+                participant = self.svc.get_participant(tournament_id, db_user.id)
+                if participant is None or participant.archetype_id is not None:
+                    return HandlerResult(ALREADY_REGISTERED)
+                self.svc.set_participant_archetype(
+                    participant_id=participant.id,
+                    archetype_id=archetype.id,
+                )
             return HandlerResult(REGISTERED)
-        except errors.ParticipantAlreadyRegistered:
-            return HandlerResult(ALREADY_REGISTERED)
         except errors.TournamentInvalidState:
             return HandlerResult(REGISTRATION_CLOSED)
 
