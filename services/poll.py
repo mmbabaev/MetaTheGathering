@@ -43,12 +43,14 @@ class PollService:
         chat_id: int,
         tg_poll_id: str,
         message_id: int,
+        chat_username: str | None = None,
     ) -> models.TournamentPoll:
         poll = models.TournamentPoll(
             tournament_id=tournament_id,
             chat_id=chat_id,
             tg_poll_id=tg_poll_id,
             message_id=message_id,
+            chat_username=chat_username,
         )
         self.db.add(poll)
         self.db.commit()

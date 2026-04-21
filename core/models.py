@@ -219,6 +219,7 @@ class TournamentPoll(Base):
     chat_id = Column(BigInteger, nullable=False)
     tg_poll_id = Column(String, nullable=False, unique=True)
     message_id = Column(BigInteger, nullable=False)
+    chat_username = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=utc_now, nullable=False)
 
     tournament = relationship("Tournament", back_populates="poll")

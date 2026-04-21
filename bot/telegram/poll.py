@@ -23,8 +23,14 @@ _POLL_OPTIONS = ["Пойду", "Не пойду"]
 _DM_NO_DECK = "Привет! Ты записался на турнир, но ещё не выбрал колоду. Зайди в /tournaments и заполни её."
 
 
-def _poll_message_link(chat_id: int, message_id: int) -> str | None:
-    """Ссылка на сообщение. Работает только для супергрупп (chat_id вида -100XXXXXXXXX)."""
+def _poll_message_link(chat_id: int, message_id: int, chat_username: str | None = None) -> str | None:
+    """Ссылка на сообщение в группе.
+    Публичная группа (есть username): t.me/{username}/{message_id}
+    Супергруппа без username (-100XXXXX): t.me/c/{id}/{message_id}
+    Обычная группа: None
+    """
+    if chat_username:
+        return f"https://t.me/{chat_username}/{message_id}"
     bare_id = str(abs(chat_id))
     if not bare_id.startswith("100") or len(bare_id) < 12:
         return None
@@ -75,14 +81,21 @@ async def callback_create_poll(update: Update, context: ContextTypes.DEFAULT_TYP
             await query.answer(f"❌ Не удалось создать опрос в чате {chat_id}: {e}", show_alert=True)
             return
 
+        try:
+            chat_info = await context.bot.get_chat(chat_id)
+            chat_username = chat_info.username
+        except Exception:
+            chat_username = None
+
         PollService(db).create_poll(
             tournament_id=tournament_id,
             chat_id=chat_id,
             tg_poll_id=msg.poll.id,
             message_id=msg.message_id,
+            chat_username=chat_username,
         )
         _log("create_poll", user, tournament_id=tournament_id)
-        poll_link = _poll_message_link(chat_id, msg.message_id)
+        poll_link = _poll_message_link(chat_id, msg.message_id, chat_username)
         await query.answer()
         await query.message.reply_text(
             f"✅ Опрос создан!\n{poll_link}" if poll_link else "✅ Опрос создан!"
@@ -135,7 +148,7 @@ def _build_notify_preview(
     )
 
     poll_link = (
-        _poll_message_link(latest_poll.chat_id, latest_poll.message_id)
+        _poll_message_link(latest_poll.chat_id, latest_poll.message_id, latest_poll.chat_username)
         if latest_poll else None
     )
 
