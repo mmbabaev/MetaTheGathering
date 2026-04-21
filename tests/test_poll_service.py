@@ -275,3 +275,21 @@ class TestHandleCreatePoll:
     def test_tournament_not_found(self, admin_handler, admin_user):
         result = admin_handler.handle_create_poll(admin_user.tg_id, tournament_id=9999)
         assert result.is_alert
+
+
+# ── Chat migration: poll stored with old chat_id ─────────────────────────────
+
+class TestChatMigration:
+    OLD_CHAT_ID = -5194706758
+    NEW_CHAT_ID = -1003631429183
+
+    def test_get_poll_for_tournament_finds_poll_with_old_chat_id(self, poll_svc, tournament):
+        poll = poll_svc.create_poll(tournament.id, self.OLD_CHAT_ID, "p_old", 1)
+        found = poll_svc.get_poll_for_tournament(tournament.id)
+        assert found is not None
+        assert found.id == poll.id
+
+    def test_get_latest_poll_for_chat_misses_old_chat_id(self, poll_svc, tournament):
+        poll_svc.create_poll(tournament.id, self.OLD_CHAT_ID, "p_old", 1)
+        assert poll_svc.get_latest_poll_for_chat(self.NEW_CHAT_ID) is None
+        assert poll_svc.get_latest_poll_for_chat(self.OLD_CHAT_ID) is not None

@@ -64,10 +64,7 @@ async def callback_poll_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
             return
 
         t = get_tournament(db, tournament_id)
-        poll_svc = PollService(db)
-        # Prefer poll tied directly to this tournament; fall back to latest in chat
-        poll = poll_svc.get_poll_for_tournament(tournament_id) or \
-               poll_svc.get_latest_poll_for_chat(t.chat_id)
+        poll = PollService(db).get_poll_for_tournament(tournament_id)
         poll_link = None
         if poll:
             poll_link = _poll_message_link(poll.chat_id, poll.message_id, poll.chat_username)
