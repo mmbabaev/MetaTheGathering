@@ -126,6 +126,19 @@ async def callback_aetherhub_confirm(update: Update, context: ContextTypes.DEFAU
     await query.edit_message_text("\n".join(lines))
     await query.answer()
 
+    from services.tournament import TournamentService
+    from services.archetype import ArchetypeService
+    from services.user import UserService
+    from bot.handlers.player import PlayerHandler
+    db2 = SessionLocal()
+    try:
+        card = PlayerHandler(
+            TournamentService(db2), UserService(db2), ArchetypeService(db2)
+        ).handle_tournament_select(tournament_id, tg_id=user.id)
+    finally:
+        db2.close()
+    await query.message.reply_text(card.text, reply_markup=card.keyboard)
+
 
 async def callback_aetherhub_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Отмена импорта."""
