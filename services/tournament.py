@@ -179,6 +179,11 @@ class TournamentService:
         rows = self.db.execute(stmt).scalars().all()
         return [TournamentRead.model_validate(t) for t in rows]
 
+    def set_aetherhub_url(self, tournament_id: int, url: str) -> None:
+        tournament = get_tournament(self.db, tournament_id)
+        tournament.aetherhub_url = url
+        self.db.commit()
+
     def set_decks_hidden(self, tournament_id: int, hidden: bool) -> TournamentRead:
         tournament = get_tournament(self.db, tournament_id)
         tournament.decks_hidden = hidden

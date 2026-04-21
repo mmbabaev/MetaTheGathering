@@ -7,6 +7,7 @@ from telegram.ext import ContextTypes
 
 from core.database import SessionLocal
 from services.user import UserService
+from services.tournament import TournamentService
 from services.aetherhub import fetch_tournament
 from services.aetherhub_import import AetherhubImportService
 from services.utils import get_tournament
@@ -20,7 +21,7 @@ USER_DATA_AETHERHUB_URL = "aetherhub_url"
 
 
 async def callback_aetherhub_import_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Кнопка «📥 AetherHub» — запрашивает ссылку на турнир."""
+    """Кнопка «📥/🔄 AetherHub» — если URL уже привязан, обновляет импорт сразу."""
     query = update.callback_query
     user = update.effective_user
     if not user:
@@ -35,15 +36,38 @@ async def callback_aetherhub_import_prompt(update: Update, context: ContextTypes
         if not UserService(db).is_admin(user.id):
             await query.answer("Нет прав.", show_alert=True)
             return
+        t = get_tournament(db, tournament_id)
+        stored_url = t.aetherhub_url
     finally:
         db.close()
 
-    context.user_data[USER_DATA_PENDING_AETHERHUB_URL] = tournament_id
-    await query.answer()
-    await query.message.reply_text(
-        "Отправьте ссылку на турнир AetherHub\n"
-        "(например: https://aetherhub.com/Tourney/RoundTourney/98984)"
-    )
+    if stored_url:
+        # Auto-fetch with stored URL — skip URL input, go straight to confirm
+        await query.answer()
+        status_msg = await query.message.reply_text("⏳ Загружаю данные с AetherHub…")
+        try:
+            data = fetch_tournament(stored_url)
+        except Exception as e:
+            await status_msg.edit_text(f"❌ Не удалось загрузить турнир: {e}")
+            return
+        context.user_data[USER_DATA_AETHERHUB_URL] = stored_url
+        rounds_summary = ", ".join(f"R{r.number}: {len(r.pairings) // 2} столов" for r in data.rounds)
+        preview = (
+            f"🔄 Обновление AetherHub\n\n"
+            f"Игроков в стендингах: {len(data.players)}\n"
+            f"Раунды: {rounds_summary}\n\n"
+            f"Первые 5 игроков:\n"
+            + "\n".join(f"  • {p}" for p in data.players[:5])
+            + (f"\n  …ещё {len(data.players) - 5}" if len(data.players) > 5 else "")
+        )
+        await status_msg.edit_text(preview, reply_markup=aetherhub_confirm_keyboard(tournament_id))
+    else:
+        context.user_data[USER_DATA_PENDING_AETHERHUB_URL] = tournament_id
+        await query.answer()
+        await query.message.reply_text(
+            "Отправьте ссылку на турнир AetherHub\n"
+            "(например: https://aetherhub.com/Tourney/RoundTourney/98984)"
+        )
 
 
 async def handle_pending_aetherhub_url(msg: Message, user: User, text: str, context) -> bool:
@@ -109,6 +133,7 @@ async def callback_aetherhub_confirm(update: Update, context: ContextTypes.DEFAU
     db = SessionLocal()
     try:
         result = AetherhubImportService(db).import_tournament(tournament_id, data)
+        TournamentService(db).set_aetherhub_url(tournament_id, url)
     finally:
         db.close()
 

@@ -11,7 +11,7 @@ from services.tournament import TournamentService
 from services.archetype import ArchetypeService
 from services.user import UserService
 from bot.handlers.admin import AdminHandler, parse_add_player_command, parse_bulk_player_line
-from bot.telegram.player import USER_DATA_PENDING_BULK_ADD, USER_DATA_PENDING_ADMIN_CUSTOM_ARCH
+from bot.telegram.player import USER_DATA_PENDING_BULK_ADD, USER_DATA_PENDING_ADMIN_CUSTOM_ARCH, USER_DATA_OPPONENTS_MODE
 from bot.messages import TELEGRAM_USER_LOOKUP_FAILED, ADD_PLAYERS_USAGE, BULK_ADD_PROMPT
 from bot.keyboards import CB_ADMIN_ARCH_MORE, CB_ADMIN_SHOW_FILLED, CB_REVEAL_DECKS, admin_more_keyboard, CB_CLOSE_TOURNAMENT
 from bot.telegram.common import log_event as _log, parse_callback_ints
@@ -76,8 +76,28 @@ async def callback_admin_set_arch(update: Update, context: ContextTypes.DEFAULT_
             await query.answer(result.text, show_alert=True)
             return
         _log("admin_set_arch", user, participant_id=participant_id, archetype_id=archetype_id)
-        await query.edit_message_text(result.text, reply_markup=result.keyboard)
-        await query.answer()
+
+        opponents_tournament_id = (context.user_data or {}).get(USER_DATA_OPPONENTS_MODE)
+        if opponents_tournament_id is not None:
+            await query.edit_message_text(result.text)
+            await query.answer()
+            opponents_result = _admin_handler(db).handle_admin_opponents(user.id, opponents_tournament_id)
+            if opponents_result.is_alert:
+                context.user_data.pop(USER_DATA_OPPONENTS_MODE, None)
+                from services.aetherhub_import import AetherhubImportService
+                from services.tournament import TournamentService
+                from services.archetype import ArchetypeService
+                from bot.handlers.player import PlayerHandler
+                has_pairings = bool(AetherhubImportService(db).get_pairings(opponents_tournament_id))
+                card = PlayerHandler(
+                    TournamentService(db), UserService(db), ArchetypeService(db)
+                ).handle_tournament_select(opponents_tournament_id, tg_id=user.id, has_pairings=has_pairings)
+                await query.message.reply_text(card.text, reply_markup=card.keyboard)
+            else:
+                await query.message.reply_text(opponents_result.text, reply_markup=opponents_result.keyboard)
+        else:
+            await query.edit_message_text(result.text, reply_markup=result.keyboard)
+            await query.answer()
     finally:
         db.close()
 
@@ -252,7 +272,7 @@ async def cmd_archive(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     db = SessionLocal()
     try:
         result = _admin_handler(db).handle_archive(user.id)
-        await msg.reply_text(result.text)
+        await msg.reply_text(result.text, reply_markup=result.keyboard)
     finally:
         db.close()
 
@@ -453,6 +473,9 @@ async def callback_admin_opponents(update: Update, context: ContextTypes.DEFAULT
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
+        if context.user_data is None:
+            context.user_data = {}
+        context.user_data[USER_DATA_OPPONENTS_MODE] = tournament_id
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
     finally:

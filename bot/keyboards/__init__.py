@@ -54,6 +54,7 @@ def tournament_card_keyboard(
     decks_hidden: bool = True,
     has_pairings: bool = False,
     has_deck: bool = True,
+    aetherhub_url: str | None = None,
 ) -> InlineKeyboardMarkup:
     """Кнопки для карточки турнира — зависят от статуса регистрации и роли пользователя."""
     if is_registered:
@@ -85,12 +86,13 @@ def tournament_card_keyboard(
                     "👁 Показать колоды", callback_data=f"{CB_REVEAL_DECKS}:{tournament_id}"
                 )
             ])
+        aetherhub_emoji = "🔄" if aetherhub_url else "📥"
         rows.append([
             InlineKeyboardButton(
                 "📊 Опрос", callback_data=f"{CB_POLL_MENU}:{tournament_id}"
             ),
             InlineKeyboardButton(
-                "📥 AetherHub", callback_data=f"{CB_AETHERHUB_IMPORT}:{tournament_id}"
+                f"{aetherhub_emoji} AetherHub", callback_data=f"{CB_AETHERHUB_IMPORT}:{tournament_id}"
             ),
         ])
         rows.append([

@@ -19,6 +19,7 @@ USER_DATA_PENDING_NAME = "pending_name_for_tournament_id"
 USER_DATA_PENDING_SETTINGS_NAME = "pending_settings_name"
 USER_DATA_PENDING_BULK_ADD = "pending_bulk_add_tournament_id"
 USER_DATA_PENDING_ADMIN_CUSTOM_ARCH = "pending_admin_custom_arch_participant_id"
+USER_DATA_OPPONENTS_MODE = "opponents_tournament_id"
 
 
 def _player_handler(db) -> PlayerHandler:

@@ -78,6 +78,7 @@ class Tournament(Base):
     ended_at = Column(DateTime, nullable=True)
 
     decks_hidden = Column(Boolean, nullable=False, default=True, server_default="true")
+    aetherhub_url = Column(String(512), nullable=True)
 
     created_at = Column(DateTime, default=utc_now, nullable=False)
 
