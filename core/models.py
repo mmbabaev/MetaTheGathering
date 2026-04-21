@@ -241,3 +241,19 @@ class PollVote(Base):
     __table_args__ = (
         UniqueConstraint("poll_id", "tg_user_id", name="uq_poll_vote_unique"),
     )
+
+
+class RoundPairing(Base):
+    """Паринг одного игрока в конкретном раунде турнира (импорт из AetherHub)."""
+
+    __tablename__ = "round_pairings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tournament_id = Column(Integer, ForeignKey("tournaments.id", ondelete="CASCADE"), nullable=False)
+    round_number = Column(Integer, nullable=False)
+    player_name = Column(String(255), nullable=False)
+    opponent_name = Column(String(255), nullable=True)  # NULL = bye
+
+    __table_args__ = (
+        UniqueConstraint("tournament_id", "round_number", "player_name", name="uq_round_pairing"),
+    )
