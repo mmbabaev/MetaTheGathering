@@ -91,22 +91,25 @@ def tournament_card_keyboard(
     return InlineKeyboardMarkup(rows)
 
 
-def admin_more_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
+def admin_more_keyboard(tournament_id: int, is_closed: bool = False) -> InlineKeyboardMarkup:
     """Скрытые admin-кнопки за «• • •»."""
-    return InlineKeyboardMarkup([
+    rows = [
         [InlineKeyboardButton(
             "➕ Добавить участников", callback_data=f"{CB_BULK_ADD}:{tournament_id}"
         )],
-        [InlineKeyboardButton(
+    ]
+    if not is_closed:
+        rows.append([InlineKeyboardButton(
             "🔒 Закрыть турнир", callback_data=f"{CB_CLOSE_TOURNAMENT}:{tournament_id}"
-        )],
-        [InlineKeyboardButton(
+        )])
+    if is_closed:
+        rows.append([InlineKeyboardButton(
             "🗑 Удалить турнир", callback_data=f"{CB_DELETE_TOURNAMENT}:{tournament_id}"
-        )],
-        [InlineKeyboardButton(
-            "⬅️ Назад", callback_data=f"{CB_TOURNAMENT}:{tournament_id}"
-        )],
-    ])
+        )])
+    rows.append([InlineKeyboardButton(
+        "⬅️ Назад", callback_data=f"{CB_TOURNAMENT}:{tournament_id}"
+    )])
+    return InlineKeyboardMarkup(rows)
 
 
 def delete_tournament_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:

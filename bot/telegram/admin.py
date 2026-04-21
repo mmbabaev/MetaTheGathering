@@ -463,12 +463,17 @@ async def callback_admin_more(update: Update, context: ContextTypes.DEFAULT_TYPE
     (tournament_id,) = ids
     db = SessionLocal()
     try:
-        if not UserService(db).is_admin(user.id):
+        user_svc = UserService(db)
+        if not user_svc.is_admin(user.id):
             await query.answer("Нет прав.", show_alert=True)
             return
+        from services.tournament import TournamentService
+        from core import models as _models
+        t = TournamentService(db).db.get(_models.Tournament, tournament_id)
+        is_closed = t is not None and t.status == _models.TournamentStatus.CLOSED
     finally:
         db.close()
-    await query.edit_message_text("Действия с турниром:", reply_markup=admin_more_keyboard(tournament_id))
+    await query.edit_message_text("Действия с турниром:", reply_markup=admin_more_keyboard(tournament_id, is_closed=is_closed))
     await query.answer()
 
 
