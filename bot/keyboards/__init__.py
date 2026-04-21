@@ -25,6 +25,7 @@ CB_DELETE_TOURNAMENT_CANCEL = "del_t_no"    # del_t_no:{tournament_id}
 CB_ADMIN_SHOW_FILLED = "adm_show_filled"    # adm_show_filled:{tournament_id}
 CB_REVEAL_DECKS = "reveal_decks"            # reveal_decks:{tournament_id}
 CB_POLL_MENU = "poll_menu"                  # poll_menu:{tournament_id}
+CB_LINK_POLL_BY_URL = "link_poll_url"       # link_poll_url:{tournament_id}
 CB_CREATE_POLL = "create_poll"              # create_poll:{tournament_id}
 CB_NOTIFY_NO_DECK = "notify_no_deck"        # notify_no_deck:{tournament_id}
 CB_NOTIFY_CONFIRM = "notify_confirm"        # notify_confirm:{tournament_id}
@@ -112,12 +113,16 @@ def fill_deck_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
 
 
 def poll_menu_keyboard(tournament_id: int, poll_link: str | None = None) -> InlineKeyboardMarkup:
-    """Подменю «📊 Опрос»: создать / перейти / разослать."""
+    """Подменю «📊 Опрос»: создать / перейти (или привязать) / разослать."""
     rows = [
         [InlineKeyboardButton("➕ Создать новый опрос", callback_data=f"{CB_CREATE_POLL}:{tournament_id}")],
     ]
     if poll_link:
         rows.append([InlineKeyboardButton("🔗 Перейти на последний опрос", url=poll_link)])
+    else:
+        rows.append([InlineKeyboardButton(
+            "🔗 Привязать опрос по ссылке", callback_data=f"{CB_LINK_POLL_BY_URL}:{tournament_id}"
+        )])
     rows.append([
         InlineKeyboardButton("📣 Напомнить без колоды", callback_data=f"{CB_NOTIFY_NO_DECK}:{tournament_id}")
     ])

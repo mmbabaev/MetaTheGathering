@@ -320,12 +320,15 @@ async def _handle_pending_custom_arch(msg, user, text, context) -> bool:
     return True
 
 
+from bot.telegram.poll import handle_pending_link_poll as _handle_pending_link_poll
+
 _TEXT_INPUT_HANDLERS = [
     _handle_pending_name,
     _handle_pending_settings_name,
     _handle_pending_admin_custom_arch,
     _handle_pending_bulk_add,
     _handle_pending_custom_arch,
+    _handle_pending_link_poll,
 ]
 
 

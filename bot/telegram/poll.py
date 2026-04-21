@@ -1,8 +1,9 @@
 # Telegram-обёртки для poll-фичи
 
 import logging
+import re
 
-from telegram import Update
+from telegram import Update, Message, User
 from telegram.ext import ContextTypes
 
 from core.config import settings
@@ -21,6 +22,25 @@ logger = logging.getLogger(__name__)
 _POLL_QUESTION = "Пойдёшь на турнир?"
 _POLL_OPTIONS = ["Пойду", "Не пойду"]
 _DM_NO_DECK = "Привет! Ты записался на турнир, но ещё не выбрал колоду. Зайди в /tournaments и заполни её."
+
+USER_DATA_PENDING_LINK_POLL = "pending_link_poll_tournament_id"
+
+
+def _parse_message_link(url: str) -> tuple[int | str, int] | None:
+    """Парсит ссылку на сообщение Telegram.
+
+    Возвращает (from_chat_id, message_id) или None.
+    t.me/c/{bare_id}/{msg_id}  → chat_id = -100{bare_id}
+    t.me/{username}/{msg_id}   → chat_id = "@{username}"
+    """
+    url = url.strip()
+    m = re.match(r'https?://t\.me/c/(\d+)/(\d+)', url)
+    if m:
+        return int(f"-100{m.group(1)}"), int(m.group(2))
+    m = re.match(r'https?://t\.me/([A-Za-z0-9_]+)/(\d+)', url)
+    if m and m.group(1) != 'c':
+        return f"@{m.group(1)}", int(m.group(2))
+    return None
 
 
 def _poll_message_link(chat_id: int, message_id: int, chat_username: str | None = None) -> str | None:
@@ -81,6 +101,101 @@ async def callback_poll_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.answer()
     finally:
         db.close()
+
+
+async def callback_link_poll_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка «🔗 Привязать опрос по ссылке» — запрашивает ссылку на сообщение."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+
+    db = SessionLocal()
+    try:
+        if not UserService(db).is_admin(user.id):
+            await query.answer("Нет прав.", show_alert=True)
+            return
+    finally:
+        db.close()
+
+    context.user_data[USER_DATA_PENDING_LINK_POLL] = tournament_id
+    await query.answer()
+    await query.message.reply_text(
+        "Отправьте ссылку на сообщение с опросом (например: https://t.me/mygroup/42)"
+    )
+
+
+async def handle_pending_link_poll(msg: Message, user: User, text: str, context) -> bool:
+    """Обрабатывает ввод ссылки на сообщение с опросом. Возвращает True если обработал."""
+    tournament_id = context.user_data.get(USER_DATA_PENDING_LINK_POLL)
+    if tournament_id is None:
+        return False
+
+    parsed = _parse_message_link(text)
+    if parsed is None:
+        await msg.reply_text(
+            "❌ Не могу распознать ссылку. Ожидается формат:\n"
+            "https://t.me/groupname/42  или  https://t.me/c/1234567890/42"
+        )
+        return True
+
+    from_chat_id, message_id = parsed
+    context.user_data.pop(USER_DATA_PENDING_LINK_POLL)
+
+    from telegram.error import TelegramError
+    try:
+        fwd = await context.bot.forward_message(
+            chat_id=user.id,
+            from_chat_id=from_chat_id,
+            message_id=message_id,
+        )
+    except TelegramError as e:
+        await msg.reply_text(f"❌ Не удалось получить сообщение: {e}")
+        return True
+
+    if fwd.poll is None:
+        await context.bot.delete_message(chat_id=user.id, message_id=fwd.message_id)
+        await msg.reply_text("❌ Это сообщение не содержит опрос.")
+        return True
+
+    tg_poll_id = fwd.poll.id
+    try:
+        await context.bot.delete_message(chat_id=user.id, message_id=fwd.message_id)
+    except Exception:
+        pass
+
+    # Resolve chat_id to int if username
+    try:
+        chat_info = await context.bot.get_chat(from_chat_id)
+        actual_chat_id = chat_info.id
+        chat_username = chat_info.username
+    except Exception:
+        actual_chat_id = from_chat_id if isinstance(from_chat_id, int) else 0
+        chat_username = None
+
+    db = SessionLocal()
+    try:
+        poll_svc = PollService(db)
+        existing = poll_svc.get_poll_by_tg_id(tg_poll_id)
+        if existing:
+            poll_svc.link_poll_to_tournament(existing.id, tournament_id)
+        else:
+            poll_svc.create_poll(
+                tournament_id=tournament_id,
+                chat_id=actual_chat_id,
+                tg_poll_id=tg_poll_id,
+                message_id=message_id,
+                chat_username=chat_username,
+            )
+    finally:
+        db.close()
+
+    await msg.reply_text("✅ Опрос привязан к турниру!")
+    return True
 
 
 async def callback_create_poll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

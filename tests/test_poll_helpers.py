@@ -1,7 +1,7 @@
 """Tests for pure helper functions in bot/telegram/poll.py."""
 
-from bot.telegram.poll import _poll_message_link
-from bot.keyboards import poll_menu_keyboard, CB_CREATE_POLL, CB_NOTIFY_NO_DECK
+from bot.telegram.poll import _poll_message_link, _parse_message_link
+from bot.keyboards import poll_menu_keyboard, CB_CREATE_POLL, CB_NOTIFY_NO_DECK, CB_LINK_POLL_BY_URL
 
 
 class TestPollMessageLink:
@@ -28,12 +28,13 @@ class TestPollMenuKeyboard:
     def _flat_buttons(self, keyboard):
         return [btn for row in keyboard.inline_keyboard for btn in row]
 
-    def test_without_poll_link_has_two_buttons(self):
+    def test_without_poll_link_has_three_buttons(self):
         kb = poll_menu_keyboard(1)
         buttons = self._flat_buttons(kb)
-        assert len(buttons) == 2
+        assert len(buttons) == 3
         texts = [b.text for b in buttons]
         assert any("Создать" in t for t in texts)
+        assert any("Привязать" in t for t in texts)
         assert any("Напомнить" in t for t in texts)
         assert not any(b.url for b in buttons)
 
@@ -51,5 +52,37 @@ class TestPollMenuKeyboard:
         cb_data = [b.callback_data for b in buttons if b.callback_data]
         assert f"{CB_CREATE_POLL}:7" in cb_data
         assert f"{CB_NOTIFY_NO_DECK}:7" in cb_data
+
+    def test_link_by_url_button_shown_when_no_poll(self):
+        kb = poll_menu_keyboard(5)
+        buttons = self._flat_buttons(kb)
+        cb_data = [b.callback_data for b in buttons if b.callback_data]
+        assert f"{CB_LINK_POLL_BY_URL}:5" in cb_data
+
+    def test_link_by_url_button_absent_when_poll_linked(self):
+        kb = poll_menu_keyboard(5, poll_link="https://t.me/g/1")
+        buttons = self._flat_buttons(kb)
+        cb_data = [b.callback_data for b in buttons if b.callback_data]
+        assert not any(CB_LINK_POLL_BY_URL in (d or "") for d in cb_data)
+
+
+class TestParseMessageLink:
+    def test_supergroup_link(self):
+        chat_id, msg_id = _parse_message_link("https://t.me/c/1003631429183/42")
+        assert chat_id == -1001003631429183
+        assert msg_id == 42
+
+    def test_public_group_link(self):
+        chat_id, msg_id = _parse_message_link("https://t.me/metathegatheringtestgroup/99")
+        assert chat_id == "@metathegatheringtestgroup"
+        assert msg_id == 99
+
+    def test_invalid_link_returns_none(self):
+        assert _parse_message_link("not a link") is None
+        assert _parse_message_link("https://example.com/foo") is None
+
+    def test_strips_whitespace(self):
+        result = _parse_message_link("  https://t.me/c/1234567890/5  ")
+        assert result is not None
 
 

@@ -29,6 +29,7 @@ from bot.keyboards import (
     CB_ADMIN_SHOW_FILLED,
     CB_REVEAL_DECKS,
     CB_POLL_MENU,
+    CB_LINK_POLL_BY_URL,
     CB_CREATE_POLL,
     CB_NOTIFY_NO_DECK,
     CB_NOTIFY_CONFIRM,
@@ -206,6 +207,9 @@ def main() -> None:
     )
     app.add_handler(
         CallbackQueryHandler(poll_handler.callback_poll_menu, pattern=f"^{CB_POLL_MENU}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(poll_handler.callback_link_poll_prompt, pattern=f"^{CB_LINK_POLL_BY_URL}:")
     )
     app.add_handler(
         CallbackQueryHandler(poll_handler.callback_create_poll, pattern=f"^{CB_CREATE_POLL}:")
