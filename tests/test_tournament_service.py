@@ -694,3 +694,27 @@ class TestGetOrCreateByName:
         # Участник должен быть привязан к правильному пользователю (с историей)
         participant = svc.get_participant(t.id, u.id)
         assert participant is not None, "Участник не связан с правильным пользователем"
+
+
+
+class TestSetAetherhubUrl:
+    def test_stores_url(self, svc, tournament):
+        url = "https://aetherhub.com/Tourney/RoundTourney/12345"
+        svc.set_aetherhub_url(tournament.id, url)
+        from services.utils import get_tournament
+        t = get_tournament(svc.db, tournament.id)
+        assert t.aetherhub_url == url
+
+    def test_overwrites_existing_url(self, svc, tournament):
+        svc.set_aetherhub_url(tournament.id, "https://aetherhub.com/old")
+        svc.set_aetherhub_url(tournament.id, "https://aetherhub.com/new")
+        from services.utils import get_tournament
+        t = get_tournament(svc.db, tournament.id)
+        assert t.aetherhub_url == "https://aetherhub.com/new"
+
+    def test_tournament_read_schema_includes_url(self, svc, tournament):
+        url = "https://aetherhub.com/Tourney/RoundTourney/99"
+        svc.set_aetherhub_url(tournament.id, url)
+        tournaments = svc.list_all_active_tournaments()
+        match = next(t for t in tournaments if t.id == tournament.id)
+        assert match.aetherhub_url == url

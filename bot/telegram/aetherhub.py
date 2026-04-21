@@ -36,8 +36,12 @@ async def callback_aetherhub_import_prompt(update: Update, context: ContextTypes
         if not UserService(db).is_admin(user.id):
             await query.answer("Нет прав.", show_alert=True)
             return
-        t = get_tournament(db, tournament_id)
-        stored_url = t.aetherhub_url
+        try:
+            t = get_tournament(db, tournament_id)
+            stored_url = t.aetherhub_url
+        except Exception:
+            logger.exception("Failed to load tournament %s", tournament_id)
+            stored_url = None
     finally:
         db.close()
 
@@ -133,7 +137,10 @@ async def callback_aetherhub_confirm(update: Update, context: ContextTypes.DEFAU
     db = SessionLocal()
     try:
         result = AetherhubImportService(db).import_tournament(tournament_id, data)
-        TournamentService(db).set_aetherhub_url(tournament_id, url)
+        try:
+            TournamentService(db).set_aetherhub_url(tournament_id, url)
+        except Exception:
+            logger.exception("Failed to save aetherhub_url for tournament %s", tournament_id)
     finally:
         db.close()
 
