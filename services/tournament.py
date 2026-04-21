@@ -255,6 +255,7 @@ class TournamentService:
         user_id: int,
         archetype_id: Optional[int] = None,
         added_by_admin: bool = False,
+        deck_added_by_tg_id: Optional[int] = None,
     ) -> ParticipantRead:
         tournament = get_tournament(self.db, tournament_id)
         ensure_tournament_status(tournament, allowed=[models.TournamentStatus.REGISTRATION])
@@ -274,6 +275,7 @@ class TournamentService:
             user_id=user_id,
             archetype_id=archetype_id,
             added_by_admin=added_by_admin,
+            deck_added_by_tg_id=deck_added_by_tg_id if archetype_id else None,
             created_at=models.utc_now(),
             updated_at=models.utc_now(),
         )
@@ -288,12 +290,15 @@ class TournamentService:
         participant_id: int,
         archetype_id: Optional[int],
         reset_votes: bool = True,
+        deck_added_by_tg_id: Optional[int] = None,
     ) -> ParticipantRead:
         participant = self._get_participant(participant_id)
 
         participant.archetype_id = archetype_id
         participant.confirmed = False
         participant.updated_at = models.utc_now()
+        if deck_added_by_tg_id is not None:
+            participant.deck_added_by_tg_id = deck_added_by_tg_id
 
         if reset_votes:
             self.db.query(models.Vote).filter(

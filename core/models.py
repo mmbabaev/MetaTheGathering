@@ -134,6 +134,9 @@ class Participant(Base):
     # был добавлен самим игроком или админом
     added_by_admin = Column(Boolean, default=False, nullable=False)
 
+    # tg_id того, кто записал колоду (сам игрок, админ или оппонент)
+    deck_added_by_tg_id = Column(BigInteger, nullable=True)
+
     # подтверждена ли колода (по голосованию или руками админа)
     confirmed = Column(Boolean, default=False, nullable=False)
 

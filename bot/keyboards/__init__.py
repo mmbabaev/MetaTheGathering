@@ -71,7 +71,7 @@ def tournament_card_keyboard(
         if is_registered and has_pairings:
             rows.append([
                 InlineKeyboardButton(
-                    "👥 Записать оппонентов", callback_data=f"{CB_ADMIN_OPPONENTS}:{tournament_id}"
+                    "🤝 Записать оппонентов", callback_data=f"{CB_ADMIN_OPPONENTS}:{tournament_id}"
                 )
             ])
         if decks_hidden:
