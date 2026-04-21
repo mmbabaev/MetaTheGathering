@@ -13,7 +13,7 @@ from services.archetype import ArchetypeService
 from services.poll import PollService
 from services.utils import get_tournament
 from bot.handlers.admin import AdminHandler
-from bot.keyboards import fill_deck_keyboard, notify_confirm_keyboard
+from bot.keyboards import fill_deck_keyboard, notify_confirm_keyboard, poll_menu_keyboard
 from bot.telegram.common import log_event as _log, parse_callback_ints
 
 logger = logging.getLogger(__name__)
@@ -44,6 +44,40 @@ def _admin_handler(db) -> AdminHandler:
 def _is_notify_allowed(tg_user_id: int) -> bool:
     allowed = settings.notify_allowed_ids
     return allowed is None or tg_user_id in allowed
+
+
+async def callback_poll_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка «📊 Опрос» — показывает подменю опроса для турнира."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+
+    db = SessionLocal()
+    try:
+        if not UserService(db).is_admin(user.id):
+            await query.answer("Нет прав.", show_alert=True)
+            return
+
+        t = get_tournament(db, tournament_id)
+        latest_poll = PollService(db).get_latest_poll_for_chat(t.chat_id)
+        poll_link = None
+        if latest_poll:
+            poll_link = _poll_message_link(
+                latest_poll.chat_id, latest_poll.message_id, latest_poll.chat_username
+            )
+
+        await query.edit_message_text(
+            f"📊 Опрос — «{t.title}»",
+            reply_markup=poll_menu_keyboard(tournament_id, poll_link),
+        )
+        await query.answer()
+    finally:
+        db.close()
 
 
 async def callback_create_poll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

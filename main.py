@@ -28,6 +28,7 @@ from bot.keyboards import (
     CB_DELETE_TOURNAMENT, CB_DELETE_TOURNAMENT_CONFIRM, CB_DELETE_TOURNAMENT_CANCEL,
     CB_ADMIN_SHOW_FILLED,
     CB_REVEAL_DECKS,
+    CB_POLL_MENU,
     CB_CREATE_POLL,
     CB_NOTIFY_NO_DECK,
     CB_NOTIFY_CONFIRM,
@@ -204,6 +205,7 @@ def main() -> None:
         CallbackQueryHandler(admin.callback_reveal_decks, pattern=f"^{CB_REVEAL_DECKS}:")
     )
     app.add_handler(
+        CallbackQueryHandler(poll_handler.callback_poll_menu, pattern=f"^{CB_POLL_MENU}:"),
         CallbackQueryHandler(poll_handler.callback_create_poll, pattern=f"^{CB_CREATE_POLL}:")
     )
     app.add_handler(
