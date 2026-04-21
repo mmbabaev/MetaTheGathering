@@ -176,9 +176,9 @@ class TestPollStats:
 # ── PollService.get_voter_display_names ──────────────────────────────────────
 
 class TestVoterDisplayNames:
-    def test_returns_username(self, poll_svc, user_alice):
+    def test_returns_username_and_name(self, poll_svc, user_alice):
         names = poll_svc.get_voter_display_names([user_alice.tg_id])
-        assert names[user_alice.tg_id] == "@alice"
+        assert names[user_alice.tg_id] == "@alice Alice"
 
     def test_unknown_id_fallback(self, poll_svc):
         names = poll_svc.get_voter_display_names([9999999])

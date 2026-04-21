@@ -147,12 +147,13 @@ class PollService:
         ).all()
         result = {}
         for u in users:
+            parts = []
             if u.username:
-                result[u.tg_id] = f"@{u.username}"
-            elif u.first_name or u.last_name:
-                result[u.tg_id] = " ".join(filter(None, [u.first_name, u.last_name]))
-            else:
-                result[u.tg_id] = f"id{u.tg_id}"
+                parts.append(f"@{u.username}")
+            name = " ".join(filter(None, [u.first_name, u.last_name]))
+            if name:
+                parts.append(name)
+            result[u.tg_id] = " ".join(parts) if parts else f"id{u.tg_id}"
         for tg_id in tg_user_ids:
             result.setdefault(tg_id, f"id{tg_id}")
         return result
