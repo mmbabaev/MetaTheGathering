@@ -30,6 +30,9 @@ CB_CREATE_POLL = "create_poll"              # create_poll:{tournament_id}
 CB_NOTIFY_NO_DECK = "notify_no_deck"        # notify_no_deck:{tournament_id}
 CB_NOTIFY_CONFIRM = "notify_confirm"        # notify_confirm:{tournament_id}
 CB_NOTIFY_CANCEL = "notify_cancel"          # notify_cancel:{tournament_id}
+CB_AETHERHUB_IMPORT = "ah_import"           # ah_import:{tournament_id}
+CB_AETHERHUB_CONFIRM = "ah_confirm"         # ah_confirm:{tournament_id}
+CB_AETHERHUB_CANCEL = "ah_cancel"           # ah_cancel:{tournament_id}
 
 
 def tournament_list_keyboard(tournaments: list) -> InlineKeyboardMarkup:
@@ -75,6 +78,9 @@ def tournament_card_keyboard(
         rows.append([
             InlineKeyboardButton(
                 "📊 Опрос", callback_data=f"{CB_POLL_MENU}:{tournament_id}"
+            ),
+            InlineKeyboardButton(
+                "📥 AetherHub", callback_data=f"{CB_AETHERHUB_IMPORT}:{tournament_id}"
             ),
         ])
         rows.append([
@@ -137,6 +143,14 @@ def notify_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[
         InlineKeyboardButton("✅ Отправить", callback_data=f"{CB_NOTIFY_CONFIRM}:{tournament_id}"),
         InlineKeyboardButton("❌ Отмена", callback_data=f"{CB_NOTIFY_CANCEL}:{tournament_id}"),
+    ]])
+
+
+def aetherhub_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
+    """Подтверждение импорта из AetherHub."""
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Импортировать", callback_data=f"{CB_AETHERHUB_CONFIRM}:{tournament_id}"),
+        InlineKeyboardButton("❌ Отмена", callback_data=f"{CB_AETHERHUB_CANCEL}:{tournament_id}"),
     ]])
 
 

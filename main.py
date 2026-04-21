@@ -19,6 +19,7 @@ from core.schemas import TournamentCreate
 from services.tournament import TournamentService
 from bot.telegram import common, player, admin, poll as poll_handler
 from bot.telegram import settings as settings_handler
+from bot.telegram import aetherhub as aetherhub_handler
 from bot.keyboards import (
     CB_TOURNAMENT, CB_REGISTER, CB_ARCHETYPE, CB_CUSTOM_ARCHETYPE,
     CB_ARCHETYPE_MORE,
@@ -34,6 +35,9 @@ from bot.keyboards import (
     CB_NOTIFY_NO_DECK,
     CB_NOTIFY_CONFIRM,
     CB_NOTIFY_CANCEL,
+    CB_AETHERHUB_IMPORT,
+    CB_AETHERHUB_CONFIRM,
+    CB_AETHERHUB_CANCEL,
 )
 from bot.scheduler import setup_scheduler
 
@@ -222,6 +226,15 @@ def main() -> None:
     )
     app.add_handler(
         CallbackQueryHandler(poll_handler.callback_notify_cancel, pattern=f"^{CB_NOTIFY_CANCEL}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(aetherhub_handler.callback_aetherhub_import_prompt, pattern=f"^{CB_AETHERHUB_IMPORT}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(aetherhub_handler.callback_aetherhub_confirm, pattern=f"^{CB_AETHERHUB_CONFIRM}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(aetherhub_handler.callback_aetherhub_cancel, pattern=f"^{CB_AETHERHUB_CANCEL}:")
     )
     app.add_handler(PollAnswerHandler(poll_handler.handle_poll_answer))
 
