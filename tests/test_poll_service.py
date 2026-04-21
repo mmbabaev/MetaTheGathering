@@ -72,6 +72,14 @@ class TestCreatePoll:
     def test_get_latest_poll_for_chat_no_poll(self, poll_svc):
         assert poll_svc.get_latest_poll_for_chat(999) is None
 
+    def test_create_poll_saves_chat_username(self, poll_svc, tournament):
+        poll = poll_svc.create_poll(tournament.id, 100, "p1", 1, chat_username="testgroup")
+        assert poll.chat_username == "testgroup"
+
+    def test_create_poll_chat_username_optional(self, poll_svc, tournament):
+        poll = poll_svc.create_poll(tournament.id, 100, "p1", 1)
+        assert poll.chat_username is None
+
 
 # ── PollService.upsert_vote ──────────────────────────────────────────────────
 
