@@ -13,7 +13,7 @@ from services.user import UserService
 from bot.handlers.admin import AdminHandler, parse_add_player_command, parse_bulk_player_line
 from bot.telegram.player import USER_DATA_PENDING_BULK_ADD, USER_DATA_PENDING_ADMIN_CUSTOM_ARCH
 from bot.messages import TELEGRAM_USER_LOOKUP_FAILED, ADD_PLAYERS_USAGE, BULK_ADD_PROMPT
-from bot.keyboards import CB_ADMIN_ARCH_MORE, CB_ADMIN_SHOW_FILLED, CB_REVEAL_DECKS
+from bot.keyboards import CB_ADMIN_ARCH_MORE, CB_ADMIN_SHOW_FILLED, CB_REVEAL_DECKS, admin_more_keyboard
 from bot.telegram.common import log_event as _log, parse_callback_ints
 
 
@@ -412,6 +412,27 @@ async def callback_delete_tournament_cancel(
         await query.answer()
     finally:
         db.close()
+
+
+async def callback_admin_more(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка «• • •» — показывает скрытые admin-действия."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+    db = SessionLocal()
+    try:
+        if not UserService(db).is_admin(user.id):
+            await query.answer("Нет прав.", show_alert=True)
+            return
+    finally:
+        db.close()
+    await query.edit_message_text("Действия с турниром:", reply_markup=admin_more_keyboard(tournament_id))
+    await query.answer()
 
 
 async def callback_reveal_decks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

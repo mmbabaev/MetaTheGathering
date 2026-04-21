@@ -7,19 +7,21 @@ from sqlalchemy import select
 
 from core import models
 from services.aetherhub import AetherhubTournamentData, AetherhubRound
+from services.user import UserService
 
 
 @dataclass
 class ImportResult:
-    registered: int        # new participants registered (matched by name)
+    registered: int        # new participants registered (matched or created)
     already_registered: int
     pairings_saved: int
-    unmatched_names: list[str]  # players in aetherhub not found in our User table
+    created_names: list[str]  # players not found in bot — created as placeholders
 
 
 class AetherhubImportService:
     def __init__(self, db: Session) -> None:
         self.db = db
+        self._user_svc = UserService(db)
 
     def _find_user_by_name(self, full_name: str) -> models.User | None:
         """Match 'First Last' or 'Last First' against User.first_name + User.last_name."""
@@ -40,6 +42,13 @@ class AetherhubImportService:
             if user:
                 return user
         return None
+
+    def _get_or_create_user_by_name(self, full_name: str) -> tuple[models.User, bool]:
+        """Find or create a user by full name. Returns (user, was_created)."""
+        parts = full_name.strip().split(None, 1)
+        first_name = parts[0]
+        last_name = parts[1] if len(parts) > 1 else None
+        return self._user_svc.get_or_create_by_name(first_name, last_name)
 
     def _is_registered(self, tournament_id: int, user_id: int) -> bool:
         return self.db.execute(
@@ -76,13 +85,13 @@ class AetherhubImportService:
     ) -> ImportResult:
         registered = 0
         already_registered = 0
-        unmatched: list[str] = []
+        created: list[str] = []
 
         for name in data.players:
             user = self._find_user_by_name(name)
+            was_created = False
             if user is None:
-                unmatched.append(name)
-                continue
+                user, was_created = self._get_or_create_user_by_name(name)
             if self._is_registered(tournament_id, user.id):
                 already_registered += 1
             else:
@@ -91,6 +100,8 @@ class AetherhubImportService:
                     user_id=user.id,
                 ))
                 registered += 1
+            if was_created:
+                created.append(name)
 
         self.db.commit()
         pairings_saved = self._save_pairings(tournament_id, data.rounds)
@@ -99,7 +110,7 @@ class AetherhubImportService:
             registered=registered,
             already_registered=already_registered,
             pairings_saved=pairings_saved,
-            unmatched_names=unmatched,
+            created_names=created,
         )
 
     def get_pairings(

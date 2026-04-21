@@ -241,13 +241,13 @@ class TestImportTournament:
         data = _make_data(players=["Alice"], rounds_pairings=[[("Alice", None)]])
         result = import_svc.import_tournament(tournament.id, data)
         assert result.registered == 1
-        assert result.unmatched_names == []
+        assert result.created_names == []
 
-    def test_unmatched_name_not_registered(self, import_svc, tournament):
+    def test_unmatched_name_creates_placeholder_and_registers(self, import_svc, tournament):
         data = _make_data(players=["Ghost User"], rounds_pairings=[[("Ghost User", None)]])
         result = import_svc.import_tournament(tournament.id, data)
-        assert result.registered == 0
-        assert "Ghost User" in result.unmatched_names
+        assert result.registered == 1
+        assert "Ghost User" in result.created_names
 
     def test_already_registered_counted_separately(self, import_svc, svc, tournament, user_alice):
         svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id)

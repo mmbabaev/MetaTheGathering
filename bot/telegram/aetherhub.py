@@ -118,10 +118,10 @@ async def callback_aetherhub_confirm(update: Update, context: ContextTypes.DEFAU
         f"Уже были: {result.already_registered}",
         f"Паринги сохранены: {result.pairings_saved}",
     ]
-    if result.unmatched_names:
-        lines.append(f"Не найдено в боте ({len(result.unmatched_names)}): "
-                     + ", ".join(result.unmatched_names[:5])
-                     + ("…" if len(result.unmatched_names) > 5 else ""))
+    if result.created_names:
+        lines.append(f"Созданы как новые игроки ({len(result.created_names)}): "
+                     + ", ".join(result.created_names[:5])
+                     + ("…" if len(result.created_names) > 5 else ""))
 
     await query.edit_message_text("\n".join(lines))
     await query.answer()

@@ -33,6 +33,7 @@ CB_NOTIFY_CANCEL = "notify_cancel"          # notify_cancel:{tournament_id}
 CB_AETHERHUB_IMPORT = "ah_import"           # ah_import:{tournament_id}
 CB_AETHERHUB_CONFIRM = "ah_confirm"         # ah_confirm:{tournament_id}
 CB_AETHERHUB_CANCEL = "ah_cancel"           # ah_cancel:{tournament_id}
+CB_ADMIN_MORE = "adm_more"                  # adm_more:{tournament_id}
 
 
 def tournament_list_keyboard(tournaments: list) -> InlineKeyboardMarkup:
@@ -72,11 +73,6 @@ def tournament_card_keyboard(
             ])
         rows.append([
             InlineKeyboardButton(
-                "➕ Добавить участников", callback_data=f"{CB_BULK_ADD}:{tournament_id}"
-            )
-        ])
-        rows.append([
-            InlineKeyboardButton(
                 "📊 Опрос", callback_data=f"{CB_POLL_MENU}:{tournament_id}"
             ),
             InlineKeyboardButton(
@@ -85,13 +81,28 @@ def tournament_card_keyboard(
         ])
         rows.append([
             InlineKeyboardButton(
-                "📊 Выгрузка Excel", callback_data=f"{CB_EXPORT_EXCEL}:{tournament_id}"
+                "📈 Выгрузка Excel", callback_data=f"{CB_EXPORT_EXCEL}:{tournament_id}"
             ),
             InlineKeyboardButton(
-                "🗑 Удалить", callback_data=f"{CB_DELETE_TOURNAMENT}:{tournament_id}"
+                "• • •", callback_data=f"{CB_ADMIN_MORE}:{tournament_id}"
             ),
         ])
     return InlineKeyboardMarkup(rows)
+
+
+def admin_more_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
+    """Скрытые admin-кнопки за «• • •»."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(
+            "➕ Добавить участников", callback_data=f"{CB_BULK_ADD}:{tournament_id}"
+        )],
+        [InlineKeyboardButton(
+            "🗑 Удалить турнир", callback_data=f"{CB_DELETE_TOURNAMENT}:{tournament_id}"
+        )],
+        [InlineKeyboardButton(
+            "⬅️ Назад", callback_data=f"{CB_TOURNAMENT}:{tournament_id}"
+        )],
+    ])
 
 
 def delete_tournament_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:

@@ -38,6 +38,7 @@ from bot.keyboards import (
     CB_AETHERHUB_IMPORT,
     CB_AETHERHUB_CONFIRM,
     CB_AETHERHUB_CANCEL,
+    CB_ADMIN_MORE,
 )
 from bot.scheduler import setup_scheduler
 
@@ -235,6 +236,9 @@ def main() -> None:
     )
     app.add_handler(
         CallbackQueryHandler(aetherhub_handler.callback_aetherhub_cancel, pattern=f"^{CB_AETHERHUB_CANCEL}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(admin.callback_admin_more, pattern=f"^{CB_ADMIN_MORE}:")
     )
     app.add_handler(PollAnswerHandler(poll_handler.handle_poll_answer))
 
