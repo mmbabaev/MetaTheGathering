@@ -53,6 +53,7 @@ def tournament_card_keyboard(
     is_admin: bool = False,
     decks_hidden: bool = True,
     has_pairings: bool = False,
+    has_deck: bool = True,
 ) -> InlineKeyboardMarkup:
     """Кнопки для карточки турнира — зависят от статуса регистрации и роли пользователя."""
     if is_registered:
@@ -67,6 +68,10 @@ def tournament_card_keyboard(
         "📋 Статус", callback_data=f"{CB_TSTATUS}:{tournament_id}"
     )
     rows = [[action_btn], [status_btn]]
+    if is_registered and not has_deck:
+        rows.insert(1, [InlineKeyboardButton(
+            "🃏 Выбрать колоду", callback_data=f"{CB_REGISTER}:{tournament_id}"
+        )])
     if is_admin:
         if is_registered and has_pairings:
             rows.append([

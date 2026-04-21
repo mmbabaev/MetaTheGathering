@@ -85,10 +85,14 @@ class PlayerHandler:
     def _tournament_card(self, t, tg_id: int | None, has_pairings: bool = False) -> HandlerResult:
         is_registered = False
         is_admin = False
+        has_deck = True
         if tg_id is not None:
             user = self.user_svc.get_by_tg_id(tg_id)
             if user:
-                is_registered = self.svc.get_participant(t.id, user.id) is not None
+                participant = self.svc.get_participant(t.id, user.id)
+                is_registered = participant is not None
+                if participant is not None:
+                    has_deck = participant.archetype_id is not None
             is_admin = self.user_svc.is_admin(tg_id)
         participants = self.svc.list_participants_for_tournament(t.id)
         with_deck = sum(1 for p in participants if p.archetype)
@@ -100,7 +104,7 @@ class PlayerHandler:
             text,
             keyboard=tournament_card_keyboard(
                 t.id, is_registered, is_admin=is_admin, decks_hidden=t.decks_hidden,
-                has_pairings=has_pairings,
+                has_pairings=has_pairings, has_deck=has_deck,
             ),
         )
 

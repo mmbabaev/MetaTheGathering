@@ -44,23 +44,25 @@ class AetherhubImportService:
 
     def get_unfilled_opponents(
         self, tournament_id: int, user_id: int, participants: list
-    ) -> list:
-        """Return participants without archetype whose AetherHub name matches user_id's opponents.
+    ) -> tuple[list, str | None]:
+        """Return (unfilled_opponent_participants, error_key).
+
+        error_key is None on success, or one of:
+          'no_pairings'     — no pairings imported for tournament
+          'not_in_pairings' — user not found among pairing player names
+          'all_filled'      — all opponents already have archetypes
 
         Builds name→User cache to avoid O(n²) queries.
-        participants: list of Participant ORM objects.
         """
         pairings = self.get_pairings(tournament_id)
         if not pairings:
-            return []
+            return [], 'no_pairings'
 
-        # Collect all unique player names and resolve them once
         all_names = {p.player_name for p in pairings} | {p.opponent_name for p in pairings if p.opponent_name}
         name_to_user: dict[str, models.User | None] = {}
         for name in all_names:
             name_to_user[name] = self.find_user_by_name(name)
 
-        # Find opponent names for this user
         opponent_names: set[str] = set()
         for p in pairings:
             u = name_to_user.get(p.player_name)
@@ -68,19 +70,19 @@ class AetherhubImportService:
                 opponent_names.add(p.opponent_name)
 
         if not opponent_names:
-            return []
+            return [], 'not_in_pairings'
 
-        # Build user_id → opponent_name set for fast lookup
         opponent_user_ids: set[int] = set()
         for opp_name in opponent_names:
             u = name_to_user.get(opp_name)
             if u:
                 opponent_user_ids.add(u.id)
 
-        return [
+        result = [
             p for p in participants
-            if p.archetype is None and p.user is not None and p.user_id in opponent_user_ids
+            if p.archetype is None and p.user_id in opponent_user_ids
         ]
+        return result, (None if result else 'all_filled')
 
     def _get_or_create_user_by_name(self, full_name: str) -> tuple[models.User, bool]:
         """Find or create a user by full name. Returns (user, was_created)."""

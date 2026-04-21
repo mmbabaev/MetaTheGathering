@@ -398,15 +398,17 @@ class AdminHandler:
 
         from services.aetherhub_import import AetherhubImportService
         participants = self.svc.list_participants_for_tournament(tournament_id)
-        opponent_participants = AetherhubImportService(self.svc.db).get_unfilled_opponents(
+        opponent_participants, err = AetherhubImportService(self.svc.db).get_unfilled_opponents(
             tournament_id, user.id, participants
         )
 
-        if not opponent_participants:
-            pairings = AetherhubImportService(self.svc.db).get_pairings(tournament_id)
-            if not pairings:
-                return HandlerResult("У вас нет оппонентов из импорта AetherHub.", is_alert=True)
-            return HandlerResult("Все оппоненты уже заполнены.", is_alert=True)
+        _errors = {
+            'no_pairings': "Пейринги AetherHub не импортированы для этого турнира.",
+            'not_in_pairings': "Ваше имя не найдено в пейрингах AetherHub.",
+            'all_filled': "Все оппоненты уже заполнены.",
+        }
+        if err:
+            return HandlerResult(_errors.get(err, err), is_alert=True)
 
         return HandlerResult(
             "Выберите оппонента для записи колоды:",
