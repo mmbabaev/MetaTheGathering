@@ -274,12 +274,15 @@ async def cmd_close_tournament(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 async def cmd_create_tournament(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/create_tournament [название] — создаёт новый турнир в текущем чате."""
+    """/create_tournament [название] — создаёт турнир. В личке дефолт — чат Единорога."""
     user = update.effective_user
     msg = update.effective_message
     if not user or not msg:
         return
-    chat_id = msg.chat_id
+    if msg.chat.type == ChatType.PRIVATE:
+        chat_id = settings.EDINOROG_CHAT_ID or msg.chat_id
+    else:
+        chat_id = msg.chat_id
     title = " ".join(context.args or []).strip() or None
     db = SessionLocal()
     try:

@@ -9,6 +9,7 @@ from telegram.ext import (
     CommandHandler,
     CallbackQueryHandler,
     MessageHandler,
+    PollAnswerHandler,
     filters,
 )
 
@@ -16,7 +17,7 @@ from core.config import settings
 from core.database import SessionLocal
 from core.schemas import TournamentCreate
 from services.tournament import TournamentService
-from bot.telegram import common, player, admin
+from bot.telegram import common, player, admin, poll as poll_handler
 from bot.telegram import settings as settings_handler
 from bot.keyboards import (
     CB_TOURNAMENT, CB_REGISTER, CB_ARCHETYPE, CB_CUSTOM_ARCHETYPE,
@@ -27,6 +28,12 @@ from bot.keyboards import (
     CB_DELETE_TOURNAMENT, CB_DELETE_TOURNAMENT_CONFIRM, CB_DELETE_TOURNAMENT_CANCEL,
     CB_ADMIN_SHOW_FILLED,
     CB_REVEAL_DECKS,
+    CB_POLL_MENU,
+    CB_LINK_POLL_BY_URL,
+    CB_CREATE_POLL,
+    CB_NOTIFY_NO_DECK,
+    CB_NOTIFY_CONFIRM,
+    CB_NOTIFY_CANCEL,
 )
 from bot.scheduler import setup_scheduler
 
@@ -198,6 +205,25 @@ def main() -> None:
     app.add_handler(
         CallbackQueryHandler(admin.callback_reveal_decks, pattern=f"^{CB_REVEAL_DECKS}:")
     )
+    app.add_handler(
+        CallbackQueryHandler(poll_handler.callback_poll_menu, pattern=f"^{CB_POLL_MENU}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(poll_handler.callback_link_poll_prompt, pattern=f"^{CB_LINK_POLL_BY_URL}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(poll_handler.callback_create_poll, pattern=f"^{CB_CREATE_POLL}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(poll_handler.callback_notify_no_deck, pattern=f"^{CB_NOTIFY_NO_DECK}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(poll_handler.callback_notify_confirm, pattern=f"^{CB_NOTIFY_CONFIRM}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(poll_handler.callback_notify_cancel, pattern=f"^{CB_NOTIFY_CANCEL}:")
+    )
+    app.add_handler(PollAnswerHandler(poll_handler.handle_poll_answer))
 
     app.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, player.message_text_input)
@@ -211,7 +237,7 @@ def main() -> None:
         _debug_create_tournament()
 
     logger.info("Bot starting (polling)...")
-    app.run_polling(allowed_updates=["message", "callback_query"])
+    app.run_polling(allowed_updates=["message", "callback_query", "poll_answer"])
 
 
 if __name__ == "__main__":

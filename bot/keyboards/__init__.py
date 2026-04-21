@@ -24,6 +24,12 @@ CB_DELETE_TOURNAMENT_CONFIRM = "del_t_yes"  # del_t_yes:{tournament_id}
 CB_DELETE_TOURNAMENT_CANCEL = "del_t_no"    # del_t_no:{tournament_id}
 CB_ADMIN_SHOW_FILLED = "adm_show_filled"    # adm_show_filled:{tournament_id}
 CB_REVEAL_DECKS = "reveal_decks"            # reveal_decks:{tournament_id}
+CB_POLL_MENU = "poll_menu"                  # poll_menu:{tournament_id}
+CB_LINK_POLL_BY_URL = "link_poll_url"       # link_poll_url:{tournament_id}
+CB_CREATE_POLL = "create_poll"              # create_poll:{tournament_id}
+CB_NOTIFY_NO_DECK = "notify_no_deck"        # notify_no_deck:{tournament_id}
+CB_NOTIFY_CONFIRM = "notify_confirm"        # notify_confirm:{tournament_id}
+CB_NOTIFY_CANCEL = "notify_cancel"          # notify_cancel:{tournament_id}
 
 
 def tournament_list_keyboard(tournaments: list) -> InlineKeyboardMarkup:
@@ -68,6 +74,11 @@ def tournament_card_keyboard(
         ])
         rows.append([
             InlineKeyboardButton(
+                "📊 Опрос", callback_data=f"{CB_POLL_MENU}:{tournament_id}"
+            ),
+        ])
+        rows.append([
+            InlineKeyboardButton(
                 "📊 Выгрузка Excel", callback_data=f"{CB_EXPORT_EXCEL}:{tournament_id}"
             ),
             InlineKeyboardButton(
@@ -92,6 +103,41 @@ def delete_tournament_confirm_keyboard(tournament_id: int) -> InlineKeyboardMark
 def register_button(tournament_id: int) -> InlineKeyboardMarkup:
     """Одна кнопка «Записаться» для турнира (обратная совместимость)."""
     return tournament_card_keyboard(tournament_id, is_registered=False)
+
+
+def fill_deck_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
+    """Кнопка в DM-уведомлении — ведёт сразу к выбору колоды."""
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("🃏 Выбрать колоду", callback_data=f"{CB_REGISTER}:{tournament_id}")
+    ]])
+
+
+def poll_menu_keyboard(tournament_id: int, poll_link: str | None = None) -> InlineKeyboardMarkup:
+    """Подменю «📊 Опрос»: создать / перейти (или привязать) / разослать / назад."""
+    rows = [
+        [InlineKeyboardButton("➕ Создать новый опрос", callback_data=f"{CB_CREATE_POLL}:{tournament_id}")],
+    ]
+    if poll_link:
+        rows.append([InlineKeyboardButton("🔗 Перейти на последний опрос", url=poll_link)])
+    else:
+        rows.append([InlineKeyboardButton(
+            "🔗 Привязать опрос по ссылке", callback_data=f"{CB_LINK_POLL_BY_URL}:{tournament_id}"
+        )])
+    rows.append([
+        InlineKeyboardButton("📣 Напомнить без колоды", callback_data=f"{CB_NOTIFY_NO_DECK}:{tournament_id}")
+    ])
+    rows.append([
+        InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_TOURNAMENT}:{tournament_id}")
+    ])
+    return InlineKeyboardMarkup(rows)
+
+
+def notify_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
+    """Подтверждение рассылки DM игрокам без колоды."""
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Отправить", callback_data=f"{CB_NOTIFY_CONFIRM}:{tournament_id}"),
+        InlineKeyboardButton("❌ Отмена", callback_data=f"{CB_NOTIFY_CANCEL}:{tournament_id}"),
+    ]])
 
 
 def leave_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:

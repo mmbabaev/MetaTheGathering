@@ -83,6 +83,7 @@ class Tournament(Base):
 
     participants = relationship("Participant", back_populates="tournament", cascade="all, delete-orphan")
     votes = relationship("Vote", back_populates="tournament", cascade="all, delete-orphan")
+    poll = relationship("TournamentPoll", back_populates="tournament", uselist=False, cascade="all, delete-orphan")
 
 
 class Archetype(Base):
@@ -141,6 +142,7 @@ class Participant(Base):
 
     created_at = Column(DateTime, default=utc_now, nullable=False)
     updated_at = Column(DateTime, default=utc_now, nullable=False)
+    last_dm_at = Column(DateTime, nullable=True)
 
     tournament = relationship("Tournament", back_populates="participants")
     user = relationship("User", back_populates="participants")
@@ -204,4 +206,38 @@ class Vote(Base):
         # один голос (up/down) voter → participant в рамках турнира
         UniqueConstraint("tournament_id", "participant_id", "voter_id", name="uq_vote_unique"),
         Index("ix_votes_tournament_voter", "tournament_id", "voter_id"),
+    )
+
+
+class TournamentPoll(Base):
+    """Telegram-опрос «Пойду / Не пойду» привязанный к турниру."""
+
+    __tablename__ = "tournament_polls"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tournament_id = Column(Integer, ForeignKey("tournaments.id", ondelete="CASCADE"), nullable=False, unique=True)
+    chat_id = Column(BigInteger, nullable=False)
+    tg_poll_id = Column(String, nullable=False, unique=True)
+    message_id = Column(BigInteger, nullable=False)
+    chat_username = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+    tournament = relationship("Tournament", back_populates="poll")
+    votes = relationship("PollVote", back_populates="poll", cascade="all, delete-orphan")
+
+
+class PollVote(Base):
+    """Голос одного пользователя в опросе турнира."""
+
+    __tablename__ = "poll_votes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    poll_id = Column(Integer, ForeignKey("tournament_polls.id", ondelete="CASCADE"), nullable=False)
+    tg_user_id = Column(BigInteger, nullable=False)
+    choice = Column(Integer, nullable=False)  # 0 = пойду, 1 = не пойду
+
+    poll = relationship("TournamentPoll", back_populates="votes")
+
+    __table_args__ = (
+        UniqueConstraint("poll_id", "tg_user_id", name="uq_poll_vote_unique"),
     )
