@@ -49,17 +49,22 @@ class TestArchetypeKeyboard:
     def test_one_button_per_archetype_plus_custom(self):
         archetypes = [(1, "Burn"), (2, "Affinity")]
         markup = archetype_keyboard(10, archetypes)
-        assert len(markup.inline_keyboard) == 3  # 2 архетипа + «Свой вариант»
+        assert len(markup.inline_keyboard) == 4  # 2 архетипа + «Свой вариант» + «Назад»
 
     def test_archetype_callback_data_format(self):
         markup = archetype_keyboard(10, [(5, "Burn")])
         cb = markup.inline_keyboard[0][0].callback_data
         assert cb == f"{CB_ARCHETYPE}:10:5"
 
-    def test_custom_archetype_button_last(self):
+    def test_custom_archetype_button_second_to_last(self):
         markup = archetype_keyboard(10, [(1, "Burn"), (2, "Affinity")])
+        second_last_cb = markup.inline_keyboard[-2][0].callback_data
+        assert second_last_cb == f"{CB_CUSTOM_ARCHETYPE}:10"
+
+    def test_back_button_last(self):
+        markup = archetype_keyboard(10, [(1, "Burn")])
         last_cb = markup.inline_keyboard[-1][0].callback_data
-        assert last_cb == f"{CB_CUSTOM_ARCHETYPE}:10"
+        assert last_cb == f"{CB_TOURNAMENT}:10"
 
     def test_callback_data_under_64_bytes(self):
         # Telegram ограничение на callback_data — 64 байта
