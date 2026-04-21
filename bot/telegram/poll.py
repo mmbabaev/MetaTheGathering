@@ -13,7 +13,7 @@ from services.archetype import ArchetypeService
 from services.poll import PollService
 from services.utils import get_tournament
 from bot.handlers.admin import AdminHandler
-from bot.keyboards import fill_deck_keyboard
+from bot.keyboards import fill_deck_keyboard, notify_confirm_keyboard
 from bot.telegram.common import log_event as _log, parse_callback_ints
 
 logger = logging.getLogger(__name__)
@@ -116,8 +116,48 @@ async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
         db.close()
 
 
+def _build_notify_preview(
+    poll_svc: PollService,
+    tournament_id: int,
+    t_chat_id: int,
+    t_title: str,
+) -> tuple[str, list[int]] | None:
+    """Строит текст превью рассылки. Возвращает (text, voter_ids) или None если некому слать."""
+    latest_poll = poll_svc.get_latest_poll_for_chat(t_chat_id)
+    poll_id = latest_poll.id if latest_poll else None
+
+    voters = poll_svc.get_yes_voters_without_deck(tournament_id, poll_id=poll_id)
+    if not voters:
+        return None
+
+    yes_count, no_count = (
+        poll_svc.get_poll_stats(poll_id) if poll_id else (0, 0)
+    )
+
+    poll_link = (
+        _poll_message_link(latest_poll.chat_id, latest_poll.message_id)
+        if latest_poll else None
+    )
+
+    names = poll_svc.get_voter_display_names(voters)
+    player_list = "\n".join(f"  • {names[tg_id]}" for tg_id in voters)
+
+    lines = [
+        f"📊 Голосование «{t_title}»:",
+        f"  ✅ Пойду: {yes_count}   ❌ Не пойду: {no_count}",
+    ]
+    if poll_link:
+        lines.append(f"  🔗 {poll_link}")
+    lines += [
+        "",
+        f"Получат сообщение ({len(voters)}):",
+        player_list,
+    ]
+    return "\n".join(lines), voters
+
+
 async def callback_notify_no_deck(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Кнопка «📣 Без колоды» — отправляет DM игрокам, проголосовавшим «пойду» без колоды."""
+    """Кнопка «📣 Без колоды» — показывает превью рассылки с запросом подтверждения."""
     query = update.callback_query
     user = update.effective_user
     if not user:
@@ -129,20 +169,49 @@ async def callback_notify_no_deck(update: Update, context: ContextTypes.DEFAULT_
 
     db = SessionLocal()
     try:
-        user_svc = UserService(db)
-        if not user_svc.is_admin(user.id):
+        if not UserService(db).is_admin(user.id):
             await query.answer("Нет прав.", show_alert=True)
             return
 
-        # Голоса из последнего опроса чата, колода/cooldown — по текущему турниру
+        t = get_tournament(db, tournament_id)
+        result = _build_notify_preview(PollService(db), tournament_id, t.chat_id, t.title)
+        if result is None:
+            await query.answer("Все «пойду» уже заполнили колоду.", show_alert=True)
+            return
+
+        preview_text, _ = result
+        await query.edit_message_text(preview_text, reply_markup=notify_confirm_keyboard(tournament_id))
+        await query.answer()
+    finally:
+        db.close()
+
+
+async def callback_notify_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Подтверждение рассылки — реально отправляет DM."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+
+    db = SessionLocal()
+    try:
+        if not UserService(db).is_admin(user.id):
+            await query.answer("Нет прав.", show_alert=True)
+            return
+
         t = get_tournament(db, tournament_id)
         poll_svc = PollService(db)
         latest_poll = poll_svc.get_latest_poll_for_chat(t.chat_id)
         poll_id = latest_poll.id if latest_poll else None
-
         voters = poll_svc.get_yes_voters_without_deck(tournament_id, poll_id=poll_id)
+
         if not voters:
-            await query.answer("Все «пойду» уже заполнили колоду.", show_alert=True)
+            await query.edit_message_text("Уже нечего отправлять — все заполнили колоду.")
+            await query.answer()
             return
 
         sent = 0
@@ -153,9 +222,7 @@ async def callback_notify_no_deck(update: Update, context: ContextTypes.DEFAULT_
                 logger.info(f"[poll] skip notify tg_id={tg_id} (not in allowed list)")
                 continue
             try:
-                await context.bot.send_message(
-                    chat_id=tg_id, text=_DM_NO_DECK, reply_markup=keyboard
-                )
+                await context.bot.send_message(chat_id=tg_id, text=_DM_NO_DECK, reply_markup=keyboard)
                 notified_ids.append(tg_id)
                 sent += 1
             except Exception as e:
@@ -165,6 +232,14 @@ async def callback_notify_no_deck(update: Update, context: ContextTypes.DEFAULT_
             poll_svc.mark_notified(tournament_id, notified_ids)
 
         _log("notify_no_deck", user, tournament_id=tournament_id, sent=sent, total=len(voters))
-        await query.answer(f"Отправлено {sent} из {len(voters)} игроков.")
+        await query.edit_message_text(f"✅ Отправлено {sent} из {len(voters)} игроков.")
+        await query.answer()
     finally:
         db.close()
+
+
+async def callback_notify_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Отмена рассылки."""
+    query = update.callback_query
+    await query.edit_message_text("Рассылка отменена.")
+    await query.answer()

@@ -30,6 +30,8 @@ from bot.keyboards import (
     CB_REVEAL_DECKS,
     CB_CREATE_POLL,
     CB_NOTIFY_NO_DECK,
+    CB_NOTIFY_CONFIRM,
+    CB_NOTIFY_CANCEL,
 )
 from bot.scheduler import setup_scheduler
 
@@ -206,6 +208,12 @@ def main() -> None:
     )
     app.add_handler(
         CallbackQueryHandler(poll_handler.callback_notify_no_deck, pattern=f"^{CB_NOTIFY_NO_DECK}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(poll_handler.callback_notify_confirm, pattern=f"^{CB_NOTIFY_CONFIRM}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(poll_handler.callback_notify_cancel, pattern=f"^{CB_NOTIFY_CANCEL}:")
     )
     app.add_handler(PollAnswerHandler(poll_handler.handle_poll_answer))
 

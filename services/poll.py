@@ -125,6 +125,38 @@ class PollService:
 
         return list(yes_voter_ids - registered_with_deck - recently_notified)
 
+    def get_poll_stats(self, poll_id: int) -> tuple[int, int]:
+        """Возвращает (yes_count, no_count) для опроса."""
+        from sqlalchemy import func
+        rows = self.db.execute(
+            select(models.PollVote.choice, func.count().label("cnt"))
+            .where(models.PollVote.poll_id == poll_id)
+            .group_by(models.PollVote.choice)
+        ).all()
+        stats = {r.choice: r.cnt for r in rows}
+        return stats.get(0, 0), stats.get(1, 0)
+
+    def get_voter_display_names(self, tg_user_ids: list[int]) -> dict[int, str]:
+        """tg_id → отображаемое имя (username или first_name или id)."""
+        if not tg_user_ids:
+            return {}
+        users = self.db.execute(
+            select(models.User.tg_id, models.User.username,
+                   models.User.first_name, models.User.last_name)
+            .where(models.User.tg_id.in_(tg_user_ids))
+        ).all()
+        result = {}
+        for u in users:
+            if u.username:
+                result[u.tg_id] = f"@{u.username}"
+            elif u.first_name or u.last_name:
+                result[u.tg_id] = " ".join(filter(None, [u.first_name, u.last_name]))
+            else:
+                result[u.tg_id] = f"id{u.tg_id}"
+        for tg_id in tg_user_ids:
+            result.setdefault(tg_id, f"id{tg_id}")
+        return result
+
     def mark_notified(self, tournament_id: int, tg_user_ids: list[int]) -> None:
         """Записывает время последнего DM для участников турнира."""
         if not tg_user_ids:

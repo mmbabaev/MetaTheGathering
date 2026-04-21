@@ -26,6 +26,8 @@ CB_ADMIN_SHOW_FILLED = "adm_show_filled"    # adm_show_filled:{tournament_id}
 CB_REVEAL_DECKS = "reveal_decks"            # reveal_decks:{tournament_id}
 CB_CREATE_POLL = "create_poll"              # create_poll:{tournament_id}
 CB_NOTIFY_NO_DECK = "notify_no_deck"        # notify_no_deck:{tournament_id}
+CB_NOTIFY_CONFIRM = "notify_confirm"        # notify_confirm:{tournament_id}
+CB_NOTIFY_CANCEL = "notify_cancel"          # notify_cancel:{tournament_id}
 
 
 def tournament_list_keyboard(tournaments: list) -> InlineKeyboardMarkup:
@@ -108,6 +110,14 @@ def fill_deck_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
     """Кнопка в DM-уведомлении — ведёт сразу к выбору колоды."""
     return InlineKeyboardMarkup([[
         InlineKeyboardButton("🃏 Выбрать колоду", callback_data=f"{CB_REGISTER}:{tournament_id}")
+    ]])
+
+
+def notify_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
+    """Подтверждение рассылки DM игрокам без колоды."""
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Отправить", callback_data=f"{CB_NOTIFY_CONFIRM}:{tournament_id}"),
+        InlineKeyboardButton("❌ Отмена", callback_data=f"{CB_NOTIFY_CANCEL}:{tournament_id}"),
     ]])
 
 

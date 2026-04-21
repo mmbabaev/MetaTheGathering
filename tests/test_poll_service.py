@@ -156,6 +156,38 @@ class TestYesVotersWithoutDeck:
         assert user_bob.tg_id not in result
 
 
+# ── PollService.get_poll_stats ───────────────────────────────────────────────
+
+class TestPollStats:
+    def test_counts_votes(self, poll_svc, tournament):
+        poll = poll_svc.create_poll(tournament.id, 100, "p1", 1)
+        poll_svc.upsert_vote(poll.id, 111, choice=0)
+        poll_svc.upsert_vote(poll.id, 222, choice=0)
+        poll_svc.upsert_vote(poll.id, 333, choice=1)
+        yes, no = poll_svc.get_poll_stats(poll.id)
+        assert yes == 2
+        assert no == 1
+
+    def test_empty_poll(self, poll_svc, tournament):
+        poll = poll_svc.create_poll(tournament.id, 100, "p1", 1)
+        assert poll_svc.get_poll_stats(poll.id) == (0, 0)
+
+
+# ── PollService.get_voter_display_names ──────────────────────────────────────
+
+class TestVoterDisplayNames:
+    def test_returns_username(self, poll_svc, user_alice):
+        names = poll_svc.get_voter_display_names([user_alice.tg_id])
+        assert names[user_alice.tg_id] == "@alice"
+
+    def test_unknown_id_fallback(self, poll_svc):
+        names = poll_svc.get_voter_display_names([9999999])
+        assert names[9999999] == "id9999999"
+
+    def test_empty_list(self, poll_svc):
+        assert poll_svc.get_voter_display_names([]) == {}
+
+
 # ── PollService.mark_notified + DM cooldown ─────────────────────────────────
 
 class TestDmCooldown:
