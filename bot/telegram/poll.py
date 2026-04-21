@@ -64,12 +64,13 @@ async def callback_poll_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
             return
 
         t = get_tournament(db, tournament_id)
-        latest_poll = PollService(db).get_latest_poll_for_chat(t.chat_id)
+        poll_svc = PollService(db)
+        # Prefer poll tied directly to this tournament; fall back to latest in chat
+        poll = poll_svc.get_poll_for_tournament(tournament_id) or \
+               poll_svc.get_latest_poll_for_chat(t.chat_id)
         poll_link = None
-        if latest_poll:
-            poll_link = _poll_message_link(
-                latest_poll.chat_id, latest_poll.message_id, latest_poll.chat_username
-            )
+        if poll:
+            poll_link = _poll_message_link(poll.chat_id, poll.message_id, poll.chat_username)
 
         await query.edit_message_text(
             f"📊 Опрос — «{t.title}»",
