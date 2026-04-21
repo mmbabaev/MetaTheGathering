@@ -462,7 +462,9 @@ async def callback_close_tournament(update: Update, context: ContextTypes.DEFAUL
     (tournament_id,) = ids
     db = SessionLocal()
     try:
-        result = _admin_handler(db).handle_close_tournament_by_id(user.id, tournament_id)
+        result = _admin_handler(db).handle_close_tournament_by_id(
+            user.id, tournament_id, allow_empty=settings.DEBUG
+        )
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
@@ -483,16 +485,20 @@ async def callback_admin_more(update: Update, context: ContextTypes.DEFAULT_TYPE
     if ids is None:
         return
     (tournament_id,) = ids
+    from services.tournament import TournamentService
+    from services.utils import get_tournament
+    from services import errors as svc_errors
+    from core.models import TournamentStatus
     db = SessionLocal()
     try:
-        user_svc = UserService(db)
-        if not user_svc.is_admin(user.id):
+        if not UserService(db).is_admin(user.id):
             await query.answer("Нет прав.", show_alert=True)
             return
-        from services.tournament import TournamentService
-        from core import models as _models
-        t = TournamentService(db).db.get(_models.Tournament, tournament_id)
-        is_closed = t is not None and t.status == _models.TournamentStatus.CLOSED
+        try:
+            t = get_tournament(TournamentService(db).db, tournament_id)
+            is_closed = t.status == TournamentStatus.CLOSED
+        except svc_errors.TournamentNotFound:
+            is_closed = False
     finally:
         db.close()
     await query.edit_message_text("Действия с турниром:", reply_markup=admin_more_keyboard(tournament_id, is_closed=is_closed))

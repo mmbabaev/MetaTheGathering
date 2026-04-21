@@ -23,7 +23,7 @@ class AetherhubImportService:
         self.db = db
         self._user_svc = UserService(db)
 
-    def _find_user_by_name(self, full_name: str) -> models.User | None:
+    def find_user_by_name(self, full_name: str) -> models.User | None:
         """Match 'First Last' or 'Last First' against User.first_name + User.last_name."""
         parts = full_name.strip().split()
         if len(parts) < 2:
@@ -31,7 +31,6 @@ class AetherhubImportService:
                 select(models.User).where(models.User.first_name == full_name)
             ).scalar_one_or_none()
 
-        # Try "First Last" and "Last First" orderings
         for first, last in [(parts[0], " ".join(parts[1:])), (" ".join(parts[:-1]), parts[-1])]:
             user = self.db.execute(
                 select(models.User).where(
@@ -42,6 +41,46 @@ class AetherhubImportService:
             if user:
                 return user
         return None
+
+    def get_unfilled_opponents(
+        self, tournament_id: int, user_id: int, participants: list
+    ) -> list:
+        """Return participants without archetype whose AetherHub name matches user_id's opponents.
+
+        Builds name→User cache to avoid O(n²) queries.
+        participants: list of Participant ORM objects.
+        """
+        pairings = self.get_pairings(tournament_id)
+        if not pairings:
+            return []
+
+        # Collect all unique player names and resolve them once
+        all_names = {p.player_name for p in pairings} | {p.opponent_name for p in pairings if p.opponent_name}
+        name_to_user: dict[str, models.User | None] = {}
+        for name in all_names:
+            name_to_user[name] = self.find_user_by_name(name)
+
+        # Find opponent names for this user
+        opponent_names: set[str] = set()
+        for p in pairings:
+            u = name_to_user.get(p.player_name)
+            if u and u.id == user_id and p.opponent_name:
+                opponent_names.add(p.opponent_name)
+
+        if not opponent_names:
+            return []
+
+        # Build user_id → opponent_name set for fast lookup
+        opponent_user_ids: set[int] = set()
+        for opp_name in opponent_names:
+            u = name_to_user.get(opp_name)
+            if u:
+                opponent_user_ids.add(u.id)
+
+        return [
+            p for p in participants
+            if p.archetype is None and p.user is not None and p.user_id in opponent_user_ids
+        ]
 
     def _get_or_create_user_by_name(self, full_name: str) -> tuple[models.User, bool]:
         """Find or create a user by full name. Returns (user, was_created)."""
@@ -88,7 +127,7 @@ class AetherhubImportService:
         created: list[str] = []
 
         for name in data.players:
-            user = self._find_user_by_name(name)
+            user = self.find_user_by_name(name)
             was_created = False
             if user is None:
                 user, was_created = self._get_or_create_user_by_name(name)

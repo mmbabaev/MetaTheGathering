@@ -196,15 +196,15 @@ def import_svc(db):
 
 class TestFindUserByName:
     def test_finds_user_by_first_name(self, import_svc, user_alice):
-        result = import_svc._find_user_by_name("Alice")
+        result = import_svc.find_user_by_name("Alice")
         assert result is not None
         assert result.id == user_alice.id
 
     def test_returns_none_for_unknown(self, import_svc):
-        assert import_svc._find_user_by_name("Unknown Person") is None
+        assert import_svc.find_user_by_name("Unknown Person") is None
 
     def test_returns_none_for_empty(self, import_svc):
-        assert import_svc._find_user_by_name("") is None
+        assert import_svc.find_user_by_name("") is None
 
 
 # ── TestSavePairings ─────────────────────────────────────────────────────────

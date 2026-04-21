@@ -388,47 +388,24 @@ class AdminHandler:
         return HandlerResult(ADMIN_ARCH_SAVED.format(archetype_name=arch.name))
 
     def handle_admin_opponents(self, tg_id: int, tournament_id: int) -> HandlerResult:
-        """Показывает незаполненных оппонентов администратора из AetherHub-пейрингов."""
+        """Показывает незаполненных оппонентов пользователя из AetherHub-пейрингов."""
         if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN, is_alert=True)
 
-        admin_user = self.user_svc.get_by_tg_id(tg_id)
-        if not admin_user:
+        user = self.user_svc.get_by_tg_id(tg_id)
+        if not user:
             return HandlerResult("Профиль не найден.", is_alert=True)
 
         from services.aetherhub_import import AetherhubImportService
-        import_svc = AetherhubImportService(self.svc.db)
-        pairings = import_svc.get_pairings(tournament_id)
-
-        # Find which pairing player_name corresponds to this admin
-        opponent_names: set[str] = set()
-        seen: dict[str, bool] = {}
-        for p in pairings:
-            name = p.player_name
-            if name not in seen:
-                matched = import_svc._find_user_by_name(name)
-                seen[name] = (matched is not None and matched.id == admin_user.id)
-            if seen[name] and p.opponent_name:
-                opponent_names.add(p.opponent_name)
-
-        if not opponent_names:
-            return HandlerResult("У вас нет оппонентов из импорта AetherHub.", is_alert=True)
-
-        # Match opponent names to registered participants without archetype
         participants = self.svc.list_participants_for_tournament(tournament_id)
-        opponent_participants = []
-        for p in participants:
-            if p.archetype is not None:
-                continue
-            if p.user is None:
-                continue
-            for opp_name in opponent_names:
-                matched = import_svc._find_user_by_name(opp_name)
-                if matched and matched.id == p.user_id:
-                    opponent_participants.append(p)
-                    break
+        opponent_participants = AetherhubImportService(self.svc.db).get_unfilled_opponents(
+            tournament_id, user.id, participants
+        )
 
         if not opponent_participants:
+            pairings = AetherhubImportService(self.svc.db).get_pairings(tournament_id)
+            if not pairings:
+                return HandlerResult("У вас нет оппонентов из импорта AetherHub.", is_alert=True)
             return HandlerResult("Все оппоненты уже заполнены.", is_alert=True)
 
         return HandlerResult(
@@ -468,11 +445,12 @@ class AdminHandler:
         self.svc.close_tournament(active.id)
         return HandlerResult(TOURNAMENT_CLOSED_MSG)
 
-    def handle_close_tournament_by_id(self, tg_id: int, tournament_id: int) -> HandlerResult:
+    def handle_close_tournament_by_id(
+        self, tg_id: int, tournament_id: int, allow_empty: bool = False
+    ) -> HandlerResult:
         if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN, is_alert=True)
-        from core.config import settings
-        if not settings.DEBUG:
+        if not allow_empty:
             participants = self.svc.list_participants_for_tournament(tournament_id)
             if not participants:
                 return HandlerResult("⚠️ Нельзя закрыть пустой турнир — сначала добавьте участников.", is_alert=True)

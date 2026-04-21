@@ -110,6 +110,12 @@ async def callback_archetype(update: Update, context: ContextTypes.DEFAULT_TYPE)
         _log("register", user, tournament_id=tournament_id, archetype_id=archetype_id)
         await query.edit_message_text(result.text)
         await query.answer()
+        from services.aetherhub_import import AetherhubImportService
+        has_pairings = bool(AetherhubImportService(db).get_pairings(tournament_id))
+        card = _player_handler(db).handle_tournament_select(
+            tournament_id, tg_id=user.id, has_pairings=has_pairings
+        )
+        await query.message.reply_text(card.text, reply_markup=card.keyboard)
     finally:
         db.close()
 
@@ -319,6 +325,13 @@ async def _handle_pending_custom_arch(msg, user, text, context) -> bool:
             tournament_id, text,
         )
         await msg.reply_text(result.text)
+        if not result.is_alert:
+            from services.aetherhub_import import AetherhubImportService
+            has_pairings = bool(AetherhubImportService(db).get_pairings(tournament_id))
+            card = _player_handler(db).handle_tournament_select(
+                tournament_id, tg_id=user.id, has_pairings=has_pairings
+            )
+            await msg.reply_text(card.text, reply_markup=card.keyboard)
     finally:
         db.close()
     return True
