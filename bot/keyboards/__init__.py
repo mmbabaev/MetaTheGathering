@@ -113,7 +113,7 @@ def fill_deck_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
 
 
 def poll_menu_keyboard(tournament_id: int, poll_link: str | None = None) -> InlineKeyboardMarkup:
-    """Подменю «📊 Опрос»: создать / перейти (или привязать) / разослать."""
+    """Подменю «📊 Опрос»: создать / перейти (или привязать) / разослать / назад."""
     rows = [
         [InlineKeyboardButton("➕ Создать новый опрос", callback_data=f"{CB_CREATE_POLL}:{tournament_id}")],
     ]
@@ -125,6 +125,9 @@ def poll_menu_keyboard(tournament_id: int, poll_link: str | None = None) -> Inli
         )])
     rows.append([
         InlineKeyboardButton("📣 Напомнить без колоды", callback_data=f"{CB_NOTIFY_NO_DECK}:{tournament_id}")
+    ])
+    rows.append([
+        InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_TOURNAMENT}:{tournament_id}")
     ])
     return InlineKeyboardMarkup(rows)
 

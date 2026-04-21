@@ -182,19 +182,24 @@ async def handle_pending_link_poll(msg: Message, user: User, text: str, context)
         poll_svc = PollService(db)
         existing = poll_svc.get_poll_by_tg_id(tg_poll_id)
         if existing:
-            poll_svc.link_poll_to_tournament(existing.id, tournament_id)
+            poll = poll_svc.link_poll_to_tournament(existing.id, tournament_id)
         else:
-            poll_svc.create_poll(
+            poll = poll_svc.create_poll(
                 tournament_id=tournament_id,
                 chat_id=actual_chat_id,
                 tg_poll_id=tg_poll_id,
                 message_id=message_id,
                 chat_username=chat_username,
             )
+        t = get_tournament(db, tournament_id)
+        poll_link = _poll_message_link(poll.chat_id, poll.message_id, poll.chat_username)
     finally:
         db.close()
 
-    await msg.reply_text("✅ Опрос привязан к турниру!")
+    await msg.reply_text(
+        f"📊 Опрос — «{t.title}»",
+        reply_markup=poll_menu_keyboard(tournament_id, poll_link),
+    )
     return True
 
 

@@ -28,20 +28,21 @@ class TestPollMenuKeyboard:
     def _flat_buttons(self, keyboard):
         return [btn for row in keyboard.inline_keyboard for btn in row]
 
-    def test_without_poll_link_has_three_buttons(self):
+    def test_without_poll_link_has_four_buttons(self):
         kb = poll_menu_keyboard(1)
         buttons = self._flat_buttons(kb)
-        assert len(buttons) == 3
+        assert len(buttons) == 4
         texts = [b.text for b in buttons]
         assert any("Создать" in t for t in texts)
         assert any("Привязать" in t for t in texts)
         assert any("Напомнить" in t for t in texts)
+        assert any("Назад" in t for t in texts)
         assert not any(b.url for b in buttons)
 
-    def test_with_poll_link_has_three_buttons(self):
+    def test_with_poll_link_has_four_buttons(self):
         kb = poll_menu_keyboard(1, poll_link="https://t.me/testgroup/42")
         buttons = self._flat_buttons(kb)
-        assert len(buttons) == 3
+        assert len(buttons) == 4
         url_buttons = [b for b in buttons if b.url]
         assert len(url_buttons) == 1
         assert url_buttons[0].url == "https://t.me/testgroup/42"
