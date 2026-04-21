@@ -301,9 +301,18 @@ async def cmd_create_tournament(update: Update, context: ContextTypes.DEFAULT_TY
     db = SessionLocal()
     try:
         result = _admin_handler(db).handle_create_tournament(user.id, chat_id, title)
-        if not result.is_alert:
-            _log("create_tournament", user, chat_id=chat_id, title=title)
+        if result.is_alert:
+            await msg.reply_text(result.text)
+            return
+        _log("create_tournament", user, chat_id=chat_id, title=title)
         await msg.reply_text(result.text)
+        from services.tournament import TournamentService
+        from services.archetype import ArchetypeService
+        from bot.handlers.player import PlayerHandler
+        card = PlayerHandler(
+            TournamentService(db), UserService(db), ArchetypeService(db)
+        ).handle_tournament_select(result.tournament_id, tg_id=user.id)
+        await msg.reply_text(card.text, reply_markup=card.keyboard)
     finally:
         db.close()
 

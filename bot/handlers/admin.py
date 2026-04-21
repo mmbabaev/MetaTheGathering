@@ -472,7 +472,7 @@ class AdminHandler:
             t = self.svc.create_tournament(TournamentCreate(title=title, chat_id=chat_id))
         except errors.TournamentAlreadyExists:
             return HandlerResult(TOURNAMENT_ALREADY_EXISTS_MSG, is_alert=True)
-        return HandlerResult(f"✅ Турнир создан: «{t.title}» (id={t.id})")
+        return HandlerResult(f"✅ Турнир создан: «{t.title}»", tournament_id=t.id)
 
     def handle_delete_tournament(self, tg_id: int) -> HandlerResult:
         """Удалить активный турнир вместе с участниками (для дебага, через /delete_tournament)."""
