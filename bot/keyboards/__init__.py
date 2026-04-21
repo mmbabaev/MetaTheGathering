@@ -275,4 +275,7 @@ def archetype_keyboard(
     buttons.append([
         InlineKeyboardButton("Свой вариант", callback_data=f"{CB_CUSTOM_ARCHETYPE}:{tournament_id}")
     ])
+    buttons.append([
+        InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_TOURNAMENT}:{tournament_id}")
+    ])
     return InlineKeyboardMarkup(buttons)
