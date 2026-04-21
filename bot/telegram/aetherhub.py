@@ -8,11 +8,13 @@ from telegram.ext import ContextTypes
 from core.database import SessionLocal
 from services.user import UserService
 from services.tournament import TournamentService
+from services.archetype import ArchetypeService
 from services.aetherhub import fetch_tournament
 from services.aetherhub_import import AetherhubImportService
 from services.utils import get_tournament
 from bot.keyboards import aetherhub_confirm_keyboard
 from bot.telegram.common import parse_callback_ints
+from bot.handlers.player import PlayerHandler
 
 logger = logging.getLogger(__name__)
 
@@ -162,10 +164,6 @@ async def callback_aetherhub_confirm(update: Update, context: ContextTypes.DEFAU
     await query.edit_message_text("\n".join(lines))
     await query.answer()
 
-    from services.tournament import TournamentService
-    from services.archetype import ArchetypeService
-    from services.user import UserService
-    from bot.handlers.player import PlayerHandler
     db2 = SessionLocal()
     try:
         card = PlayerHandler(
