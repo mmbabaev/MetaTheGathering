@@ -24,23 +24,11 @@ class AetherhubImportService:
         self._user_svc = UserService(db)
 
     def find_user_by_name(self, full_name: str) -> models.User | None:
-        """Match 'First Last' or 'Last First' against User.first_name + User.last_name."""
-        parts = full_name.strip().split()
-        if len(parts) < 2:
-            return self.db.execute(
-                select(models.User).where(models.User.first_name == full_name)
-            ).scalar_one_or_none()
-
-        for first, last in [(parts[0], " ".join(parts[1:])), (" ".join(parts[:-1]), parts[-1])]:
-            user = self.db.execute(
-                select(models.User).where(
-                    models.User.first_name == first,
-                    models.User.last_name == last,
-                )
-            ).scalar_one_or_none()
-            if user:
-                return user
-        return None
+        """Match full_name against User records using flexible name matching
+        (both orderings, case-insensitive, ё/е normalization)."""
+        if not full_name.strip():
+            return None
+        return self._user_svc.find_by_name(full_name)
 
     def get_unfilled_opponents(
         self, tournament_id: int, user_id: int, participants: list
