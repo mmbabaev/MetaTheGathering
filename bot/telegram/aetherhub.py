@@ -137,12 +137,16 @@ async def callback_aetherhub_confirm(update: Update, context: ContextTypes.DEFAU
     db = SessionLocal()
     try:
         result = AetherhubImportService(db).import_tournament(tournament_id, data)
-        try:
-            TournamentService(db).set_aetherhub_url(tournament_id, url)
-        except Exception:
-            logger.exception("Failed to save aetherhub_url for tournament %s", tournament_id)
     finally:
         db.close()
+
+    db_url = SessionLocal()
+    try:
+        TournamentService(db_url).set_aetherhub_url(tournament_id, url)
+    except Exception:
+        logger.exception("Failed to save aetherhub_url for tournament %s", tournament_id)
+    finally:
+        db_url.close()
 
     lines = [
         "✅ Импорт завершён",
