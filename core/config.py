@@ -40,9 +40,8 @@ class Settings(BaseSettings):
     # Через запятую в .env: ADMIN_IDS=123,456
     ADMIN_IDS: str = ""
 
-    # Chat ID для каждого клуба — задаются в .env или берутся из config/debug.py
-    GOLDFISH_CHAT_ID: Optional[int] = _app_cfg.goldfish_chat_id
-    EDINOROG_CHAT_ID: Optional[int] = _app_cfg.edinorog_chat_id
+    # Telegram ID для получения уведомлений о создании турниров (личка)
+    ANNOUNCE_CHAT_ID: Optional[int] = None
 
     MONIUM_PROJECT: str = ""
     MONIUM_API_KEY: str = ""
@@ -68,11 +67,12 @@ class Settings(BaseSettings):
     def chat_ids(self) -> List[int]:
         """Все известные chat_id клубов."""
         ids = []
-        if self.GOLDFISH_CHAT_ID:
-            ids.append(self.GOLDFISH_CHAT_ID)
-        if self.EDINOROG_CHAT_ID:
-            ids.append(self.EDINOROG_CHAT_ID)
+        if _app_cfg.goldfish_chat_id:
+            ids.append(_app_cfg.goldfish_chat_id)
+        if _app_cfg.edinorog_chat_id:
+            ids.append(_app_cfg.edinorog_chat_id)
         return ids
 
 
 settings = Settings()
+app_cfg = _app_cfg

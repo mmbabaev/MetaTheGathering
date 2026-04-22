@@ -13,6 +13,7 @@ from bot.keyboards import (
     admin_more_keyboard,
 )
 from bot.messages import ADD_PLAYERS_USAGE, BULK_ADD_PROMPT, TELEGRAM_USER_LOOKUP_FAILED
+from bot.scheduler import format_schedule_text
 from bot.telegram.common import log_event as _log
 from bot.telegram.common import parse_callback_ints
 from bot.telegram.player import (
@@ -20,7 +21,7 @@ from bot.telegram.player import (
     USER_DATA_PENDING_ADMIN_CUSTOM_ARCH,
     USER_DATA_PENDING_BULK_ADD,
 )
-from core.config import settings
+from core.config import app_cfg, settings
 from core.database import SessionLocal
 from core.models import TournamentStatus
 from services import errors as svc_errors
@@ -322,7 +323,7 @@ async def cmd_create_tournament(update: Update, context: ContextTypes.DEFAULT_TY
     if not user or not msg:
         return
     if msg.chat.type == ChatType.PRIVATE:
-        chat_id = settings.EDINOROG_CHAT_ID or msg.chat_id
+        chat_id = app_cfg.edinorog_chat_id or msg.chat_id
     else:
         chat_id = msg.chat_id
     title = " ".join(context.args or []).strip() or None
@@ -549,3 +550,17 @@ async def callback_reveal_decks(update: Update, context: ContextTypes.DEFAULT_TY
         await query.answer()
     finally:
         db.close()
+
+
+async def cmd_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.effective_message or not update.effective_user:
+        return
+    user = update.effective_user
+    db = SessionLocal()
+    try:
+        if not UserService(db).is_admin(user.id):
+            await update.effective_message.reply_text("У вас нет прав администратора.")
+            return
+    finally:
+        db.close()
+    await update.effective_message.reply_text(format_schedule_text())

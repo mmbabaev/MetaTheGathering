@@ -39,7 +39,6 @@ CB_AETHERHUB_CANCEL = "ah_cancel"  # ah_cancel:{tournament_id}
 CB_ADMIN_MORE = "adm_more"  # adm_more:{tournament_id}
 CB_CLOSE_TOURNAMENT = "close_t"  # close_t:{tournament_id}
 CB_ADMIN_OPPONENTS = "adm_opps"  # adm_opps:{tournament_id}
-CB_DISMISS = "dismiss"  # dismiss — удалить сообщение
 
 
 def tournament_list_keyboard(tournaments: list) -> InlineKeyboardMarkup:

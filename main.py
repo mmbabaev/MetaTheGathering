@@ -36,7 +36,6 @@ from bot.keyboards import (
     CB_DELETE_TOURNAMENT,
     CB_DELETE_TOURNAMENT_CANCEL,
     CB_DELETE_TOURNAMENT_CONFIRM,
-    CB_DISMISS,
     CB_EXPORT_EXCEL,
     CB_LEAVE,
     CB_LEAVE_CANCEL,
@@ -97,6 +96,7 @@ _ADMIN_COMMANDS = _USER_COMMANDS + [
     BotCommand("add_players", "Массовая запись"),
     BotCommand("create_tournament", "Создать турнир"),
     BotCommand("delete_tournament", "Удалить турнир"),
+    BotCommand("schedule", "Расписание автозаданий"),
 ]
 
 
@@ -168,6 +168,7 @@ def main() -> None:
     app.add_handler(CommandHandler("archive", admin.cmd_archive, filters=private))
     app.add_handler(CommandHandler("create_tournament", admin.cmd_create_tournament, filters=private))
     app.add_handler(CommandHandler("delete_tournament", admin.cmd_delete_tournament, filters=private))
+    app.add_handler(CommandHandler("schedule", admin.cmd_schedule, filters=private))
 
     app.add_handler(CallbackQueryHandler(player.callback_tournament_select, pattern=f"^{CB_TOURNAMENT}:"))
     app.add_handler(CallbackQueryHandler(player.callback_register, pattern=f"^{CB_REGISTER}:"))
@@ -215,7 +216,6 @@ def main() -> None:
     app.add_handler(PollAnswerHandler(poll_handler.handle_poll_answer))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & private, player.message_text_input))
-    app.add_handler(CallbackQueryHandler(common.callback_dismiss, pattern=f"^{CB_DISMISS}$"))
 
     app.add_error_handler(_error_handler)
 

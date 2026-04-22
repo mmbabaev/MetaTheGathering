@@ -5,12 +5,10 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, ContextTypes
 
-from bot.keyboards import CB_DISMISS
 from core import models
-from core.config import Club, ClubSchedule, settings
+from core.config import Club, ClubSchedule, app_cfg, settings
 from core.database import SessionLocal
 from core.schemas import TournamentCreate
 from services.aetherhub import fetch_tournament, find_todays_pauper_tournament
@@ -40,7 +38,7 @@ def get_clubs() -> list[Club]:
     clubs = [
         Club(
             name="Goldfish",
-            chat_id=settings.GOLDFISH_CHAT_ID or 0,
+            chat_id=app_cfg.goldfish_chat_id or 0,
             aetherhub_url="https://aetherhub.com/User/GoldFish",
             title_prefix="🐠 ",
             schedules=[
@@ -82,7 +80,7 @@ def get_clubs() -> list[Club]:
         ),
         Club(
             name="Edinorog",
-            chat_id=settings.EDINOROG_CHAT_ID or 0,
+            chat_id=app_cfg.edinorog_chat_id or 0,
             aetherhub_url="https://aetherhub.com/User/Edinorog/",
             title_prefix="🦄 ",
             schedules=[
@@ -110,7 +108,7 @@ def get_clubs() -> list[Club]:
         clubs.append(
             Club(
                 name="Debug",
-                chat_id=settings.GOLDFISH_CHAT_ID or 0,
+                chat_id=app_cfg.goldfish_chat_id or 0,
                 schedules=[ClubSchedule(weekday="saturday", game_time="14:20")],
             )
         )
@@ -161,21 +159,13 @@ class CreateTournamentJob:
                 )
                 logger.info(f"Created tournament #{new_t.id} '{title}' for '{self.club.name}'")
 
-                if self.club.chat_id and bot is not None:
-                    keyboard = InlineKeyboardMarkup(
-                        [
-                            [
-                                InlineKeyboardButton("🔕 Скрыть", callback_data=CB_DISMISS),
-                            ]
-                        ]
-                    )
+                if settings.ANNOUNCE_CHAT_ID and bot is not None:
                     await bot.send_message(
-                        chat_id=self.club.chat_id,
+                        chat_id=settings.ANNOUNCE_CHAT_ID,
                         text=(
                             f"🏆 {self.club.name} Pauper — сегодня в {self.schedule.game_time}\n"
-                            f"Регистрация открыта! Используйте /tournaments для записи."
+                            f"Турнир создан. Регистрация открыта."
                         ),
-                        reply_markup=keyboard,
                     )
             except Exception as e:
                 logger.error(f"CreateTournamentJob error for '{self.club.name}': {e}", exc_info=True)
@@ -315,6 +305,33 @@ def setup_scheduler(app: Application) -> None:
                 _import.__name__ = f"aetherhub_import[{club.name}/{schedule.weekday}/{fetch_time_str}]"
                 app.job_queue.run_daily(_import, time=fetch_time, days=(DAYS[schedule.weekday],))
                 logger.info(f"Scheduler: AetherHub import for '{club.name}' ({schedule.weekday}) at {fetch_time_str}")
+
+
+_DAY_RU = {
+    "monday": "понедельник",
+    "tuesday": "вторник",
+    "wednesday": "среда",
+    "thursday": "четверг",
+    "friday": "пятница",
+    "saturday": "суббота",
+    "sunday": "воскресенье",
+}
+
+
+def format_schedule_text() -> str:
+    """Возвращает текстовое описание расписания для команды /schedule."""
+    tz = settings.TOURNAMENT_TIMEZONE
+    lines = [f"📅 Расписание ({tz}):"]
+    for club in get_clubs():
+        lines.append(f"\n{club.title_prefix}{club.name}:")
+        for schedule in club.schedules:
+            time_str = schedule.create_time or settings.TOURNAMENT_CREATE_TIME
+            day_ru = _DAY_RU.get(schedule.weekday.lower(), schedule.weekday)
+            lines.append(f"  {day_ru}: создание {time_str}, игра {schedule.game_time}")
+            if schedule.aetherhub_fetch_times:
+                times = ", ".join(schedule.aetherhub_fetch_times)
+                lines.append(f"    импорт: {times}")
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
