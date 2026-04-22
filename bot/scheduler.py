@@ -33,6 +33,7 @@ def get_clubs() -> list[Club]:
             name="Goldfish",
             chat_id=settings.GOLDFISH_CHAT_ID or 0,
             aetherhub_url="https://aetherhub.com/User/GoldFish",
+            title_prefix="🐠 ",
             schedules=[
                 ClubSchedule(
                     weekday="friday",
@@ -49,6 +50,7 @@ def get_clubs() -> list[Club]:
         Club(
             name="Edinorog",
             chat_id=settings.EDINOROG_CHAT_ID or 0,
+            aetherhub_url="https://aetherhub.com/User/Edinorog/",
             title_prefix="🦄 ",
             schedules=[
                 ClubSchedule(
