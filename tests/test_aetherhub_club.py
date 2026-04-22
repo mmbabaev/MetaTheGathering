@@ -262,12 +262,6 @@ def _make_import_job(weekday="friday", aetherhub_url="https://aetherhub.com/User
 class TestAetherhubImportJob:
     """Tests for AetherhubImportJob — db and now are injected directly."""
 
-    def test_skips_wrong_weekday(self, db):
-        job = _make_import_job(weekday="saturday")  # today is Friday
-        with patch("bot.scheduler.find_todays_pauper_tournament") as mock_find:
-            asyncio.run(job.run(now=FRIDAY_NOW, db=db))
-            mock_find.assert_not_called()
-
     def test_skips_when_no_aetherhub_url_configured(self, db):
         job = _make_import_job(aetherhub_url=None)
         with patch("bot.scheduler.find_todays_pauper_tournament") as mock_find:
@@ -389,12 +383,6 @@ def _make_create_job(weekday="friday", chat_id=100) -> CreateTournamentJob:
 
 class TestCreateTournamentJob:
     """Tests for CreateTournamentJob — db and now are injected directly."""
-
-    def test_skips_wrong_weekday(self, db, svc):
-        job = _make_create_job(weekday="saturday")  # today is Friday
-        bot = AsyncMock()
-        asyncio.run(job.run(bot=bot, now=FRIDAY_NOW, db=db))
-        assert svc.get_active_tournament_for_chat(100) is None
 
     def test_creates_tournament_on_correct_weekday(self, db, svc):
         job = _make_create_job(weekday="friday", chat_id=0)

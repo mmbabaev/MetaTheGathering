@@ -85,14 +85,6 @@ class CreateTournamentJob:
         self.schedule = schedule
 
     async def run(self, bot, now: datetime, db=None) -> None:
-        target_weekday = DAYS.get(self.schedule.weekday.lower())
-        if target_weekday is None or now.weekday() != target_weekday:
-            logger.info(
-                f"CreateTournamentJob[{self.club.name}/{self.schedule.weekday}]: "
-                f"not today (now={now.strftime('%A')}), skipping."
-            )
-            return
-
         date_str = now.strftime("%Y-%m-%d")
         title = f"{self.club.title_prefix}{self.club.name} Pauper {date_str}"
         slug = f"{date_str}-{self.club.name.lower()}-pauper"
@@ -144,14 +136,6 @@ class AetherhubImportJob:
 
     async def run(self, now: datetime, db=None) -> None:
         if not self.club.aetherhub_url:
-            return
-
-        target_weekday = DAYS.get(self.schedule.weekday.lower())
-        if target_weekday is None or now.weekday() != target_weekday:
-            logger.info(
-                f"AetherhubImportJob[{self.club.name}/{self.schedule.weekday}]: "
-                f"not today (now={now.strftime('%A')}), skipping."
-            )
             return
 
         close_db = db is None
@@ -251,7 +235,7 @@ def setup_scheduler(app: Application) -> None:
                 await _job.run(bot=context.bot, now=datetime.now(tz_))
 
             _create.__name__ = f"create_tournament[{club.name}/{schedule.weekday}]"
-            app.job_queue.run_daily(_create, time=create_time)
+            app.job_queue.run_daily(_create, time=create_time, days=(DAYS[schedule.weekday],))
             logger.info(
                 f"Scheduler: {club.name} create on {schedule.weekday} at {time_str} "
                 f"({settings.TOURNAMENT_TIMEZONE}), game at {schedule.game_time}"
@@ -266,7 +250,7 @@ def setup_scheduler(app: Application) -> None:
                     await _job.run(now=datetime.now(tz_))
 
                 _import.__name__ = f"aetherhub_import[{club.name}/{schedule.weekday}/{fetch_time_str}]"
-                app.job_queue.run_daily(_import, time=fetch_time)
+                app.job_queue.run_daily(_import, time=fetch_time, days=(DAYS[schedule.weekday],))
                 logger.info(
                     f"Scheduler: AetherHub import for '{club.name}' ({schedule.weekday}) at {fetch_time_str}"
                 )

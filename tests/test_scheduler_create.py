@@ -117,6 +117,35 @@ class TestSetupScheduler:
             setup_scheduler(app)
         assert app.job_queue.run_daily.call_count == 2
 
+    def test_create_job_days_matches_weekday(self):
+        """run_daily is called with days=(weekday_int,) matching the schedule."""
+        app = _make_app()
+        clubs = [Club(name="Test", chat_id=1, schedules=[
+            ClubSchedule(weekday="thursday", game_time="19:45", create_time="12:00"),
+        ])]
+        with patch("bot.scheduler.settings", _mock_settings()), \
+             patch("bot.scheduler.get_clubs", return_value=clubs):
+            setup_scheduler(app)
+        call_kwargs = app.job_queue.run_daily.call_args.kwargs
+        assert call_kwargs["days"] == (3,)  # thursday = 3
+
+    def test_import_job_days_matches_weekday(self):
+        """Import jobs also get the correct days= parameter."""
+        app = _make_app()
+        clubs = [Club(
+            name="Test", chat_id=1, aetherhub_url="https://aetherhub.com/User/Test",
+            schedules=[
+                ClubSchedule(weekday="friday", game_time="19:45",
+                             aetherhub_fetch_times=["21:00"]),
+            ],
+        )]
+        with patch("bot.scheduler.settings", _mock_settings()), \
+             patch("bot.scheduler.get_clubs", return_value=clubs):
+            setup_scheduler(app)
+        # Both calls (create + import) should use days=(4,) for Friday
+        for call in app.job_queue.run_daily.call_args_list:
+            assert call.kwargs["days"] == (4,)  # friday = 4
+
     def test_goldfish_full_config_registers_correct_count(self):
         """Goldfish fri(1+3) + sat(1+2) + Edinorog mon(1) = 8 jobs."""
         app = _make_app()
