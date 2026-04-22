@@ -158,3 +158,31 @@ Telegram-опрос «Пойду / Не пойду», привязанный к 
 | `opponent_name` | string | Имя оппонента (null = bye) |
 
 Тройка `(tournament_id, round_number, player_name)` уникальна.
+
+---
+
+## Club *(config)*
+
+Конфигурация клуба. Не хранится в БД — определена в коде (`core/config.py`).
+`Club.name` соответствует полю `Tournament.club`.
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `name` | string | Уникальное имя клуба (`Goldfish`, `Edinorog`) |
+| `chat_id` | int | Telegram chat ID группы клуба |
+| `aetherhub_url` | string | URL страницы клуба на AetherHub |
+| `title_prefix` | string | Префикс в названии турнира (напр. `🦄 `) |
+| `schedules` | list | Список расписаний (ClubSchedule) |
+
+---
+
+## ClubSchedule *(config)*
+
+Расписание одного игрового дня клуба. Клуб может иметь несколько расписаний (напр. Goldfish — пятница и суббота).
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| `weekday` | string | День недели (`friday`, `saturday`, …) |
+| `game_time` | string | Время начала турнира (`19:30`) |
+| `create_time` | string | Время создания турнира-записи (переопределяет дефолт) |
+| `aetherhub_fetch_times` | list | Времена для автоимпорта из AetherHub (`["20:15", "21:00"]`) |

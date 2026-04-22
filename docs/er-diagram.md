@@ -83,6 +83,23 @@ erDiagram
         string opponent_name
     }
 
+    Club {
+        string name
+        int chat_id
+        string aetherhub_url
+        string title_prefix
+    }
+
+    ClubSchedule {
+        string weekday
+        string game_time
+        string create_time
+        list aetherhub_fetch_times
+    }
+
+    Club ||--o{ ClubSchedule : "расписания"
+    Club }o--o{ Tournament : "club (name)"
+
     Tournament ||--o{ Participant : "участники"
     Tournament ||--o{ Vote : "голоса"
     Tournament ||--o| TournamentPoll : "опрос"
