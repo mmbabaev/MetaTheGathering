@@ -5,8 +5,10 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, ContextTypes
 
+from bot.keyboards import CB_DISMISS
 from core import models
 from core.config import Club, ClubSchedule, settings
 from core.database import SessionLocal
@@ -128,6 +130,12 @@ class CreateTournamentJob:
         self.schedule = schedule
 
     async def run(self, bot, now: datetime, db=None) -> None:
+        if now.weekday() != DAYS[self.schedule.weekday]:
+            logger.info(
+                f"CreateTournamentJob: skipping '{self.club.name}' — not {self.schedule.weekday} (now={now.strftime('%A')})"
+            )
+            return
+
         date_str = now.strftime("%Y-%m-%d")
         title = f"{self.club.title_prefix}{self.club.name} Pauper {now.strftime('%d.%m.%Y')}"
         slug = f"{date_str}-{self.club.name.lower()}-pauper"
@@ -154,12 +162,20 @@ class CreateTournamentJob:
                 logger.info(f"Created tournament #{new_t.id} '{title}' for '{self.club.name}'")
 
                 if self.club.chat_id and bot is not None:
+                    keyboard = InlineKeyboardMarkup(
+                        [
+                            [
+                                InlineKeyboardButton("🔕 Скрыть", callback_data=CB_DISMISS),
+                            ]
+                        ]
+                    )
                     await bot.send_message(
                         chat_id=self.club.chat_id,
                         text=(
                             f"🏆 {self.club.name} Pauper — сегодня в {self.schedule.game_time}\n"
                             f"Регистрация открыта! Используйте /tournaments для записи."
                         ),
+                        reply_markup=keyboard,
                     )
             except Exception as e:
                 logger.error(f"CreateTournamentJob error for '{self.club.name}': {e}", exc_info=True)

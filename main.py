@@ -36,6 +36,7 @@ from bot.keyboards import (
     CB_DELETE_TOURNAMENT,
     CB_DELETE_TOURNAMENT_CANCEL,
     CB_DELETE_TOURNAMENT_CONFIRM,
+    CB_DISMISS,
     CB_EXPORT_EXCEL,
     CB_LEAVE,
     CB_LEAVE_CANCEL,
@@ -154,10 +155,11 @@ def _debug_create_tournament() -> None:
 def main() -> None:
     app = Application.builder().token(settings.TELEGRAM_BOT_TOKEN).post_init(_set_commands).build()
 
-    app.add_handler(CommandHandler("start", common.cmd_start))
-    app.add_handler(CommandHandler("help", common.cmd_help))
-    app.add_handler(CommandHandler("tournaments", player.cmd_tournaments))
-    app.add_handler(CommandHandler("settings", settings_handler.cmd_settings))
+    private = filters.ChatType.PRIVATE
+    app.add_handler(CommandHandler("start", common.cmd_start, filters=private))
+    app.add_handler(CommandHandler("help", common.cmd_help, filters=private))
+    app.add_handler(CommandHandler("tournaments", player.cmd_tournaments, filters=private))
+    app.add_handler(CommandHandler("settings", settings_handler.cmd_settings, filters=private))
 
     app.add_handler(CommandHandler("add_me", admin.cmd_add_me))
     app.add_handler(CommandHandler("add_player", admin.cmd_add_player))
@@ -212,7 +214,8 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(admin.callback_admin_opponents, pattern=f"^{CB_ADMIN_OPPONENTS}:"))
     app.add_handler(PollAnswerHandler(poll_handler.handle_poll_answer))
 
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, player.message_text_input))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & private, player.message_text_input))
+    app.add_handler(CallbackQueryHandler(common.callback_dismiss, pattern=f"^{CB_DISMISS}$"))
 
     app.add_error_handler(_error_handler)
 
