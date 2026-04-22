@@ -1,12 +1,13 @@
 """Tests for decks_hidden feature: spoiler wrapping, reveal button, service method."""
 
 import pytest
-from core.schemas import TournamentCreate
-from services.tournament import TournamentService
-from bot.handlers.player import PlayerHandler
+
 from bot.handlers.admin import AdminHandler
+from bot.handlers.player import PlayerHandler
 from bot.keyboards import CB_REVEAL_DECKS
 from bot.messages import DECKS_REVEALED, format_tournament_status
+from core.schemas import TournamentCreate
+from services.tournament import TournamentService
 
 CHAT_ID = 777
 
@@ -28,6 +29,7 @@ def admin_handler(svc, user_svc, arch_svc):
 
 # ===== TournamentService.set_decks_hidden =====
 
+
 class TestSetDecksHidden:
     def test_default_is_true(self, tournament):
         assert tournament.decks_hidden is True
@@ -43,6 +45,7 @@ class TestSetDecksHidden:
 
 
 # ===== format_tournament_status with decks_hidden =====
+
 
 class TestFormatTournamentStatus:
     def test_hidden_shows_placeholder(self, db, svc, user_svc, arch_svc, tournament, archetype_burn):
@@ -66,6 +69,7 @@ class TestFormatTournamentStatus:
     def test_no_archetype_never_has_placeholder(self, db, svc, user_svc, tournament):
         user = user_svc.get_or_create(tg_id=4003, username="u3", first_name="Oleg")
         from core import models
+
         db.add(models.Participant(tournament_id=tournament.id, user_id=user.id))
         db.commit()
         participants = svc.list_participants_for_tournament(tournament.id)
@@ -76,6 +80,7 @@ class TestFormatTournamentStatus:
 
 
 # ===== PlayerHandler.handle_tournament_public_status =====
+
 
 class TestHandleTournamentPublicStatus:
     def test_decks_hidden_shows_placeholder(self, handler, svc, user_svc, arch_svc, tournament, archetype_burn):
@@ -98,9 +103,11 @@ class TestHandleTournamentPublicStatus:
 
 # ===== Tournament card keyboard: reveal button =====
 
+
 class TestTournamentCardKeyboard:
     def test_admin_sees_reveal_button_when_hidden(self, handler, user_svc, svc, arch_svc, tournament, archetype_burn):
         from unittest.mock import patch
+
         with patch("services.user.settings") as mock_settings:
             mock_settings.admin_ids = [9001]
             result = handler.handle_tournaments(tg_id=9001)
@@ -111,6 +118,7 @@ class TestTournamentCardKeyboard:
     def test_admin_no_reveal_button_when_already_revealed(self, handler, user_svc, svc, arch_svc, tournament):
         svc.set_decks_hidden(tournament.id, hidden=False)
         from unittest.mock import patch
+
         with patch("services.user.settings") as mock_settings:
             mock_settings.admin_ids = [9002]
             result = handler.handle_tournaments(tg_id=9002)
@@ -126,9 +134,11 @@ class TestTournamentCardKeyboard:
 
 # ===== Admin view also respects decks_hidden =====
 
+
 class TestAdminViewDecksHidden:
     def test_admin_status_hides_decks_when_hidden(self, admin_handler, svc, user_svc, tournament, archetype_burn):
         from unittest.mock import patch
+
         user = user_svc.get_or_create(tg_id=7001, username="p", first_name="Player")
         svc.register_participant(tournament_id=tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
 
@@ -141,6 +151,7 @@ class TestAdminViewDecksHidden:
 
     def test_admin_status_shows_decks_after_reveal(self, admin_handler, svc, user_svc, tournament, archetype_burn):
         from unittest.mock import patch
+
         svc.set_decks_hidden(tournament.id, hidden=False)
         user = user_svc.get_or_create(tg_id=7002, username="p2", first_name="Player2")
         svc.register_participant(tournament_id=tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
@@ -155,9 +166,11 @@ class TestAdminViewDecksHidden:
 
 # ===== AdminHandler.handle_reveal_decks =====
 
+
 class TestHandleRevealDecks:
     def test_reveals_decks_and_returns_status(self, admin_handler, svc, user_svc, tournament, archetype_burn):
         from unittest.mock import patch
+
         user = user_svc.get_or_create(tg_id=6001, username="p", first_name="Player")
         svc.register_participant(tournament_id=tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
 
@@ -172,6 +185,7 @@ class TestHandleRevealDecks:
 
     def test_non_admin_returns_alert(self, admin_handler, tournament):
         from unittest.mock import patch
+
         with patch("services.user.settings") as mock_settings:
             mock_settings.admin_ids = []
             result = admin_handler.handle_reveal_decks(tg_id=99999, tournament_id=tournament.id)
@@ -180,6 +194,7 @@ class TestHandleRevealDecks:
 
     def test_tournament_not_found_returns_alert(self, admin_handler):
         from unittest.mock import patch
+
         with patch("services.user.settings") as mock_settings:
             mock_settings.admin_ids = [8001]
             result = admin_handler.handle_reveal_decks(tg_id=8001, tournament_id=99999)

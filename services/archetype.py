@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass
 from typing import List
 
-from sqlalchemy import select, func
+from sqlalchemy import func, nulls_last, select
 from sqlalchemy.orm import Session
 
 from core import models
@@ -33,12 +33,8 @@ class ArchetypeService:
         Участники турниров в статусе REGISTRATION не учитываются — иначе только что
         назначенные колоды всплывали бы в топе и загрязняли меню выбора.
         """
-        from sqlalchemy import nulls_last
-
         past_registration = (
-            select(models.Tournament.id).where(
-                models.Tournament.status != models.TournamentStatus.REGISTRATION
-            )
+            select(models.Tournament.id).where(models.Tournament.status != models.TournamentStatus.REGISTRATION)
         ).scalar_subquery()
 
         stmt = (
@@ -71,9 +67,7 @@ class ArchetypeService:
         1. Участие в прошлых турнирах (самые новые первыми)
         2. user_deck_history (DataLens import; ORDER BY id ASC = порядок по числу матчей)
         """
-        user = self.db.execute(
-            select(models.User).where(models.User.tg_id == tg_id)
-        ).scalar_one_or_none()
+        user = self.db.execute(select(models.User).where(models.User.tg_id == tg_id)).scalar_one_or_none()
         if not user:
             return []
 
@@ -114,7 +108,11 @@ class ArchetypeService:
             d_names = [all_arch[i].name for i in datalens_ids if i in all_arch]
             logger.debug(
                 "archetype_menu tg_id=%s | tournaments(%d)=%s | datalens(%d)=%s",
-                tg_id, len(t_names), t_names, len(d_names), d_names,
+                tg_id,
+                len(t_names),
+                t_names,
+                len(d_names),
+                d_names,
             )
 
         return [all_arch[aid] for aid in recent_ids if aid in all_arch]

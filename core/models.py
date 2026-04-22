@@ -3,15 +3,15 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     Column,
-    Integer,
-    String,
     DateTime,
     Enum,
-    Boolean,
     ForeignKey,
-    UniqueConstraint,
     Index,
+    Integer,
+    String,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 
@@ -66,10 +66,10 @@ class Tournament(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(255), nullable=False)
     chat_id = Column(BigInteger, nullable=False, index=True)  # id группового чата
-    slug = Column(String(64), nullable=True, index=True)   # например "2026-01-31-pauper"
+    slug = Column(String(64), nullable=True, index=True)  # например "2026-01-31-pauper"
 
     status = Column(Enum(TournamentStatus), default=TournamentStatus.REGISTRATION, nullable=False)
-    club = Column(String(64), nullable=True, index=True)   # "Goldfish" / "Edinorog" / None
+    club = Column(String(64), nullable=True, index=True)  # "Goldfish" / "Edinorog" / None
 
     registration_open_at = Column(DateTime, nullable=True)
     registration_close_at = Column(DateTime, nullable=True)
@@ -92,10 +92,12 @@ class Archetype(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), unique=True, nullable=False)  # "Burn"
-    color_emoji = Column(String(8), nullable=True)           # "🔴"
-    short_name = Column(String(64), nullable=True)           # "RDW"
-    meta_rank = Column(Integer, nullable=True, index=True)   # позиция в топ-мета (1=первый); NULL — нет места в списке
-    is_custom = Column(Boolean, nullable=False, default=False, server_default="false")  # True = введён игроком вручную; не показывается в глобальном топе
+    color_emoji = Column(String(8), nullable=True)  # "🔴"
+    short_name = Column(String(64), nullable=True)  # "RDW"
+    meta_rank = Column(Integer, nullable=True, index=True)  # позиция в топ-мета (1=первый); NULL — нет места в списке
+    is_custom = Column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )  # True = введён игроком вручную; не показывается в глобальном топе
 
     created_at = Column(DateTime, default=utc_now, nullable=False)
 
@@ -116,9 +118,7 @@ class ArchetypeAlias(Base):
 
     archetype = relationship("Archetype", back_populates="aliases")
 
-    __table_args__ = (
-        UniqueConstraint("archetype_id", "alias", name="uq_archetype_alias"),
-    )
+    __table_args__ = (UniqueConstraint("archetype_id", "alias", name="uq_archetype_alias"),)
 
 
 class Participant(Base):
@@ -178,9 +178,7 @@ class UserDeckHistory(Base):
     user = relationship("User", back_populates="deck_history")
     archetype = relationship("Archetype", back_populates="user_history")
 
-    __table_args__ = (
-        UniqueConstraint("user_id", "archetype_id", name="uq_user_deck_history"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "archetype_id", name="uq_user_deck_history"),)
 
 
 class VoteType(str, enum.Enum):
@@ -242,9 +240,7 @@ class PollVote(Base):
 
     poll = relationship("TournamentPoll", back_populates="votes")
 
-    __table_args__ = (
-        UniqueConstraint("poll_id", "tg_user_id", name="uq_poll_vote_unique"),
-    )
+    __table_args__ = (UniqueConstraint("poll_id", "tg_user_id", name="uq_poll_vote_unique"),)
 
 
 class RoundPairing(Base):
@@ -258,6 +254,4 @@ class RoundPairing(Base):
     player_name = Column(String(255), nullable=False)
     opponent_name = Column(String(255), nullable=True)  # NULL = bye
 
-    __table_args__ = (
-        UniqueConstraint("tournament_id", "round_number", "player_name", name="uq_round_pairing"),
-    )
+    __table_args__ = (UniqueConstraint("tournament_id", "round_number", "player_name", name="uq_round_pairing"),)

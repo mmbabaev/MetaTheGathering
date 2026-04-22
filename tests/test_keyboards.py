@@ -1,18 +1,18 @@
+from bot.deck_emoji import deck_emoji
 from bot.keyboards import (
-    tournament_list_keyboard,
-    register_button,
-    tournament_card_keyboard,
-    archetype_keyboard,
-    admin_archetype_select_keyboard,
-    CB_TOURNAMENT,
-    CB_REGISTER,
+    CB_ADMIN_ARCH_MORE,
+    CB_ADMIN_CUSTOM_ARCH,
+    CB_ADMIN_SET_ARCH,
     CB_ARCHETYPE,
     CB_CUSTOM_ARCHETYPE,
-    CB_ADMIN_SET_ARCH,
-    CB_ADMIN_CUSTOM_ARCH,
-    CB_ADMIN_ARCH_MORE,
+    CB_REGISTER,
+    CB_TOURNAMENT,
+    admin_archetype_select_keyboard,
+    archetype_keyboard,
+    register_button,
+    tournament_card_keyboard,
+    tournament_list_keyboard,
 )
-from bot.deck_emoji import deck_emoji
 
 
 class TestTournamentListKeyboard:
@@ -87,12 +87,14 @@ class TestArchetypeKeyboard:
 
     def test_has_more_button_present_when_flag_true(self):
         from bot.keyboards import CB_ARCHETYPE_MORE
+
         markup = archetype_keyboard(10, [(1, "Burn")], has_more=True)
         cbs = [b.callback_data for row in markup.inline_keyboard for b in row]
         assert any(cb.startswith(CB_ARCHETYPE_MORE) for cb in cbs)
 
     def test_no_more_button_when_flag_false(self):
         from bot.keyboards import CB_ARCHETYPE_MORE
+
         markup = archetype_keyboard(10, [(1, "Burn")], has_more=False)
         cbs = [b.callback_data for row in markup.inline_keyboard for b in row]
         assert not any(cb.startswith(CB_ARCHETYPE_MORE) for cb in cbs)
@@ -101,10 +103,7 @@ class TestArchetypeKeyboard:
 class TestAdminArchetypeSelectKeyboard:
     def test_one_button_per_archetype_plus_custom(self):
         markup = admin_archetype_select_keyboard(5, [(1, "Burn"), (2, "Elves")])
-        arch_btns = [
-            b for row in markup.inline_keyboard for b in row
-            if b.callback_data.startswith(CB_ADMIN_SET_ARCH)
-        ]
+        arch_btns = [b for row in markup.inline_keyboard for b in row if b.callback_data.startswith(CB_ADMIN_SET_ARCH)]
         assert len(arch_btns) == 2
 
     def test_callback_data_format(self):
@@ -166,8 +165,7 @@ class TestTournamentCardKeyboard:
 
     def test_aetherhub_url_stored_shows_refresh_emoji(self):
         markup = tournament_card_keyboard(
-            1, is_registered=False, is_admin=True,
-            aetherhub_url="https://aetherhub.com/Tourney/RoundTourney/1"
+            1, is_registered=False, is_admin=True, aetherhub_url="https://aetherhub.com/Tourney/RoundTourney/1"
         )
         texts = self._all_texts(markup)
         assert any("🔄" in t and "AetherHub" in t for t in texts)

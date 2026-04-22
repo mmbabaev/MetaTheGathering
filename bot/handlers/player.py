@@ -1,33 +1,33 @@
 # Регистрация, выбор колоды — чистая бизнес-логика
 
-from services.tournament import TournamentService
-from services.archetype import ArchetypeService, ArchetypeItem
-from services.user import UserService
-from services import errors
-from services.utils import get_tournament
 from bot.handlers.base import HandlerResult
 from bot.keyboards import (
-    tournament_list_keyboard,
-    tournament_card_keyboard,
     archetype_keyboard,
     leave_confirm_keyboard,
+    tournament_card_keyboard,
+    tournament_list_keyboard,
 )
 from bot.messages import (
-    NO_ACTIVE_TOURNAMENTS,
-    CHOOSE_ARCHETYPE,
-    REGISTERED_AS,
-    REGISTERED,
     ALREADY_REGISTERED,
-    REGISTRATION_CLOSED,
-    TOURNAMENT_NOT_FOUND,
-    NAME_REQUIRED_FOR_REGISTRATION,
+    CHOOSE_ARCHETYPE,
     LEAVE_CONFIRM_PROMPT,
     LEFT_TOURNAMENT,
+    NAME_REQUIRED_FOR_REGISTRATION,
+    NO_ACTIVE_TOURNAMENTS,
     NOT_REGISTERED_IN_TOURNAMENT,
+    REGISTERED,
+    REGISTERED_AS,
+    REGISTRATION_CLOSED,
+    TOURNAMENT_NOT_FOUND,
     format_tournament_card,
     format_tournament_status,
     sort_participants,
 )
+from services import errors
+from services.archetype import ArchetypeItem, ArchetypeService
+from services.tournament import TournamentService
+from services.user import UserService
+from services.utils import get_tournament
 
 ARCHETYPE_COLLAPSED_COUNT = 3
 
@@ -97,15 +97,21 @@ class PlayerHandler:
         participants = self.svc.list_participants_for_tournament(t.id)
         with_deck = sum(1 for p in participants if p.archetype)
         text = format_tournament_card(
-            t.title, t.status.label_ru,
-            total=len(participants), with_deck=with_deck,
+            t.title,
+            t.status.label_ru,
+            total=len(participants),
+            with_deck=with_deck,
         )
         return HandlerResult(
             text,
             keyboard=tournament_card_keyboard(
-                t.id, is_registered, is_admin=is_admin, decks_hidden=t.decks_hidden,
-                has_pairings=has_pairings, has_deck=has_deck,
-                aetherhub_url=getattr(t, 'aetherhub_url', None),
+                t.id,
+                is_registered,
+                is_admin=is_admin,
+                decks_hidden=t.decks_hidden,
+                has_pairings=has_pairings,
+                has_deck=has_deck,
+                aetherhub_url=getattr(t, "aetherhub_url", None),
             ),
         )
 
@@ -134,9 +140,7 @@ class PlayerHandler:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
         return self._tournament_card(t, tg_id, has_pairings=has_pairings)
 
-    def handle_register(
-        self, tournament_id: int, tg_id: int | None = None
-    ) -> HandlerResult:
+    def handle_register(self, tournament_id: int, tg_id: int | None = None) -> HandlerResult:
         """Возвращает выбор архетипа. Если имя не задано — needs_name=True."""
         if tg_id is not None:
             user = self.user_svc.get_by_tg_id(tg_id)

@@ -1,27 +1,25 @@
 """Tests for aetherhub scraper and import service."""
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from services.aetherhub import (
-    fetch_tournament,
-    AetherhubTournamentData,
-    AetherhubRound,
     AetherhubPairing,
-    _strip_points,
+    AetherhubRound,
+    AetherhubTournamentData,
     _parse_page,
+    _strip_points,
+    fetch_tournament,
 )
 from services.aetherhub_import import AetherhubImportService
 
-
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
 
 def _make_data(players, rounds_pairings):
     rounds = [
-        AetherhubRound(number=i + 1, pairings=[
-            AetherhubPairing(player=p, opponent=o) for p, o in pairs
-        ])
+        AetherhubRound(number=i + 1, pairings=[AetherhubPairing(player=p, opponent=o) for p, o in pairs])
         for i, pairs in enumerate(rounds_pairings)
     ]
     return AetherhubTournamentData(
@@ -83,6 +81,7 @@ ROUND2_HTML = """
 
 # ── TestStripPoints ──────────────────────────────────────────────────────────
 
+
 class TestStripPoints:
     def test_removes_points_suffix(self):
         assert _strip_points("Иванов Иван (9 Points)") == "Иванов Иван"
@@ -101,6 +100,7 @@ class TestStripPoints:
 
 
 # ── TestParsePage ────────────────────────────────────────────────────────────
+
 
 class TestParsePage:
     def test_extracts_all_players_from_standings(self):
@@ -143,6 +143,7 @@ class TestParsePage:
 
 # ── TestFetchTournament ──────────────────────────────────────────────────────
 
+
 class TestFetchTournament:
     def _fetch(self, url="https://aetherhub.com/Tourney/RoundTourney/1"):
         html_map = {f"{url}?p=1": ROUND1_HTML, f"{url}?p=2": ROUND2_HTML}
@@ -178,9 +179,7 @@ class TestFetchTournament:
 
     def test_single_round_tournament(self):
         url = "https://aetherhub.com/Tourney/RoundTourney/1"
-        single_round_html = ROUND1_HTML.replace(
-            '<a href="?p=2">2</a>', ""
-        )
+        single_round_html = ROUND1_HTML.replace('<a href="?p=2">2</a>', "")
         html_map = {f"{url}?p=1": single_round_html}
         with patch("services.aetherhub._scraper", return_value=_mock_scraper(html_map)):
             data = fetch_tournament(url)
@@ -188,6 +187,7 @@ class TestFetchTournament:
 
 
 # ── TestFindUserByName ───────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def import_svc(db):
@@ -208,6 +208,7 @@ class TestFindUserByName:
 
     def test_finds_user_with_reversed_name_order(self, import_svc, db):
         from services.user import UserService
+
         UserService(db).get_or_create(tg_id=9001, username=None, first_name="Михаил", last_name="Бабаев")
         result = import_svc.find_user_by_name("Бабаев Михаил")
         assert result is not None
@@ -216,6 +217,7 @@ class TestFindUserByName:
 
     def test_finds_user_with_canonical_name_order(self, import_svc, db):
         from services.user import UserService
+
         UserService(db).get_or_create(tg_id=9002, username=None, first_name="Иван", last_name="Петров")
         result = import_svc.find_user_by_name("Иван Петров")
         assert result is not None
@@ -224,32 +226,49 @@ class TestFindUserByName:
 
 # ── TestSavePairings ─────────────────────────────────────────────────────────
 
+
 class TestSavePairings:
     def test_saves_pairings_to_db(self, import_svc, tournament):
-        rounds = [AetherhubRound(number=1, pairings=[
-            AetherhubPairing(player="Alice", opponent="Bob"),
-            AetherhubPairing(player="Bob", opponent="Alice"),
-        ])]
+        rounds = [
+            AetherhubRound(
+                number=1,
+                pairings=[
+                    AetherhubPairing(player="Alice", opponent="Bob"),
+                    AetherhubPairing(player="Bob", opponent="Alice"),
+                ],
+            )
+        ]
         count = import_svc._save_pairings(tournament.id, rounds)
         assert count == 2
 
     def test_idempotent_second_save_returns_zero(self, import_svc, tournament):
-        rounds = [AetherhubRound(number=1, pairings=[
-            AetherhubPairing(player="Alice", opponent="Bob"),
-        ])]
+        rounds = [
+            AetherhubRound(
+                number=1,
+                pairings=[
+                    AetherhubPairing(player="Alice", opponent="Bob"),
+                ],
+            )
+        ]
         import_svc._save_pairings(tournament.id, rounds)
         count2 = import_svc._save_pairings(tournament.id, rounds)
         assert count2 == 0
 
     def test_saves_bye_as_none(self, import_svc, tournament):
-        rounds = [AetherhubRound(number=1, pairings=[
-            AetherhubPairing(player="Alice", opponent=None),
-        ])]
+        rounds = [
+            AetherhubRound(
+                number=1,
+                pairings=[
+                    AetherhubPairing(player="Alice", opponent=None),
+                ],
+            )
+        ]
         import_svc._save_pairings(tournament.id, rounds)
         assert import_svc.get_opponent(tournament.id, "Alice", round_number=1) is None
 
 
 # ── TestImportTournament ─────────────────────────────────────────────────────
+
 
 class TestImportTournament:
     def test_registers_matched_user(self, import_svc, tournament, user_alice):
@@ -293,20 +312,27 @@ class TestImportTournament:
 
 # ── TestGetPairings ──────────────────────────────────────────────────────────
 
+
 class TestGetPairings:
     def test_returns_all_rounds(self, import_svc, tournament):
-        data = _make_data(players=[], rounds_pairings=[
-            [("Alice", "Bob")],
-            [("Bob", "Carol")],
-        ])
+        data = _make_data(
+            players=[],
+            rounds_pairings=[
+                [("Alice", "Bob")],
+                [("Bob", "Carol")],
+            ],
+        )
         import_svc.import_tournament(tournament.id, data)
         assert len(import_svc.get_pairings(tournament.id)) == 2
 
     def test_filters_by_round(self, import_svc, tournament):
-        data = _make_data(players=[], rounds_pairings=[
-            [("Alice", "Bob")],
-            [("Bob", "Carol")],
-        ])
+        data = _make_data(
+            players=[],
+            rounds_pairings=[
+                [("Alice", "Bob")],
+                [("Bob", "Carol")],
+            ],
+        )
         import_svc.import_tournament(tournament.id, data)
         r1 = import_svc.get_pairings(tournament.id, round_number=1)
         assert len(r1) == 1
@@ -317,6 +343,7 @@ class TestGetPairings:
 
 
 # ── TestGetOpponent ──────────────────────────────────────────────────────────
+
 
 class TestGetOpponent:
     def test_returns_opponent(self, import_svc, tournament):
@@ -340,12 +367,14 @@ class TestGetOpponent:
 
 # ── TestGetUnfilledOpponents ─────────────────────────────────────────────────
 
+
 class TestGetUnfilledOpponents:
     """Tests for get_unfilled_opponents — covers all error keys and success path."""
 
     def _setup(self, import_svc, svc, tournament, db, player_name: str, opponent_name: str):
         """Import pairings and register both players; return (player_user, opponent_participant)."""
         from services.user import UserService
+
         data = _make_data(
             players=[player_name, opponent_name],
             rounds_pairings=[[(player_name, opponent_name), (opponent_name, player_name)]],
@@ -365,7 +394,7 @@ class TestGetUnfilledOpponents:
         participants = svc.list_participants_for_tournament(tournament.id)
         result, err = import_svc.get_unfilled_opponents(tournament.id, 999, participants)
         assert result == []
-        assert err == 'no_pairings'
+        assert err == "no_pairings"
 
     def test_not_in_pairings_returns_error_key(self, import_svc, svc, tournament, user_alice, db):
         data = _make_data(players=["Bob"], rounds_pairings=[[("Bob", None)]])
@@ -374,11 +403,12 @@ class TestGetUnfilledOpponents:
         # user_alice is not in pairings
         result, err = import_svc.get_unfilled_opponents(tournament.id, user_alice.id, participants)
         assert result == []
-        assert err == 'not_in_pairings'
+        assert err == "not_in_pairings"
 
     def test_all_filled_returns_error_key(self, import_svc, svc, tournament, db):
-        from services.user import UserService
         from services.archetype import ArchetypeService
+        from services.user import UserService
+
         data = _make_data(
             players=["PlayerA", "PlayerB"],
             rounds_pairings=[[("PlayerA", "PlayerB"), ("PlayerB", "PlayerA")]],
@@ -395,10 +425,11 @@ class TestGetUnfilledOpponents:
         participants = svc.list_participants_for_tournament(tournament.id)
         result, err = import_svc.get_unfilled_opponents(tournament.id, player_a.id, participants)
         assert result == []
-        assert err == 'all_filled'
+        assert err == "all_filled"
 
     def test_returns_unfilled_opponents(self, import_svc, svc, tournament, db):
         from services.user import UserService
+
         data = _make_data(
             players=["PlayerA", "PlayerB"],
             rounds_pairings=[[("PlayerA", "PlayerB"), ("PlayerB", "PlayerA")]],

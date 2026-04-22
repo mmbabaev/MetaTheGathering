@@ -1,19 +1,19 @@
 """Re-export service errors for `from services import errors`."""
 
 from services.services_errors import (
-    ServiceError,
-    TournamentError,
-    TournamentNotFound,
-    TournamentAlreadyExists,
-    TournamentInvalidState,
     MultipleActiveTournaments,
-    ParticipantError,
     ParticipantAlreadyRegistered,
+    ParticipantError,
     ParticipantNotFound,
+    SelfVoteNotAllowed,
+    ServiceError,
+    TournamentAlreadyExists,
+    TournamentError,
+    TournamentInvalidState,
+    TournamentNotFound,
+    VoteTargetNotFound,
     VotingError,
     VotingNotAllowed,
-    SelfVoteNotAllowed,
-    VoteTargetNotFound,
 )
 
 __all__ = [

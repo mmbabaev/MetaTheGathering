@@ -16,7 +16,9 @@ NOT_REGISTERED_IN_TOURNAMENT = "Вы не записаны на этот тур�
 # Name prompts
 ASK_NAME = "Как вас зовут? Введите фамилию и имя через пробел (например: Иванов Иван):"
 NAME_SAVED = "Имя сохранено: {full_name}"
-NAME_REQUIRED_FOR_REGISTRATION = "Для записи на турнир нужно указать ваше имя.\n\nВведите фамилию и имя через пробел (например: Иванов Иван):"
+NAME_REQUIRED_FOR_REGISTRATION = (
+    "Для записи на турнир нужно указать ваше имя.\n\nВведите фамилию и имя через пробел (например: Иванов Иван):"
+)
 
 # Settings
 SETTINGS_MENU = "⚙️ Настройки"
@@ -31,12 +33,9 @@ TELEGRAM_USER_LOOKUP_FAILED = "Не удалось найти @{username} в Tel
 TOURNAMENT_CLOSED_MSG = "Турнир закрыт."
 TOURNAMENT_ALREADY_EXISTS_MSG = "В этом чате уже есть активный турнир."
 MULTIPLE_TOURNAMENTS_MSG = "Активных турниров несколько. Используйте /tournament_status чтобы увидеть их ID."
-ADD_PLAYERS_USAGE = (
-    "Формат:\n/add_players\n@username1 Название колоды\n@username2 Другая колода"
-)
+ADD_PLAYERS_USAGE = "Формат:\n/add_players\n@username1 Название колоды\n@username2 Другая колода"
 BULK_ADD_PROMPT = (
-    "Введите список игроков — по одному на строке (Фамилия Имя):\n\n"
-    "Пример:\nИванов Иван\nПетрова Мария\nАлексей"
+    "Введите список игроков — по одному на строке (Фамилия Имя):\n\nПример:\nИванов Иван\nПетрова Мария\nАлексей"
 )
 BULK_ADD_EMPTY = "Список игроков пустой."
 PARTICIPANT_NOT_FOUND = "Участник не найден."
@@ -65,9 +64,25 @@ def _participant_icon(p) -> str:
 
 # Типичные окончания русских фамилий
 _FAMILY_SUFFIXES = (
-    "ов", "ев", "ёв", "ин", "ын", "ый", "ий", "ой",
-    "ский", "цкий", "ской", "ная", "ная",
-    "ных", "ых", "ина", "ева", "ова", "ская",
+    "ов",
+    "ев",
+    "ёв",
+    "ин",
+    "ын",
+    "ый",
+    "ий",
+    "ой",
+    "ский",
+    "цкий",
+    "ской",
+    "ная",
+    "ная",
+    "ных",
+    "ых",
+    "ина",
+    "ева",
+    "ова",
+    "ская",
 )
 
 
@@ -110,6 +125,7 @@ def family_name_sort_key(first_name: str | None, last_name: str | None) -> str:
 
 def sort_participants(participants: list) -> list:
     """Сортирует участников: сначала без колоды, затем с колодой; внутри — по фамилии."""
+
     def _key(p):
         filled = 0 if p.archetype is None else 1
         name = family_name_sort_key(
@@ -117,6 +133,7 @@ def sort_participants(participants: list) -> list:
             p.user.last_name if p.user else None,
         )
         return (filled, name)
+
     return sorted(participants, key=_key)
 
 
@@ -138,9 +155,7 @@ def format_tournament_card(
     return header
 
 
-def format_tournament_status(
-    title: str, status: str, participants: list, decks_hidden: bool = False
-) -> str:
+def format_tournament_status(title: str, status: str, participants: list, decks_hidden: bool = False) -> str:
     """Структурированный список участников турнира."""
     total = len(participants)
     with_deck = sum(1 for p in participants if p.archetype)

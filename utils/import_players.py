@@ -29,12 +29,12 @@ from pathlib import Path
 from sqlalchemy import func, select
 
 from core.database import SessionLocal
-from core.models import User, Archetype
-
+from core.models import Archetype, User
 
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
+
 
 def _next_placeholder_tg_id(db) -> int:
     """Следующий свободный отрицательный tg_id (уходит вниз от -1)."""
@@ -86,6 +86,7 @@ def _get_or_create_user(db, first_name: str, last_name: str | None, dry_run: boo
 # ---------------------------------------------------------------------------
 # main logic
 # ---------------------------------------------------------------------------
+
 
 def run(path: str, dry_run: bool = False) -> None:
     data = json.loads(Path(path).read_text(encoding="utf-8"))

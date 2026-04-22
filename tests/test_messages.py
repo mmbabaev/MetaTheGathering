@@ -3,11 +3,14 @@ from bot.messages import format_tournament_card, format_tournament_status
 
 
 class _FakeArchetype:
-    def __init__(self, name): self.name = name
+    def __init__(self, name):
+        self.name = name
+
 
 class _FakeUser:
     def __init__(self, fn, ln=None, uname=None, tg_id=1):
         self.first_name, self.last_name, self.username, self.tg_id = fn, ln, uname, tg_id
+
 
 class _FakeParticipant:
     def __init__(self, user, archetype=None, confirmed=False):
@@ -96,10 +99,18 @@ class TestMessageTemplates:
 
     def test_all_constants_are_non_empty(self):
         constants = [
-            msg.NO_ACTIVE_TOURNAMENTS, msg.CHOOSE_ARCHETYPE, msg.CUSTOM_ARCHETYPE_PROMPT,
-            msg.REGISTERED, msg.ALREADY_REGISTERED, msg.REGISTRATION_CLOSED,
-            msg.TOURNAMENT_NOT_FOUND, msg.NOT_ADMIN, msg.NO_DECK_NAME,
-            msg.NO_ACTIVE_TOURNAMENT, msg.TOURNAMENT_CLOSED_MSG, msg.ADD_PLAYERS_USAGE,
+            msg.NO_ACTIVE_TOURNAMENTS,
+            msg.CHOOSE_ARCHETYPE,
+            msg.CUSTOM_ARCHETYPE_PROMPT,
+            msg.REGISTERED,
+            msg.ALREADY_REGISTERED,
+            msg.REGISTRATION_CLOSED,
+            msg.TOURNAMENT_NOT_FOUND,
+            msg.NOT_ADMIN,
+            msg.NO_DECK_NAME,
+            msg.NO_ACTIVE_TOURNAMENT,
+            msg.TOURNAMENT_CLOSED_MSG,
+            msg.ADD_PLAYERS_USAGE,
             msg.HELP_TEXT,
         ]
         for constant in constants:

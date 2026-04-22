@@ -27,8 +27,8 @@ from bot.telegram.player import (
     message_text_input,
 )
 
-
 # ── helpers ───────────────────────────────────────────────────────────────────
+
 
 def _make_user(tg_id: int = 111):
     u = MagicMock()
@@ -65,13 +65,13 @@ def _make_callback_update(data: str, user=None):
 
 # ── cmd_tournaments ───────────────────────────────────────────────────────────
 
+
 async def test_cmd_tournaments_replies_with_result():
     result = HandlerResult("Нет активных турниров.")
     update = _make_update()
     ctx = _make_context()
 
-    with patch("bot.telegram.player.SessionLocal") as mock_sl, \
-         patch("bot.telegram.player.PlayerHandler") as mock_ph:
+    with patch("bot.telegram.player.SessionLocal") as mock_sl, patch("bot.telegram.player.PlayerHandler") as mock_ph:
         mock_db = MagicMock()
         mock_sl.return_value = mock_db
         mock_h = MagicMock()
@@ -81,9 +81,7 @@ async def test_cmd_tournaments_replies_with_result():
         await cmd_tournaments(update, ctx)
 
     mock_h.handle_tournaments.assert_called_once_with(tg_id=update.effective_user.id)
-    update.effective_message.reply_text.assert_called_once_with(
-        "Нет активных турниров.", reply_markup=None
-    )
+    update.effective_message.reply_text.assert_called_once_with("Нет активных турниров.", reply_markup=None)
     mock_db.close.assert_called_once()
 
 
@@ -92,22 +90,18 @@ async def test_cmd_tournaments_passes_keyboard():
     result = HandlerResult("Выберите турнир:", keyboard=kb)
     update = _make_update()
 
-    with patch("bot.telegram.player.SessionLocal"), \
-         patch("bot.telegram.player.PlayerHandler") as mock_ph:
+    with patch("bot.telegram.player.SessionLocal"), patch("bot.telegram.player.PlayerHandler") as mock_ph:
         mock_ph.return_value.handle_tournaments.return_value = result
         await cmd_tournaments(update, _make_context())
 
-    update.effective_message.reply_text.assert_called_once_with(
-        "Выберите турнир:", reply_markup=kb
-    )
+    update.effective_message.reply_text.assert_called_once_with("Выберите турнир:", reply_markup=kb)
 
 
 async def test_cmd_tournaments_no_user():
     update = _make_update()
     update.effective_user = None
 
-    with patch("bot.telegram.player.SessionLocal"), \
-         patch("bot.telegram.player.PlayerHandler") as mock_ph:
+    with patch("bot.telegram.player.SessionLocal"), patch("bot.telegram.player.PlayerHandler") as mock_ph:
         mock_ph.return_value.handle_tournaments.return_value = HandlerResult("ok")
         await cmd_tournaments(update, _make_context())
 
@@ -116,13 +110,13 @@ async def test_cmd_tournaments_no_user():
 
 # ── callback_register ─────────────────────────────────────────────────────────
 
+
 async def test_callback_register_basic():
     result = HandlerResult("Выберите архетип:")
     update = _make_callback_update("reg:42")
     ctx = _make_context()
 
-    with patch("bot.telegram.player.SessionLocal"), \
-         patch("bot.telegram.player.PlayerHandler") as mock_ph:
+    with patch("bot.telegram.player.SessionLocal"), patch("bot.telegram.player.PlayerHandler") as mock_ph:
         mock_ph.return_value.handle_register.return_value = result
         await callback_register(update, ctx)
 
@@ -135,8 +129,7 @@ async def test_callback_register_needs_name_sets_user_data():
     update = _make_callback_update("reg:7")
     ctx = _make_context()
 
-    with patch("bot.telegram.player.SessionLocal"), \
-         patch("bot.telegram.player.PlayerHandler") as mock_ph:
+    with patch("bot.telegram.player.SessionLocal"), patch("bot.telegram.player.PlayerHandler") as mock_ph:
         mock_ph.return_value.handle_register.return_value = result
         await callback_register(update, ctx)
 
@@ -152,12 +145,12 @@ async def test_callback_register_bad_data():
 
 # ── callback_tournament_select ────────────────────────────────────────────────
 
+
 async def test_callback_tournament_select_edits_message():
     result = HandlerResult("Карточка турнира")
     update = _make_callback_update("t:5")
 
-    with patch("bot.telegram.player.SessionLocal"), \
-         patch("bot.telegram.player.PlayerHandler") as mock_ph:
+    with patch("bot.telegram.player.SessionLocal"), patch("bot.telegram.player.PlayerHandler") as mock_ph:
         mock_ph.return_value.handle_tournament_select.return_value = result
         await callback_tournament_select(update, _make_context())
 
@@ -169,12 +162,12 @@ async def test_callback_tournament_select_edits_message():
 
 # ── callback_archetype ────────────────────────────────────────────────────────
 
+
 async def test_callback_archetype_success():
     result = HandlerResult("Вы записаны как Burn.")
     update = _make_callback_update("arch:3:12")
 
-    with patch("bot.telegram.player.SessionLocal"), \
-         patch("bot.telegram.player.PlayerHandler") as mock_ph:
+    with patch("bot.telegram.player.SessionLocal"), patch("bot.telegram.player.PlayerHandler") as mock_ph:
         mock_ph.return_value.handle_archetype.return_value = result
         await callback_archetype(update, _make_context())
 
@@ -183,7 +176,8 @@ async def test_callback_archetype_success():
         update.effective_user.username,
         update.effective_user.first_name,
         update.effective_user.last_name,
-        3, 12,
+        3,
+        12,
     )
     update.callback_query.edit_message_text.assert_called_once_with("Вы записаны как Burn.")
 
@@ -192,8 +186,7 @@ async def test_callback_archetype_alert():
     result = HandlerResult("Уже записаны.", is_alert=True)
     update = _make_callback_update("arch:3:12")
 
-    with patch("bot.telegram.player.SessionLocal"), \
-         patch("bot.telegram.player.PlayerHandler") as mock_ph:
+    with patch("bot.telegram.player.SessionLocal"), patch("bot.telegram.player.PlayerHandler") as mock_ph:
         mock_ph.return_value.handle_archetype.return_value = result
         await callback_archetype(update, _make_context())
 
@@ -203,54 +196,49 @@ async def test_callback_archetype_alert():
 
 # ── callback_archetype_more ───────────────────────────────────────────────────
 
+
 async def test_callback_archetype_more():
     result = HandlerResult("Все архетипы", keyboard=MagicMock())
     update = _make_callback_update("arch_more:9")
 
-    with patch("bot.telegram.player.SessionLocal"), \
-         patch("bot.telegram.player.PlayerHandler") as mock_ph:
+    with patch("bot.telegram.player.SessionLocal"), patch("bot.telegram.player.PlayerHandler") as mock_ph:
         mock_ph.return_value.handle_archetype_more.return_value = result
         await callback_archetype_more(update, _make_context())
 
-    mock_ph.return_value.handle_archetype_more.assert_called_once_with(
-        9, tg_id=update.effective_user.id
-    )
+    mock_ph.return_value.handle_archetype_more.assert_called_once_with(9, tg_id=update.effective_user.id)
 
 
 # ── callback_leave_tournament ─────────────────────────────────────────────────
+
 
 async def test_callback_leave_tournament():
     result = HandlerResult("Подтверждение выхода")
     update = _make_callback_update("leave:4")
 
-    with patch("bot.telegram.player.SessionLocal"), \
-         patch("bot.telegram.player.PlayerHandler") as mock_ph:
+    with patch("bot.telegram.player.SessionLocal"), patch("bot.telegram.player.PlayerHandler") as mock_ph:
         mock_ph.return_value.handle_leave_tournament.return_value = result
         await callback_leave_tournament(update, _make_context())
 
-    mock_ph.return_value.handle_leave_tournament.assert_called_once_with(
-        update.effective_user.id, 4
-    )
+    mock_ph.return_value.handle_leave_tournament.assert_called_once_with(update.effective_user.id, 4)
 
 
 # ── callback_leave_confirm ────────────────────────────────────────────────────
+
 
 async def test_callback_leave_confirm():
     result = HandlerResult("Вы вышли.")
     update = _make_callback_update("leave_confirm:4")
 
-    with patch("bot.telegram.player.SessionLocal"), \
-         patch("bot.telegram.player.PlayerHandler") as mock_ph:
+    with patch("bot.telegram.player.SessionLocal"), patch("bot.telegram.player.PlayerHandler") as mock_ph:
         mock_ph.return_value.handle_leave_confirm.return_value = result
         await callback_leave_confirm(update, _make_context())
 
-    mock_ph.return_value.handle_leave_confirm.assert_called_once_with(
-        update.effective_user.id, 4
-    )
+    mock_ph.return_value.handle_leave_confirm.assert_called_once_with(update.effective_user.id, 4)
     update.callback_query.edit_message_text.assert_called_once_with("Вы вышли.")
 
 
 # ── message_text_input — pending_name ─────────────────────────────────────────
+
 
 async def test_message_text_input_pending_name_calls_save():
     result = HandlerResult("Выберите архетип:")
@@ -259,14 +247,11 @@ async def test_message_text_input_pending_name_calls_save():
     update = _make_update(user=user, message_text="Иван Петров")
     ctx = _make_context({USER_DATA_PENDING_NAME: 10})
 
-    with patch("bot.telegram.player.SessionLocal"), \
-         patch("bot.telegram.player.PlayerHandler") as mock_ph:
+    with patch("bot.telegram.player.SessionLocal"), patch("bot.telegram.player.PlayerHandler") as mock_ph:
         mock_ph.return_value.handle_save_name_then_register.return_value = result
         await message_text_input(update, ctx)
 
-    mock_ph.return_value.handle_save_name_then_register.assert_called_once_with(
-        222, "alice", "Иван Петров", 10
-    )
+    mock_ph.return_value.handle_save_name_then_register.assert_called_once_with(222, "alice", "Иван Петров", 10)
     assert USER_DATA_PENDING_NAME not in ctx.user_data
 
 
@@ -282,13 +267,13 @@ async def test_message_text_input_pending_name_empty_restores_state():
 
 # ── message_text_input — pending_custom ──────────────────────────────────────
 
+
 async def test_message_text_input_custom_archetype():
     result = HandlerResult("Записан.")
     update = _make_update(message_text="My Custom Deck")
     ctx = _make_context({USER_DATA_PENDING_CUSTOM: 5})
 
-    with patch("bot.telegram.player.SessionLocal"), \
-         patch("bot.telegram.player.PlayerHandler") as mock_ph:
+    with patch("bot.telegram.player.SessionLocal"), patch("bot.telegram.player.PlayerHandler") as mock_ph:
         mock_ph.return_value.handle_custom_archetype_text.return_value = result
         await message_text_input(update, ctx)
 
@@ -297,35 +282,34 @@ async def test_message_text_input_custom_archetype():
         update.effective_user.username,
         update.effective_user.first_name,
         update.effective_user.last_name,
-        5, "My Custom Deck",
+        5,
+        "My Custom Deck",
     )
 
 
 # ── message_text_input — settings name ───────────────────────────────────────
+
 
 async def test_message_text_input_settings_name():
     result = HandlerResult("Имя сохранено.")
     update = _make_update(message_text="Новое Имя")
     ctx = _make_context({USER_DATA_PENDING_SETTINGS_NAME: True})
 
-    with patch("bot.telegram.player.SessionLocal"), \
-         patch("bot.telegram.player.SettingsHandler") as mock_sh:
+    with patch("bot.telegram.player.SessionLocal"), patch("bot.telegram.player.SettingsHandler") as mock_sh:
         mock_sh.return_value.handle_settings_name_text.return_value = result
         await message_text_input(update, ctx)
 
-    mock_sh.return_value.handle_settings_name_text.assert_called_once_with(
-        update.effective_user.id, "Новое Имя"
-    )
+    mock_sh.return_value.handle_settings_name_text.assert_called_once_with(update.effective_user.id, "Новое Имя")
     assert USER_DATA_PENDING_SETTINGS_NAME not in ctx.user_data
 
 
 # ── db session always closed ──────────────────────────────────────────────────
 
+
 async def test_db_closed_even_on_handler_exception():
     update = _make_update()
 
-    with patch("bot.telegram.player.SessionLocal") as mock_sl, \
-         patch("bot.telegram.player.PlayerHandler") as mock_ph:
+    with patch("bot.telegram.player.SessionLocal") as mock_sl, patch("bot.telegram.player.PlayerHandler") as mock_ph:
         mock_db = MagicMock()
         mock_sl.return_value = mock_db
         mock_ph.return_value.handle_tournaments.side_effect = RuntimeError("db exploded")

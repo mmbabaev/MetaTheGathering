@@ -4,16 +4,16 @@ from datetime import timedelta
 
 import pytest
 
-from services.poll import PollService, DM_COOLDOWN_SECONDS
-from services.user import UserService
-from services.archetype import ArchetypeService
-from services.tournament import TournamentService
-from core.models import utc_now
 from bot.handlers.admin import AdminHandler
 from bot.handlers.base import HandlerResult
-
+from core.models import utc_now
+from services.archetype import ArchetypeService
+from services.poll import DM_COOLDOWN_SECONDS, PollService
+from services.tournament import TournamentService
+from services.user import UserService
 
 # ── fixtures ────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def poll_svc(db):
@@ -34,6 +34,7 @@ def admin_user(user_svc):
 
 
 # ── PollService.create_poll ──────────────────────────────────────────────────
+
 
 class TestCreatePoll:
     def test_creates_poll(self, poll_svc, tournament):
@@ -83,12 +84,15 @@ class TestCreatePoll:
 
 # ── PollService.upsert_vote ──────────────────────────────────────────────────
 
+
 class TestUpsertVote:
     def test_creates_vote(self, poll_svc, tournament):
         poll = poll_svc.create_poll(tournament.id, 100, "p1", 1)
         poll_svc.upsert_vote(poll.id, tg_user_id=555, choice=0)
         from sqlalchemy import select
+
         from core.models import PollVote
+
         vote = poll_svc.db.execute(
             select(PollVote).where(PollVote.poll_id == poll.id, PollVote.tg_user_id == 555)
         ).scalar_one()
@@ -99,10 +103,14 @@ class TestUpsertVote:
         poll_svc.upsert_vote(poll.id, 555, choice=0)
         poll_svc.remove_vote(poll.id, 555)
         from sqlalchemy import select
+
         from core.models import PollVote
-        count = len(poll_svc.db.execute(
-            select(PollVote).where(PollVote.poll_id == poll.id, PollVote.tg_user_id == 555)
-        ).scalars().all())
+
+        count = len(
+            poll_svc.db.execute(select(PollVote).where(PollVote.poll_id == poll.id, PollVote.tg_user_id == 555))
+            .scalars()
+            .all()
+        )
         assert count == 0
 
     def test_remove_vote_nonexistent_is_noop(self, poll_svc, tournament):
@@ -114,15 +122,20 @@ class TestUpsertVote:
         poll_svc.upsert_vote(poll.id, 555, choice=0)
         poll_svc.upsert_vote(poll.id, 555, choice=1)
         from sqlalchemy import select
+
         from core.models import PollVote
-        votes = poll_svc.db.execute(
-            select(PollVote).where(PollVote.poll_id == poll.id, PollVote.tg_user_id == 555)
-        ).scalars().all()
+
+        votes = (
+            poll_svc.db.execute(select(PollVote).where(PollVote.poll_id == poll.id, PollVote.tg_user_id == 555))
+            .scalars()
+            .all()
+        )
         assert len(votes) == 1
         assert votes[0].choice == 1
 
 
 # ── PollService.get_yes_voters_without_deck ──────────────────────────────────
+
 
 class TestYesVotersWithoutDeck:
     def test_empty_when_no_poll(self, poll_svc, tournament):
@@ -156,6 +169,7 @@ class TestYesVotersWithoutDeck:
     def test_cross_tournament_poll(self, poll_svc, svc, db, user_alice):
         """Голоса из старого опроса, колода проверяется по новому турниру."""
         from core.schemas import TournamentCreate
+
         old_t = svc.create_tournament(TournamentCreate(title="Old", chat_id=100))
         old_poll = poll_svc.create_poll(old_t.id, 100, "old_p", 1)
         poll_svc.upsert_vote(old_poll.id, user_alice.tg_id, choice=0)
@@ -172,7 +186,7 @@ class TestYesVotersWithoutDeck:
     def test_mixed_voters(self, poll_svc, svc, tournament, user_alice, user_bob, archetype_burn):
         poll = poll_svc.create_poll(tournament.id, 100, "p1", 1)
         poll_svc.upsert_vote(poll.id, user_alice.tg_id, choice=0)  # пойду, без колоды
-        poll_svc.upsert_vote(poll.id, user_bob.tg_id, choice=0)    # пойду, с колодой
+        poll_svc.upsert_vote(poll.id, user_bob.tg_id, choice=0)  # пойду, с колодой
         svc.register_participant(tournament_id=tournament.id, user_id=user_bob.id, archetype_id=archetype_burn.id)
         result = poll_svc.get_yes_voters_without_deck(tournament.id)
         assert user_alice.tg_id in result
@@ -180,6 +194,7 @@ class TestYesVotersWithoutDeck:
 
 
 # ── PollService.get_poll_stats ───────────────────────────────────────────────
+
 
 class TestPollStats:
     def test_counts_votes(self, poll_svc, tournament):
@@ -198,6 +213,7 @@ class TestPollStats:
 
 # ── PollService.get_voter_display_names ──────────────────────────────────────
 
+
 class TestVoterDisplayNames:
     def test_returns_username_and_name(self, poll_svc, user_alice):
         names = poll_svc.get_voter_display_names([user_alice.tg_id])
@@ -213,12 +229,15 @@ class TestVoterDisplayNames:
 
 # ── PollService.mark_notified + DM cooldown ─────────────────────────────────
 
+
 class TestDmCooldown:
     def test_mark_notified_sets_last_dm_at(self, poll_svc, svc, tournament, user_alice):
         svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id)
         poll_svc.mark_notified(tournament.id, [user_alice.tg_id])
         from sqlalchemy import select
+
         from core.models import Participant
+
         p = poll_svc.db.execute(
             select(Participant).where(
                 Participant.tournament_id == tournament.id,
@@ -241,10 +260,10 @@ class TestDmCooldown:
         svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id)
         # Simulate old notification
         from sqlalchemy import select
+
         from core.models import Participant
-        p = poll_svc.db.execute(
-            select(Participant).where(Participant.tournament_id == tournament.id)
-        ).scalar_one()
+
+        p = poll_svc.db.execute(select(Participant).where(Participant.tournament_id == tournament.id)).scalar_one()
         p.last_dm_at = utc_now() - timedelta(seconds=DM_COOLDOWN_SECONDS + 60)
         poll_svc.db.commit()
         result = poll_svc.get_yes_voters_without_deck(tournament.id)
@@ -255,6 +274,7 @@ class TestDmCooldown:
 
 
 # ── AdminHandler.handle_create_poll ─────────────────────────────────────────
+
 
 class TestHandleCreatePoll:
     def test_not_admin_returns_error(self, admin_handler, tournament, user_alice):
@@ -279,6 +299,7 @@ class TestHandleCreatePoll:
 
 # ── Chat migration: poll stored with old chat_id ─────────────────────────────
 
+
 class TestChatMigration:
     OLD_CHAT_ID = -5194706758
     NEW_CHAT_ID = -1003631429183
@@ -297,9 +318,11 @@ class TestChatMigration:
 
 # ── PollService.link_poll_to_tournament ──────────────────────────────────────
 
+
 class TestLinkPollToTournament:
     def test_links_poll_to_tournament(self, poll_svc, svc, db):
         from core.schemas import TournamentCreate
+
         t1 = svc.create_tournament(TournamentCreate(title="T1", chat_id=100))
         poll = poll_svc.create_poll(t1.id, 100, "p1", 1)
         svc.close_tournament(t1.id)
@@ -313,6 +336,7 @@ class TestLinkPollToTournament:
     def test_auto_link_via_chat_when_no_tournament_poll(self, poll_svc, svc, db):
         """Simulates callback_poll_menu auto-linking logic."""
         from core.schemas import TournamentCreate
+
         old_t = svc.create_tournament(TournamentCreate(title="Old", chat_id=100))
         poll = poll_svc.create_poll(old_t.id, 100, "p1", 1)
         svc.close_tournament(old_t.id)

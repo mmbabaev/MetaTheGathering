@@ -4,27 +4,34 @@ import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import select
 from telegram.ext import Application, ContextTypes
 
-from core.config import settings, Club, ClubSchedule
+from core import models
+from core.config import Club, ClubSchedule, settings
 from core.database import SessionLocal
 from core.schemas import TournamentCreate
-from core import models
-from services.tournament import TournamentService
-from services.aetherhub_import import AetherhubImportService
 from services.aetherhub import fetch_tournament, find_todays_pauper_tournament
+from services.aetherhub_import import AetherhubImportService
+from services.tournament import TournamentService
 
 logger = logging.getLogger(__name__)
 
 DAYS = {
-    "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
-    "friday": 4, "saturday": 5, "sunday": 6,
+    "monday": 0,
+    "tuesday": 1,
+    "wednesday": 2,
+    "thursday": 3,
+    "friday": 4,
+    "saturday": 5,
+    "sunday": 6,
 }
 
 
 # ---------------------------------------------------------------------------
 # Club definitions
 # ---------------------------------------------------------------------------
+
 
 def get_clubs() -> list[Club]:
     """Returns the list of configured clubs."""
@@ -39,13 +46,35 @@ def get_clubs() -> list[Club]:
                     weekday="thursday",
                     game_time="19:45",
                     create_time="12:00",
-                    aetherhub_fetch_times=["20:00", "20:30", "21:00", "21:30", "22:00", "22:30", "23:00", "23:30", "00:00", "00:30"],
+                    aetherhub_fetch_times=[
+                        "20:00",
+                        "20:30",
+                        "21:00",
+                        "21:30",
+                        "22:00",
+                        "22:30",
+                        "23:00",
+                        "23:30",
+                        "00:00",
+                        "00:30",
+                    ],
                 ),
                 ClubSchedule(
                     weekday="friday",
                     game_time="19:45",
                     create_time="12:00",
-                    aetherhub_fetch_times=["20:00", "20:30", "21:00", "21:30", "22:00", "22:30", "23:00", "23:30", "00:00", "00:30"],
+                    aetherhub_fetch_times=[
+                        "20:00",
+                        "20:30",
+                        "21:00",
+                        "21:30",
+                        "22:00",
+                        "22:30",
+                        "23:00",
+                        "23:30",
+                        "00:00",
+                        "00:30",
+                    ],
                 ),
             ],
         ),
@@ -59,23 +88,37 @@ def get_clubs() -> list[Club]:
                     weekday="monday",
                     game_time="19:30",
                     create_time="12:00",
-                    aetherhub_fetch_times=["20:00", "20:30", "21:00", "21:30", "22:00", "22:30", "23:00", "23:30", "00:00", "00:30"],
+                    aetherhub_fetch_times=[
+                        "20:00",
+                        "20:30",
+                        "21:00",
+                        "21:30",
+                        "22:00",
+                        "22:30",
+                        "23:00",
+                        "23:30",
+                        "00:00",
+                        "00:30",
+                    ],
                 ),
             ],
         ),
     ]
     if settings.DEBUG:
-        clubs.append(Club(
-            name="Debug",
-            chat_id=settings.GOLDFISH_CHAT_ID or 0,
-            schedules=[ClubSchedule(weekday="saturday", game_time="14:20")],
-        ))
+        clubs.append(
+            Club(
+                name="Debug",
+                chat_id=settings.GOLDFISH_CHAT_ID or 0,
+                schedules=[ClubSchedule(weekday="saturday", game_time="14:20")],
+            )
+        )
     return clubs
 
 
 # ---------------------------------------------------------------------------
 # Job: create tournament
 # ---------------------------------------------------------------------------
+
 
 class CreateTournamentJob:
     """Creates the club's tournament on the scheduled weekday."""
@@ -100,12 +143,14 @@ class CreateTournamentJob:
                     svc.close_tournament(active.id)
                     logger.info(f"Closed previous tournament #{active.id} for '{self.club.name}'")
 
-                new_t = svc.create_tournament(TournamentCreate(
-                    title=title,
-                    chat_id=self.club.chat_id or 0,
-                    slug=slug,
-                    club=self.club.name,
-                ))
+                new_t = svc.create_tournament(
+                    TournamentCreate(
+                        title=title,
+                        chat_id=self.club.chat_id or 0,
+                        slug=slug,
+                        club=self.club.name,
+                    )
+                )
                 logger.info(f"Created tournament #{new_t.id} '{title}' for '{self.club.name}'")
 
                 if self.club.chat_id and bot is not None:
@@ -126,6 +171,7 @@ class CreateTournamentJob:
 # ---------------------------------------------------------------------------
 # Job: AetherHub auto-import
 # ---------------------------------------------------------------------------
+
 
 class AetherhubImportJob:
     """Fetches today's pauper tournament from AetherHub and imports it automatically."""
@@ -200,9 +246,9 @@ class AetherhubImportJob:
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _find_active_club_tournament(db, club_name: str):
     """Find the current non-CLOSED tournament for a club."""
-    from sqlalchemy import select
     stmt = (
         select(models.Tournament)
         .where(
@@ -218,6 +264,7 @@ def _find_active_club_tournament(db, club_name: str):
 # ---------------------------------------------------------------------------
 # Setup
 # ---------------------------------------------------------------------------
+
 
 def setup_scheduler(app: Application) -> None:
     """Registers daily jobs for each club and schedule."""
@@ -251,14 +298,13 @@ def setup_scheduler(app: Application) -> None:
 
                 _import.__name__ = f"aetherhub_import[{club.name}/{schedule.weekday}/{fetch_time_str}]"
                 app.job_queue.run_daily(_import, time=fetch_time, days=(DAYS[schedule.weekday],))
-                logger.info(
-                    f"Scheduler: AetherHub import for '{club.name}' ({schedule.weekday}) at {fetch_time_str}"
-                )
+                logger.info(f"Scheduler: AetherHub import for '{club.name}' ({schedule.weekday}) at {fetch_time_str}")
 
 
 # ---------------------------------------------------------------------------
 # Legacy helpers — used in old scheduler tests
 # ---------------------------------------------------------------------------
+
 
 def parse_schedule(schedule_str: str) -> tuple[int, datetime.time]:
     """Парсит строку "friday 19:00" в (weekday_int, time)."""

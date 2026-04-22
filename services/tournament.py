@@ -11,24 +11,19 @@ logger = logging.getLogger(__name__)
 
 from core import models
 from core.schemas import (
-    TournamentCreate,
-    TournamentRead,
     ParticipantRead,
     ParticipantWithUserAndArchetype,
+    TournamentCreate,
+    TournamentRead,
     VoteRead,
 )
 from services import errors
-from services.utils import get_tournament, ensure_tournament_status
-
+from services.utils import ensure_tournament_status, get_tournament
 
 # доменные настройки
-CONFIRM_THRESHOLD = 3   # up - down >= 3 → confirmed = True
-REJECT_THRESHOLD = 3    # down - up >= 3 → confirmed = False
+CONFIRM_THRESHOLD = 3  # up - down >= 3 → confirmed = True
+REJECT_THRESHOLD = 3  # down - up >= 3 → confirmed = False
 CHANGE_VOTE_COOLDOWN = timedelta(seconds=30)
-
-
-from services.archetype import ArchetypeItem  # re-export
-from services.stats import MetaRow  # re-export
 
 
 class TournamentService:
@@ -88,9 +83,7 @@ class TournamentService:
         )
         active = self.db.execute(stmt).scalar_one_or_none()
         if active:
-            raise errors.TournamentAlreadyExists(
-                f"Chat {data.chat_id} already has active tournament #{active.id}"
-            )
+            raise errors.TournamentAlreadyExists(f"Chat {data.chat_id} already has active tournament #{active.id}")
 
         tournament = models.Tournament(
             title=data.title,
@@ -181,9 +174,7 @@ class TournamentService:
 
     def set_aetherhub_url(self, tournament_id: int, url: str) -> None:
         self.db.execute(
-            update(models.Tournament)
-            .where(models.Tournament.id == tournament_id)
-            .values(aetherhub_url=url)
+            update(models.Tournament).where(models.Tournament.id == tournament_id).values(aetherhub_url=url)
         )
         self.db.commit()
 
@@ -309,9 +300,9 @@ class TournamentService:
             participant.deck_added_by_tg_id = deck_added_by_tg_id
 
         if reset_votes:
-            self.db.query(models.Vote).filter(
-                models.Vote.participant_id == participant_id
-            ).delete(synchronize_session=False)
+            self.db.query(models.Vote).filter(models.Vote.participant_id == participant_id).delete(
+                synchronize_session=False
+            )
             participant.upvotes_count = 0
             participant.downvotes_count = 0
 
@@ -336,9 +327,7 @@ class TournamentService:
         stmt = select(models.Participant).where(models.Participant.id == participant_id)
         return self.db.execute(stmt).scalar_one_or_none()
 
-    def get_participant(
-        self, tournament_id: int, user_id: int
-    ) -> Optional[models.Participant]:
+    def get_participant(self, tournament_id: int, user_id: int) -> Optional[models.Participant]:
         """Вернуть участника турнира по user_id или None."""
         stmt = select(models.Participant).where(
             models.Participant.tournament_id == tournament_id,
@@ -475,9 +464,9 @@ class TournamentService:
     def reset_votes_for_participant(self, participant_id: int) -> None:
         participant = self._get_participant(participant_id)
 
-        self.db.query(models.Vote).filter(
-            models.Vote.participant_id == participant_id
-        ).delete(synchronize_session=False)
+        self.db.query(models.Vote).filter(models.Vote.participant_id == participant_id).delete(
+            synchronize_session=False
+        )
 
         participant.upvotes_count = 0
         participant.downvotes_count = 0
@@ -485,4 +474,3 @@ class TournamentService:
         participant.updated_at = models.utc_now()
 
         self.db.commit()
-

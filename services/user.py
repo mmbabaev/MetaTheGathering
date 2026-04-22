@@ -2,7 +2,9 @@
 
 from typing import Optional
 
-from sqlalchemy import select, func, update as sa_update, delete as sa_delete
+from sqlalchemy import delete as sa_delete
+from sqlalchemy import func, select
+from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
 from core import models
@@ -53,9 +55,7 @@ class UserService:
 
     def get_by_username(self, username: str) -> Optional[models.User]:
         """Найти пользователя по Telegram username (без @, без учёта регистра)."""
-        stmt = select(models.User).where(
-            models.User.username.ilike(username)
-        )
+        stmt = select(models.User).where(models.User.username.ilike(username))
         return self.db.execute(stmt).scalar_one_or_none()
 
     def find_by_name(self, query: str) -> Optional[models.User]:
@@ -65,9 +65,7 @@ class UserService:
         last = parts[1] if len(parts) > 1 else None
         return self._find_user_flexible(first, last)
 
-    def _find_user_flexible(
-        self, first_name: str, last_name: Optional[str]
-    ) -> Optional[models.User]:
+    def _find_user_flexible(self, first_name: str, last_name: Optional[str]) -> Optional[models.User]:
         """Гибкий поиск пользователя по имени:
         — регистронезависимый
         — нормализует ё→е
@@ -103,9 +101,7 @@ class UserService:
         # Несколько совпадений — предпочитаем того, у кого есть история колод
         for user in candidates:
             has_history = self.db.execute(
-                select(models.UserDeckHistory.id)
-                .where(models.UserDeckHistory.user_id == user.id)
-                .limit(1)
+                select(models.UserDeckHistory.id).where(models.UserDeckHistory.user_id == user.id).limit(1)
             ).scalar_one_or_none()
             if has_history:
                 return user
@@ -114,9 +110,7 @@ class UserService:
         real = [u for u in candidates if u.tg_id > 0]
         return real[0] if real else candidates[0]
 
-    def get_or_create_placeholder(
-        self, *, username: str
-    ) -> tuple["models.User", bool]:
+    def get_or_create_placeholder(self, *, username: str) -> tuple["models.User", bool]:
         """Найти пользователя по username или создать placeholder с отрицательным tg_id."""
         user = self.get_by_username(username)
         if user:
@@ -163,9 +157,7 @@ class UserService:
         self.db.flush()
         return user, True
 
-    def merge_placeholder_by_name(
-        self, real_tg_id: int, first_name: str, last_name: Optional[str]
-    ) -> bool:
+    def merge_placeholder_by_name(self, real_tg_id: int, first_name: str, last_name: Optional[str]) -> bool:
         """Привязывает реального пользователя к существующему placeholder-юзеру по имени.
 
         Когда реальный tg-пользователь впервые вводит своё имя, ищем placeholder
@@ -190,9 +182,9 @@ class UserService:
 
         # Переносим участие в турнирах, пропуская конфликты (тот же турнир)
         already_in = {
-            row[0] for row in self.db.execute(
-                select(models.Participant.tournament_id)
-                .where(models.Participant.user_id == real_user.id)
+            row[0]
+            for row in self.db.execute(
+                select(models.Participant.tournament_id).where(models.Participant.user_id == real_user.id)
             ).all()
         }
         if already_in:

@@ -14,6 +14,7 @@
 import json
 import logging
 import threading
+import urllib.request
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from pathlib import Path
@@ -29,6 +30,7 @@ _DEFAULT_PATH = Path(__file__).parent.parent / "events.jsonl"
 # Интерфейс бэкенда
 # ---------------------------------------------------------------------------
 
+
 class EventBackend(ABC):
     @abstractmethod
     def send(self, entry: dict) -> None:
@@ -38,6 +40,7 @@ class EventBackend(ABC):
 # ---------------------------------------------------------------------------
 # JSONL-бэкенд (файловый, дефолт)
 # ---------------------------------------------------------------------------
+
 
 class JsonlBackend(EventBackend):
     def __init__(self, path: Path = _DEFAULT_PATH) -> None:
@@ -58,6 +61,7 @@ class JsonlBackend(EventBackend):
 # Monium-бэкенд
 # ---------------------------------------------------------------------------
 
+
 class MoniumBackend(EventBackend):
     """Отправляет события в Monium через HTTP POST (fire-and-forget, отдельный поток)."""
 
@@ -68,12 +72,10 @@ class MoniumBackend(EventBackend):
         self._api_key = api_key
 
     def send(self, entry: dict) -> None:
-        import threading
         threading.Thread(target=self._post, args=(dict(entry),), daemon=True).start()
 
     def _post(self, entry: dict) -> None:
         try:
-            import urllib.request
             payload = json.dumps({"project": self._project, "event": entry}, ensure_ascii=False).encode()
             req = urllib.request.Request(
                 self._URL,
@@ -91,6 +93,7 @@ class MoniumBackend(EventBackend):
 # Мультиплексор — пишет во все бэкенды
 # ---------------------------------------------------------------------------
 
+
 class MultiBackend(EventBackend):
     def __init__(self, backends: list[EventBackend]) -> None:
         self._backends = backends
@@ -103,6 +106,7 @@ class MultiBackend(EventBackend):
 # ---------------------------------------------------------------------------
 # Основной EventLogger — тонкая обёртка поверх бэкенда
 # ---------------------------------------------------------------------------
+
 
 class EventLogger:
     def __init__(self, backend: EventBackend) -> None:
@@ -132,6 +136,7 @@ class EventLogger:
 # ---------------------------------------------------------------------------
 # Инициализация — добавь MoniumBackend сюда когда будет готов API
 # ---------------------------------------------------------------------------
+
 
 def _build_logger() -> EventLogger:
     backends: list[EventBackend] = [JsonlBackend()]

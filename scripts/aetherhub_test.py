@@ -1,6 +1,7 @@
 """Quick test: can cloudscraper fetch aetherhub tournament page?"""
 
 import sys
+
 import cloudscraper
 from bs4 import BeautifulSoup
 

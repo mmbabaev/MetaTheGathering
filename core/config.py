@@ -18,9 +18,9 @@ else:
 
 @dataclass
 class ClubSchedule:
-    weekday: str                              # "friday"
-    game_time: str                            # "19:30"
-    create_time: Optional[str] = None        # overrides TOURNAMENT_CREATE_TIME if set
+    weekday: str  # "friday"
+    game_time: str  # "19:30"
+    create_time: Optional[str] = None  # overrides TOURNAMENT_CREATE_TIME if set
     aetherhub_fetch_times: List[str] = field(default_factory=list)  # ["20:15", "21:00"]
 
 
@@ -29,7 +29,7 @@ class Club:
     name: str
     chat_id: int
     schedules: List[ClubSchedule]
-    aetherhub_url: Optional[str] = None      # https://aetherhub.com/User/GoldFish
+    aetherhub_url: Optional[str] = None  # https://aetherhub.com/User/GoldFish
     title_prefix: str = ""
 
 

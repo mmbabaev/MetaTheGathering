@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 
-
 FIELD_DECK_NAME = "koloda_igroka_b1uy"
 FIELD_MATCHES = "ff8d7ec0-856c-11ef-8901-6fb67336f168"
 FIELD_WINRATE = "8dd98d80-8569-11ef-90c9-2999d49d0630"
@@ -24,9 +23,11 @@ class PlayerChoicesResponse:
         result = []
         for row in self._rows:
             cells = {cell["fieldId"]: cell["value"] for cell in row["cells"]}
-            result.append(DeckStats(
-                name=cells[FIELD_DECK_NAME],
-                matches=int(cells[FIELD_MATCHES]),
-                winrate=float(cells[FIELD_WINRATE]),
-            ))
+            result.append(
+                DeckStats(
+                    name=cells[FIELD_DECK_NAME],
+                    matches=int(cells[FIELD_MATCHES]),
+                    winrate=float(cells[FIELD_WINRATE]),
+                )
+            )
         return result

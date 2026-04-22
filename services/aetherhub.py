@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime
 
 import cloudscraper
@@ -23,7 +23,7 @@ class AetherhubRound:
 @dataclass
 class AetherhubTournamentData:
     url: str
-    players: list[str]           # from round 1 standings
+    players: list[str]  # from round 1 standings
     rounds: list[AetherhubRound]
 
 
@@ -87,8 +87,18 @@ _DATE_FORMATS = [
 ]
 
 _MONTH_MAP = {
-    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
-    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+    "jan": 1,
+    "feb": 2,
+    "mar": 3,
+    "apr": 4,
+    "may": 5,
+    "jun": 6,
+    "jul": 7,
+    "aug": 8,
+    "sep": 9,
+    "oct": 10,
+    "nov": 11,
+    "dec": 12,
 }
 
 

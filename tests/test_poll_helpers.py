@@ -1,7 +1,7 @@
 """Tests for pure helper functions in bot/telegram/poll.py."""
 
-from bot.telegram.poll import _poll_message_link, _parse_message_link
-from bot.keyboards import poll_menu_keyboard, CB_CREATE_POLL, CB_NOTIFY_NO_DECK, CB_LINK_POLL_BY_URL
+from bot.keyboards import CB_CREATE_POLL, CB_LINK_POLL_BY_URL, CB_NOTIFY_NO_DECK, poll_menu_keyboard
+from bot.telegram.poll import _parse_message_link, _poll_message_link
 
 
 class TestPollMessageLink:
@@ -85,5 +85,3 @@ class TestParseMessageLink:
     def test_strips_whitespace(self):
         result = _parse_message_link("  https://t.me/c/1234567890/5  ")
         assert result is not None
-
-

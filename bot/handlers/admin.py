@@ -3,38 +3,41 @@
 import re
 from datetime import datetime
 
-from core.schemas import TournamentCreate
-from services.utils import get_tournament
-from services.tournament import TournamentService
-from services.archetype import ArchetypeService
-from services.user import UserService
-from services import errors
 from bot.handlers.base import HandlerResult
 from bot.handlers.player import build_archetype_menu
 from bot.keyboards import (
-    admin_participants_keyboard,
     admin_archetype_select_keyboard,
+    admin_participants_keyboard,
     delete_tournament_confirm_keyboard,
+    tournament_list_keyboard,
 )
 from bot.messages import (
-    NOT_ADMIN,
-    sort_participants,
-    NO_DECK_NAME,
-    NO_ACTIVE_TOURNAMENT,
-    MULTIPLE_TOURNAMENTS_MSG,
-    PLAYER_ADDED,
-    TOURNAMENT_CLOSED_MSG,
-    TOURNAMENT_ALREADY_EXISTS_MSG,
-    TOURNAMENT_NOT_FOUND,
-    REGISTRATION_CLOSED,
-    BULK_ADD_EMPTY,
-    PARTICIPANT_NOT_FOUND,
     ADMIN_ARCH_SAVED,
-    DECKS_REVEALED,
+    BULK_ADD_EMPTY,
     CHOOSE_ARCHETYPE,
+    DECKS_REVEALED,
+    MULTIPLE_TOURNAMENTS_MSG,
+    NO_ACTIVE_TOURNAMENT,
+    NO_DECK_NAME,
+    NOT_ADMIN,
+    PARTICIPANT_NOT_FOUND,
+    PLAYER_ADDED,
+    REGISTRATION_CLOSED,
+    TOURNAMENT_ALREADY_EXISTS_MSG,
+    TOURNAMENT_CLOSED_MSG,
+    TOURNAMENT_NOT_FOUND,
     format_tournament_status,
+    sort_participants,
 )
-
+from core.schemas import TournamentCreate
+from services import errors
+from services.aetherhub_import import AetherhubImportService
+from services.archetype import ArchetypeService
+from services.export import ExportService
+from services.poll import PollService
+from services.tournament import TournamentService
+from services.user import UserService
+from services.utils import get_tournament
 
 
 def parse_add_player_command(message_text: str, bot_username: str | None) -> tuple[str, str] | None:
@@ -147,10 +150,12 @@ class AdminHandler:
                 added_by_admin=True,
             )
             user_label = f"@{username}" if username else (first_name or f"id{tg_id}")
-            return HandlerResult(PLAYER_ADDED.format(
-                user=user_label,
-                archetype_name=archetype.name,
-            ))
+            return HandlerResult(
+                PLAYER_ADDED.format(
+                    user=user_label,
+                    archetype_name=archetype.name,
+                )
+            )
         except errors.ParticipantAlreadyRegistered:
             return HandlerResult("Вы уже записаны на этот турнир.")
         except errors.TournamentInvalidState:
@@ -186,10 +191,12 @@ class AdminHandler:
                 added_by_admin=True,
             )
             user_label = _player_display_label(target_username, target_first_name, target_tg_id)
-            return HandlerResult(PLAYER_ADDED.format(
-                user=user_label,
-                archetype_name=archetype.name,
-            ))
+            return HandlerResult(
+                PLAYER_ADDED.format(
+                    user=user_label,
+                    archetype_name=archetype.name,
+                )
+            )
         except errors.ParticipantAlreadyRegistered:
             user_label = _player_display_label(target_username, target_first_name, target_tg_id)
             return HandlerResult(f"{user_label} уже записан на этот турнир.")
@@ -338,9 +345,7 @@ class AdminHandler:
             keyboard=admin_archetype_select_keyboard(participant_id, arch_list, has_more),
         )
 
-    def handle_admin_pick_arch(
-        self, tg_id: int, participant_id: int, expanded: bool = False
-    ) -> HandlerResult:
+    def handle_admin_pick_arch(self, tg_id: int, participant_id: int, expanded: bool = False) -> HandlerResult:
         """Показывает выбор архетипа для конкретного участника."""
         if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
@@ -355,9 +360,7 @@ class AdminHandler:
         """Разворачивает полный список архетипов для участника (история + топ)."""
         return self.handle_admin_pick_arch(tg_id, participant_id, expanded=True)
 
-    def handle_admin_set_arch(
-        self, tg_id: int, participant_id: int, archetype_id: int
-    ) -> HandlerResult:
+    def handle_admin_set_arch(self, tg_id: int, participant_id: int, archetype_id: int) -> HandlerResult:
         """Устанавливает архетип участнику, затем возвращает обновлённый статус турнира."""
         if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
@@ -370,13 +373,9 @@ class AdminHandler:
             self.svc.set_participant_archetype(participant_id=participant_id, archetype_id=archetype_id)
         except errors.ParticipantNotFound:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
-        return self._tournament_status_result(
-            p.tournament_id, prefix=ADMIN_ARCH_SAVED.format(archetype_name=arch_name)
-        )
+        return self._tournament_status_result(p.tournament_id, prefix=ADMIN_ARCH_SAVED.format(archetype_name=arch_name))
 
-    def handle_admin_custom_arch_text(
-        self, tg_id: int, participant_id: int, arch_name: str
-    ) -> HandlerResult:
+    def handle_admin_custom_arch_text(self, tg_id: int, participant_id: int, arch_name: str) -> HandlerResult:
         """Создаёт архетип по введённому названию и присваивает участнику."""
         if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
@@ -396,16 +395,15 @@ class AdminHandler:
         if not user:
             return HandlerResult("Профиль не найден.", is_alert=True)
 
-        from services.aetherhub_import import AetherhubImportService
         participants = self.svc.list_participants_for_tournament(tournament_id)
         opponent_participants, err = AetherhubImportService(self.svc.db).get_unfilled_opponents(
             tournament_id, user.id, participants
         )
 
         _errors = {
-            'no_pairings': "Пейринги AetherHub не импортированы для этого турнира.",
-            'not_in_pairings': "Ваше имя не найдено в пейрингах AetherHub.",
-            'all_filled': "Все оппоненты уже заполнены.",
+            "no_pairings": "Пейринги AetherHub не импортированы для этого турнира.",
+            "not_in_pairings": "Ваше имя не найдено в пейрингах AetherHub.",
+            "all_filled": "Все оппоненты уже заполнены.",
         }
         if err:
             return HandlerResult(_errors.get(err, err), is_alert=True)
@@ -419,7 +417,6 @@ class AdminHandler:
         """Последние 20 закрытых турниров — список кнопок как в /tournaments."""
         if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
-        from bot.keyboards import tournament_list_keyboard
         tournaments = self.svc.list_closed_tournaments()
         if not tournaments:
             return HandlerResult("Архив пуст — закрытых турниров нет.")
@@ -433,7 +430,9 @@ class AdminHandler:
         if not tournaments:
             return HandlerResult(NO_ACTIVE_TOURNAMENT)
         blocks = [
-            format_tournament_status(t.title, t.status.label_ru, sort_participants(self.svc.list_participants_for_tournament(t.id)))
+            format_tournament_status(
+                t.title, t.status.label_ru, sort_participants(self.svc.list_participants_for_tournament(t.id))
+            )
             for t in tournaments
         ]
         return HandlerResult("\n\n---\n\n".join(blocks))
@@ -447,9 +446,7 @@ class AdminHandler:
         self.svc.close_tournament(active.id)
         return HandlerResult(TOURNAMENT_CLOSED_MSG)
 
-    def handle_close_tournament_by_id(
-        self, tg_id: int, tournament_id: int, allow_empty: bool = False
-    ) -> HandlerResult:
+    def handle_close_tournament_by_id(self, tg_id: int, tournament_id: int, allow_empty: bool = False) -> HandlerResult:
         if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN, is_alert=True)
         if not allow_empty:
@@ -462,9 +459,7 @@ class AdminHandler:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
         return HandlerResult(TOURNAMENT_CLOSED_MSG)
 
-    def handle_create_tournament(
-        self, tg_id: int, chat_id: int, title: str | None = None
-    ) -> HandlerResult:
+    def handle_create_tournament(self, tg_id: int, chat_id: int, title: str | None = None) -> HandlerResult:
         """Создать новый турнир в текущем чате."""
         if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
@@ -489,8 +484,6 @@ class AdminHandler:
 
     def handle_export_excel(self, tg_id: int, tournament_id: int) -> tuple[bytes, str] | None:
         """Возвращает (bytes, filename) или None если нет прав."""
-        from services.export import ExportService
-
         if not self.user_svc.is_admin(tg_id):
             return None
         try:
@@ -498,9 +491,7 @@ class AdminHandler:
         except errors.TournamentNotFound:
             return None
 
-    def handle_delete_tournament_prompt(
-        self, tg_id: int, tournament_id: int
-    ) -> HandlerResult:
+    def handle_delete_tournament_prompt(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Показывает запрос подтверждения удаления турнира."""
         if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
@@ -509,10 +500,7 @@ class AdminHandler:
         except errors.TournamentNotFound:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
         n = len(self.svc.list_participants_for_tournament(tournament_id))
-        text = (
-            f"⚠️ Удалить турнир «{t.title}»?\n"
-            f"Будет удалено {n} участник(ов). Действие необратимо."
-        )
+        text = f"⚠️ Удалить турнир «{t.title}»?\nБудет удалено {n} участник(ов). Действие необратимо."
         return HandlerResult(text, keyboard=delete_tournament_confirm_keyboard(tournament_id))
 
     def handle_create_poll(self, tg_id: int, tournament_id: int) -> HandlerResult:
@@ -521,7 +509,6 @@ class AdminHandler:
         """
         if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN, is_alert=True)
-        from services.poll import PollService
         if PollService(self.svc.db).get_poll_for_tournament(tournament_id):
             return HandlerResult("⚠️ Для этого турнира уже есть опрос.", is_alert=True)
         try:
@@ -530,9 +517,7 @@ class AdminHandler:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
         return HandlerResult(t.title)
 
-    def handle_delete_tournament_confirm(
-        self, tg_id: int, tournament_id: int
-    ) -> HandlerResult:
+    def handle_delete_tournament_confirm(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Выполняет удаление после подтверждения."""
         if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
@@ -543,4 +528,3 @@ class AdminHandler:
         title = t.title
         self.svc.delete_tournament(tournament_id)
         return HandlerResult(f"🗑 Турнир «{title}» удалён.")
-

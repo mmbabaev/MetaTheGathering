@@ -1,20 +1,34 @@
 # Telegram-обёртки для admin-хендлеров
 
+import io
+
 from telegram import Update
 from telegram.constants import ChatType
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
+from bot.handlers.admin import AdminHandler, parse_add_player_command, parse_bulk_player_line
+from bot.handlers.player import PlayerHandler
+from bot.keyboards import (
+    admin_more_keyboard,
+)
+from bot.messages import ADD_PLAYERS_USAGE, BULK_ADD_PROMPT, TELEGRAM_USER_LOOKUP_FAILED
+from bot.telegram.common import log_event as _log
+from bot.telegram.common import parse_callback_ints
+from bot.telegram.player import (
+    USER_DATA_OPPONENTS_MODE,
+    USER_DATA_PENDING_ADMIN_CUSTOM_ARCH,
+    USER_DATA_PENDING_BULK_ADD,
+)
 from core.config import settings
 from core.database import SessionLocal
-from services.tournament import TournamentService
+from core.models import TournamentStatus
+from services import errors as svc_errors
+from services.aetherhub_import import AetherhubImportService
 from services.archetype import ArchetypeService
+from services.tournament import TournamentService
 from services.user import UserService
-from bot.handlers.admin import AdminHandler, parse_add_player_command, parse_bulk_player_line
-from bot.telegram.player import USER_DATA_PENDING_BULK_ADD, USER_DATA_PENDING_ADMIN_CUSTOM_ARCH, USER_DATA_OPPONENTS_MODE
-from bot.messages import TELEGRAM_USER_LOOKUP_FAILED, ADD_PLAYERS_USAGE, BULK_ADD_PROMPT
-from bot.keyboards import CB_ADMIN_ARCH_MORE, CB_ADMIN_SHOW_FILLED, CB_REVEAL_DECKS, admin_more_keyboard, CB_CLOSE_TOURNAMENT
-from bot.telegram.common import log_event as _log, parse_callback_ints
+from services.utils import get_tournament
 
 
 def _admin_handler(db) -> AdminHandler:
@@ -84,10 +98,6 @@ async def callback_admin_set_arch(update: Update, context: ContextTypes.DEFAULT_
             opponents_result = _admin_handler(db).handle_admin_opponents(user.id, opponents_tournament_id)
             if opponents_result.is_alert:
                 context.user_data.pop(USER_DATA_OPPONENTS_MODE, None)
-                from services.aetherhub_import import AetherhubImportService
-                from services.tournament import TournamentService
-                from services.archetype import ArchetypeService
-                from bot.handlers.player import PlayerHandler
                 has_pairings = bool(AetherhubImportService(db).get_pairings(opponents_tournament_id))
                 card = PlayerHandler(
                     TournamentService(db), UserService(db), ArchetypeService(db)
@@ -198,9 +208,7 @@ async def cmd_add_player(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await msg.reply_text(TELEGRAM_USER_LOOKUP_FAILED.format(username=username))
             return
         if chat.type != ChatType.PRIVATE:
-            await msg.reply_text(
-                f"❌ @{username} — укажите @username человека (не группу или канал)."
-            )
+            await msg.reply_text(f"❌ @{username} — укажите @username человека (не группу или канал).")
             return
         target_tg_id = chat.id
         target_first_name = chat.first_name
@@ -326,12 +334,9 @@ async def cmd_create_tournament(update: Update, context: ContextTypes.DEFAULT_TY
             return
         _log("create_tournament", user, chat_id=chat_id, title=title)
         await msg.reply_text(result.text)
-        from services.tournament import TournamentService
-        from services.archetype import ArchetypeService
-        from bot.handlers.player import PlayerHandler
-        card = PlayerHandler(
-            TournamentService(db), UserService(db), ArchetypeService(db)
-        ).handle_tournament_select(result.tournament_id, tg_id=user.id)
+        card = PlayerHandler(TournamentService(db), UserService(db), ArchetypeService(db)).handle_tournament_select(
+            result.tournament_id, tg_id=user.id
+        )
         await msg.reply_text(card.text, reply_markup=card.keyboard)
     finally:
         db.close()
@@ -369,7 +374,6 @@ async def callback_export_excel(update: Update, context: ContextTypes.DEFAULT_TY
             await query.answer("Нет прав или турнир не найден.", show_alert=True)
             return
         data, filename = result
-        import io
         await context.bot.send_document(
             chat_id=query.message.chat_id,
             document=io.BytesIO(data),
@@ -380,9 +384,7 @@ async def callback_export_excel(update: Update, context: ContextTypes.DEFAULT_TY
         db.close()
 
 
-async def callback_delete_tournament_prompt(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> None:
+async def callback_delete_tournament_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Кнопка «🗑 Удалить турнир» — показывает запрос подтверждения."""
     query = update.callback_query
     user = update.effective_user
@@ -404,9 +406,7 @@ async def callback_delete_tournament_prompt(
         db.close()
 
 
-async def callback_delete_tournament_confirm(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> None:
+async def callback_delete_tournament_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Подтверждение удаления турнира."""
     query = update.callback_query
     user = update.effective_user
@@ -429,9 +429,7 @@ async def callback_delete_tournament_confirm(
         db.close()
 
 
-async def callback_delete_tournament_cancel(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> None:
+async def callback_delete_tournament_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Отмена удаления — возвращает карточку турнира."""
     query = update.callback_query
     user = update.effective_user
@@ -441,16 +439,13 @@ async def callback_delete_tournament_cancel(
     if ids is None:
         return
     (tournament_id,) = ids
-    from core.database import SessionLocal as SL
-    from services.tournament import TournamentService
-    from services.archetype import ArchetypeService
-    from services.user import UserService
-    from bot.handlers.player import PlayerHandler
-    db = SL()
+    db = SessionLocal()
     try:
         svc = TournamentService(db)
         user_svc = UserService(db)
-        result = PlayerHandler(svc, user_svc, ArchetypeService(db)).handle_tournament_select(tournament_id, tg_id=user.id)
+        result = PlayerHandler(svc, user_svc, ArchetypeService(db)).handle_tournament_select(
+            tournament_id, tg_id=user.id
+        )
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
     finally:
@@ -494,9 +489,7 @@ async def callback_close_tournament(update: Update, context: ContextTypes.DEFAUL
     (tournament_id,) = ids
     db = SessionLocal()
     try:
-        result = _admin_handler(db).handle_close_tournament_by_id(
-            user.id, tournament_id, allow_empty=settings.DEBUG
-        )
+        result = _admin_handler(db).handle_close_tournament_by_id(user.id, tournament_id, allow_empty=settings.DEBUG)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
@@ -517,10 +510,6 @@ async def callback_admin_more(update: Update, context: ContextTypes.DEFAULT_TYPE
     if ids is None:
         return
     (tournament_id,) = ids
-    from services.tournament import TournamentService
-    from services.utils import get_tournament
-    from services import errors as svc_errors
-    from core.models import TournamentStatus
     db = SessionLocal()
     try:
         if not UserService(db).is_admin(user.id):
@@ -533,7 +522,9 @@ async def callback_admin_more(update: Update, context: ContextTypes.DEFAULT_TYPE
             is_closed = False
     finally:
         db.close()
-    await query.edit_message_text("Действия с турниром:", reply_markup=admin_more_keyboard(tournament_id, is_closed=is_closed))
+    await query.edit_message_text(
+        "Действия с турниром:", reply_markup=admin_more_keyboard(tournament_id, is_closed=is_closed)
+    )
     await query.answer()
 
 
@@ -558,5 +549,3 @@ async def callback_reveal_decks(update: Update, context: ContextTypes.DEFAULT_TY
         await query.answer()
     finally:
         db.close()
-
-

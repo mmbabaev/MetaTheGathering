@@ -2,12 +2,12 @@ import pytest
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session
 
-from core.database import Base
 import core.models  # noqa: F401 — регистрирует все модели на Base.metadata
+from core.database import Base
 from core.models import TournamentStatus, VoteType
 from core.schemas import TournamentCreate
-from services.tournament import TournamentService
 from services.archetype import ArchetypeService
+from services.tournament import TournamentService
 from services.user import UserService
 
 

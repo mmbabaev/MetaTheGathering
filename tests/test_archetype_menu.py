@@ -9,13 +9,14 @@
 """
 
 import pytest
+
+from bot.handlers.admin import AdminHandler
+from bot.handlers.player import ARCHETYPE_COLLAPSED_COUNT, PlayerHandler, build_archetype_list
 from core import models
 from core.schemas import TournamentCreate
+from services.archetype import ArchetypeItem, ArchetypeService
 from services.tournament import TournamentService
-from services.archetype import ArchetypeService, ArchetypeItem
 from services.user import UserService
-from bot.handlers.player import PlayerHandler, build_archetype_list, ARCHETYPE_COLLAPSED_COUNT
-from bot.handlers.admin import AdminHandler
 
 CHAT_ID = 200
 ADMIN_TG_ID = 9999
@@ -25,9 +26,8 @@ PLAYER_TG_ID = 1111
 def close_tournament(svc: TournamentService, tournament_id: int) -> None:
     """Принудительно переводит турнир в статус CLOSED (для тестов исторических данных)."""
     from sqlalchemy import select
-    t = svc.db.execute(
-        select(models.Tournament).where(models.Tournament.id == tournament_id)
-    ).scalar_one()
+
+    t = svc.db.execute(select(models.Tournament).where(models.Tournament.id == tournament_id)).scalar_one()
     t.status = models.TournamentStatus.CLOSED
     svc.db.commit()
 
@@ -35,6 +35,7 @@ def close_tournament(svc: TournamentService, tournament_id: int) -> None:
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def active_tournament(svc):
@@ -44,8 +45,10 @@ def active_tournament(svc):
 @pytest.fixture
 def admin_user(svc, user_svc):
     u = user_svc.get_or_create(tg_id=ADMIN_TG_ID, username="admin", first_name="Admin")
-    from core import models
     from sqlalchemy import select
+
+    from core import models
+
     obj = svc.db.execute(select(models.User).where(models.User.tg_id == ADMIN_TG_ID)).scalar_one()
     obj.is_admin = True
     svc.db.commit()
@@ -70,6 +73,7 @@ def admin_handler(svc, user_svc, arch_svc):
 # ---------------------------------------------------------------------------
 # 1. list_top_archetypes
 # ---------------------------------------------------------------------------
+
 
 class TestListTopArchetypes:
     def test_empty_db_returns_empty(self, svc, arch_svc):
@@ -116,13 +120,13 @@ class TestListTopArchetypes:
         close_tournament(svc, t1.id)
 
         result = arch_svc.list_top_archetypes()
-        assert result[0].name == "Affinity"   # 'A' < 'B'
+        assert result[0].name == "Affinity"  # 'A' < 'B'
         assert result[1].name == "Burn"
 
     def test_never_used_archetype_is_included_after_used_ones(self, svc, user_svc, arch_svc):
         """Архетипы без использования тоже попадают в топ (после использованных)."""
         burn = arch_svc.get_or_create_by_name("Burn")
-        unused = arch_svc.get_or_create_by_name("Zzz Unused")
+        arch_svc.get_or_create_by_name("Zzz Unused")
 
         t1 = svc.create_tournament(TournamentCreate(title="T1", chat_id=CHAT_ID + 20))
         u = user_svc.get_or_create(tg_id=401, username=None, first_name="P")
@@ -171,8 +175,8 @@ class TestListTopArchetypes:
 
     def test_custom_archetype_excluded_from_top(self, svc, user_svc, arch_svc):
         """Кастомный архетип (is_custom=True) не появляется в глобальном топе."""
-        public = arch_svc.get_or_create_by_name("Public Deck", is_custom=False)
-        custom = arch_svc.get_or_create_by_name("My Weird Deck", is_custom=True)
+        arch_svc.get_or_create_by_name("Public Deck", is_custom=False)
+        arch_svc.get_or_create_by_name("My Weird Deck", is_custom=True)
 
         top = arch_svc.list_top_archetypes()
         names = [a.name for a in top]
@@ -194,6 +198,7 @@ class TestListTopArchetypes:
 # 2. list_user_recent_archetypes
 # ---------------------------------------------------------------------------
 
+
 class TestListUserRecentArchetypes:
     def test_unknown_user_returns_empty(self, svc, arch_svc):
         assert arch_svc.list_user_recent_archetypes(tg_id=99999) == []
@@ -214,8 +219,9 @@ class TestListUserRecentArchetypes:
 
     def test_most_recent_comes_first(self, svc, user_svc, db, arch_svc):
         """Из нескольких колод — самая последняя первая."""
-        import core.models as m
         from datetime import timedelta
+
+        import core.models as m
         from core.models import utc_now
 
         burn = arch_svc.get_or_create_by_name("Burn")
@@ -228,8 +234,13 @@ class TestListUserRecentArchetypes:
 
         # Вручную добавляем участника в t2 с более поздней датой
         p2 = m.Participant(
-            tournament_id=t2.id, user_id=u.id, archetype_id=elves.id,
-            added_by_admin=False, confirmed=False, upvotes_count=0, downvotes_count=0,
+            tournament_id=t2.id,
+            user_id=u.id,
+            archetype_id=elves.id,
+            added_by_admin=False,
+            confirmed=False,
+            upvotes_count=0,
+            downvotes_count=0,
             created_at=utc_now() + timedelta(seconds=5),
             updated_at=utc_now(),
         )
@@ -265,6 +276,7 @@ class TestListUserRecentArchetypes:
 # ---------------------------------------------------------------------------
 # 3. build_archetype_list (чистая функция)
 # ---------------------------------------------------------------------------
+
 
 def _a(id: int, name: str) -> ArchetypeItem:
     return ArchetypeItem(id=id, name=name)
@@ -351,6 +363,7 @@ class TestBuildArchetypeList:
 # 4. PlayerHandler.handle_register (интеграция)
 # ---------------------------------------------------------------------------
 
+
 class TestHandleRegisterArchetypeMenu:
     def test_new_player_no_history_sees_top(self, svc, user_svc, player_handler, active_tournament, arch_svc):
         """Новый игрок (нет истории) видит топ-архетипы."""
@@ -374,10 +387,8 @@ class TestHandleRegisterArchetypeMenu:
         result = player_handler.handle_register(active_tournament.id, tg_id=PLAYER_TG_ID)
 
         from bot.keyboards import CB_ARCHETYPE_MORE
-        btn_callbacks = [
-            b.callback_data
-            for row in result.keyboard.inline_keyboard for b in row
-        ]
+
+        btn_callbacks = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
         assert not any(cb.startswith(CB_ARCHETYPE_MORE) for cb in btn_callbacks)
 
     def test_player_with_history_shows_collapsed(self, svc, user_svc, player_handler, active_tournament, arch_svc):
@@ -391,18 +402,19 @@ class TestHandleRegisterArchetypeMenu:
         result = player_handler.handle_register(active_tournament.id, tg_id=PLAYER_TG_ID)
 
         from bot.keyboards import CB_ARCHETYPE, CB_ARCHETYPE_MORE
+
         arch_btns = [
-            b for row in result.keyboard.inline_keyboard for b in row
-            if b.callback_data.startswith(CB_ARCHETYPE + ":")
+            b for row in result.keyboard.inline_keyboard for b in row if b.callback_data.startswith(CB_ARCHETYPE + ":")
         ]
         more_btns = [
-            b for row in result.keyboard.inline_keyboard for b in row
-            if b.callback_data.startswith(CB_ARCHETYPE_MORE)
+            b for row in result.keyboard.inline_keyboard for b in row if b.callback_data.startswith(CB_ARCHETYPE_MORE)
         ]
         assert len(arch_btns) == ARCHETYPE_COLLAPSED_COUNT
         assert len(more_btns) == 1
 
-    def test_player_with_history_always_has_custom_button(self, svc, user_svc, player_handler, active_tournament, arch_svc):
+    def test_player_with_history_always_has_custom_button(
+        self, svc, user_svc, player_handler, active_tournament, arch_svc
+    ):
         burn = arch_svc.get_or_create_by_name("Burn")
         u = user_svc.get_or_create(tg_id=PLAYER_TG_ID, username=None, first_name="Player")
         t = svc.create_tournament(TournamentCreate(title="T", chat_id=CHAT_ID + 60))
@@ -411,6 +423,7 @@ class TestHandleRegisterArchetypeMenu:
         result = player_handler.handle_register(active_tournament.id, tg_id=PLAYER_TG_ID)
 
         from bot.keyboards import CB_CUSTOM_ARCHETYPE
+
         btns = [b for row in result.keyboard.inline_keyboard for b in row]
         assert any(b.callback_data.startswith(CB_CUSTOM_ARCHETYPE) for b in btns)
 
@@ -418,6 +431,7 @@ class TestHandleRegisterArchetypeMenu:
 # ---------------------------------------------------------------------------
 # 5. PlayerHandler.handle_archetype_more (интеграция)
 # ---------------------------------------------------------------------------
+
 
 class TestHandleArchetypeMore:
     @pytest.fixture
@@ -436,9 +450,12 @@ class TestHandleArchetypeMore:
         expanded = player_handler.handle_archetype_more(active_tournament.id, tg_id=PLAYER_TG_ID)
 
         from bot.keyboards import CB_ARCHETYPE
+
         def arch_btn_count(result):
             return sum(
-                1 for row in result.keyboard.inline_keyboard for b in row
+                1
+                for row in result.keyboard.inline_keyboard
+                for b in row
                 if b.callback_data.startswith(CB_ARCHETYPE + ":")
             )
 
@@ -448,6 +465,7 @@ class TestHandleArchetypeMore:
         result = player_handler.handle_archetype_more(active_tournament.id, tg_id=PLAYER_TG_ID)
 
         from bot.keyboards import CB_ARCHETYPE_MORE
+
         btns = [b for row in result.keyboard.inline_keyboard for b in row]
         assert not any(b.callback_data.startswith(CB_ARCHETYPE_MORE) for b in btns)
 
@@ -469,6 +487,7 @@ class TestHandleArchetypeMore:
 # ---------------------------------------------------------------------------
 # 6. AdminHandler.handle_admin_pick_arch (интеграция)
 # ---------------------------------------------------------------------------
+
 
 class TestAdminPickArchMenu:
     @pytest.fixture
@@ -498,6 +517,7 @@ class TestAdminPickArchMenu:
         result = admin_handler.handle_admin_pick_arch(ADMIN_TG_ID, bulk_participant.id)
 
         from bot.keyboards import CB_ADMIN_ARCH_MORE
+
         btns = [b for row in result.keyboard.inline_keyboard for b in row]
         assert not any(b.callback_data.startswith(CB_ADMIN_ARCH_MORE) for b in btns)
 
@@ -515,14 +535,13 @@ class TestAdminPickArchMenu:
 
         result = admin_handler.handle_admin_pick_arch(ADMIN_TG_ID, participant.id)
 
-        from bot.keyboards import CB_ADMIN_SET_ARCH, CB_ADMIN_ARCH_MORE
+        from bot.keyboards import CB_ADMIN_ARCH_MORE, CB_ADMIN_SET_ARCH
+
         arch_btns = [
-            b for row in result.keyboard.inline_keyboard for b in row
-            if b.callback_data.startswith(CB_ADMIN_SET_ARCH)
+            b for row in result.keyboard.inline_keyboard for b in row if b.callback_data.startswith(CB_ADMIN_SET_ARCH)
         ]
         more_btns = [
-            b for row in result.keyboard.inline_keyboard for b in row
-            if b.callback_data.startswith(CB_ADMIN_ARCH_MORE)
+            b for row in result.keyboard.inline_keyboard for b in row if b.callback_data.startswith(CB_ADMIN_ARCH_MORE)
         ]
         assert len(arch_btns) == ARCHETYPE_COLLAPSED_COUNT
         assert len(more_btns) == 1
@@ -531,6 +550,7 @@ class TestAdminPickArchMenu:
 # ---------------------------------------------------------------------------
 # 7. AdminHandler.handle_admin_arch_more (интеграция)
 # ---------------------------------------------------------------------------
+
 
 class TestAdminArchMore:
     @pytest.fixture
@@ -547,9 +567,12 @@ class TestAdminArchMore:
         self, admin_handler, admin_user, active_tournament, participant_with_history
     ):
         from bot.keyboards import CB_ADMIN_SET_ARCH
+
         def arch_btn_count(result):
             return sum(
-                1 for row in result.keyboard.inline_keyboard for b in row
+                1
+                for row in result.keyboard.inline_keyboard
+                for b in row
                 if b.callback_data.startswith(CB_ADMIN_SET_ARCH)
             )
 
@@ -557,16 +580,16 @@ class TestAdminArchMore:
         expanded = admin_handler.handle_admin_arch_more(ADMIN_TG_ID, participant_with_history.id)
         assert arch_btn_count(expanded) > arch_btn_count(collapsed)
 
-    def test_expanded_no_more_button(
-        self, admin_handler, admin_user, active_tournament, participant_with_history
-    ):
+    def test_expanded_no_more_button(self, admin_handler, admin_user, active_tournament, participant_with_history):
         from bot.keyboards import CB_ADMIN_ARCH_MORE
+
         result = admin_handler.handle_admin_arch_more(ADMIN_TG_ID, participant_with_history.id)
         btns = [b for row in result.keyboard.inline_keyboard for b in row]
         assert not any(b.callback_data.startswith(CB_ADMIN_ARCH_MORE) for b in btns)
 
     def test_non_admin_returns_not_admin(self, admin_handler, active_tournament, participant_with_history):
         from bot.messages import NOT_ADMIN
+
         result = admin_handler.handle_admin_arch_more(tg_id=42, participant_id=participant_with_history.id)
         assert result.text == NOT_ADMIN
 
@@ -574,6 +597,7 @@ class TestAdminArchMore:
 # ---------------------------------------------------------------------------
 # 8. Сценарий заполнения турнира — регрессия на баг «загрязнение топа»
 # ---------------------------------------------------------------------------
+
 
 class TestTournamentFillScenario:
     """
@@ -583,15 +607,14 @@ class TestTournamentFillScenario:
     """
 
     FILL_ADMIN = 8888
-    FILL_CHAT  = 700
+    FILL_CHAT = 700
 
     @pytest.fixture
     def fill_admin(self, svc, user_svc):
         u = user_svc.get_or_create(tg_id=self.FILL_ADMIN, username="admin", first_name="Admin")
         from sqlalchemy import select
-        obj = svc.db.execute(
-            select(models.User).where(models.User.tg_id == self.FILL_ADMIN)
-        ).scalar_one()
+
+        obj = svc.db.execute(select(models.User).where(models.User.tg_id == self.FILL_ADMIN)).scalar_one()
         obj.is_admin = True
         svc.db.commit()
         return u
@@ -605,10 +628,13 @@ class TestTournamentFillScenario:
         """Два игрока без истории, добавленных через bulk_add."""
         p1_user = user_svc.get_or_create_by_name("Player", "One")[0]
         p2_user = user_svc.get_or_create_by_name("Player", "Two")[0]
-        svc.bulk_add_participants(fill_tournament.id, [
-            (p1_user.id, "Player One"),
-            (p2_user.id, "Player Two"),
-        ])
+        svc.bulk_add_participants(
+            fill_tournament.id,
+            [
+                (p1_user.id, "Player One"),
+                (p2_user.id, "Player Two"),
+            ],
+        )
         p1 = svc.get_participant(fill_tournament.id, p1_user.id)
         p2 = svc.get_participant(fill_tournament.id, p2_user.id)
         return p1, p2
@@ -619,22 +645,18 @@ class TestTournamentFillScenario:
         """Баг-регрессия: назначение колоды игроку1 не должно менять меню игрока2."""
         p1, p2 = two_participants
         burn = arch_svc.get_or_create_by_name("Burn")
-        elves = arch_svc.get_or_create_by_name("Elves")
+        arch_svc.get_or_create_by_name("Elves")
 
         # Снимаем фиксацию порядка: оба на 0, алфавит → Burn < Elves
         top_before = admin_handler.handle_admin_pick_arch(self.FILL_ADMIN, p2.id)
-        btn_names_before = [
-            b.text for row in top_before.keyboard.inline_keyboard for b in row
-        ]
+        btn_names_before = [b.text for row in top_before.keyboard.inline_keyboard for b in row]
 
         # Назначаем Burn игроку1
         admin_handler.handle_admin_set_arch(self.FILL_ADMIN, p1.id, burn.id)
 
         # Меню игрока2 не должно измениться
         top_after = admin_handler.handle_admin_pick_arch(self.FILL_ADMIN, p2.id)
-        btn_names_after = [
-            b.text for row in top_after.keyboard.inline_keyboard for b in row
-        ]
+        btn_names_after = [b.text for row in top_after.keyboard.inline_keyboard for b in row]
         assert btn_names_before == btn_names_after
 
     def test_registration_deck_not_at_top_when_historical_alternative_exists(
@@ -658,14 +680,12 @@ class TestTournamentFillScenario:
         # Игрок2 без истории видит топ: популярная историческая должна быть выше
         result = admin_handler.handle_admin_pick_arch(self.FILL_ADMIN, p2.id)
         from bot.keyboards import CB_ADMIN_SET_ARCH
+
         arch_btns = [
-            b for row in result.keyboard.inline_keyboard for b in row
-            if b.callback_data.startswith(CB_ADMIN_SET_ARCH)
+            b for row in result.keyboard.inline_keyboard for b in row if b.callback_data.startswith(CB_ADMIN_SET_ARCH)
         ]
         assert arch_btns
-        assert "Aaaaa Popular" in arch_btns[0].text, (
-            f"Первой должна быть историческая Popular, но: {arch_btns[0].text}"
-        )
+        assert "Aaaaa Popular" in arch_btns[0].text, f"Первой должна быть историческая Popular, но: {arch_btns[0].text}"
 
     def test_historical_deck_ranks_above_registration_deck(
         self, svc, user_svc, arch_svc, admin_handler, fill_admin, fill_tournament, two_participants
@@ -673,7 +693,7 @@ class TestTournamentFillScenario:
         """Колода из закрытого турнира стоит выше колоды из текущей регистрации."""
         p1, p2 = two_participants
         popular = arch_svc.get_or_create_by_name("Popular Historical")
-        new_deck  = arch_svc.get_or_create_by_name("New Registration Deck")
+        new_deck = arch_svc.get_or_create_by_name("New Registration Deck")
 
         # Исторический закрытый турнир: popular сыгран 5 раз
         hist = svc.create_tournament(TournamentCreate(title="Hist", chat_id=self.FILL_CHAT + 1))
@@ -707,7 +727,7 @@ class TestTournamentFillScenario:
     ):
         """История игрока (из DataLens/турниров) не зависит от назначений другим игрокам."""
         elves = arch_svc.get_or_create_by_name("Elves")
-        burn  = arch_svc.get_or_create_by_name("Burn")
+        burn = arch_svc.get_or_create_by_name("Burn")
 
         # Игрок A — есть история (Elves из прошлого турнира)
         player_a = user_svc.get_or_create(tg_id=800, username=None, first_name="PlayerA")
@@ -717,10 +737,13 @@ class TestTournamentFillScenario:
 
         # Игрок B — без истории, добавлен через bulk_add
         player_b = user_svc.get_or_create_by_name("Player", "B")[0]
-        svc.bulk_add_participants(fill_tournament.id, [
-            (player_a.id, "PlayerA"),
-            (player_b.id, "PlayerB"),
-        ])
+        svc.bulk_add_participants(
+            fill_tournament.id,
+            [
+                (player_a.id, "PlayerA"),
+                (player_b.id, "PlayerB"),
+            ],
+        )
         p_a = svc.get_participant(fill_tournament.id, player_a.id)
         p_b = svc.get_participant(fill_tournament.id, player_b.id)
 
@@ -730,9 +753,9 @@ class TestTournamentFillScenario:
         # У игрока A первой должна стоять Elves (его история)
         result = admin_handler.handle_admin_pick_arch(self.FILL_ADMIN, p_a.id)
         from bot.keyboards import CB_ADMIN_SET_ARCH
+
         arch_btns = [
-            b for row in result.keyboard.inline_keyboard for b in row
-            if b.callback_data.startswith(CB_ADMIN_SET_ARCH)
+            b for row in result.keyboard.inline_keyboard for b in row if b.callback_data.startswith(CB_ADMIN_SET_ARCH)
         ]
         assert arch_btns, "Нет кнопок архетипов"
         assert "Elves" in arch_btns[0].text, f"Первая кнопка должна быть Elves, но: {arch_btns[0].text}"

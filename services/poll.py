@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from datetime import timedelta
+
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
-from sqlalchemy import select
 
 from core import models
 from core.models import utc_now
@@ -16,9 +17,7 @@ class PollService:
 
     def get_poll_for_tournament(self, tournament_id: int) -> models.TournamentPoll | None:
         return self.db.execute(
-            select(models.TournamentPoll).where(
-                models.TournamentPoll.tournament_id == tournament_id
-            )
+            select(models.TournamentPoll).where(models.TournamentPoll.tournament_id == tournament_id)
         ).scalar_one_or_none()
 
     def get_latest_poll_for_chat(self, chat_id: int) -> models.TournamentPoll | None:
@@ -32,9 +31,7 @@ class PollService:
 
     def get_poll_by_tg_id(self, tg_poll_id: str) -> models.TournamentPoll | None:
         return self.db.execute(
-            select(models.TournamentPoll).where(
-                models.TournamentPoll.tg_poll_id == tg_poll_id
-            )
+            select(models.TournamentPoll).where(models.TournamentPoll.tg_poll_id == tg_poll_id)
         ).scalar_one_or_none()
 
     def create_poll(
@@ -86,16 +83,16 @@ class PollService:
         if existing:
             existing.choice = choice
         else:
-            self.db.add(models.PollVote(
-                poll_id=poll_id,
-                tg_user_id=tg_user_id,
-                choice=choice,
-            ))
+            self.db.add(
+                models.PollVote(
+                    poll_id=poll_id,
+                    tg_user_id=tg_user_id,
+                    choice=choice,
+                )
+            )
         self.db.commit()
 
-    def get_yes_voters_without_deck(
-        self, tournament_id: int, poll_id: int | None = None
-    ) -> list[int]:
+    def get_yes_voters_without_deck(self, tournament_id: int, poll_id: int | None = None) -> list[int]:
         """tg_user_ids who voted «пойду» (choice=0), have no archetype, and are not on DM cooldown.
 
         poll_id — если указан, голоса берутся из этого опроса (не обязательно привязанного
@@ -113,7 +110,9 @@ class PollService:
                     models.PollVote.poll_id == poll_id,
                     models.PollVote.choice == 0,
                 )
-            ).scalars().all()
+            )
+            .scalars()
+            .all()
         )
         if not yes_voter_ids:
             return []
@@ -127,7 +126,9 @@ class PollService:
                     models.Participant.archetype_id.isnot(None),
                     models.User.tg_id.in_(yes_voter_ids),
                 )
-            ).scalars().all()
+            )
+            .scalars()
+            .all()
         )
 
         cooldown_cutoff = utc_now() - timedelta(seconds=DM_COOLDOWN_SECONDS)
@@ -141,14 +142,15 @@ class PollService:
                     models.Participant.last_dm_at > cooldown_cutoff,
                     models.User.tg_id.in_(yes_voter_ids),
                 )
-            ).scalars().all()
+            )
+            .scalars()
+            .all()
         )
 
         return list(yes_voter_ids - registered_with_deck - recently_notified)
 
     def get_poll_stats(self, poll_id: int) -> tuple[int, int]:
         """Возвращает (yes_count, no_count) для опроса."""
-        from sqlalchemy import func
         rows = self.db.execute(
             select(models.PollVote.choice, func.count().label("cnt"))
             .where(models.PollVote.poll_id == poll_id)
@@ -162,9 +164,9 @@ class PollService:
         if not tg_user_ids:
             return {}
         users = self.db.execute(
-            select(models.User.tg_id, models.User.username,
-                   models.User.first_name, models.User.last_name)
-            .where(models.User.tg_id.in_(tg_user_ids))
+            select(models.User.tg_id, models.User.username, models.User.first_name, models.User.last_name).where(
+                models.User.tg_id.in_(tg_user_ids)
+            )
         ).all()
         result = {}
         for u in users:
@@ -184,14 +186,18 @@ class PollService:
         if not tg_user_ids:
             return
         now = utc_now()
-        rows = self.db.execute(
-            select(models.Participant)
-            .join(models.User, models.User.id == models.Participant.user_id)
-            .where(
-                models.Participant.tournament_id == tournament_id,
-                models.User.tg_id.in_(tg_user_ids),
+        rows = (
+            self.db.execute(
+                select(models.Participant)
+                .join(models.User, models.User.id == models.Participant.user_id)
+                .where(
+                    models.Participant.tournament_id == tournament_id,
+                    models.User.tg_id.in_(tg_user_ids),
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         for p in rows:
             p.last_dm_at = now
         self.db.commit()

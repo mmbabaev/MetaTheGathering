@@ -13,11 +13,7 @@ def _parse_add_handler_calls(source: str) -> list[ast.Call]:
     tree = ast.parse(source)
     calls = []
     for node in ast.walk(tree):
-        if (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr == "add_handler"
-        ):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "add_handler":
             calls.append(node)
     return calls
 
@@ -33,6 +29,5 @@ def test_each_add_handler_has_exactly_one_positional_arg():
     assert calls, "No app.add_handler() calls found — check the test"
     for call in calls:
         assert len(call.args) == 1, (
-            f"app.add_handler() at line {call.lineno} has {len(call.args)} "
-            f"positional args — expected exactly 1"
+            f"app.add_handler() at line {call.lineno} has {len(call.args)} positional args — expected exactly 1"
         )
