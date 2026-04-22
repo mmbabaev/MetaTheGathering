@@ -18,12 +18,12 @@ else:
 
 @dataclass
 class ClubConfig:
-    name: str                        # "Goldfish"
-    weekday: str                     # "thursday"
+    name: str  # "Goldfish"
+    weekday: str  # "thursday"
     chat_id: int
-    game_time: str                   # "19:30" — время самого турнира (для заголовка)
+    game_time: str  # "19:30" — время самого турнира (для заголовка)
     create_time: Optional[str] = None  # переопределяет TOURNAMENT_CREATE_TIME
-    title_prefix: str = ""           # эмодзи/префикс перед именем клуба в заголовке
+    title_prefix: str = ""  # эмодзи/префикс перед именем клуба в заголовке
 
 
 class Settings(BaseSettings):
@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     GOLDFISH_CHAT_ID: Optional[int] = _app_cfg.goldfish_chat_id
     EDINOROG_CHAT_ID: Optional[int] = _app_cfg.edinorog_chat_id
 
+    # Telegram ID для получения уведомлений о создании турниров (личка)
+    ANNOUNCE_CHAT_ID: Optional[int] = None
+
     MONIUM_PROJECT: str = ""
     MONIUM_API_KEY: str = ""
 
@@ -46,7 +49,9 @@ class Settings(BaseSettings):
     TOURNAMENT_CREATE_TIME: str = _app_cfg.tournament_create_time
     VERSION: str = _app_cfg.version
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
 
     @property
     def admin_ids(self) -> List[int]:

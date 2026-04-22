@@ -3,6 +3,7 @@
 from telegram import Update
 from telegram.constants import ChatType
 from telegram.error import TelegramError
+from bot.scheduler import format_schedule_text
 from telegram.ext import ContextTypes
 
 from core.config import settings
@@ -10,10 +11,18 @@ from core.database import SessionLocal
 from services.tournament import TournamentService
 from services.archetype import ArchetypeService
 from services.user import UserService
-from bot.handlers.admin import AdminHandler, parse_add_player_command, parse_bulk_player_line
-from bot.telegram.player import USER_DATA_PENDING_BULK_ADD, USER_DATA_PENDING_ADMIN_CUSTOM_ARCH, USER_DATA_OPPONENTS_MODE
+from bot.handlers.admin import (
+    AdminHandler,
+    parse_add_player_command,
+    parse_bulk_player_line,
+)
+from bot.telegram.player import (
+    USER_DATA_PENDING_BULK_ADD,
+    USER_DATA_PENDING_ADMIN_CUSTOM_ARCH,
+    USER_DATA_OPPONENTS_MODE,
+)
 from bot.messages import TELEGRAM_USER_LOOKUP_FAILED, ADD_PLAYERS_USAGE, BULK_ADD_PROMPT
-from bot.keyboards import CB_ADMIN_ARCH_MORE, CB_ADMIN_SHOW_FILLED, CB_REVEAL_DECKS, admin_more_keyboard, CB_CLOSE_TOURNAMENT
+from bot.keyboards import admin_more_keyboard
 from bot.telegram.common import log_event as _log, parse_callback_ints
 
 
@@ -21,7 +30,9 @@ def _admin_handler(db) -> AdminHandler:
     return AdminHandler(TournamentService(db), UserService(db), ArchetypeService(db))
 
 
-async def callback_bulk_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def callback_bulk_add_start(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """Кнопка «➕ Добавить участников» на карточке турнира."""
     query = update.callback_query
     ids = await parse_callback_ints(query, 1)
@@ -37,7 +48,9 @@ async def callback_bulk_add_start(update: Update, context: ContextTypes.DEFAULT_
     await query.answer()
 
 
-async def callback_admin_pick_arch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def callback_admin_pick_arch(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """Нажатие на участника в admin status → показывает выбор архетипа."""
     query = update.callback_query
     user = update.effective_user
@@ -59,7 +72,9 @@ async def callback_admin_pick_arch(update: Update, context: ContextTypes.DEFAULT
         db.close()
 
 
-async def callback_admin_set_arch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def callback_admin_set_arch(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """Выбор конкретного архетипа для участника."""
     query = update.callback_query
     user = update.effective_user
@@ -71,30 +86,48 @@ async def callback_admin_set_arch(update: Update, context: ContextTypes.DEFAULT_
     participant_id, archetype_id = ids
     db = SessionLocal()
     try:
-        result = _admin_handler(db).handle_admin_set_arch(user.id, participant_id, archetype_id)
+        result = _admin_handler(db).handle_admin_set_arch(
+            user.id, participant_id, archetype_id
+        )
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
-        _log("admin_set_arch", user, participant_id=participant_id, archetype_id=archetype_id)
+        _log(
+            "admin_set_arch",
+            user,
+            participant_id=participant_id,
+            archetype_id=archetype_id,
+        )
 
-        opponents_tournament_id = (context.user_data or {}).get(USER_DATA_OPPONENTS_MODE)
+        opponents_tournament_id = (context.user_data or {}).get(
+            USER_DATA_OPPONENTS_MODE
+        )
         if opponents_tournament_id is not None:
             await query.edit_message_text(result.text)
             await query.answer()
-            opponents_result = _admin_handler(db).handle_admin_opponents(user.id, opponents_tournament_id)
+            opponents_result = _admin_handler(db).handle_admin_opponents(
+                user.id, opponents_tournament_id
+            )
             if opponents_result.is_alert:
                 context.user_data.pop(USER_DATA_OPPONENTS_MODE, None)
                 from services.aetherhub_import import AetherhubImportService
                 from services.tournament import TournamentService
                 from services.archetype import ArchetypeService
                 from bot.handlers.player import PlayerHandler
-                has_pairings = bool(AetherhubImportService(db).get_pairings(opponents_tournament_id))
+
+                has_pairings = bool(
+                    AetherhubImportService(db).get_pairings(opponents_tournament_id)
+                )
                 card = PlayerHandler(
                     TournamentService(db), UserService(db), ArchetypeService(db)
-                ).handle_tournament_select(opponents_tournament_id, tg_id=user.id, has_pairings=has_pairings)
+                ).handle_tournament_select(
+                    opponents_tournament_id, tg_id=user.id, has_pairings=has_pairings
+                )
                 await query.message.reply_text(card.text, reply_markup=card.keyboard)
             else:
-                await query.message.reply_text(opponents_result.text, reply_markup=opponents_result.keyboard)
+                await query.message.reply_text(
+                    opponents_result.text, reply_markup=opponents_result.keyboard
+                )
         else:
             await query.edit_message_text(result.text, reply_markup=result.keyboard)
             await query.answer()
@@ -102,7 +135,9 @@ async def callback_admin_set_arch(update: Update, context: ContextTypes.DEFAULT_
         db.close()
 
 
-async def callback_admin_arch_more(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def callback_admin_arch_more(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """«... ещё» в admin pick arch — разворачивает полный список архетипов."""
     query = update.callback_query
     user = update.effective_user
@@ -124,7 +159,9 @@ async def callback_admin_arch_more(update: Update, context: ContextTypes.DEFAULT
         db.close()
 
 
-async def callback_admin_custom_arch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def callback_admin_custom_arch(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """«Свой вариант» — ждём текст с названием архетипа."""
     query = update.callback_query
     ids = await parse_callback_ints(query, 1)
@@ -138,7 +175,9 @@ async def callback_admin_custom_arch(update: Update, context: ContextTypes.DEFAU
     await query.answer()
 
 
-async def callback_admin_show_filled(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def callback_admin_show_filled(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """Кнопка «Показать заполненных (N)» — разворачивает список заполненных участников."""
     query = update.callback_query
     user = update.effective_user
@@ -169,7 +208,9 @@ async def cmd_add_me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     deck_name = " ".join(context.args or []).strip()
     db = SessionLocal()
     try:
-        result = _admin_handler(db).handle_add_me(user.id, user.username, user.first_name, user.last_name, deck_name)
+        result = _admin_handler(db).handle_add_me(
+            user.id, user.username, user.first_name, user.last_name, deck_name
+        )
         await msg.reply_text(result.text)
     finally:
         db.close()
@@ -246,7 +287,9 @@ async def cmd_add_players(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             fragments.append(f"❌ @{uname} — не найден в Telegram")
             continue
         if chat.type != ChatType.PRIVATE:
-            fragments.append(f"❌ @{uname} — укажите @username человека (не группу или канал)")
+            fragments.append(
+                f"❌ @{uname} — укажите @username человека (не группу или канал)"
+            )
             continue
         entries.append((chat.id, chat.username, chat.first_name, deck_name))
 
@@ -257,7 +300,11 @@ async def cmd_add_players(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await msg.reply_text(body)
             return
         result = _admin_handler(db).handle_add_players(user.id, entries)
-        out = ("\n".join(fragments) + "\n" + result.text).strip() if fragments else result.text
+        out = (
+            ("\n".join(fragments) + "\n" + result.text).strip()
+            if fragments
+            else result.text
+        )
         await msg.reply_text(out)
     finally:
         db.close()
@@ -277,7 +324,9 @@ async def cmd_archive(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         db.close()
 
 
-async def cmd_tournament_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def cmd_tournament_status(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """/tournament_status — все активные турниры и их участники."""
     user = update.effective_user
     msg = update.effective_message
@@ -291,7 +340,9 @@ async def cmd_tournament_status(update: Update, context: ContextTypes.DEFAULT_TY
         db.close()
 
 
-async def cmd_close_tournament(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def cmd_close_tournament(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """/close_tournament — закрывает текущий турнир."""
     user = update.effective_user
     msg = update.effective_message
@@ -307,7 +358,9 @@ async def cmd_close_tournament(update: Update, context: ContextTypes.DEFAULT_TYP
         db.close()
 
 
-async def cmd_create_tournament(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def cmd_create_tournament(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """/create_tournament [название] — создаёт турнир. В личке дефолт — чат Единорога."""
     user = update.effective_user
     msg = update.effective_message
@@ -329,6 +382,7 @@ async def cmd_create_tournament(update: Update, context: ContextTypes.DEFAULT_TY
         from services.tournament import TournamentService
         from services.archetype import ArchetypeService
         from bot.handlers.player import PlayerHandler
+
         card = PlayerHandler(
             TournamentService(db), UserService(db), ArchetypeService(db)
         ).handle_tournament_select(result.tournament_id, tg_id=user.id)
@@ -337,7 +391,9 @@ async def cmd_create_tournament(update: Update, context: ContextTypes.DEFAULT_TY
         db.close()
 
 
-async def cmd_delete_tournament(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def cmd_delete_tournament(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """/delete_tournament — удаляет активный турнир и всех участников (дебаг)."""
     user = update.effective_user
     msg = update.effective_message
@@ -351,7 +407,9 @@ async def cmd_delete_tournament(update: Update, context: ContextTypes.DEFAULT_TY
         db.close()
 
 
-async def callback_export_excel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def callback_export_excel(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """Кнопка «📊 Выгрузка Excel» — отправляет файл участников."""
     query = update.callback_query
     user = update.effective_user
@@ -370,6 +428,7 @@ async def callback_export_excel(update: Update, context: ContextTypes.DEFAULT_TY
             return
         data, filename = result
         import io
+
         await context.bot.send_document(
             chat_id=query.message.chat_id,
             document=io.BytesIO(data),
@@ -394,7 +453,9 @@ async def callback_delete_tournament_prompt(
     (tournament_id,) = ids
     db = SessionLocal()
     try:
-        result = _admin_handler(db).handle_delete_tournament_prompt(user.id, tournament_id)
+        result = _admin_handler(db).handle_delete_tournament_prompt(
+            user.id, tournament_id
+        )
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
@@ -418,7 +479,9 @@ async def callback_delete_tournament_confirm(
     (tournament_id,) = ids
     db = SessionLocal()
     try:
-        result = _admin_handler(db).handle_delete_tournament_confirm(user.id, tournament_id)
+        result = _admin_handler(db).handle_delete_tournament_confirm(
+            user.id, tournament_id
+        )
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
@@ -446,18 +509,23 @@ async def callback_delete_tournament_cancel(
     from services.archetype import ArchetypeService
     from services.user import UserService
     from bot.handlers.player import PlayerHandler
+
     db = SL()
     try:
         svc = TournamentService(db)
         user_svc = UserService(db)
-        result = PlayerHandler(svc, user_svc, ArchetypeService(db)).handle_tournament_select(tournament_id, tg_id=user.id)
+        result = PlayerHandler(
+            svc, user_svc, ArchetypeService(db)
+        ).handle_tournament_select(tournament_id, tg_id=user.id)
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
     finally:
         db.close()
 
 
-async def callback_admin_opponents(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def callback_admin_opponents(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """Кнопка «👥 Записать оппонентов» — показывает незаполненных оппонентов."""
     query = update.callback_query
     user = update.effective_user
@@ -482,7 +550,9 @@ async def callback_admin_opponents(update: Update, context: ContextTypes.DEFAULT
         db.close()
 
 
-async def callback_close_tournament(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def callback_close_tournament(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """Кнопка «🔒 Закрыть турнир» в меню «• • •»."""
     query = update.callback_query
     user = update.effective_user
@@ -507,7 +577,9 @@ async def callback_close_tournament(update: Update, context: ContextTypes.DEFAUL
         db.close()
 
 
-async def callback_admin_more(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def callback_admin_more(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """Кнопка «• • •» — показывает скрытые admin-действия."""
     query = update.callback_query
     user = update.effective_user
@@ -521,6 +593,7 @@ async def callback_admin_more(update: Update, context: ContextTypes.DEFAULT_TYPE
     from services.utils import get_tournament
     from services import errors as svc_errors
     from core.models import TournamentStatus
+
     db = SessionLocal()
     try:
         if not UserService(db).is_admin(user.id):
@@ -533,11 +606,16 @@ async def callback_admin_more(update: Update, context: ContextTypes.DEFAULT_TYPE
             is_closed = False
     finally:
         db.close()
-    await query.edit_message_text("Действия с турниром:", reply_markup=admin_more_keyboard(tournament_id, is_closed=is_closed))
+    await query.edit_message_text(
+        "Действия с турниром:",
+        reply_markup=admin_more_keyboard(tournament_id, is_closed=is_closed),
+    )
     await query.answer()
 
 
-async def callback_reveal_decks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def callback_reveal_decks(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """Кнопка «👁 Показать колоды» — снимает скрытие колод для всех."""
     query = update.callback_query
     user = update.effective_user
@@ -560,3 +638,15 @@ async def callback_reveal_decks(update: Update, context: ContextTypes.DEFAULT_TY
         db.close()
 
 
+async def cmd_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.effective_message or not update.effective_user:
+        return
+    user = update.effective_user
+    db = SessionLocal()
+    try:
+        if not UserService(db).is_admin(user.id):
+            await update.effective_message.reply_text("У вас нет прав администратора.")
+            return
+    finally:
+        db.close()
+    await update.effective_message.reply_text(format_schedule_text())

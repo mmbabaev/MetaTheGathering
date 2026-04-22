@@ -1,16 +1,20 @@
 """Tests for _create_club_tournament, _create_tournaments_for_schedule, and setup_scheduler."""
 
 import asyncio
-from datetime import datetime, time, timedelta
+from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 from zoneinfo import ZoneInfo
 
-import pytest
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session
 
 import core.models  # noqa: F401
-from bot.scheduler import _create_club_tournament, _create_tournaments_for_schedule, _make_job, setup_scheduler
+from bot.scheduler import (
+    _create_club_tournament,
+    _create_tournaments_for_schedule,
+    _make_job,
+    setup_scheduler,
+)
 from core.config import ClubConfig
 from core.database import Base
 from core.models import TournamentStatus
@@ -25,6 +29,7 @@ CHAT_ID = 42
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_db():
     engine = create_engine(
@@ -73,23 +78,33 @@ def _patch_now(weekday: int, hour: int = 19, minute: int = 0):
 # Tests for _create_club_tournament
 # ---------------------------------------------------------------------------
 
-class TestCreateClubTournament:
 
+class TestCreateClubTournament:
     def _club(self, weekday="monday", chat_id=0, prefix="🦄 "):
         return ClubConfig(
-            name="Edinorog", weekday=weekday, chat_id=chat_id,
-            game_time="19:30", create_time="12:00", title_prefix=prefix,
+            name="Edinorog",
+            weekday=weekday,
+            chat_id=chat_id,
+            game_time="19:30",
+            create_time="12:00",
+            title_prefix=prefix,
         )
 
-    def _mock_settings(self):
+    def _mock_settings(self, announce_chat_id=None):
         s = MagicMock()
         s.TOURNAMENT_TIMEZONE = TZ
+        s.ANNOUNCE_CHAT_ID = announce_chat_id
         return s
 
-    async def _run(self, db, bot, club, weekday, hour=12):
-        with _patch_now(weekday=weekday, hour=hour), \
-             patch("bot.scheduler.settings", self._mock_settings()), \
-             patch("bot.scheduler.SessionLocal", return_value=db):
+    async def _run(self, db, bot, club, weekday, hour=12, announce_chat_id=None):
+        with (
+            _patch_now(weekday=weekday, hour=hour),
+            patch(
+                "bot.scheduler.settings",
+                self._mock_settings(announce_chat_id=announce_chat_id),
+            ),
+            patch("bot.scheduler.SessionLocal", return_value=db),
+        ):
             await _create_club_tournament(bot, club)
 
     def test_wrong_weekday_skips(self):
@@ -123,6 +138,7 @@ class TestCreateClubTournament:
 
         active = TournamentService(db).get_active_tournament_for_chat(0)
         import re
+
         assert re.search(r"\d{4}-\d{2}-\d{2}", active.title)
         db.close()
 
@@ -130,7 +146,9 @@ class TestCreateClubTournament:
         db = _make_db()
         bot = _make_bot()
         svc = TournamentService(db)
-        old = svc.create_tournament(TournamentCreate(title="Old", chat_id=0, slug="old"))
+        old = svc.create_tournament(
+            TournamentCreate(title="Old", chat_id=0, slug="old")
+        )
 
         club = self._club(weekday="monday", chat_id=0)
         asyncio.run(self._run(db, bot, club, weekday=0))
@@ -141,30 +159,30 @@ class TestCreateClubTournament:
         assert active.id != old.id
         db.close()
 
-    def test_no_announcement_when_chat_id_zero(self):
-        db = _make_db()
-        bot = _make_bot()
-        club = self._club(weekday="monday", chat_id=0)
-        asyncio.run(self._run(db, bot, club, weekday=0))
-
-        bot.send_message.assert_not_called()
-        db.close()
-
-    def test_announcement_sent_when_chat_id_set(self):
+    def test_no_announcement_when_announce_chat_id_none(self):
         db = _make_db()
         bot = _make_bot()
         club = self._club(weekday="monday", chat_id=CHAT_ID)
-        asyncio.run(self._run(db, bot, club, weekday=0))
+        asyncio.run(self._run(db, bot, club, weekday=0, announce_chat_id=None))
+        bot.send_message.assert_not_called()
+        db.close()
 
+    def test_announcement_sent_to_announce_chat_id(self):
+        db = _make_db()
+        bot = _make_bot()
+        club = self._club(weekday="monday", chat_id=CHAT_ID)
+        asyncio.run(self._run(db, bot, club, weekday=0, announce_chat_id=999))
         bot.send_message.assert_awaited_once()
-        assert bot.send_message.await_args.kwargs["chat_id"] == CHAT_ID
+        assert bot.send_message.await_args.kwargs["chat_id"] == 999
         db.close()
 
     def test_closes_existing_with_real_chat_id_too(self):
         db = _make_db()
         bot = _make_bot()
         svc = TournamentService(db)
-        old = svc.create_tournament(TournamentCreate(title="Old", chat_id=CHAT_ID, slug="old"))
+        old = svc.create_tournament(
+            TournamentCreate(title="Old", chat_id=CHAT_ID, slug="old")
+        )
 
         club = self._club(weekday="monday", chat_id=CHAT_ID)
         asyncio.run(self._run(db, bot, club, weekday=0))
@@ -177,7 +195,13 @@ class TestCreateClubTournament:
     def test_no_prefix_club(self):
         db = _make_db()
         bot = _make_bot()
-        club = ClubConfig(name="Goldfish", weekday="thursday", chat_id=0, game_time="19:30", title_prefix="")
+        club = ClubConfig(
+            name="Goldfish",
+            weekday="thursday",
+            chat_id=0,
+            game_time="19:30",
+            title_prefix="",
+        )
         asyncio.run(self._run(db, bot, club, weekday=3))  # thursday
 
         active = TournamentService(db).get_active_tournament_for_chat(0)
@@ -189,17 +213,19 @@ class TestCreateClubTournament:
 # Tests for _create_tournaments_for_schedule
 # ---------------------------------------------------------------------------
 
-class TestCreateTournamentsForSchedule:
 
+class TestCreateTournamentsForSchedule:
     def test_wrong_weekday_skips(self):
         """Should return early without touching the DB on a wrong weekday."""
         db = _make_db()
         bot = _make_bot()
 
         # schedule says friday (4), but we mock now as saturday (5)
-        with _patch_settings("friday 19:00", chat_ids=[CHAT_ID]), \
-             _patch_now(weekday=5), \
-             patch("bot.scheduler.SessionLocal", return_value=db):
+        with (
+            _patch_settings("friday 19:00", chat_ids=[CHAT_ID]),
+            _patch_now(weekday=5),
+            patch("bot.scheduler.SessionLocal", return_value=db),
+        ):
             asyncio.run(_create_tournaments_for_schedule(bot, "friday 19:00"))
 
         bot.send_message.assert_not_called()
@@ -212,9 +238,11 @@ class TestCreateTournamentsForSchedule:
         db = _make_db()
         bot = _make_bot()
 
-        with _patch_settings("friday 19:00", chat_ids=[CHAT_ID]), \
-             _patch_now(weekday=4), \
-             patch("bot.scheduler.SessionLocal", return_value=db):
+        with (
+            _patch_settings("friday 19:00", chat_ids=[CHAT_ID]),
+            _patch_now(weekday=4),
+            patch("bot.scheduler.SessionLocal", return_value=db),
+        ):
             asyncio.run(_create_tournaments_for_schedule(bot, "friday 19:00"))
 
         bot.send_message.assert_awaited_once()
@@ -233,11 +261,15 @@ class TestCreateTournamentsForSchedule:
         db = _make_db()
         bot = _make_bot()
         svc = TournamentService(db)
-        old = svc.create_tournament(TournamentCreate(title="Old", chat_id=CHAT_ID, slug="old"))
+        old = svc.create_tournament(
+            TournamentCreate(title="Old", chat_id=CHAT_ID, slug="old")
+        )
 
-        with _patch_settings("friday 19:00", chat_ids=[CHAT_ID]), \
-             _patch_now(weekday=4), \
-             patch("bot.scheduler.SessionLocal", return_value=db):
+        with (
+            _patch_settings("friday 19:00", chat_ids=[CHAT_ID]),
+            _patch_now(weekday=4),
+            patch("bot.scheduler.SessionLocal", return_value=db),
+        ):
             asyncio.run(_create_tournaments_for_schedule(bot, "friday 19:00"))
 
         old_orm = db.get(TournamentModel, old.id)
@@ -254,9 +286,11 @@ class TestCreateTournamentsForSchedule:
         db = _make_db()
         bot = _make_bot()
 
-        with _patch_settings("friday 19:00", chat_ids=[]), \
-             _patch_now(weekday=4), \
-             patch("bot.scheduler.SessionLocal", return_value=db):
+        with (
+            _patch_settings("friday 19:00", chat_ids=[]),
+            _patch_now(weekday=4),
+            patch("bot.scheduler.SessionLocal", return_value=db),
+        ):
             asyncio.run(_create_tournaments_for_schedule(bot, "friday 19:00"))
 
         bot.send_message.assert_not_called()
@@ -274,9 +308,11 @@ class TestCreateTournamentsForSchedule:
 
         bot.send_message.side_effect = send_message_side_effect
 
-        with _patch_settings("friday 19:00", chat_ids=[chat_a, chat_b]), \
-             _patch_now(weekday=4), \
-             patch("bot.scheduler.SessionLocal", return_value=db):
+        with (
+            _patch_settings("friday 19:00", chat_ids=[chat_a, chat_b]),
+            _patch_now(weekday=4),
+            patch("bot.scheduler.SessionLocal", return_value=db),
+        ):
             asyncio.run(_create_tournaments_for_schedule(bot, "friday 19:00"))
 
         svc = TournamentService(db)
@@ -289,9 +325,11 @@ class TestCreateTournamentsForSchedule:
         db = _make_db()
         bot = _make_bot()
 
-        with _patch_settings("friday 19:00", chat_ids=chat_ids), \
-             _patch_now(weekday=4), \
-             patch("bot.scheduler.SessionLocal", return_value=db):
+        with (
+            _patch_settings("friday 19:00", chat_ids=chat_ids),
+            _patch_now(weekday=4),
+            patch("bot.scheduler.SessionLocal", return_value=db),
+        ):
             asyncio.run(_create_tournaments_for_schedule(bot, "friday 19:00"))
 
         svc = TournamentService(db)
@@ -305,14 +343,16 @@ class TestCreateTournamentsForSchedule:
 # Tests for _make_job
 # ---------------------------------------------------------------------------
 
-class TestMakeJob:
 
+class TestMakeJob:
     def test_job_calls_create_tournaments(self):
         """_make_job should return a coroutine that delegates to _create_tournaments_for_schedule."""
         context = MagicMock()
         context.bot = _make_bot()
 
-        with patch("bot.scheduler._create_tournaments_for_schedule", new_callable=AsyncMock) as mock_create:
+        with patch(
+            "bot.scheduler._create_tournaments_for_schedule", new_callable=AsyncMock
+        ) as mock_create:
             job = _make_job("friday 19:00")
             asyncio.run(job(context))
             mock_create.assert_awaited_once_with(context.bot, "friday 19:00")
@@ -326,10 +366,9 @@ class TestMakeJob:
 # Tests for setup_scheduler
 # ---------------------------------------------------------------------------
 
-class TestSetupScheduler:
 
+class TestSetupScheduler:
     def _make_mock_settings(self, clubs=None):
-        from core.config import ClubConfig
         mock_settings = MagicMock()
         mock_settings.TOURNAMENT_TIMEZONE = TZ
         mock_settings.TOURNAMENT_CREATE_TIME = "10:00"
@@ -340,15 +379,22 @@ class TestSetupScheduler:
     def test_registers_one_job_per_club(self):
         """setup_scheduler registers run_daily once per club."""
         from core.config import ClubConfig
+
         app = MagicMock()
         app.job_queue = MagicMock()
         clubs = [
-            ClubConfig(name="Goldfish", weekday="thursday", chat_id=101, game_time="19:30"),
-            ClubConfig(name="Edinorog", weekday="monday",   chat_id=102, game_time="19:30"),
+            ClubConfig(
+                name="Goldfish", weekday="thursday", chat_id=101, game_time="19:30"
+            ),
+            ClubConfig(
+                name="Edinorog", weekday="monday", chat_id=102, game_time="19:30"
+            ),
         ]
         mock_settings = self._make_mock_settings(clubs)
-        with patch("bot.scheduler.settings", mock_settings), \
-             patch("bot.scheduler.get_clubs", return_value=clubs):
+        with (
+            patch("bot.scheduler.settings", mock_settings),
+            patch("bot.scheduler.get_clubs", return_value=clubs),
+        ):
             setup_scheduler(app)
 
         assert app.job_queue.run_daily.call_count == 2
@@ -356,14 +402,21 @@ class TestSetupScheduler:
     def test_registers_correct_create_time(self):
         """run_daily is called with TOURNAMENT_CREATE_TIME, not game_time."""
         from core.config import ClubConfig
+
         app = MagicMock()
         app.job_queue = MagicMock()
-        clubs = [ClubConfig(name="Goldfish", weekday="thursday", chat_id=CHAT_ID, game_time="19:30")]
+        clubs = [
+            ClubConfig(
+                name="Goldfish", weekday="thursday", chat_id=CHAT_ID, game_time="19:30"
+            )
+        ]
         mock_settings = self._make_mock_settings(clubs)
         mock_settings.TOURNAMENT_CREATE_TIME = "10:00"
 
-        with patch("bot.scheduler.settings", mock_settings), \
-             patch("bot.scheduler.get_clubs", return_value=clubs):
+        with (
+            patch("bot.scheduler.settings", mock_settings),
+            patch("bot.scheduler.get_clubs", return_value=clubs),
+        ):
             setup_scheduler(app)
 
         call_kwargs = app.job_queue.run_daily.call_args.kwargs
@@ -377,8 +430,10 @@ class TestSetupScheduler:
         app.job_queue = MagicMock()
         mock_settings = self._make_mock_settings([])
 
-        with patch("bot.scheduler.settings", mock_settings), \
-             patch("bot.scheduler.get_clubs", return_value=[]):
+        with (
+            patch("bot.scheduler.settings", mock_settings),
+            patch("bot.scheduler.get_clubs", return_value=[]),
+        ):
             setup_scheduler(app)
 
         app.job_queue.run_daily.assert_not_called()
