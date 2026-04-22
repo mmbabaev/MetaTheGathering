@@ -2,6 +2,10 @@
 
 → [ER Diagram](er-diagram.md)
 
+Сущности двух типов:
+- **DB-таблицы** — хранятся в PostgreSQL
+- **Config-объекты** — определены в коде (`core/config.py`), не в БД
+
 ---
 
 ## User

@@ -17,15 +17,20 @@ else:
 
 
 @dataclass
-class ClubConfig:
-    name: str                        # "Goldfish"
-    weekday: str                     # "thursday"
+class ClubSchedule:
+    weekday: str                              # "friday"
+    game_time: str                            # "19:30"
+    create_time: Optional[str] = None        # overrides TOURNAMENT_CREATE_TIME if set
+    aetherhub_fetch_times: List[str] = field(default_factory=list)  # ["20:15", "21:00"]
+
+
+@dataclass
+class Club:
+    name: str
     chat_id: int
-    game_time: str                   # "19:30" — время самого турнира (для заголовка)
-    create_time: Optional[str] = None  # переопределяет TOURNAMENT_CREATE_TIME
-    title_prefix: str = ""           # эмодзи/префикс перед именем клуба в заголовке
-    aetherhub_url: Optional[str] = None          # https://aetherhub.com/User/GoldFish
-    aetherhub_fetch_times: List[str] = field(default_factory=list)  # ["21:00", "22:00"]
+    schedules: List[ClubSchedule]
+    aetherhub_url: Optional[str] = None      # https://aetherhub.com/User/GoldFish
+    title_prefix: str = ""
 
 
 class Settings(BaseSettings):
