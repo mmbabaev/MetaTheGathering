@@ -318,19 +318,23 @@ _DAY_RU = {
 }
 
 
+def _format_club_schedule(club: Club) -> str:
+    lines = [f"\n{club.title_prefix}{club.name}:"]
+    for schedule in club.schedules:
+        time_str = schedule.create_time or settings.TOURNAMENT_CREATE_TIME
+        day_ru = _DAY_RU.get(schedule.weekday.lower(), schedule.weekday)
+        lines.append(f"  {day_ru}: создание {time_str}, игра {schedule.game_time}")
+        if schedule.aetherhub_fetch_times:
+            lines.append(f"    импорт: {', '.join(schedule.aetherhub_fetch_times)}")
+    return "\n".join(lines)
+
+
 def format_schedule_text() -> str:
     """Возвращает текстовое описание расписания для команды /schedule."""
     tz = settings.TOURNAMENT_TIMEZONE
     lines = [f"📅 Расписание ({tz}):"]
     for club in get_clubs():
-        lines.append(f"\n{club.title_prefix}{club.name}:")
-        for schedule in club.schedules:
-            time_str = schedule.create_time or settings.TOURNAMENT_CREATE_TIME
-            day_ru = _DAY_RU.get(schedule.weekday.lower(), schedule.weekday)
-            lines.append(f"  {day_ru}: создание {time_str}, игра {schedule.game_time}")
-            if schedule.aetherhub_fetch_times:
-                times = ", ".join(schedule.aetherhub_fetch_times)
-                lines.append(f"    импорт: {times}")
+        lines.append(_format_club_schedule(club))
     return "\n".join(lines)
 
 

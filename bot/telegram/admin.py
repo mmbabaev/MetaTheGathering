@@ -556,11 +556,10 @@ async def cmd_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not update.effective_message or not update.effective_user:
         return
     user = update.effective_user
+    msg = update.effective_message
     db = SessionLocal()
     try:
-        if not UserService(db).is_admin(user.id):
-            await update.effective_message.reply_text("У вас нет прав администратора.")
-            return
+        result = _admin_handler(db).handle_schedule(user.id, format_schedule_text())
     finally:
         db.close()
-    await update.effective_message.reply_text(format_schedule_text())
+    await msg.reply_text(result.text)
