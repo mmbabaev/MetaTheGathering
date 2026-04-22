@@ -1,11 +1,12 @@
-"""Tests for AetherHub club page parsing and auto-import scheduler logic."""
+"""Tests for AetherHub club page parsing and scheduler job logic."""
 
+import asyncio
 import pytest
 from datetime import date, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 from zoneinfo import ZoneInfo
 
-from core.config import ClubConfig
+from core.config import Club, ClubSchedule
 from core.schemas import TournamentCreate
 from core.models import TournamentStatus
 from services.aetherhub import (
@@ -16,6 +17,7 @@ from services.aetherhub import (
     PAUPER_RE,
 )
 from services.aetherhub_import import AetherhubImportService
+from bot.scheduler import AetherhubImportJob, CreateTournamentJob
 
 
 # ---------------------------------------------------------------------------
@@ -32,6 +34,11 @@ def _club_page_html(entries: list[dict]) -> str:
 
 TODAY = date(2026, 4, 24)
 TOURNEY_URL = "https://aetherhub.com/Tourney/RoundTourney/12345"
+
+TZ = ZoneInfo("Europe/Moscow")
+# April 24, 2026 = Friday (weekday=4)
+FRIDAY_NOW = datetime(2026, 4, 24, 21, 0, tzinfo=TZ)
+FRIDAY_DATE = date(2026, 4, 24)
 
 
 # ---------------------------------------------------------------------------
@@ -239,268 +246,186 @@ class TestFindTodaysPauperTournament:
 
 
 # ---------------------------------------------------------------------------
-# _aetherhub_auto_import scheduler logic
+# AetherhubImportJob
 # ---------------------------------------------------------------------------
 
-THURSDAY = 3  # weekday index
-
-def _make_club(weekday="thursday", aetherhub_url="https://aetherhub.com/User/GoldFish",
-               fetch_times=None) -> ClubConfig:
-    return ClubConfig(
-        name="Goldfish",
-        weekday=weekday,
-        chat_id=0,
-        game_time="19:30",
-        aetherhub_url=aetherhub_url,
+def _make_import_job(weekday="friday", aetherhub_url="https://aetherhub.com/User/GoldFish",
+                     fetch_times=None) -> AetherhubImportJob:
+    club = Club(name="Goldfish", chat_id=0, aetherhub_url=aetherhub_url, schedules=[])
+    schedule = ClubSchedule(
+        weekday=weekday, game_time="19:30",
         aetherhub_fetch_times=fetch_times or ["21:00"],
     )
+    return AetherhubImportJob(club, schedule)
 
 
-class TestAetherhubAutoImport:
-    """Tests for _aetherhub_auto_import scheduler function."""
+class TestAetherhubImportJob:
+    """Tests for AetherhubImportJob — db and now are injected directly."""
 
-    def _run(self, club, db, today_weekday=THURSDAY, today_date=TODAY,
-             club_page_url=None, db2=None):
-        """Run _aetherhub_auto_import with mocked time and DB."""
-        from bot.scheduler import _aetherhub_auto_import
-        import asyncio
-
-        tz = ZoneInfo("Europe/Moscow")
-        fake_now = datetime(2026, 4, 23, 21, 0, tzinfo=tz)  # Thursday
-
-        with patch("bot.scheduler.SessionLocal") as mock_sl, \
-             patch("bot.scheduler.datetime") as mock_dt:
-
-            mock_dt.now.return_value = fake_now
-            mock_dt.strptime = datetime.strptime
-            # today() comes from datetime.now().date()
-
-            db_instance = db
-            db2_instance = db2 or MagicMock()
-            call_count = [0]
-
-            def session_factory():
-                call_count[0] += 1
-                if call_count[0] == 1:
-                    return db_instance
-                return db2_instance
-
-            mock_sl.side_effect = session_factory
-
-            return asyncio.run(_aetherhub_auto_import(club))
-
-    def test_skips_wrong_weekday(self, db, svc):
-        club = _make_club(weekday="friday")  # today is Thursday
-        t = svc.create_tournament(TournamentCreate(title="T", chat_id=0, slug="t", club="Goldfish"))
-
-        from bot.scheduler import _aetherhub_auto_import
-        import asyncio
-        from zoneinfo import ZoneInfo
-
-        tz = ZoneInfo("Europe/Moscow")
-        fake_now = datetime(2026, 4, 23, 21, 0, tzinfo=tz)  # Thursday
-
-        with patch("bot.scheduler.SessionLocal") as mock_sl, \
-             patch("bot.scheduler.datetime") as mock_dt, \
-             patch("bot.scheduler.find_todays_pauper_tournament") as mock_find:
-
-            mock_dt.now.return_value = fake_now
-            mock_dt.strptime = datetime.strptime
-            mock_sl.return_value = db
-
-            asyncio.run(_aetherhub_auto_import(club))
-            mock_find.assert_not_called()
-
-    def test_skips_when_no_active_tournament(self, db, svc):
-        club = _make_club()
-
-        from bot.scheduler import _aetherhub_auto_import
-        import asyncio
-
-        tz = ZoneInfo("Europe/Moscow")
-        fake_now = datetime(2026, 4, 23, 21, 0, tzinfo=tz)  # Thursday
-
-        with patch("bot.scheduler.SessionLocal") as mock_sl, \
-             patch("bot.scheduler.datetime") as mock_dt, \
-             patch("bot.scheduler.find_todays_pauper_tournament") as mock_find:
-
-            mock_dt.now.return_value = fake_now
-            mock_dt.strptime = datetime.strptime
-
-            db_mock = MagicMock()
-            db_mock.execute.return_value.scalar_one_or_none.return_value = None
-            mock_sl.return_value = db_mock
-
-            asyncio.run(_aetherhub_auto_import(club))
-            mock_find.assert_not_called()
-
-    def test_skips_when_no_aetherhub_url_configured(self, db, svc):
-        club = _make_club(aetherhub_url=None)
-        t = svc.create_tournament(TournamentCreate(title="T", chat_id=0, slug="t", club="Goldfish"))
-
-        from bot.scheduler import _aetherhub_auto_import
-        import asyncio
-
+    def test_skips_wrong_weekday(self, db):
+        job = _make_import_job(weekday="saturday")  # today is Friday
         with patch("bot.scheduler.find_todays_pauper_tournament") as mock_find:
-            asyncio.run(_aetherhub_auto_import(club))
+            asyncio.run(job.run(now=FRIDAY_NOW, db=db))
+            mock_find.assert_not_called()
+
+    def test_skips_when_no_aetherhub_url_configured(self, db):
+        job = _make_import_job(aetherhub_url=None)
+        with patch("bot.scheduler.find_todays_pauper_tournament") as mock_find:
+            asyncio.run(job.run(now=FRIDAY_NOW, db=db))
+            mock_find.assert_not_called()
+
+    def test_skips_when_no_active_tournament(self, db):
+        job = _make_import_job()  # no tournament in db
+        with patch("bot.scheduler.find_todays_pauper_tournament") as mock_find:
+            asyncio.run(job.run(now=FRIDAY_NOW, db=db))
             mock_find.assert_not_called()
 
     def test_fetches_club_page_when_no_url_on_tournament(self, db, svc):
-        """When tournament has no aetherhub_url, should fetch club page to find it."""
-        club = _make_club()
-        t = svc.create_tournament(TournamentCreate(title="T", chat_id=0, slug="t", club="Goldfish"))
-
-        from bot.scheduler import _aetherhub_auto_import
-        import asyncio
-
-        tz = ZoneInfo("Europe/Moscow")
-        fake_now = datetime(2026, 4, 23, 21, 0, tzinfo=tz)  # Thursday (weekday=3)
-
+        """When tournament has no aetherhub_url, fetch the club page to find it."""
+        job = _make_import_job()
+        svc.create_tournament(TournamentCreate(title="T", chat_id=0, slug="t", club="Goldfish"))
         found_url = "https://aetherhub.com/Tourney/RoundTourney/99"
 
-        with patch("bot.scheduler.SessionLocal") as mock_sl, \
-             patch("bot.scheduler.datetime") as mock_dt, \
-             patch("bot.scheduler.find_todays_pauper_tournament", return_value=found_url) as mock_find, \
-             patch("bot.scheduler.fetch_tournament") as mock_fetch, \
-             patch("bot.scheduler.AetherhubImportService") as mock_import_cls:
+        with patch("bot.scheduler.find_todays_pauper_tournament", return_value=found_url) as mock_find, \
+             patch("bot.scheduler.fetch_tournament", return_value=MagicMock()) as mock_fetch, \
+             patch("bot.scheduler.AetherhubImportService") as mock_import_cls, \
+             patch("bot.scheduler.SessionLocal", return_value=MagicMock()):
 
-            mock_dt.now.return_value = fake_now
-            mock_dt.strptime = datetime.strptime
-
-            db_mock = MagicMock()
-            tournament_mock = MagicMock()
-            tournament_mock.aetherhub_url = None
-            tournament_mock.id = t.id
-            db_mock.execute.return_value.scalar_one_or_none.return_value = tournament_mock
-            db2_mock = MagicMock()
-
-            call_count = [0]
-            def session_factory():
-                call_count[0] += 1
-                return db_mock if call_count[0] == 1 else db2_mock
-            mock_sl.side_effect = session_factory
-
-            mock_fetch.return_value = MagicMock()
             mock_import_cls.return_value.import_tournament.return_value = MagicMock(
                 registered=5, already_registered=0, pairings_saved=20
             )
 
-            asyncio.run(_aetherhub_auto_import(club))
+            asyncio.run(job.run(now=FRIDAY_NOW, db=db))
 
-            mock_find.assert_called_once_with(club.aetherhub_url, today=fake_now.date())
+            mock_find.assert_called_once_with(job.club.aetherhub_url, today=FRIDAY_DATE)
             mock_fetch.assert_called_once_with(found_url)
             mock_import_cls.return_value.import_tournament.assert_called_once()
 
     def test_uses_stored_url_without_fetching_club_page(self, db, svc):
-        """When tournament already has aetherhub_url, skip club page fetch."""
-        club = _make_club()
-
-        from bot.scheduler import _aetherhub_auto_import
-        import asyncio
-
-        tz = ZoneInfo("Europe/Moscow")
-        fake_now = datetime(2026, 4, 23, 21, 0, tzinfo=tz)  # Thursday
-
+        """When tournament already has aetherhub_url stored, skip club page fetch."""
+        job = _make_import_job()
+        t = svc.create_tournament(TournamentCreate(title="T", chat_id=0, slug="t", club="Goldfish"))
         stored_url = "https://aetherhub.com/Tourney/RoundTourney/42"
+        svc.set_aetherhub_url(t.id, stored_url)
 
-        with patch("bot.scheduler.SessionLocal") as mock_sl, \
-             patch("bot.scheduler.datetime") as mock_dt, \
-             patch("bot.scheduler.find_todays_pauper_tournament") as mock_find, \
-             patch("bot.scheduler.fetch_tournament") as mock_fetch, \
-             patch("bot.scheduler.AetherhubImportService") as mock_import_cls:
+        with patch("bot.scheduler.find_todays_pauper_tournament") as mock_find, \
+             patch("bot.scheduler.fetch_tournament", return_value=MagicMock()) as mock_fetch, \
+             patch("bot.scheduler.AetherhubImportService") as mock_import_cls, \
+             patch("bot.scheduler.SessionLocal", return_value=MagicMock()):
 
-            mock_dt.now.return_value = fake_now
-            mock_dt.strptime = datetime.strptime
-
-            db_mock = MagicMock()
-            tournament_mock = MagicMock()
-            tournament_mock.aetherhub_url = stored_url
-            tournament_mock.id = 42
-            db_mock.execute.return_value.scalar_one_or_none.return_value = tournament_mock
-            db2_mock = MagicMock()
-
-            call_count = [0]
-            def session_factory():
-                call_count[0] += 1
-                return db_mock if call_count[0] == 1 else db2_mock
-            mock_sl.side_effect = session_factory
-
-            mock_fetch.return_value = MagicMock()
             mock_import_cls.return_value.import_tournament.return_value = MagicMock(
                 registered=0, already_registered=5, pairings_saved=10
             )
 
-            asyncio.run(_aetherhub_auto_import(club))
+            asyncio.run(job.run(now=FRIDAY_NOW, db=db))
 
             mock_find.assert_not_called()
             mock_fetch.assert_called_once_with(stored_url)
 
-    def test_stops_gracefully_when_club_page_has_no_tournament(self):
+    def test_stops_gracefully_when_club_page_has_no_tournament(self, db, svc):
         """If find_todays_pauper_tournament returns None, import is skipped."""
-        club = _make_club()
+        job = _make_import_job()
+        svc.create_tournament(TournamentCreate(title="T", chat_id=0, slug="t", club="Goldfish"))
 
-        from bot.scheduler import _aetherhub_auto_import
-        import asyncio
-
-        tz = ZoneInfo("Europe/Moscow")
-        fake_now = datetime(2026, 4, 23, 21, 0, tzinfo=tz)  # Thursday
-
-        with patch("bot.scheduler.SessionLocal") as mock_sl, \
-             patch("bot.scheduler.datetime") as mock_dt, \
-             patch("bot.scheduler.find_todays_pauper_tournament", return_value=None), \
+        with patch("bot.scheduler.find_todays_pauper_tournament", return_value=None), \
              patch("bot.scheduler.fetch_tournament") as mock_fetch:
-
-            mock_dt.now.return_value = fake_now
-            mock_dt.strptime = datetime.strptime
-
-            db_mock = MagicMock()
-            tournament_mock = MagicMock()
-            tournament_mock.aetherhub_url = None
-            tournament_mock.id = 1
-            db_mock.execute.return_value.scalar_one_or_none.return_value = tournament_mock
-            mock_sl.return_value = db_mock
-
-            asyncio.run(_aetherhub_auto_import(club))
+            asyncio.run(job.run(now=FRIDAY_NOW, db=db))
             mock_fetch.assert_not_called()
 
-    def test_saves_url_after_successful_import(self):
-        """After import, aetherhub_url should be saved via set_aetherhub_url."""
-        club = _make_club()
-
-        from bot.scheduler import _aetherhub_auto_import
-        import asyncio
-
-        tz = ZoneInfo("Europe/Moscow")
-        fake_now = datetime(2026, 4, 23, 21, 0, tzinfo=tz)  # Thursday
+    def test_saves_url_after_successful_import(self, db, svc):
+        """After import, aetherhub_url is saved via a separate session."""
+        job = _make_import_job()
+        t = svc.create_tournament(TournamentCreate(title="T", chat_id=0, slug="t", club="Goldfish"))
         found_url = "https://aetherhub.com/Tourney/RoundTourney/77"
 
-        with patch("bot.scheduler.SessionLocal") as mock_sl, \
-             patch("bot.scheduler.datetime") as mock_dt, \
-             patch("bot.scheduler.find_todays_pauper_tournament", return_value=found_url), \
+        db2_mock = MagicMock()
+        with patch("bot.scheduler.find_todays_pauper_tournament", return_value=found_url), \
              patch("bot.scheduler.fetch_tournament", return_value=MagicMock()), \
              patch("bot.scheduler.AetherhubImportService") as mock_import_cls, \
-             patch("bot.scheduler.TournamentService") as mock_ts_cls:
-
-            mock_dt.now.return_value = fake_now
-            mock_dt.strptime = datetime.strptime
-
-            db_mock = MagicMock()
-            tournament_mock = MagicMock()
-            tournament_mock.aetherhub_url = None
-            tournament_mock.id = 77
-            db_mock.execute.return_value.scalar_one_or_none.return_value = tournament_mock
-            db2_mock = MagicMock()
-
-            call_count = [0]
-            def session_factory():
-                call_count[0] += 1
-                return db_mock if call_count[0] == 1 else db2_mock
-            mock_sl.side_effect = session_factory
+             patch("bot.scheduler.TournamentService") as mock_ts_cls, \
+             patch("bot.scheduler.SessionLocal", return_value=db2_mock):
 
             mock_import_cls.return_value.import_tournament.return_value = MagicMock(
                 registered=3, already_registered=0, pairings_saved=6
             )
 
-            asyncio.run(_aetherhub_auto_import(club))
+            asyncio.run(job.run(now=FRIDAY_NOW, db=db))
 
-            mock_ts_cls.return_value.set_aetherhub_url.assert_called_once_with(77, found_url)
+            mock_ts_cls.assert_called_once_with(db2_mock)
+            mock_ts_cls.return_value.set_aetherhub_url.assert_called_once_with(t.id, found_url)
+
+    def test_club_page_fetch_exception_is_handled(self, db, svc):
+        """If fetching the club page raises, import is skipped gracefully."""
+        job = _make_import_job()
+        svc.create_tournament(TournamentCreate(title="T", chat_id=0, slug="t", club="Goldfish"))
+
+        with patch("bot.scheduler.find_todays_pauper_tournament", side_effect=Exception("timeout")), \
+             patch("bot.scheduler.fetch_tournament") as mock_fetch:
+            asyncio.run(job.run(now=FRIDAY_NOW, db=db))
+            mock_fetch.assert_not_called()
+
+    def test_fetch_tournament_exception_is_handled(self, db, svc):
+        """If fetching tournament data raises, import is skipped gracefully."""
+        job = _make_import_job()
+        t = svc.create_tournament(TournamentCreate(title="T", chat_id=0, slug="t", club="Goldfish"))
+        found_url = "https://aetherhub.com/Tourney/RoundTourney/99"
+
+        with patch("bot.scheduler.find_todays_pauper_tournament", return_value=found_url), \
+             patch("bot.scheduler.fetch_tournament", side_effect=Exception("network error")), \
+             patch("bot.scheduler.AetherhubImportService") as mock_import_cls:
+            asyncio.run(job.run(now=FRIDAY_NOW, db=db))
+            mock_import_cls.return_value.import_tournament.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# CreateTournamentJob
+# ---------------------------------------------------------------------------
+
+def _make_create_job(weekday="friday", chat_id=100) -> CreateTournamentJob:
+    club = Club(name="Goldfish", chat_id=chat_id, aetherhub_url=None, schedules=[])
+    schedule = ClubSchedule(weekday=weekday, game_time="19:30")
+    return CreateTournamentJob(club, schedule)
+
+
+class TestCreateTournamentJob:
+    """Tests for CreateTournamentJob — db and now are injected directly."""
+
+    def test_skips_wrong_weekday(self, db, svc):
+        job = _make_create_job(weekday="saturday")  # today is Friday
+        bot = AsyncMock()
+        asyncio.run(job.run(bot=bot, now=FRIDAY_NOW, db=db))
+        assert svc.get_active_tournament_for_chat(100) is None
+
+    def test_creates_tournament_on_correct_weekday(self, db, svc):
+        job = _make_create_job(weekday="friday", chat_id=0)
+        bot = AsyncMock()
+        asyncio.run(job.run(bot=bot, now=FRIDAY_NOW, db=db))
+        t = svc.get_active_tournament_for_chat(0)
+        assert t is not None
+        assert "Goldfish" in t.title
+        assert FRIDAY_DATE.strftime("%Y-%m-%d") in t.title
+
+    def test_closes_previous_active_tournament(self, db, svc):
+        job = _make_create_job(weekday="friday", chat_id=0)
+        old = svc.create_tournament(TournamentCreate(title="Old", chat_id=0, slug="old", club="Goldfish"))
+        bot = AsyncMock()
+        asyncio.run(job.run(bot=bot, now=FRIDAY_NOW, db=db))
+        from core.models import TournamentStatus
+        from sqlalchemy import select
+        import core.models as m
+        old_refreshed = db.get(m.Tournament, old.id)
+        assert old_refreshed.status == TournamentStatus.CLOSED
+
+    def test_sends_message_to_chat(self, db):
+        job = _make_create_job(weekday="friday", chat_id=42)
+        bot = AsyncMock()
+        asyncio.run(job.run(bot=bot, now=FRIDAY_NOW, db=db))
+        bot.send_message.assert_called_once()
+        call_kwargs = bot.send_message.call_args
+        assert call_kwargs.kwargs.get("chat_id") == 42 or call_kwargs.args[0] == 42
+
+    def test_no_message_when_chat_id_is_zero(self, db):
+        job = _make_create_job(weekday="friday", chat_id=0)
+        bot = AsyncMock()
+        asyncio.run(job.run(bot=bot, now=FRIDAY_NOW, db=db))
+        bot.send_message.assert_not_called()
