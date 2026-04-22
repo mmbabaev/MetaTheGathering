@@ -3,7 +3,7 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from bot.messages import HELP_TEXT
+from bot.messages import HELP_TEXT, HELP_TEXT_ADMIN
 from core.database import SessionLocal
 from core.event_log import event_logger
 from services.user import UserService
@@ -56,7 +56,14 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not update.effective_message:
+    if not update.effective_message or not update.effective_user:
         return
-    _log("cmd_help", update.effective_user)
-    await update.effective_message.reply_text(HELP_TEXT)
+    user = update.effective_user
+    _log("cmd_help", user)
+    db = SessionLocal()
+    try:
+        is_admin = UserService(db).is_admin(user.id)
+    finally:
+        db.close()
+    text = HELP_TEXT + "\n\n" + HELP_TEXT_ADMIN if is_admin else HELP_TEXT
+    await update.effective_message.reply_text(text)

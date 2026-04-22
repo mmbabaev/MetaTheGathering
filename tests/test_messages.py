@@ -117,5 +117,7 @@ class TestMessageTemplates:
             assert isinstance(constant, str) and len(constant) > 0
 
     def test_help_text_covers_main_commands(self):
-        for cmd in ("/tournaments", "/tournament_status", "/add_me", "/add_player", "/close_tournament"):
+        for cmd in ("/tournaments", "/settings"):
             assert cmd in msg.HELP_TEXT
+        for cmd in ("/tournament_status", "/add_me", "/add_player", "/create_tournament"):
+            assert cmd in msg.HELP_TEXT_ADMIN
