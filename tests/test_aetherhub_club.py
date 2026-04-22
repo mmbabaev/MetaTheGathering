@@ -414,7 +414,7 @@ class TestCreateTournamentJob:
         t = svc.get_active_tournament_for_chat(0)
         assert t is not None
         assert "Goldfish" in t.title
-        assert FRIDAY_DATE.strftime("%Y-%m-%d") in t.title
+        assert FRIDAY_DATE.strftime("%d.%m.%Y") in t.title
 
     def test_closes_previous_active_tournament(self, db, svc):
         job = _make_create_job(weekday="friday", chat_id=0)

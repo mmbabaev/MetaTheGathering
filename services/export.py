@@ -114,6 +114,12 @@ class ExportService:
         """Возвращает (bytes, filename) для Excel-файла списка участников."""
         t = get_tournament(self.db, tournament_id)
         participants = self.db.query(models.Participant).filter_by(tournament_id=tournament_id).all()
+        participants.sort(
+            key=lambda p: format_participant_name(
+                p.user.first_name if p.user else None,
+                p.user.last_name if p.user else None,
+            ).lower()
+        )
 
         wb = openpyxl.Workbook()
         ws = wb.active

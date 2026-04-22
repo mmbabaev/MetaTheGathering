@@ -464,7 +464,7 @@ class AdminHandler:
         if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
         if not title:
-            title = f"Pauper {datetime.now().strftime('%Y-%m-%d')}"
+            title = f"Pauper {datetime.now().strftime('%d.%m.%Y')}"
         try:
             t = self.svc.create_tournament(TournamentCreate(title=title, chat_id=chat_id))
         except errors.TournamentAlreadyExists:

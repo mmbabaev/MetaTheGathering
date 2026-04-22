@@ -129,7 +129,7 @@ class CreateTournamentJob:
 
     async def run(self, bot, now: datetime, db=None) -> None:
         date_str = now.strftime("%Y-%m-%d")
-        title = f"{self.club.title_prefix}{self.club.name} Pauper {date_str}"
+        title = f"{self.club.title_prefix}{self.club.name} Pauper {now.strftime('%d.%m.%Y')}"
         slug = f"{date_str}-{self.club.name.lower()}-pauper"
 
         close_db = db is None
