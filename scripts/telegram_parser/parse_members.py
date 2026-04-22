@@ -10,8 +10,8 @@ Requires TELEGRAM_API_ID and TELEGRAM_API_HASH in .env (same directory or projec
 A session file (session.session) will be created on first run — keep it out of git.
 """
 
-import asyncio
 import argparse
+import asyncio
 import os
 import sys
 from pathlib import Path
@@ -47,9 +47,7 @@ async def main(chat: str) -> None:
         try:
             members = []
             async for user in client.iter_participants(chat):
-                full_name = " ".join(
-                    part for part in (user.first_name, user.last_name) if part
-                ).strip() or "<no name>"
+                full_name = " ".join(part for part in (user.first_name, user.last_name) if part).strip() or "<no name>"
 
                 username = f"@{user.username}" if user.username else "(no username)"
                 members.append((full_name, username, user.id))

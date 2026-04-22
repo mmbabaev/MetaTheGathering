@@ -1,10 +1,10 @@
 # /settings — управление профилем пользователя — чистая бизнес-логика
 
-from core.config import settings as app_settings
-from services.user import UserService
 from bot.handlers.base import HandlerResult
 from bot.keyboards import settings_keyboard
-from bot.messages import SETTINGS_MENU, NAME_SAVED
+from bot.messages import NAME_SAVED, SETTINGS_MENU, format_participant_name
+from core.config import settings as app_settings
+from services.user import UserService
 
 
 class SettingsHandler:
@@ -12,9 +12,10 @@ class SettingsHandler:
         self.user_svc = user_svc
 
     def handle_settings(self, tg_id: int) -> HandlerResult:
-        from bot.messages import format_participant_name
         user = self.user_svc.get_by_tg_id(tg_id)
-        current = format_participant_name(user.first_name if user else None, user.last_name if user else None) or "не указано"
+        current = (
+            format_participant_name(user.first_name if user else None, user.last_name if user else None) or "не указано"
+        )
         text = f"{SETTINGS_MENU}\n\nВаше имя: {current}\n\nВерсия: {app_settings.VERSION}"
         return HandlerResult(text, keyboard=settings_keyboard(is_admin=self.user_svc.is_admin(tg_id)))
 

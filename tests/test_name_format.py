@@ -1,7 +1,8 @@
 """Tests for name formatting heuristic and participant sort order."""
 
 import pytest
-from bot.messages import format_participant_name, family_name_sort_key
+
+from bot.messages import family_name_sort_key, format_participant_name
 
 
 class TestFormatParticipantName:
@@ -66,9 +67,9 @@ class TestParticipantSortOrder:
     """Integration: _sort_participants puts unfilled first, then alphabetical by family name."""
 
     def test_sort_order(self, db, svc, user_svc, arch_svc):
-        from core.schemas import TournamentCreate
-        from core import models
         from bot.messages import sort_participants as _sort_participants
+        from core import models
+        from core.schemas import TournamentCreate
 
         t = svc.create_tournament(TournamentCreate(title="T", chat_id=500, slug="t"))
         arch = arch_svc.get_or_create_by_name("Burn")

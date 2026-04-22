@@ -1,12 +1,12 @@
 from datetime import datetime
-from typing import Optional, List
+from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict
 
 from core.models import TournamentStatus, VoteType
 
-
 # ==== Archetype ====
+
 
 class ArchetypeBase(BaseModel):
     name: str
@@ -31,6 +31,7 @@ class ArchetypeWithAliases(ArchetypeRead):
 
 # ==== User ====
 
+
 class UserBase(BaseModel):
     tg_id: int
     username: Optional[str] = None
@@ -52,6 +53,7 @@ class UserRead(UserBase):
 
 
 # ==== Tournament ====
+
 
 class TournamentBase(BaseModel):
     title: str
@@ -79,6 +81,7 @@ class TournamentRead(TournamentBase):
 
 
 # ==== Participant ====
+
 
 class ParticipantBase(BaseModel):
     tournament_id: int
@@ -108,6 +111,7 @@ class ParticipantWithUserAndArchetype(ParticipantRead):
 
 
 # ==== Vote ====
+
 
 class VoteBase(BaseModel):
     tournament_id: int

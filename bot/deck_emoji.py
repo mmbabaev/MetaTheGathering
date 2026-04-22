@@ -4,64 +4,59 @@
 
 _DECK_EMOJI: dict[str, str] = {
     # ── Топ-10 по числу игроков ──────────────────────────────────────────
-    "Blue Delver":      "🔵🐍🪲",   # синий, змея, жук (Delver + Insectile Aberration)
-    "Blue Faeries":     "🔵🧚",     # синий, фея
-    "Rakdos Madness":   "🔴⚫👹",   # красный, чёрный, демон
-    "Grixis Affinity":  "🔴🔵⚫🤖🧊",  # три цвета, робот, холодильник
-    "Dimir Faeries":    "🔵⚫🧚",   # синий, чёрный, фея
-    "Bogles":           "🟢⚪😊",   # зелёный, белый, колобок (hexproof dude)
-    "Red Kuldotha":     "🔴👺",     # красный, гоблин
-    "Dimir Terror":     "🔵⚫💀🐍", # синий, чёрный, череп, уж
-    "Elves":            "🟢🧝🧝‍♀️",  # зелёный, эльф, эльфийка
-    "Caw Gates":        "🔵⚪🦅⛩️", # синий, белый, орёл, ворота
-
+    "Blue Delver": "🔵🐍🪲",  # синий, змея, жук (Delver + Insectile Aberration)
+    "Blue Faeries": "🔵🧚",  # синий, фея
+    "Rakdos Madness": "🔴⚫👹",  # красный, чёрный, демон
+    "Grixis Affinity": "🔴🔵⚫🤖🧊",  # три цвета, робот, холодильник
+    "Dimir Faeries": "🔵⚫🧚",  # синий, чёрный, фея
+    "Bogles": "🟢⚪😊",  # зелёный, белый, колобок (hexproof dude)
+    "Red Kuldotha": "🔴👺",  # красный, гоблин
+    "Dimir Terror": "🔵⚫💀🐍",  # синий, чёрный, череп, уж
+    "Elves": "🟢🧝🧝‍♀️",  # зелёный, эльф, эльфийка
+    "Caw Gates": "🔵⚪🦅⛩️",  # синий, белый, орёл, ворота
     # ── Расширенный список ───────────────────────────────────────────────
-    "Red Rally":        "🔴👥",
-    "Mono Red Rally":   "🔴👥",     # алиас
-    "Red Burn":         "🔴🔥",
-    "Classic Burn":     "🔴🔥",     # алиас
+    "Red Rally": "🔴👥",
+    "Mono Red Rally": "🔴👥",  # алиас
+    "Red Burn": "🔴🔥",
+    "Classic Burn": "🔴🔥",  # алиас
     "Mono Blue Faeries": "🔵🧚",
-    "Dimir Control":    "🔵⚫🧠",
-    "Izzet Faeries":    "🔴🔵🧚",
-    "Izzet Control":    "🔴🔵🧠",
-    "Izzet Terror":     "🔴🔵💀",
+    "Dimir Control": "🔵⚫🧠",
+    "Izzet Faeries": "🔴🔵🧚",
+    "Izzet Control": "🔴🔵🧠",
+    "Izzet Terror": "🔴🔵💀",
     "Azorius Familiars": "🔵⚪🦜",
-    "Gruul Ramp":       "🔴🟢🌿",
-    "White Weenie":     "⚪⚔️",
-    "White Aggro":      "⚪⚔️",     # алиас
-    "Gardens":          "🟢🌸",
-    "Glee Combo":       "🟢😄",
-    "Jund Midrange":    "🔴🟢⚫",
-    "Cascade Tron":     "🟡⚙️🪑",
-    "Flicker Tron":     "🟡✨🪑",
-    "Tron":             "🟡⚙️🪑",  # алиас
-    "Red Tron":         "🔴🟡⚙️🪑",
-    "Gruul Tron":       "🔴🟢⚙️🪑",
-    "Moggwarts Combo":  "🔴🧙",
-    "Combo Walls":      "🧱🔵",
-    "Spy":              "🕵️",
-    "Spy Combo":        "🕵️🔄",
+    "Gruul Ramp": "🔴🟢🌿",
+    "White Weenie": "⚪⚔️",
+    "White Aggro": "⚪⚔️",  # алиас
+    "Gardens": "🟢🌸",
+    "Glee Combo": "🟢😄",
+    "Jund Midrange": "🔴🟢⚫",
+    "Cascade Tron": "🟡⚙️🪑",
+    "Flicker Tron": "🟡✨🪑",
+    "Tron": "🟡⚙️🪑",  # алиас
+    "Red Tron": "🔴🟡⚙️🪑",
+    "Gruul Tron": "🔴🟢⚙️🪑",
+    "Moggwarts Combo": "🔴🧙",
+    "Combo Walls": "🧱🔵",
+    "Spy": "🕵️",
+    "Spy Combo": "🕵️🔄",
     "Boros Synthesizer": "🔴⚪🤖",
-    "Golgari Dredge":   "🟢⚫🪦",
-
+    "Golgari Dredge": "🟢⚫🪦",
     # ── Blue Terror / Mono U семейство ───────────────────────────────────
-    "Blue Terror":      "🔵🐍🪲",
-    "Mono U Terror":    "🔵🐍🪲",
-    "Mono U Delver":    "🔵🐍🪲",
+    "Blue Terror": "🔵🐍🪲",
+    "Mono U Terror": "🔵🐍🪲",
+    "Mono U Delver": "🔵🐍🪲",
     "Mono Blue Delver": "🔵🐍🪲",
     "Mono Blue Terror": "🔵🐍🪲",
-
     # ── Madness семейство ────────────────────────────────────────────────
-    "Red Madness":      "🔴👹",
+    "Red Madness": "🔴👹",
     "Mono Red Madness": "🔴👹",
     "Rakdos Reanimator": "🔴⚫💀👹",
-
     # ── Caw Gates алиасы ─────────────────────────────────────────────────
-    "Caw-Gates":        "🔵⚪🦅⛩️",
-
+    "Caw-Gates": "🔵⚪🦅⛩️",
     # ── Jund / Wildfire ──────────────────────────────────────────────────
-    "Jund Wildfire":    "🔴🟢⚫🔥",
-    "Gruul Ponza":      "🔴🟢🪨",
+    "Jund Wildfire": "🔴🟢⚫🔥",
+    "Gruul Ponza": "🔴🟢🪨",
     "Gruul Rhino Friends + Eldrazi": "🔴🟢🦏",
 }
 

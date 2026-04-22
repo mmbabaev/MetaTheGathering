@@ -3,18 +3,17 @@ from __future__ import annotations
 import csv
 import io
 from datetime import datetime
-from typing import Iterable, List, Literal
+from typing import List, Literal
 
 import openpyxl
 from openpyxl.styles import Alignment, Font, PatternFill
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from core import models
 from bot.messages import format_participant_name
-from services.utils import get_tournament
+from core import models
 from services.stats import StatsService
-
+from services.utils import get_tournament
 
 ExportFormat = Literal["csv", "markdown"]
 
@@ -114,10 +113,12 @@ class ExportService:
     def export_participants_excel(self, tournament_id: int) -> tuple[bytes, str]:
         """Возвращает (bytes, filename) для Excel-файла списка участников."""
         t = get_tournament(self.db, tournament_id)
-        participants = (
-            self.db.query(models.Participant)
-            .filter_by(tournament_id=tournament_id)
-            .all()
+        participants = self.db.query(models.Participant).filter_by(tournament_id=tournament_id).all()
+        participants.sort(
+            key=lambda p: format_participant_name(
+                p.user.first_name if p.user else None,
+                p.user.last_name if p.user else None,
+            ).lower()
         )
 
         wb = openpyxl.Workbook()
@@ -167,7 +168,5 @@ class ExportService:
         lines.append("| Archetype | Players | Upvotes | Downvotes |")
         lines.append("|---|---|---|---|")
         for row in meta:
-            lines.append(
-                f"| {row.archetype_name} | {row.count} | {row.upvotes_sum} | {row.downvotes_sum} |"
-            )
+            lines.append(f"| {row.archetype_name} | {row.count} | {row.upvotes_sum} | {row.downvotes_sum} |")
         return "\n".join(lines)

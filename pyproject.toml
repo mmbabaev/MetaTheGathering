@@ -1,0 +1,14 @@
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+exclude = [".venv", "alembic"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "PLC0415"]
+ignore = [
+    "E501",   # line too long
+    "E402",   # module-level import not at top (config.py loads env first)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["PLC0415", "F401"]

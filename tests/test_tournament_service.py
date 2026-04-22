@@ -5,17 +5,17 @@ import pytest
 from core.models import TournamentStatus, VoteType, utc_now
 from core.schemas import TournamentCreate
 from services.errors import (
-    TournamentAlreadyExists,
-    TournamentInvalidState,
     ParticipantAlreadyRegistered,
     SelfVoteNotAllowed,
+    TournamentAlreadyExists,
+    TournamentInvalidState,
     VotingNotAllowed,
 )
-from services.tournament import CONFIRM_THRESHOLD, REJECT_THRESHOLD
 from services.stats import StatsService
-
+from services.tournament import CONFIRM_THRESHOLD, REJECT_THRESHOLD
 
 # ===== Tournament lifecycle =====
+
 
 class TestCreateTournament:
     def test_creates_with_correct_fields(self, svc):
@@ -60,6 +60,7 @@ class TestTournamentLifecycle:
 
 # ===== Participants =====
 
+
 class TestRegisterParticipant:
     def test_registers_successfully(self, svc, tournament, user_alice, archetype_burn):
         p = svc.register_participant(
@@ -95,14 +96,20 @@ class TestRegisterParticipant:
 
 
 class TestSetParticipantArchetype:
-    def test_changes_archetype_and_resets_votes(self, svc, db, tournament, user_alice, user_bob, archetype_burn, archetype_affinity):
+    def test_changes_archetype_and_resets_votes(
+        self, svc, db, tournament, user_alice, user_bob, archetype_burn, archetype_affinity
+    ):
         # Регистрируем alice и bob
-        p_alice = svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
+        p_alice = svc.register_participant(
+            tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id
+        )
         svc.register_participant(tournament_id=tournament.id, user_id=user_bob.id, archetype_id=archetype_affinity.id)
 
         # Открываем голосование и голосуем
         svc.open_voting(tournament.id)
-        svc.cast_vote(tournament_id=tournament.id, participant_id=p_alice.id, voter_user_id=user_bob.id, vote_type=VoteType.UP)
+        svc.cast_vote(
+            tournament_id=tournament.id, participant_id=p_alice.id, voter_user_id=user_bob.id, vote_type=VoteType.UP
+        )
 
         # Меняем архетип — голоса должны сброситься
         p_updated = svc.set_participant_archetype(participant_id=p_alice.id, archetype_id=archetype_affinity.id)
@@ -113,67 +120,128 @@ class TestSetParticipantArchetype:
 
 # ===== Voting =====
 
+
 class TestCastVote:
     @pytest.fixture(autouse=True)
     def setup_voting(self, svc, tournament, user_alice, user_bob, archetype_burn, archetype_affinity):
         """Регистрируем двух участников и открываем голосование."""
-        self.p_alice = svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
-        self.p_bob = svc.register_participant(tournament_id=tournament.id, user_id=user_bob.id, archetype_id=archetype_affinity.id)
+        self.p_alice = svc.register_participant(
+            tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id
+        )
+        self.p_bob = svc.register_participant(
+            tournament_id=tournament.id, user_id=user_bob.id, archetype_id=archetype_affinity.id
+        )
         svc.open_voting(tournament.id)
 
     def test_upvote_increments_counter(self, svc, tournament, user_bob):
-        svc.cast_vote(tournament_id=tournament.id, participant_id=self.p_alice.id, voter_user_id=user_bob.id, vote_type=VoteType.UP)
+        svc.cast_vote(
+            tournament_id=tournament.id,
+            participant_id=self.p_alice.id,
+            voter_user_id=user_bob.id,
+            vote_type=VoteType.UP,
+        )
         p = svc._get_participant(self.p_alice.id)
         assert p.upvotes_count == 1
         assert p.downvotes_count == 0
 
     def test_downvote_increments_counter(self, svc, tournament, user_bob):
-        svc.cast_vote(tournament_id=tournament.id, participant_id=self.p_alice.id, voter_user_id=user_bob.id, vote_type=VoteType.DOWN)
+        svc.cast_vote(
+            tournament_id=tournament.id,
+            participant_id=self.p_alice.id,
+            voter_user_id=user_bob.id,
+            vote_type=VoteType.DOWN,
+        )
         p = svc._get_participant(self.p_alice.id)
         assert p.downvotes_count == 1
         assert p.upvotes_count == 0
 
     def test_self_vote_raises(self, svc, tournament, user_alice):
         with pytest.raises(SelfVoteNotAllowed):
-            svc.cast_vote(tournament_id=tournament.id, participant_id=self.p_alice.id, voter_user_id=user_alice.id, vote_type=VoteType.UP)
+            svc.cast_vote(
+                tournament_id=tournament.id,
+                participant_id=self.p_alice.id,
+                voter_user_id=user_alice.id,
+                vote_type=VoteType.UP,
+            )
 
     def test_vote_outside_voting_phase_raises(self, svc, db, tournament, user_bob):
         # Закрываем турнир — голосование недоступно
         from core.models import Tournament
+
         t_orm = db.get(Tournament, tournament.id)
         t_orm.status = TournamentStatus.CLOSED
         db.commit()
         with pytest.raises(TournamentInvalidState):
-            svc.cast_vote(tournament_id=tournament.id, participant_id=self.p_alice.id, voter_user_id=user_bob.id, vote_type=VoteType.UP)
+            svc.cast_vote(
+                tournament_id=tournament.id,
+                participant_id=self.p_alice.id,
+                voter_user_id=user_bob.id,
+                vote_type=VoteType.UP,
+            )
 
     def test_vote_change_updates_counters(self, svc, db, tournament, user_bob):
-        svc.cast_vote(tournament_id=tournament.id, participant_id=self.p_alice.id, voter_user_id=user_bob.id, vote_type=VoteType.UP)
+        svc.cast_vote(
+            tournament_id=tournament.id,
+            participant_id=self.p_alice.id,
+            voter_user_id=user_bob.id,
+            vote_type=VoteType.UP,
+        )
         # Сдвигаем created_at голоса назад, чтобы обойти cooldown
         from core.models import Vote
+
         vote = db.query(Vote).filter_by(participant_id=self.p_alice.id, voter_id=user_bob.id).first()
         vote.created_at = utc_now() - timedelta(seconds=60)
         db.commit()
 
-        svc.cast_vote(tournament_id=tournament.id, participant_id=self.p_alice.id, voter_user_id=user_bob.id, vote_type=VoteType.DOWN, apply_cooldown=True)
+        svc.cast_vote(
+            tournament_id=tournament.id,
+            participant_id=self.p_alice.id,
+            voter_user_id=user_bob.id,
+            vote_type=VoteType.DOWN,
+            apply_cooldown=True,
+        )
         p = svc._get_participant(self.p_alice.id)
         assert p.upvotes_count == 0
         assert p.downvotes_count == 1
 
     def test_vote_change_cooldown_raises(self, svc, tournament, user_bob):
-        svc.cast_vote(tournament_id=tournament.id, participant_id=self.p_alice.id, voter_user_id=user_bob.id, vote_type=VoteType.UP)
+        svc.cast_vote(
+            tournament_id=tournament.id,
+            participant_id=self.p_alice.id,
+            voter_user_id=user_bob.id,
+            vote_type=VoteType.UP,
+        )
         # Сразу меняем голос — cooldown не прошёл
         with pytest.raises(VotingNotAllowed):
-            svc.cast_vote(tournament_id=tournament.id, participant_id=self.p_alice.id, voter_user_id=user_bob.id, vote_type=VoteType.DOWN, apply_cooldown=True)
+            svc.cast_vote(
+                tournament_id=tournament.id,
+                participant_id=self.p_alice.id,
+                voter_user_id=user_bob.id,
+                vote_type=VoteType.DOWN,
+                apply_cooldown=True,
+            )
 
     def test_same_vote_twice_is_idempotent(self, svc, tournament, user_bob):
-        svc.cast_vote(tournament_id=tournament.id, participant_id=self.p_alice.id, voter_user_id=user_bob.id, vote_type=VoteType.UP)
+        svc.cast_vote(
+            tournament_id=tournament.id,
+            participant_id=self.p_alice.id,
+            voter_user_id=user_bob.id,
+            vote_type=VoteType.UP,
+        )
         # apply_cooldown=False чтобы дойти до проверки идемпотентности
-        svc.cast_vote(tournament_id=tournament.id, participant_id=self.p_alice.id, voter_user_id=user_bob.id, vote_type=VoteType.UP, apply_cooldown=False)
+        svc.cast_vote(
+            tournament_id=tournament.id,
+            participant_id=self.p_alice.id,
+            voter_user_id=user_bob.id,
+            vote_type=VoteType.UP,
+            apply_cooldown=False,
+        )
         p = svc._get_participant(self.p_alice.id)
         assert p.upvotes_count == 1  # не увеличился дважды
 
 
 # ===== Confirmation thresholds =====
+
 
 class TestConfirmationThreshold:
     def _make_voters(self, svc, user_svc, arch_svc, tournament, count):
@@ -221,6 +289,7 @@ class TestConfirmationThreshold:
 
 # ===== get_or_create helpers =====
 
+
 class TestGetOrCreate:
     def test_get_or_create_user_creates_new(self, user_svc):
         u = user_svc.get_or_create(tg_id=9999, username="newuser", first_name="New")
@@ -244,6 +313,7 @@ class TestGetOrCreate:
 
 # ===== list_participants =====
 
+
 class TestListParticipants:
     def test_returns_all_participants(self, svc, tournament, user_alice, user_bob, archetype_burn, archetype_affinity):
         svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
@@ -265,12 +335,19 @@ class TestListParticipants:
 
 # ===== reset_votes =====
 
+
 class TestResetVotes:
-    def test_reset_clears_all_votes(self, svc, db, tournament, user_alice, user_bob, archetype_burn, archetype_affinity):
-        p_alice = svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
+    def test_reset_clears_all_votes(
+        self, svc, db, tournament, user_alice, user_bob, archetype_burn, archetype_affinity
+    ):
+        p_alice = svc.register_participant(
+            tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id
+        )
         svc.register_participant(tournament_id=tournament.id, user_id=user_bob.id, archetype_id=archetype_affinity.id)
         svc.open_voting(tournament.id)
-        svc.cast_vote(tournament_id=tournament.id, participant_id=p_alice.id, voter_user_id=user_bob.id, vote_type=VoteType.UP)
+        svc.cast_vote(
+            tournament_id=tournament.id, participant_id=p_alice.id, voter_user_id=user_bob.id, vote_type=VoteType.UP
+        )
 
         svc.reset_votes_for_participant(p_alice.id)
         p = svc._get_participant(p_alice.id)
@@ -281,8 +358,11 @@ class TestResetVotes:
 
 # ===== Meta aggregation =====
 
+
 class TestGetTournamentMeta:
-    def test_meta_aggregates_by_archetype(self, db, svc, user_svc, tournament, user_alice, user_bob, archetype_burn, archetype_affinity):
+    def test_meta_aggregates_by_archetype(
+        self, db, svc, user_svc, tournament, user_alice, user_bob, archetype_burn, archetype_affinity
+    ):
         u3 = user_svc.get_or_create(tg_id=1003, username="carol")
         svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
         svc.register_participant(tournament_id=tournament.id, user_id=user_bob.id, archetype_id=archetype_burn.id)
@@ -314,15 +394,21 @@ class TestListArchetypesForUser:
         assert result[0].name == "Burn"
 
     def test_most_recent_choice_wins(self, svc, db, user_alice, archetype_burn, archetype_affinity, arch_svc):
-        from core.schemas import TournamentCreate
         import core.models as m
+        from core.schemas import TournamentCreate
+
         t1 = svc.create_tournament(TournamentCreate(title="T1", chat_id=1))
         t2 = svc.create_tournament(TournamentCreate(title="T2", chat_id=2))
         svc.register_participant(tournament_id=t1.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
         # Make t2 participant appear newer
         p2 = m.Participant(
-            tournament_id=t2.id, user_id=user_alice.id, archetype_id=archetype_affinity.id,
-            added_by_admin=False, confirmed=False, upvotes_count=0, downvotes_count=0,
+            tournament_id=t2.id,
+            user_id=user_alice.id,
+            archetype_id=archetype_affinity.id,
+            added_by_admin=False,
+            confirmed=False,
+            upvotes_count=0,
+            downvotes_count=0,
             created_at=utc_now() + timedelta(seconds=1),
             updated_at=utc_now(),
         )
@@ -334,6 +420,7 @@ class TestListArchetypesForUser:
 
     def test_deduplicates_repeated_choices(self, svc, db, user_alice, archetype_burn, arch_svc):
         from core.schemas import TournamentCreate
+
         t1 = svc.create_tournament(TournamentCreate(title="T1", chat_id=1))
         t2 = svc.create_tournament(TournamentCreate(title="T2", chat_id=2))
         svc.register_participant(tournament_id=t1.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
@@ -349,6 +436,7 @@ class TestListArchetypesForUser:
 
 
 # ===== List methods =====
+
 
 class TestListTournamentsForChat:
     def test_returns_all_including_closed(self, svc):
@@ -384,7 +472,7 @@ class TestListActiveTournamentsForChat:
         assert svc.list_active_tournaments_for_chat(310) == []
 
     def test_includes_registration_and_voting(self, svc):
-        t = svc.create_tournament(TournamentCreate(title="A", chat_id=311, slug="a311"))
+        svc.create_tournament(TournamentCreate(title="A", chat_id=311, slug="a311"))
         result = svc.list_active_tournaments_for_chat(311)
         assert len(result) == 1
         assert result[0].status == TournamentStatus.REGISTRATION
@@ -394,6 +482,7 @@ class TestListActiveTournamentsForChat:
 
 
 # ===== open_registration =====
+
 
 class TestOpenRegistration:
     def test_sets_status_to_registration(self, svc):
@@ -407,14 +496,17 @@ class TestOpenRegistration:
 
 # ===== _get_participant error path =====
 
+
 class TestGetParticipantNotFound:
     def test_raises_on_missing_participant(self, svc):
         from services.errors import ParticipantNotFound
+
         with pytest.raises(ParticipantNotFound):
             svc._get_participant(99999)
 
 
 # ===== cast_vote edge cases =====
+
 
 class TestCastVoteEdgeCases:
     @pytest.fixture
@@ -472,14 +564,17 @@ class TestCastVoteEdgeCases:
         )
         assert result.vote_type == VoteType.UP
         # Reload participant to verify counters
-        from core import models as m
         from sqlalchemy import select
+
+        from core import models as m
+
         part = svc.db.execute(select(m.Participant).where(m.Participant.id == p.id)).scalar_one()
         assert part.downvotes_count == 0
         assert part.upvotes_count == 1
 
 
 # ===== bulk_add_participants =====
+
 
 class TestBulkAddParticipants:
     @pytest.fixture
@@ -494,9 +589,7 @@ class TestBulkAddParticipants:
 
     def test_adds_participants_without_archetype(self, svc, tournament, users):
         alice, bob = users
-        results = svc.bulk_add_participants(
-            tournament.id, [(alice.id, "Alice"), (bob.id, "Bob")]
-        )
+        results = svc.bulk_add_participants(tournament.id, [(alice.id, "Alice"), (bob.id, "Bob")])
         assert len(results) == 2
         assert all(status == "added" for _, status in results)
         assert svc.get_participant(tournament.id, alice.id) is not None
@@ -532,9 +625,7 @@ class TestBulkAddParticipants:
     def test_mixed_new_and_existing(self, svc, tournament, users, archetype_burn):
         alice, bob = users
         svc.register_participant(tournament_id=tournament.id, user_id=alice.id, archetype_id=archetype_burn.id)
-        results = svc.bulk_add_participants(
-            tournament.id, [(alice.id, "Alice"), (bob.id, "Bob")]
-        )
+        results = svc.bulk_add_participants(tournament.id, [(alice.id, "Alice"), (bob.id, "Bob")])
         statuses = dict(results)
         assert statuses["Alice"] == "already_registered"
         assert statuses["Bob"] == "added"
@@ -542,6 +633,7 @@ class TestBulkAddParticipants:
     def test_raises_when_tournament_not_found(self, svc, users):
         alice, _ = users
         from services.errors import TournamentNotFound
+
         with pytest.raises(TournamentNotFound):
             svc.bulk_add_participants(99999, [(alice.id, "Alice")])
 
@@ -557,6 +649,7 @@ class TestBulkAddParticipants:
 
 
 # ===== UserService.get_or_create_by_name =====
+
 
 class TestGetOrCreateByName:
     def test_creates_user_with_first_and_last_name(self, user_svc, db):
@@ -637,6 +730,7 @@ class TestGetOrCreateByName:
     def test_prefers_user_with_deck_history(self, user_svc, db, svc, arch_svc):
         """Когда два совпадения — возвращает того, у кого есть история колод."""
         from core import models
+
         # Два пользователя с одинаковыми именами (разный порядок слов)
         u_no_hist, _ = user_svc.get_or_create_by_name("Антон", "Ильин")
         db.commit()
@@ -681,14 +775,13 @@ class TestGetOrCreateByName:
         t = svc.create_tournament(TournamentCreate(title="T", chat_id=9999))
 
         from unittest.mock import patch
+
         handler = AdminHandler(svc, user_svc, arch_svc)
 
         # Добавляем в порядке Фамилия Имя (как вводит оператор)
         with patch("services.user.settings") as mock_settings:
             mock_settings.admin_ids = [0]
-            result = handler.handle_bulk_add_by_name(
-                tg_id=0, tournament_id=t.id, names=["Ильин Антон"]
-            )
+            result = handler.handle_bulk_add_by_name(tg_id=0, tournament_id=t.id, names=["Ильин Антон"])
         assert "✅ Ильин Антон" in result.text
 
         # Участник должен быть привязан к правильному пользователю (с историей)
@@ -696,12 +789,12 @@ class TestGetOrCreateByName:
         assert participant is not None, "Участник не связан с правильным пользователем"
 
 
-
 class TestSetAetherhubUrl:
     def test_stores_url(self, svc, tournament):
         url = "https://aetherhub.com/Tourney/RoundTourney/12345"
         svc.set_aetherhub_url(tournament.id, url)
         from services.utils import get_tournament
+
         t = get_tournament(svc.db, tournament.id)
         assert t.aetherhub_url == url
 
@@ -709,6 +802,7 @@ class TestSetAetherhubUrl:
         svc.set_aetherhub_url(tournament.id, "https://aetherhub.com/old")
         svc.set_aetherhub_url(tournament.id, "https://aetherhub.com/new")
         from services.utils import get_tournament
+
         t = get_tournament(svc.db, tournament.id)
         assert t.aetherhub_url == "https://aetherhub.com/new"
 

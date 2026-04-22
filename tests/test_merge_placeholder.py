@@ -4,10 +4,10 @@ import pytest
 from sqlalchemy import select
 
 from core import models
-from services.user import UserService
-from services.tournament import TournamentService
-from services.archetype import ArchetypeService
 from core.schemas import TournamentCreate
+from services.archetype import ArchetypeService
+from services.tournament import TournamentService
+from services.user import UserService
 
 REAL_TG_ID = 555_000
 
@@ -38,17 +38,17 @@ class TestMergePlaceholderByName:
         svc = UserService(db)
         merged = svc.merge_placeholder_by_name(REAL_TG_ID, "Сергей", "Крипков")
         assert merged is True
-        histories = db.execute(
-            select(models.UserDeckHistory).where(models.UserDeckHistory.user_id == real_user.id)
-        ).scalars().all()
+        histories = (
+            db.execute(select(models.UserDeckHistory).where(models.UserDeckHistory.user_id == real_user.id))
+            .scalars()
+            .all()
+        )
         assert len(histories) == 1
 
     def test_placeholder_deleted(self, db, placeholder, real_user):
         svc = UserService(db)
         svc.merge_placeholder_by_name(REAL_TG_ID, "Сергей", "Крипков")
-        gone = db.execute(
-            select(models.User).where(models.User.id == placeholder.id)
-        ).scalar_one_or_none()
+        gone = db.execute(select(models.User).where(models.User.id == placeholder.id)).scalar_one_or_none()
         assert gone is None
 
     def test_swapped_name_order(self, db, placeholder, real_user):
@@ -63,8 +63,8 @@ class TestMergePlaceholderByName:
 
     def test_real_user_not_merged_with_another_real(self, db):
         user_svc = UserService(db)
-        u1 = user_svc.get_or_create(tg_id=111, first_name="Иван", last_name="Петров")
-        u2 = user_svc.get_or_create(tg_id=222, username="test")
+        user_svc.get_or_create(tg_id=111, first_name="Иван", last_name="Петров")
+        user_svc.get_or_create(tg_id=222, username="test")
         result = user_svc.merge_placeholder_by_name(222, "Иван", "Петров")
         assert result is False  # u1 has positive tg_id — not a placeholder
 
@@ -84,9 +84,9 @@ class TestMergePlaceholderByName:
 
         usvc.merge_placeholder_by_name(REAL_TG_ID, "Сергей", "Крипков")
 
-        participants = db.execute(
-            select(models.Participant).where(models.Participant.user_id == real.id)
-        ).scalars().all()
+        participants = (
+            db.execute(select(models.Participant).where(models.Participant.user_id == real.id)).scalars().all()
+        )
         assert len(participants) == 1
 
     def test_no_duplicate_participants_on_conflict(self, db, placeholder, arch_svc):
@@ -106,7 +106,7 @@ class TestMergePlaceholderByName:
 
         usvc.merge_placeholder_by_name(REAL_TG_ID, "Сергей", "Крипков")
 
-        participants = db.execute(
-            select(models.Participant).where(models.Participant.user_id == real.id)
-        ).scalars().all()
+        participants = (
+            db.execute(select(models.Participant).where(models.Participant.user_id == real.id)).scalars().all()
+        )
         assert len(participants) == 1  # без дублей

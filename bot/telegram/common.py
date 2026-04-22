@@ -3,10 +3,10 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from bot.messages import HELP_TEXT
 from core.database import SessionLocal
 from core.event_log import event_logger
 from services.user import UserService
-from bot.messages import HELP_TEXT
 
 
 async def parse_callback_ints(query, count: int) -> tuple[int, ...] | None:
@@ -15,7 +15,7 @@ async def parse_callback_ints(query, count: int) -> tuple[int, ...] | None:
         return None
     try:
         parts = query.data.split(":", count)
-        return tuple(int(p) for p in parts[1:count + 1])
+        return tuple(int(p) for p in parts[1 : count + 1])
     except (ValueError, IndexError):
         await query.answer("Ошибка данных.")
         return None

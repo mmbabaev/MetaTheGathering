@@ -18,6 +18,9 @@ import re
 import sys
 from pathlib import Path
 
+from rapidfuzz import fuzz, process
+from transliterate import translit as _translit
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
@@ -80,6 +83,7 @@ def merge_and_dedup(
 # Step 2: Resolve names to Russian
 # ---------------------------------------------------------------------------
 
+
 def _is_cyrillic(text: str) -> bool:
     return bool(re.search(r"[а-яёА-ЯЁ]", text))
 
@@ -89,11 +93,7 @@ def load_datalens_names(path: Path) -> list[str]:
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
     content = data.get("uiScheme", [{}])[0].get("content", [])
-    return [
-        item["value"]
-        for item in content
-        if item.get("value") and item["value"] != "NO_LEGAL_NAME"
-    ]
+    return [item["value"] for item in content if item.get("value") and item["value"] != "NO_LEGAL_NAME"]
 
 
 def load_manual_mapping(path: Path) -> dict[str, str]:
@@ -111,8 +111,6 @@ def _name_candidates(name: str) -> list[str]:
     - reversed word order (Имя Фамилия ↔ Фамилия Имя)
     - if Latin: transliterated versions of both orders
     """
-    from transliterate import translit as _translit
-
     parts = name.strip().split()
     variants = [name]
     if len(parts) == 2:
@@ -143,8 +141,6 @@ def resolve_names(
         tg_id, tg_name, username, ru_name, match_score, status
     Status values: 'cyrillic' | 'manual' | 'fuzzy_ok' | 'fuzzy_low' | 'not_found'
     """
-    from rapidfuzz import process, fuzz
-
     results = []
 
     for name, username, tg_id in players:
@@ -197,6 +193,7 @@ def resolve_names(
 # Step 3: Fetch DataLens deck stats
 # ---------------------------------------------------------------------------
 
+
 def fetch_all_stats(resolved: list[dict], dry_run: bool = False) -> list[dict]:
     """
     Add 'decks' key to each resolved player row.
@@ -218,9 +215,9 @@ def fetch_all_stats(resolved: list[dict], dry_run: bool = False) -> list[dict]:
         try:
             decks = fetch_player_stats(ru_name)
             row["decks"] = decks
-            print(f"  [{i+1}/{len(resolved)}] {ru_name}: {len(decks)} колод(ы)", file=sys.stderr)
+            print(f"  [{i + 1}/{len(resolved)}] {ru_name}: {len(decks)} колод(ы)", file=sys.stderr)
         except Exception as exc:  # noqa: BLE001
-            print(f"  [{i+1}/{len(resolved)}] ERROR for {ru_name!r}: {exc}", file=sys.stderr)
+            print(f"  [{i + 1}/{len(resolved)}] ERROR for {ru_name!r}: {exc}", file=sys.stderr)
             row["decks"] = []
 
     return resolved
@@ -229,6 +226,7 @@ def fetch_all_stats(resolved: list[dict], dry_run: bool = False) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Step 4: Output
 # ---------------------------------------------------------------------------
+
 
 def format_decks(decks: list) -> str:
     """Format deck list as a comma-separated string of names."""
@@ -268,15 +266,17 @@ def write_csv(rows: list[dict], path: Path) -> None:
         writer = csv.writer(f)
         writer.writerow(["tg_id", "ru_name", "tg_name", "username", "status", "match_score", "decks"])
         for row in rows:
-            writer.writerow([
-                row["tg_id"],
-                row.get("ru_name", ""),
-                row["tg_name"],
-                row["username"],
-                row["status"],
-                row.get("match_score", ""),
-                format_decks(row["decks"]),
-            ])
+            writer.writerow(
+                [
+                    row["tg_id"],
+                    row.get("ru_name", ""),
+                    row["tg_name"],
+                    row["username"],
+                    row["status"],
+                    row.get("match_score", ""),
+                    format_decks(row["decks"]),
+                ]
+            )
     print(f"Saved to {path}", file=sys.stderr)
 
 
@@ -284,12 +284,14 @@ def write_csv(rows: list[dict], path: Path) -> None:
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--dry-run", action="store_true", help="Skip DataLens requests")
     parser.add_argument("--output", metavar="FILE", help="Save results to CSV")
-    parser.add_argument("--mapping", metavar="FILE", default=str(DEFAULT_MAPPING_FILE),
-                        help="Path to manual name mapping JSON")
+    parser.add_argument(
+        "--mapping", metavar="FILE", default=str(DEFAULT_MAPPING_FILE), help="Path to manual name mapping JSON"
+    )
     args = parser.parse_args()
 
     # Step 1

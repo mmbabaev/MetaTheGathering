@@ -3,19 +3,21 @@
 import logging
 import re
 
-from telegram import Update, Message, User
+from telegram import Message, Update, User
+from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
-from core.config import settings
-from core.database import SessionLocal
-from services.user import UserService
-from services.tournament import TournamentService
-from services.archetype import ArchetypeService
-from services.poll import PollService
-from services.utils import get_tournament
 from bot.handlers.admin import AdminHandler
 from bot.keyboards import fill_deck_keyboard, notify_confirm_keyboard, poll_menu_keyboard
-from bot.telegram.common import log_event as _log, parse_callback_ints
+from bot.telegram.common import log_event as _log
+from bot.telegram.common import parse_callback_ints
+from core.config import settings
+from core.database import SessionLocal
+from services.archetype import ArchetypeService
+from services.poll import PollService
+from services.tournament import TournamentService
+from services.user import UserService
+from services.utils import get_tournament
 
 logger = logging.getLogger(__name__)
 
@@ -34,11 +36,11 @@ def _parse_message_link(url: str) -> tuple[int | str, int] | None:
     t.me/{username}/{msg_id}   → chat_id = "@{username}"
     """
     url = url.strip()
-    m = re.match(r'https?://t\.me/c/(\d+)/(\d+)', url)
+    m = re.match(r"https?://t\.me/c/(\d+)/(\d+)", url)
     if m:
         return int(f"-100{m.group(1)}"), int(m.group(2))
-    m = re.match(r'https?://t\.me/([A-Za-z0-9_]+)/(\d+)', url)
-    if m and m.group(1) != 'c':
+    m = re.match(r"https?://t\.me/([A-Za-z0-9_]+)/(\d+)", url)
+    if m and m.group(1) != "c":
         return f"@{m.group(1)}", int(m.group(2))
     return None
 
@@ -124,9 +126,7 @@ async def callback_link_poll_prompt(update: Update, context: ContextTypes.DEFAUL
 
     context.user_data[USER_DATA_PENDING_LINK_POLL] = tournament_id
     await query.answer()
-    await query.message.reply_text(
-        "Отправьте ссылку на сообщение с опросом (например: https://t.me/mygroup/42)"
-    )
+    await query.message.reply_text("Отправьте ссылку на сообщение с опросом (например: https://t.me/mygroup/42)")
 
 
 async def handle_pending_link_poll(msg: Message, user: User, text: str, context) -> bool:
@@ -146,7 +146,6 @@ async def handle_pending_link_poll(msg: Message, user: User, text: str, context)
     from_chat_id, message_id = parsed
     context.user_data.pop(USER_DATA_PENDING_LINK_POLL)
 
-    from telegram.error import TelegramError
     try:
         fwd = await context.bot.forward_message(
             chat_id=user.id,
@@ -225,7 +224,6 @@ async def callback_create_poll(update: Update, context: ContextTypes.DEFAULT_TYP
         chat_id = t.chat_id
         tournament_title = t.title
 
-        from telegram.error import TelegramError
         try:
             msg = await context.bot.send_poll(
                 chat_id=chat_id,
@@ -254,9 +252,7 @@ async def callback_create_poll(update: Update, context: ContextTypes.DEFAULT_TYP
         _log("create_poll", user, tournament_id=tournament_id)
         poll_link = _poll_message_link(chat_id, msg.message_id, chat_username)
         await query.answer()
-        await query.message.reply_text(
-            f"✅ Опрос создан!\n{poll_link}" if poll_link else "✅ Опрос создан!"
-        )
+        await query.message.reply_text(f"✅ Опрос создан!\n{poll_link}" if poll_link else "✅ Опрос создан!")
     finally:
         db.close()
 
@@ -301,13 +297,12 @@ def _build_notify_preview(
     if not voters:
         return None
 
-    yes_count, no_count = (
-        poll_svc.get_poll_stats(poll_id) if poll_id else (0, 0)
-    )
+    yes_count, no_count = poll_svc.get_poll_stats(poll_id) if poll_id else (0, 0)
 
     poll_link = (
         _poll_message_link(latest_poll.chat_id, latest_poll.message_id, latest_poll.chat_username)
-        if latest_poll else None
+        if latest_poll
+        else None
     )
 
     names = poll_svc.get_voter_display_names(voters)

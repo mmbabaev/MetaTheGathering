@@ -1,8 +1,9 @@
 """Tests for /settings handler and UserService methods."""
 
 import pytest
+
 from bot.handlers.settings import SettingsHandler
-from bot.messages import SETTINGS_MENU, NAME_SAVED
+from bot.messages import NAME_SAVED, SETTINGS_MENU
 
 
 @pytest.fixture
@@ -11,6 +12,7 @@ def handler(user_svc):
 
 
 # --- UserService.update_name ---
+
 
 class TestUpdateUserName:
     def test_creates_user_if_not_exists(self, user_svc):
@@ -38,6 +40,7 @@ class TestUpdateUserName:
 
 # --- UserService.get_by_tg_id ---
 
+
 class TestGetUserByTgId:
     def test_returns_user(self, user_svc):
         user_svc.get_or_create(tg_id=9010, username="x", first_name="X")
@@ -50,6 +53,7 @@ class TestGetUserByTgId:
 
 
 # --- handle_settings ---
+
 
 class TestHandleSettings:
     def test_no_user_shows_not_set(self, handler):
@@ -75,6 +79,7 @@ class TestHandleSettings:
 
 
 # --- handle_settings_name_text ---
+
 
 class TestHandleSettingsNameText:
     def test_saves_first_name_only(self, handler, user_svc):

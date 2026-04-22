@@ -19,9 +19,10 @@ from pathlib import Path
 # Allow importing project modules from repo root
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core.database import SessionLocal
-from core import models
+from sqlalchemy import select
 
+from core import models
+from core.database import SessionLocal
 
 SOURCE = "datalens_import"
 
@@ -34,7 +35,6 @@ def split_ru_name(ru_name: str) -> tuple[str, str | None]:
 
 def upsert_user(db, tg_id: int, ru_name: str, tg_name: str, username: str) -> models.User:
     """Get or create user by tg_id; update name if it was a placeholder."""
-    from sqlalchemy import select
 
     first_name, last_name = split_ru_name(ru_name)
     clean_username = username.lstrip("@") if username and username != "(no username)" else None
@@ -61,11 +61,8 @@ def upsert_user(db, tg_id: int, ru_name: str, tg_name: str, username: str) -> mo
 
 
 def get_or_create_archetype(db, name: str) -> models.Archetype:
-    from sqlalchemy import select
 
-    arch = db.execute(
-        select(models.Archetype).where(models.Archetype.name == name)
-    ).scalar_one_or_none()
+    arch = db.execute(select(models.Archetype).where(models.Archetype.name == name)).scalar_one_or_none()
     if arch is None:
         arch = models.Archetype(name=name)
         db.add(arch)
@@ -75,7 +72,6 @@ def get_or_create_archetype(db, name: str) -> models.Archetype:
 
 def add_deck_history(db, user: models.User, archetype: models.Archetype) -> bool:
     """Insert a user_deck_history row. Returns True if inserted, False if already existed."""
-    from sqlalchemy import select
 
     exists = db.execute(
         select(models.UserDeckHistory).where(
@@ -87,11 +83,13 @@ def add_deck_history(db, user: models.User, archetype: models.Archetype) -> bool
     if exists:
         return False
 
-    db.add(models.UserDeckHistory(
-        user_id=user.id,
-        archetype_id=archetype.id,
-        source=SOURCE,
-    ))
+    db.add(
+        models.UserDeckHistory(
+            user_id=user.id,
+            archetype_id=archetype.id,
+            source=SOURCE,
+        )
+    )
     return True
 
 
@@ -131,11 +129,7 @@ def main() -> None:
             ru_name = row["ru_name"]
             deck_names = [d.strip() for d in row["decks"].split(",") if d.strip()]
 
-            existed = db.execute(
-                __import__("sqlalchemy", fromlist=["select"]).select(models.User).where(
-                    models.User.tg_id == tg_id
-                )
-            ).scalar_one_or_none()
+            existed = db.execute(select(models.User).where(models.User.tg_id == tg_id)).scalar_one_or_none()
 
             user = upsert_user(db, tg_id, ru_name, row["tg_name"], row["username"])
 
@@ -146,9 +140,7 @@ def main() -> None:
 
             for deck_name in deck_names:
                 arch_existed = db.execute(
-                    __import__("sqlalchemy", fromlist=["select"]).select(models.Archetype).where(
-                        models.Archetype.name == deck_name
-                    )
+                    select(models.Archetype).where(models.Archetype.name == deck_name)
                 ).scalar_one_or_none()
 
                 arch = get_or_create_archetype(db, deck_name)
@@ -159,7 +151,7 @@ def main() -> None:
                     history_added += 1
 
         db.commit()
-        print(f"Done.")
+        print("Done.")
         print(f"  Users created:     {users_created}")
         print(f"  Users updated:     {users_updated}")
         print(f"  Archetypes created:{archetypes_created}")

@@ -1,133 +1,310 @@
-"""Планировщик автоматического создания турниров по расписанию клубов."""
+"""Планировщик автоматического создания турниров и импорта AetherHub по расписанию клубов."""
 
 import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import select
 from telegram.ext import Application, ContextTypes
 
-from core.config import settings, ClubConfig
+from core import models
+from core.config import Club, ClubSchedule, settings
 from core.database import SessionLocal
 from core.schemas import TournamentCreate
+from services.aetherhub import fetch_tournament, find_todays_pauper_tournament
+from services.aetherhub_import import AetherhubImportService
 from services.tournament import TournamentService
 
 logger = logging.getLogger(__name__)
 
 DAYS = {
-    "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
-    "friday": 4, "saturday": 5, "sunday": 6,
+    "monday": 0,
+    "tuesday": 1,
+    "wednesday": 2,
+    "thursday": 3,
+    "friday": 4,
+    "saturday": 5,
+    "sunday": 6,
 }
 
+
 # ---------------------------------------------------------------------------
-# Расписание клубов — бизнес-логика, хранится в коде
-# chat_id задаётся в .env (GOLDFISH_CHAT_ID / EDINOROG_CHAT_ID)
+# Club definitions
 # ---------------------------------------------------------------------------
 
-def get_clubs() -> list[ClubConfig]:
-    """Возвращает список клубов. chat_id=0 означает «создать турнир, но не писать в чат»."""
+
+def get_clubs() -> list[Club]:
+    """Returns the list of configured clubs."""
     clubs = [
-        ClubConfig(name="Goldfish",  weekday="thursday", chat_id=settings.GOLDFISH_CHAT_ID or 0,  game_time="19:30"),
-        ClubConfig(name="Edinorog",  weekday="monday",  chat_id=settings.EDINOROG_CHAT_ID or 0,  game_time="19:30",
-                   create_time="12:00", title_prefix="🦄 "),
+        Club(
+            name="Goldfish",
+            chat_id=settings.GOLDFISH_CHAT_ID or 0,
+            aetherhub_url="https://aetherhub.com/User/GoldFish",
+            title_prefix="🐠 ",
+            schedules=[
+                ClubSchedule(
+                    weekday="thursday",
+                    game_time="19:45",
+                    create_time="12:00",
+                    aetherhub_fetch_times=[
+                        "20:00",
+                        "20:30",
+                        "21:00",
+                        "21:30",
+                        "22:00",
+                        "22:30",
+                        "23:00",
+                        "23:30",
+                        "00:00",
+                        "00:30",
+                    ],
+                ),
+                ClubSchedule(
+                    weekday="friday",
+                    game_time="19:45",
+                    create_time="12:00",
+                    aetherhub_fetch_times=[
+                        "20:00",
+                        "20:30",
+                        "21:00",
+                        "21:30",
+                        "22:00",
+                        "22:30",
+                        "23:00",
+                        "23:30",
+                        "00:00",
+                        "00:30",
+                    ],
+                ),
+            ],
+        ),
+        Club(
+            name="Edinorog",
+            chat_id=settings.EDINOROG_CHAT_ID or 0,
+            aetherhub_url="https://aetherhub.com/User/Edinorog/",
+            title_prefix="🦄 ",
+            schedules=[
+                ClubSchedule(
+                    weekday="monday",
+                    game_time="19:30",
+                    create_time="12:00",
+                    aetherhub_fetch_times=[
+                        "20:00",
+                        "20:30",
+                        "21:00",
+                        "21:30",
+                        "22:00",
+                        "22:30",
+                        "23:00",
+                        "23:30",
+                        "00:00",
+                        "00:30",
+                    ],
+                ),
+            ],
+        ),
     ]
     if settings.DEBUG:
         clubs.append(
-            ClubConfig(name="Debug", weekday="saturday", chat_id=settings.GOLDFISH_CHAT_ID or 0, game_time="14:20")
+            Club(
+                name="Debug",
+                chat_id=settings.GOLDFISH_CHAT_ID or 0,
+                schedules=[ClubSchedule(weekday="saturday", game_time="14:20")],
+            )
         )
     return clubs
 
 
 # ---------------------------------------------------------------------------
-# Создание турнира для клуба
+# Job: create tournament
 # ---------------------------------------------------------------------------
 
-async def _create_club_tournament(bot, club: ClubConfig) -> None:
-    """Создаёт турнир для клуба, если сегодня нужный день."""
-    tz = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
-    now = datetime.now(tz)
-    target_weekday = DAYS.get(club.weekday.lower())
 
-    if target_weekday is None:
-        logger.error(f"Unknown weekday '{club.weekday}' for club '{club.name}'")
-        return
+class CreateTournamentJob:
+    """Creates the club's tournament on the scheduled weekday."""
 
-    logger.info(
-        f"Club job fired for '{club.name}': now={now.strftime('%A %H:%M')} "
-        f"(weekday={now.weekday()}), target={target_weekday}"
-    )
+    def __init__(self, club: Club, schedule: ClubSchedule) -> None:
+        self.club = club
+        self.schedule = schedule
 
-    if now.weekday() != target_weekday:
-        logger.info("Not the right weekday, skipping.")
-        return
+    async def run(self, bot, now: datetime, db=None) -> None:
+        date_str = now.strftime("%Y-%m-%d")
+        title = f"{self.club.title_prefix}{self.club.name} Pauper {now.strftime('%d.%m.%Y')}"
+        slug = f"{date_str}-{self.club.name.lower()}-pauper"
 
-    date_str = now.strftime("%Y-%m-%d")
-    title = f"{club.title_prefix}{club.name} Pauper {date_str}"
-    slug = f"{date_str}-{club.name.lower()}-pauper"
-
-    db = SessionLocal()
-    try:
-        svc = TournamentService(db)
+        close_db = db is None
+        if close_db:
+            db = SessionLocal()
         try:
-            active = svc.get_active_tournament_for_chat(club.chat_id or 0)
-            if active:
-                svc.close_tournament(active.id)
-                logger.info(f"Closed previous tournament #{active.id} for club '{club.name}'")
+            svc = TournamentService(db)
+            try:
+                active = svc.get_active_tournament_for_chat(self.club.chat_id or 0)
+                if active:
+                    svc.close_tournament(active.id)
+                    logger.info(f"Closed previous tournament #{active.id} for '{self.club.name}'")
 
-            new_t = svc.create_tournament(TournamentCreate(
-                title=title,
-                chat_id=club.chat_id or 0,
-                slug=slug,
-                club=club.name,
-            ))
-            logger.info(f"Created tournament #{new_t.id} '{title}' for club '{club.name}'")
-
-            if club.chat_id:
-                await bot.send_message(
-                    chat_id=club.chat_id,
-                    text=(
-                        f"🏆 {club.name} Pauper — сегодня в {club.game_time}\n"
-                        f"Регистрация открыта! Используйте /tournaments для записи."
-                    ),
+                new_t = svc.create_tournament(
+                    TournamentCreate(
+                        title=title,
+                        chat_id=self.club.chat_id or 0,
+                        slug=slug,
+                        club=self.club.name,
+                    )
                 )
-                logger.info(f"Announcement sent to chat {club.chat_id}")
-            else:
-                logger.info(f"No chat_id for '{club.name}' — tournament created without announcement")
-        except Exception as e:
-            logger.error(f"Scheduler error for club '{club.name}': {e}", exc_info=True)
-    finally:
-        db.close()
+                logger.info(f"Created tournament #{new_t.id} '{title}' for '{self.club.name}'")
+
+                if self.club.chat_id and bot is not None:
+                    await bot.send_message(
+                        chat_id=self.club.chat_id,
+                        text=(
+                            f"🏆 {self.club.name} Pauper — сегодня в {self.schedule.game_time}\n"
+                            f"Регистрация открыта! Используйте /tournaments для записи."
+                        ),
+                    )
+            except Exception as e:
+                logger.error(f"CreateTournamentJob error for '{self.club.name}': {e}", exc_info=True)
+        finally:
+            if close_db:
+                db.close()
 
 
-def _make_club_job(club: ClubConfig):
-    async def job(context: ContextTypes.DEFAULT_TYPE) -> None:
-        await _create_club_tournament(context.bot, club)
-    job.__name__ = f"club_tournament_job[{club.name}]"
-    return job
+# ---------------------------------------------------------------------------
+# Job: AetherHub auto-import
+# ---------------------------------------------------------------------------
+
+
+class AetherhubImportJob:
+    """Fetches today's pauper tournament from AetherHub and imports it automatically."""
+
+    def __init__(self, club: Club, schedule: ClubSchedule) -> None:
+        self.club = club
+        self.schedule = schedule
+
+    async def run(self, now: datetime, db=None) -> None:
+        if not self.club.aetherhub_url:
+            return
+
+        close_db = db is None
+        if close_db:
+            db = SessionLocal()
+
+        url: str | None = None
+        tournament_id: int | None = None
+
+        try:
+            tournament = _find_active_club_tournament(db, self.club.name)
+            if not tournament:
+                logger.warning(f"AetherhubImportJob: no active tournament for '{self.club.name}'")
+                return
+
+            tournament_id = tournament.id
+            url = tournament.aetherhub_url
+
+            if not url:
+                logger.info(f"AetherhubImportJob: fetching club page for '{self.club.name}'")
+                try:
+                    url = find_todays_pauper_tournament(self.club.aetherhub_url, today=now.date())
+                except Exception:
+                    logger.exception(f"AetherhubImportJob: failed to fetch club page for '{self.club.name}'")
+                    return
+                if not url:
+                    logger.info(f"AetherhubImportJob: no pauper tournament found today for '{self.club.name}'")
+                    return
+
+            logger.info(f"AetherhubImportJob: importing {url} for tournament #{tournament_id}")
+            try:
+                data = fetch_tournament(url)
+            except Exception:
+                logger.exception(f"AetherhubImportJob: failed to fetch tournament data from {url}")
+                return
+
+            try:
+                result = AetherhubImportService(db).import_tournament(tournament_id, data)
+                logger.info(
+                    f"AetherhubImportJob done for '{self.club.name}' #{tournament_id}: "
+                    f"registered={result.registered}, already={result.already_registered}, "
+                    f"pairings={result.pairings_saved}"
+                )
+            except Exception:
+                logger.exception(f"AetherhubImportJob: import failed for '{self.club.name}'")
+                return
+        finally:
+            if close_db:
+                db.close()
+
+        if tournament_id and url:
+            db2 = SessionLocal()
+            try:
+                TournamentService(db2).set_aetherhub_url(tournament_id, url)
+            except Exception:
+                logger.exception(f"AetherhubImportJob: failed to save aetherhub_url for #{tournament_id}")
+            finally:
+                db2.close()
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _find_active_club_tournament(db, club_name: str):
+    """Find the current non-CLOSED tournament for a club."""
+    stmt = (
+        select(models.Tournament)
+        .where(
+            models.Tournament.club == club_name,
+            models.Tournament.status != models.TournamentStatus.CLOSED,
+        )
+        .order_by(models.Tournament.created_at.desc())
+        .limit(1)
+    )
+    return db.execute(stmt).scalar_one_or_none()
 
 
 # ---------------------------------------------------------------------------
 # Setup
 # ---------------------------------------------------------------------------
 
+
 def setup_scheduler(app: Application) -> None:
-    """Регистрирует ежедневные джобы для каждого клуба."""
+    """Registers daily jobs for each club and schedule."""
     tz = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
 
-    clubs = get_clubs()
-    for club in clubs:
-        time_str = club.create_time or settings.TOURNAMENT_CREATE_TIME
-        create_time = datetime.strptime(time_str, "%H:%M").time()
-        aware_create_time = create_time.replace(tzinfo=tz)
-        app.job_queue.run_daily(_make_club_job(club), time=aware_create_time)
-        logger.info(
-            f"Scheduler: {club.name} every {club.weekday} at {time_str} "
-            f"({settings.TOURNAMENT_TIMEZONE}), game at {club.game_time}, chat={club.chat_id}"
-        )
+    for club in get_clubs():
+        for schedule in club.schedules:
+            time_str = schedule.create_time or settings.TOURNAMENT_CREATE_TIME
+            create_time = datetime.strptime(time_str, "%H:%M").time().replace(tzinfo=tz)
+
+            create_job = CreateTournamentJob(club, schedule)
+
+            async def _create(context: ContextTypes.DEFAULT_TYPE, _job=create_job) -> None:
+                tz_ = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
+                await _job.run(bot=context.bot, now=datetime.now(tz_))
+
+            _create.__name__ = f"create_tournament[{club.name}/{schedule.weekday}]"
+            app.job_queue.run_daily(_create, time=create_time, days=(DAYS[schedule.weekday],))
+            logger.info(
+                f"Scheduler: {club.name} create on {schedule.weekday} at {time_str} "
+                f"({settings.TOURNAMENT_TIMEZONE}), game at {schedule.game_time}"
+            )
+
+            for fetch_time_str in schedule.aetherhub_fetch_times:
+                fetch_time = datetime.strptime(fetch_time_str, "%H:%M").time().replace(tzinfo=tz)
+                import_job = AetherhubImportJob(club, schedule)
+
+                async def _import(context: ContextTypes.DEFAULT_TYPE, _job=import_job) -> None:
+                    tz_ = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
+                    await _job.run(now=datetime.now(tz_))
+
+                _import.__name__ = f"aetherhub_import[{club.name}/{schedule.weekday}/{fetch_time_str}]"
+                app.job_queue.run_daily(_import, time=fetch_time, days=(DAYS[schedule.weekday],))
+                logger.info(f"Scheduler: AetherHub import for '{club.name}' ({schedule.weekday}) at {fetch_time_str}")
 
 
 # ---------------------------------------------------------------------------
-# Legacy helpers — используются в тестах планировщика
+# Legacy helpers — used in old scheduler tests
 # ---------------------------------------------------------------------------
+
 
 def parse_schedule(schedule_str: str) -> tuple[int, datetime.time]:
     """Парсит строку "friday 19:00" в (weekday_int, time)."""
@@ -138,51 +315,3 @@ def parse_schedule(schedule_str: str) -> tuple[int, datetime.time]:
     if day_str not in DAYS:
         raise ValueError(f"Unknown weekday: '{day_str}'")
     return DAYS[day_str], datetime.strptime(time_str, "%H:%M").time()
-
-
-async def _create_tournaments_for_schedule(bot, schedule_entry: str) -> None:
-    """Legacy: создаёт турниры по расписанию для списка chat_ids (используется в тестах)."""
-    tz = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
-    now = datetime.now(tz)
-    target_weekday, _ = parse_schedule(schedule_entry)
-
-    logger.info(
-        f"Legacy job fired for '{schedule_entry}': now={now.strftime('%A %H:%M')} "
-        f"(weekday={now.weekday()}), target_weekday={target_weekday}"
-    )
-
-    if now.weekday() != target_weekday:
-        logger.info("Not the right weekday, skipping.")
-        return
-
-    chat_ids = settings.chat_ids
-    if not chat_ids:
-        logger.warning("No chat_ids configured — skipping")
-        return
-
-    date_str = now.strftime("%Y-%m-%d")
-    title = f"Pauper {date_str}"
-    slug = f"{date_str}-pauper"
-
-    db = SessionLocal()
-    try:
-        svc = TournamentService(db)
-        for chat_id in chat_ids:
-            try:
-                active = svc.get_active_tournament_for_chat(chat_id)
-                if active:
-                    svc.close_tournament(active.id)
-                new_t = svc.create_tournament(TournamentCreate(title=title, chat_id=chat_id, slug=slug))
-                logger.info(f"Created tournament #{new_t.id} for chat {chat_id}")
-                await bot.send_message(chat_id=chat_id, text=f"🏆 Новый турнир: {title}\nРегистрация открыта! /tournaments")
-            except Exception as e:
-                logger.error(f"Error for chat {chat_id}: {e}", exc_info=True)
-    finally:
-        db.close()
-
-
-def _make_job(schedule_entry: str):
-    async def job(context: ContextTypes.DEFAULT_TYPE) -> None:
-        await _create_tournaments_for_schedule(context.bot, schedule_entry)
-    job.__name__ = f"scheduled_tournament_job[{schedule_entry}]"
-    return job

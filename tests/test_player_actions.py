@@ -1,22 +1,23 @@
 """Tests for player handler business logic (PlayerHandler methods)."""
 
 import pytest
-from core.schemas import TournamentCreate
-from core.models import TournamentStatus, utc_now
+
 from bot.handlers.player import PlayerHandler
-from bot.keyboards import CB_REGISTER, CB_ARCHETYPE, CB_CUSTOM_ARCHETYPE, CB_LEAVE, CB_TSTATUS
+from bot.keyboards import CB_ARCHETYPE, CB_CUSTOM_ARCHETYPE, CB_LEAVE, CB_REGISTER, CB_TSTATUS
 from bot.messages import (
-    NO_ACTIVE_TOURNAMENTS,
-    CHOOSE_ARCHETYPE,
-    REGISTERED_AS,
-    REGISTERED,
     ALREADY_REGISTERED,
-    REGISTRATION_CLOSED,
-    TOURNAMENT_NOT_FOUND,
+    CHOOSE_ARCHETYPE,
     LEAVE_CONFIRM_PROMPT,
     LEFT_TOURNAMENT,
+    NO_ACTIVE_TOURNAMENTS,
     NOT_REGISTERED_IN_TOURNAMENT,
+    REGISTERED,
+    REGISTERED_AS,
+    REGISTRATION_CLOSED,
+    TOURNAMENT_NOT_FOUND,
 )
+from core.models import TournamentStatus, utc_now
+from core.schemas import TournamentCreate
 
 CHAT_ID = 200
 
@@ -33,6 +34,7 @@ def handler(svc, user_svc, arch_svc):
 
 # --- handle_tournaments ---
 
+
 class TestHandleTournaments:
     def test_no_tournaments_returns_message(self, handler):
         result = handler.handle_tournaments()
@@ -46,12 +48,17 @@ class TestHandleTournaments:
 
     def test_multiple_tournaments_returns_list(self, db, handler):
         from core import models
+
         for i, slug in enumerate(("t1", "t2"), start=1):
-            db.add(models.Tournament(
-                title=slug.upper(), chat_id=CHAT_ID + i, slug=slug,
-                status=models.TournamentStatus.REGISTRATION,
-                created_at=utc_now(),
-            ))
+            db.add(
+                models.Tournament(
+                    title=slug.upper(),
+                    chat_id=CHAT_ID + i,
+                    slug=slug,
+                    status=models.TournamentStatus.REGISTRATION,
+                    created_at=utc_now(),
+                )
+            )
         db.commit()
         result = handler.handle_tournaments()
         assert "Выберите турнир" in result.text
@@ -71,6 +78,7 @@ class TestHandleTournaments:
 
 # --- handle_tournament_select ---
 
+
 class TestHandleTournamentSelect:
     def test_valid_tournament_returns_card(self, handler, active_tournament):
         result = handler.handle_tournament_select(active_tournament.id)
@@ -85,6 +93,7 @@ class TestHandleTournamentSelect:
 
 
 # --- handle_register ---
+
 
 class TestHandleRegister:
     def test_returns_archetype_choice_no_tg_id(self, handler, active_tournament, archetype_burn, archetype_affinity):
@@ -113,23 +122,36 @@ class TestHandleRegister:
 
 # --- handle_archetype ---
 
+
 class TestHandleArchetype:
     def test_registers_successfully(self, handler, active_tournament, archetype_burn):
         result = handler.handle_archetype(
-            tg_id=1001, username="alice", first_name="Alice", last_name=None,
-            tournament_id=active_tournament.id, archetype_id=archetype_burn.id,
+            tg_id=1001,
+            username="alice",
+            first_name="Alice",
+            last_name=None,
+            tournament_id=active_tournament.id,
+            archetype_id=archetype_burn.id,
         )
         assert "Burn" in result.text
         assert not result.is_alert
 
     def test_already_registered_with_deck_returns_alert(self, handler, active_tournament, archetype_burn):
         handler.handle_archetype(
-            tg_id=1001, username="alice", first_name="Alice", last_name=None,
-            tournament_id=active_tournament.id, archetype_id=archetype_burn.id,
+            tg_id=1001,
+            username="alice",
+            first_name="Alice",
+            last_name=None,
+            tournament_id=active_tournament.id,
+            archetype_id=archetype_burn.id,
         )
         result = handler.handle_archetype(
-            tg_id=1001, username="alice", first_name="Alice", last_name=None,
-            tournament_id=active_tournament.id, archetype_id=archetype_burn.id,
+            tg_id=1001,
+            username="alice",
+            first_name="Alice",
+            last_name=None,
+            tournament_id=active_tournament.id,
+            archetype_id=archetype_burn.id,
         )
         assert result.text == ALREADY_REGISTERED
         assert result.is_alert
@@ -140,8 +162,12 @@ class TestHandleArchetype:
         user = user_svc.get_or_create(tg_id=1001, username="alice", first_name="Alice")
         svc.register_participant(tournament_id=active_tournament.id, user_id=user.id)
         result = handler.handle_archetype(
-            tg_id=1001, username="alice", first_name="Alice", last_name=None,
-            tournament_id=active_tournament.id, archetype_id=archetype_burn.id,
+            tg_id=1001,
+            username="alice",
+            first_name="Alice",
+            last_name=None,
+            tournament_id=active_tournament.id,
+            archetype_id=archetype_burn.id,
         )
         assert "Burn" in result.text
         assert not result.is_alert
@@ -151,8 +177,12 @@ class TestHandleArchetype:
     def test_registration_closed_returns_alert(self, handler, svc, active_tournament, archetype_burn):
         svc.close_tournament(active_tournament.id)
         result = handler.handle_archetype(
-            tg_id=1001, username="alice", first_name="Alice", last_name=None,
-            tournament_id=active_tournament.id, archetype_id=archetype_burn.id,
+            tg_id=1001,
+            username="alice",
+            first_name="Alice",
+            last_name=None,
+            tournament_id=active_tournament.id,
+            archetype_id=archetype_burn.id,
         )
         assert result.text == REGISTRATION_CLOSED
         assert result.is_alert
@@ -160,41 +190,61 @@ class TestHandleArchetype:
 
 # --- handle_custom_archetype_text ---
 
+
 class TestHandleCustomArchetypeText:
     def test_registers_with_custom_archetype(self, handler, active_tournament):
         result = handler.handle_custom_archetype_text(
-            tg_id=1001, username="alice", first_name="Alice", last_name=None,
-            tournament_id=active_tournament.id, name="Turbo Fog",
+            tg_id=1001,
+            username="alice",
+            first_name="Alice",
+            last_name=None,
+            tournament_id=active_tournament.id,
+            name="Turbo Fog",
         )
         assert result.text == REGISTERED
         assert not result.is_alert
 
     def test_already_registered_returns_message(self, handler, active_tournament):
         handler.handle_custom_archetype_text(
-            tg_id=1001, username="alice", first_name="Alice", last_name=None,
-            tournament_id=active_tournament.id, name="Turbo Fog",
+            tg_id=1001,
+            username="alice",
+            first_name="Alice",
+            last_name=None,
+            tournament_id=active_tournament.id,
+            name="Turbo Fog",
         )
         result = handler.handle_custom_archetype_text(
-            tg_id=1001, username="alice", first_name="Alice", last_name=None,
-            tournament_id=active_tournament.id, name="Turbo Fog",
+            tg_id=1001,
+            username="alice",
+            first_name="Alice",
+            last_name=None,
+            tournament_id=active_tournament.id,
+            name="Turbo Fog",
         )
         assert result.text == ALREADY_REGISTERED
 
     def test_registration_closed(self, handler, svc, active_tournament):
         svc.close_tournament(active_tournament.id)
         result = handler.handle_custom_archetype_text(
-            tg_id=1001, username="alice", first_name="Alice", last_name=None,
-            tournament_id=active_tournament.id, name="Turbo Fog",
+            tg_id=1001,
+            username="alice",
+            first_name="Alice",
+            last_name=None,
+            tournament_id=active_tournament.id,
+            name="Turbo Fog",
         )
         assert result.text == REGISTRATION_CLOSED
 
 
 # --- handle_save_name_then_register ---
 
+
 class TestHandleSaveNameThenRegister:
     def test_saves_name_and_returns_archetype_keyboard(self, handler, user_svc, active_tournament, archetype_burn):
         result = handler.handle_save_name_then_register(
-            tg_id=7010, username="u", name_text="Петров Иван",
+            tg_id=7010,
+            username="u",
+            name_text="Петров Иван",
             tournament_id=active_tournament.id,
         )
         assert result.text == CHOOSE_ARCHETYPE
@@ -205,14 +255,18 @@ class TestHandleSaveNameThenRegister:
 
     def test_first_name_only(self, handler, user_svc, active_tournament):
         handler.handle_save_name_then_register(
-            tg_id=7011, username=None, name_text="Мария",
+            tg_id=7011,
+            username=None,
+            name_text="Мария",
             tournament_id=active_tournament.id,
         )
         user = user_svc.get_by_tg_id(7011)
         assert user.first_name == "Мария"
         assert user.last_name is None
 
+
 # --- handle_tournaments: dynamic keyboard ---
+
 
 class TestHandleTournamentsDynamicKeyboard:
     def test_unregistered_user_gets_register_button(self, handler, active_tournament):
@@ -223,9 +277,7 @@ class TestHandleTournamentsDynamicKeyboard:
 
     def test_registered_user_gets_leave_button(self, handler, svc, user_svc, active_tournament, archetype_burn):
         user = user_svc.get_or_create(tg_id=3001, username="p", first_name="Player")
-        svc.register_participant(
-            tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id
-        )
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
         result = handler.handle_tournaments(tg_id=3001)
         assert result.keyboard is not None
         cb = result.keyboard.inline_keyboard[0][0].callback_data
@@ -239,6 +291,7 @@ class TestHandleTournamentsDynamicKeyboard:
 
 # --- handle_tournament_public_status ---
 
+
 class TestHandleTournamentPublicStatus:
     def test_shows_tournament_info(self, handler, active_tournament):
         result = handler.handle_tournament_public_status(active_tournament.id)
@@ -248,9 +301,7 @@ class TestHandleTournamentPublicStatus:
     def test_shows_participants(self, handler, svc, user_svc, active_tournament, archetype_burn):
         svc.set_decks_hidden(active_tournament.id, hidden=False)
         user = user_svc.get_or_create(tg_id=3010, username=None, first_name="Алиса")
-        svc.register_participant(
-            tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id
-        )
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
         result = handler.handle_tournament_public_status(active_tournament.id)
         assert "Алиса" in result.text
         assert "Burn" in result.text
@@ -262,6 +313,7 @@ class TestHandleTournamentPublicStatus:
 
 
 # --- handle_leave_tournament / handle_leave_confirm ---
+
 
 class TestHandleLeaveTournament:
     def test_unknown_user_returns_alert(self, handler, active_tournament):
@@ -277,9 +329,7 @@ class TestHandleLeaveTournament:
 
     def test_registered_returns_confirmation(self, handler, svc, user_svc, active_tournament, archetype_burn):
         user = user_svc.get_or_create(tg_id=3020, username="p", first_name="Player")
-        svc.register_participant(
-            tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id
-        )
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
         result = handler.handle_leave_tournament(tg_id=3020, tournament_id=active_tournament.id)
         assert result.text == LEAVE_CONFIRM_PROMPT
         assert result.keyboard is not None
@@ -289,9 +339,7 @@ class TestHandleLeaveTournament:
 class TestHandleLeaveConfirm:
     def test_removes_participant(self, handler, svc, user_svc, active_tournament, archetype_burn):
         user = user_svc.get_or_create(tg_id=3030, username="p", first_name="Player")
-        svc.register_participant(
-            tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id
-        )
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
         result = handler.handle_leave_confirm(tg_id=3030, tournament_id=active_tournament.id)
         assert result.text == LEFT_TOURNAMENT
         assert not result.is_alert
@@ -311,14 +359,16 @@ class TestHandleLeaveConfirm:
 
     def test_can_reregister_after_leaving(self, handler, svc, user_svc, active_tournament, archetype_burn):
         user = user_svc.get_or_create(tg_id=3031, username="p", first_name="Player")
-        svc.register_participant(
-            tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id
-        )
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
         handler.handle_leave_confirm(tg_id=3031, tournament_id=active_tournament.id)
         # Re-register
         result = handler.handle_archetype(
-            tg_id=3031, username="p", first_name="Player", last_name=None,
-            tournament_id=active_tournament.id, archetype_id=archetype_burn.id,
+            tg_id=3031,
+            username="p",
+            first_name="Player",
+            last_name=None,
+            tournament_id=active_tournament.id,
+            archetype_id=archetype_burn.id,
         )
         assert "Burn" in result.text
         assert not result.is_alert

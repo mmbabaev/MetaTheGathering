@@ -1,5 +1,5 @@
-from utils.seed import seed, PAUPER_ARCHETYPES
 from core.models import Archetype
+from utils.seed import PAUPER_ARCHETYPES, seed
 
 
 class TestSeed:

@@ -3,15 +3,16 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from core.database import SessionLocal
-from services.user import UserService
 from bot.handlers.settings import SettingsHandler
 from bot.messages import SETTINGS_CHANGE_NAME_PROMPT
 from bot.telegram.common import log_event as _log
+from core.database import SessionLocal
+from services.user import UserService
 
 
 def _settings_handler(db) -> SettingsHandler:
     return SettingsHandler(UserService(db))
+
 
 USER_DATA_PENDING_SETTINGS_NAME = "pending_settings_name"
 

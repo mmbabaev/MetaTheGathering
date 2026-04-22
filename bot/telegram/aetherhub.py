@@ -2,19 +2,19 @@
 
 import logging
 
-from telegram import Update, Message, User
+from telegram import Message, Update, User
 from telegram.ext import ContextTypes
 
-from core.database import SessionLocal
-from services.user import UserService
-from services.tournament import TournamentService
-from services.archetype import ArchetypeService
-from services.aetherhub import fetch_tournament
-from services.aetherhub_import import AetherhubImportService
-from services.utils import get_tournament
+from bot.handlers.player import PlayerHandler
 from bot.keyboards import aetherhub_confirm_keyboard
 from bot.telegram.common import parse_callback_ints
-from bot.handlers.player import PlayerHandler
+from core.database import SessionLocal
+from services.aetherhub import fetch_tournament
+from services.aetherhub_import import AetherhubImportService
+from services.archetype import ArchetypeService
+from services.tournament import TournamentService
+from services.user import UserService
+from services.utils import get_tournament
 
 logger = logging.getLogger(__name__)
 
@@ -71,8 +71,7 @@ async def callback_aetherhub_import_prompt(update: Update, context: ContextTypes
         context.user_data[USER_DATA_PENDING_AETHERHUB_URL] = tournament_id
         await query.answer()
         await query.message.reply_text(
-            "Отправьте ссылку на турнир AetherHub\n"
-            "(например: https://aetherhub.com/Tourney/RoundTourney/98984)"
+            "Отправьте ссылку на турнир AetherHub\n(например: https://aetherhub.com/Tourney/RoundTourney/98984)"
         )
 
 
@@ -83,9 +82,7 @@ async def handle_pending_aetherhub_url(msg: Message, user: User, text: str, cont
         return False
 
     if "aetherhub.com/Tourney" not in text:
-        await msg.reply_text(
-            "❌ Ожидается ссылка вида https://aetherhub.com/Tourney/RoundTourney/…"
-        )
+        await msg.reply_text("❌ Ожидается ссылка вида https://aetherhub.com/Tourney/RoundTourney/…")
         return True
 
     context.user_data.pop(USER_DATA_PENDING_AETHERHUB_URL)
@@ -157,18 +154,20 @@ async def callback_aetherhub_confirm(update: Update, context: ContextTypes.DEFAU
         f"Паринги сохранены: {result.pairings_saved}",
     ]
     if result.created_names:
-        lines.append(f"Созданы как новые игроки ({len(result.created_names)}): "
-                     + ", ".join(result.created_names[:5])
-                     + ("…" if len(result.created_names) > 5 else ""))
+        lines.append(
+            f"Созданы как новые игроки ({len(result.created_names)}): "
+            + ", ".join(result.created_names[:5])
+            + ("…" if len(result.created_names) > 5 else "")
+        )
 
     await query.edit_message_text("\n".join(lines))
     await query.answer()
 
     db2 = SessionLocal()
     try:
-        card = PlayerHandler(
-            TournamentService(db2), UserService(db2), ArchetypeService(db2)
-        ).handle_tournament_select(tournament_id, tg_id=user.id, has_pairings=True)
+        card = PlayerHandler(TournamentService(db2), UserService(db2), ArchetypeService(db2)).handle_tournament_select(
+            tournament_id, tg_id=user.id, has_pairings=True
+        )
     finally:
         db2.close()
     await query.message.reply_text(card.text, reply_markup=card.keyboard)

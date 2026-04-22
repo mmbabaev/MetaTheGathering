@@ -2,17 +2,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy.orm import Session
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from core import models
-from services.aetherhub import AetherhubTournamentData, AetherhubRound
+from services.aetherhub import AetherhubRound, AetherhubTournamentData
 from services.user import UserService
 
 
 @dataclass
 class ImportResult:
-    registered: int        # new participants registered (matched or created)
+    registered: int  # new participants registered (matched or created)
     already_registered: int
     pairings_saved: int
     created_names: list[str]  # players not found in bot — created as placeholders
@@ -30,9 +30,7 @@ class AetherhubImportService:
             return None
         return self._user_svc.find_by_name(full_name)
 
-    def get_unfilled_opponents(
-        self, tournament_id: int, user_id: int, participants: list
-    ) -> tuple[list, str | None]:
+    def get_unfilled_opponents(self, tournament_id: int, user_id: int, participants: list) -> tuple[list, str | None]:
         """Return (unfilled_opponent_participants, error_key).
 
         error_key is None on success, or one of:
@@ -44,7 +42,7 @@ class AetherhubImportService:
         """
         pairings = self.get_pairings(tournament_id)
         if not pairings:
-            return [], 'no_pairings'
+            return [], "no_pairings"
 
         all_names = {p.player_name for p in pairings} | {p.opponent_name for p in pairings if p.opponent_name}
         name_to_user: dict[str, models.User | None] = {}
@@ -58,7 +56,7 @@ class AetherhubImportService:
                 opponent_names.add(p.opponent_name)
 
         if not opponent_names:
-            return [], 'not_in_pairings'
+            return [], "not_in_pairings"
 
         opponent_user_ids: set[int] = set()
         for opp_name in opponent_names:
@@ -66,11 +64,8 @@ class AetherhubImportService:
             if u:
                 opponent_user_ids.add(u.id)
 
-        result = [
-            p for p in participants
-            if p.archetype is None and p.user_id in opponent_user_ids
-        ]
-        return result, (None if result else 'all_filled')
+        result = [p for p in participants if p.archetype is None and p.user_id in opponent_user_ids]
+        return result, (None if result else "all_filled")
 
     def _get_or_create_user_by_name(self, full_name: str) -> tuple[models.User, bool]:
         """Find or create a user by full name. Returns (user, was_created)."""
@@ -80,12 +75,15 @@ class AetherhubImportService:
         return self._user_svc.get_or_create_by_name(first_name, last_name)
 
     def _is_registered(self, tournament_id: int, user_id: int) -> bool:
-        return self.db.execute(
-            select(models.Participant).where(
-                models.Participant.tournament_id == tournament_id,
-                models.Participant.user_id == user_id,
-            )
-        ).scalar_one_or_none() is not None
+        return (
+            self.db.execute(
+                select(models.Participant).where(
+                    models.Participant.tournament_id == tournament_id,
+                    models.Participant.user_id == user_id,
+                )
+            ).scalar_one_or_none()
+            is not None
+        )
 
     def _save_pairings(self, tournament_id: int, rounds: list[AetherhubRound]) -> int:
         saved = 0
@@ -99,19 +97,19 @@ class AetherhubImportService:
                     )
                 ).scalar_one_or_none()
                 if existing is None:
-                    self.db.add(models.RoundPairing(
-                        tournament_id=tournament_id,
-                        round_number=rnd.number,
-                        player_name=pairing.player,
-                        opponent_name=pairing.opponent,
-                    ))
+                    self.db.add(
+                        models.RoundPairing(
+                            tournament_id=tournament_id,
+                            round_number=rnd.number,
+                            player_name=pairing.player,
+                            opponent_name=pairing.opponent,
+                        )
+                    )
                     saved += 1
         self.db.commit()
         return saved
 
-    def import_tournament(
-        self, tournament_id: int, data: AetherhubTournamentData
-    ) -> ImportResult:
+    def import_tournament(self, tournament_id: int, data: AetherhubTournamentData) -> ImportResult:
         registered = 0
         already_registered = 0
         created: list[str] = []
@@ -124,10 +122,12 @@ class AetherhubImportService:
             if self._is_registered(tournament_id, user.id):
                 already_registered += 1
             else:
-                self.db.add(models.Participant(
-                    tournament_id=tournament_id,
-                    user_id=user.id,
-                ))
+                self.db.add(
+                    models.Participant(
+                        tournament_id=tournament_id,
+                        user_id=user.id,
+                    )
+                )
                 registered += 1
             if was_created:
                 created.append(name)
@@ -142,19 +142,13 @@ class AetherhubImportService:
             created_names=created,
         )
 
-    def get_pairings(
-        self, tournament_id: int, round_number: int | None = None
-    ) -> list[models.RoundPairing]:
-        q = select(models.RoundPairing).where(
-            models.RoundPairing.tournament_id == tournament_id
-        )
+    def get_pairings(self, tournament_id: int, round_number: int | None = None) -> list[models.RoundPairing]:
+        q = select(models.RoundPairing).where(models.RoundPairing.tournament_id == tournament_id)
         if round_number is not None:
             q = q.where(models.RoundPairing.round_number == round_number)
         return list(self.db.execute(q).scalars().all())
 
-    def get_opponent(
-        self, tournament_id: int, player_name: str, round_number: int
-    ) -> str | None:
+    def get_opponent(self, tournament_id: int, player_name: str, round_number: int) -> str | None:
         row = self.db.execute(
             select(models.RoundPairing).where(
                 models.RoundPairing.tournament_id == tournament_id,

@@ -3,16 +3,17 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from core.database import SessionLocal
-from services.tournament import TournamentService
-from services.archetype import ArchetypeService
-from services.user import UserService
+from bot.handlers.admin import AdminHandler
 from bot.handlers.player import PlayerHandler
 from bot.handlers.settings import SettingsHandler
-from bot.keyboards import CB_REGISTER, CB_ARCHETYPE, CB_CUSTOM_ARCHETYPE, CB_TOURNAMENT, CB_ARCHETYPE_MORE
 from bot.messages import CUSTOM_ARCHETYPE_PROMPT
-from bot.handlers.admin import AdminHandler
-from bot.telegram.common import log_event as _log, parse_callback_ints
+from bot.telegram.common import log_event as _log
+from bot.telegram.common import parse_callback_ints
+from core.database import SessionLocal
+from services.aetherhub_import import AetherhubImportService
+from services.archetype import ArchetypeService
+from services.tournament import TournamentService
+from services.user import UserService
 
 USER_DATA_PENDING_CUSTOM = "pending_custom_archetype_tournament_id"
 USER_DATA_PENDING_NAME = "pending_name_for_tournament_id"
@@ -25,8 +26,10 @@ USER_DATA_OPPONENTS_MODE = "opponents_tournament_id"
 def _player_handler(db) -> PlayerHandler:
     return PlayerHandler(TournamentService(db), UserService(db), ArchetypeService(db))
 
+
 def _settings_handler(db) -> SettingsHandler:
     return SettingsHandler(UserService(db))
+
 
 def _admin_handler(db) -> AdminHandler:
     return AdminHandler(TournamentService(db), UserService(db), ArchetypeService(db))
@@ -55,7 +58,6 @@ async def callback_tournament_select(update: Update, context: ContextTypes.DEFAU
     _log("view_tournament", user, tournament_id=tournament_id)
     db = SessionLocal()
     try:
-        from services.aetherhub_import import AetherhubImportService
         has_pairings = bool(AetherhubImportService(db).get_pairings(tournament_id))
         result = _player_handler(db).handle_tournament_select(
             tournament_id, tg_id=user.id if user else None, has_pairings=has_pairings
@@ -102,8 +104,12 @@ async def callback_archetype(update: Update, context: ContextTypes.DEFAULT_TYPE)
     db = SessionLocal()
     try:
         result = _player_handler(db).handle_archetype(
-            user.id, user.username, user.first_name, user.last_name,
-            tournament_id, archetype_id,
+            user.id,
+            user.username,
+            user.first_name,
+            user.last_name,
+            tournament_id,
+            archetype_id,
         )
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
@@ -111,11 +117,8 @@ async def callback_archetype(update: Update, context: ContextTypes.DEFAULT_TYPE)
         _log("register", user, tournament_id=tournament_id, archetype_id=archetype_id)
         await query.edit_message_text(result.text)
         await query.answer()
-        from services.aetherhub_import import AetherhubImportService
         has_pairings = bool(AetherhubImportService(db).get_pairings(tournament_id))
-        card = _player_handler(db).handle_tournament_select(
-            tournament_id, tg_id=user.id, has_pairings=has_pairings
-        )
+        card = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id, has_pairings=has_pairings)
         await query.message.reply_text(card.text, reply_markup=card.keyboard)
     finally:
         db.close()
@@ -252,7 +255,10 @@ async def _handle_pending_name(msg, user, text, context) -> bool:
     db = SessionLocal()
     try:
         result = _player_handler(db).handle_save_name_then_register(
-            user.id, user.username, text, tournament_id,
+            user.id,
+            user.username,
+            text,
+            tournament_id,
         )
         await msg.reply_text(result.text, reply_markup=result.keyboard)
     finally:
@@ -322,24 +328,25 @@ async def _handle_pending_custom_arch(msg, user, text, context) -> bool:
     db = SessionLocal()
     try:
         result = _player_handler(db).handle_custom_archetype_text(
-            user.id, user.username, user.first_name, user.last_name,
-            tournament_id, text,
+            user.id,
+            user.username,
+            user.first_name,
+            user.last_name,
+            tournament_id,
+            text,
         )
         await msg.reply_text(result.text)
         if not result.is_alert:
-            from services.aetherhub_import import AetherhubImportService
             has_pairings = bool(AetherhubImportService(db).get_pairings(tournament_id))
-            card = _player_handler(db).handle_tournament_select(
-                tournament_id, tg_id=user.id, has_pairings=has_pairings
-            )
+            card = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id, has_pairings=has_pairings)
             await msg.reply_text(card.text, reply_markup=card.keyboard)
     finally:
         db.close()
     return True
 
 
-from bot.telegram.poll import handle_pending_link_poll as _handle_pending_link_poll
 from bot.telegram.aetherhub import handle_pending_aetherhub_url as _handle_pending_aetherhub_url
+from bot.telegram.poll import handle_pending_link_poll as _handle_pending_link_poll
 
 _TEXT_INPUT_HANDLERS = [
     _handle_pending_name,

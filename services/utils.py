@@ -3,7 +3,7 @@ from typing import Iterable
 from sqlalchemy.orm import Session
 
 from core import models
-from services.errors import TournamentNotFound, TournamentInvalidState
+from services.errors import TournamentInvalidState, TournamentNotFound
 
 
 def get_tournament(db: Session, tournament_id: int) -> models.Tournament:
@@ -20,6 +20,5 @@ def ensure_tournament_status(
     if tournament.status not in allowed:
         allowed_str = ", ".join(s.value for s in allowed)
         raise TournamentInvalidState(
-            f"Tournament #{tournament.id} is in status {tournament.status.value}, "
-            f"expected one of: {allowed_str}"
+            f"Tournament #{tournament.id} is in status {tournament.status.value}, expected one of: {allowed_str}"
         )
