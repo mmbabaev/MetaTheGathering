@@ -445,3 +445,76 @@ class TestCreateTournamentJob:
             mock_settings.ANNOUNCE_CHAT_ID = None
             asyncio.run(job.run(bot=bot, now=FRIDAY_NOW, db=db))
         bot.send_message.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# AetherhubImportJob weekday guard
+# ---------------------------------------------------------------------------
+
+# Saturday — weekday=5
+SATURDAY_NOW = datetime(2026, 4, 25, 21, 0, tzinfo=TZ)
+
+
+class TestAetherhubImportJobWeekdayGuard:
+    def test_skips_on_wrong_weekday(self, db, svc):
+        """AetherhubImportJob must not run when now.weekday() != schedule weekday."""
+        job = _make_import_job(weekday="friday")
+        svc.create_tournament(TournamentCreate(title="T", chat_id=0, slug="t", club="Goldfish"))
+
+        with patch("bot.scheduler.find_todays_pauper_tournament") as mock_find:
+            asyncio.run(job.run(now=SATURDAY_NOW, db=db))
+            mock_find.assert_not_called()
+
+    def test_runs_on_correct_weekday(self, db, svc):
+        """AetherhubImportJob runs when weekday matches."""
+        job = _make_import_job(weekday="friday")
+        svc.create_tournament(TournamentCreate(title="T", chat_id=0, slug="t", club="Goldfish"))
+
+        with (
+            patch("bot.scheduler.find_todays_pauper_tournament", return_value=None) as mock_find,
+        ):
+            asyncio.run(job.run(now=FRIDAY_NOW, db=db))
+            mock_find.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# format_schedule_text decomposition
+# ---------------------------------------------------------------------------
+
+
+class TestFormatScheduleText:
+    def test_contains_club_name(self):
+        from bot.scheduler import _format_club_schedule, format_schedule_text
+
+        text = format_schedule_text()
+        assert "Goldfish" in text
+        assert "Edinorog" in text
+
+    def test_format_club_schedule_contains_weekday_and_times(self):
+        from bot.scheduler import _format_club_schedule
+
+        club = Club(
+            name="TestClub",
+            chat_id=0,
+            schedules=[
+                ClubSchedule(
+                    weekday="friday", game_time="19:30", create_time="12:00", aetherhub_fetch_times=["20:00", "21:00"]
+                )
+            ],
+        )
+        text = _format_club_schedule(club)
+        assert "пятница" in text
+        assert "19:30" in text
+        assert "12:00" in text
+        assert "20:00" in text
+
+    def test_format_club_schedule_no_import_times(self):
+        from bot.scheduler import _format_club_schedule
+
+        club = Club(
+            name="TestClub",
+            chat_id=0,
+            schedules=[ClubSchedule(weekday="monday", game_time="18:00")],
+        )
+        text = _format_club_schedule(club)
+        assert "импорт" not in text

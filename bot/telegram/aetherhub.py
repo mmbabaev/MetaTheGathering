@@ -9,7 +9,7 @@ from bot.handlers.player import PlayerHandler
 from bot.keyboards import aetherhub_confirm_keyboard
 from bot.telegram.common import parse_callback_ints
 from core.database import SessionLocal
-from services.aetherhub import fetch_tournament
+from services.aetherhub import AetherhubTournamentData, fetch_tournament
 from services.aetherhub_import import AetherhubImportService
 from services.archetype import ArchetypeService
 from services.tournament import TournamentService
@@ -20,6 +20,19 @@ logger = logging.getLogger(__name__)
 
 USER_DATA_PENDING_AETHERHUB_URL = "pending_aetherhub_url_tournament_id"
 USER_DATA_AETHERHUB_URL = "aetherhub_url"
+USER_DATA_AETHERHUB_DATA = "aetherhub_data"
+
+
+def _build_preview(data: AetherhubTournamentData, header: str) -> str:
+    rounds_summary = ", ".join(f"R{r.number}: {len(r.pairings) // 2} столов" for r in data.rounds)
+    return (
+        f"{header}\n\n"
+        f"Игроков в стендингах: {len(data.players)}\n"
+        f"Раунды: {rounds_summary}\n\n"
+        f"Первые 5 игроков:\n"
+        + "\n".join(f"  • {p}" for p in data.players[:5])
+        + (f"\n  …ещё {len(data.players) - 5}" if len(data.players) > 5 else "")
+    )
 
 
 async def callback_aetherhub_import_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -48,7 +61,6 @@ async def callback_aetherhub_import_prompt(update: Update, context: ContextTypes
         db.close()
 
     if stored_url:
-        # Auto-fetch with stored URL — skip URL input, go straight to confirm
         await query.answer()
         status_msg = await query.message.reply_text("⏳ Загружаю данные с AetherHub…")
         try:
@@ -57,16 +69,11 @@ async def callback_aetherhub_import_prompt(update: Update, context: ContextTypes
             await status_msg.edit_text(f"❌ Не удалось загрузить турнир: {e}")
             return
         context.user_data[USER_DATA_AETHERHUB_URL] = stored_url
-        rounds_summary = ", ".join(f"R{r.number}: {len(r.pairings) // 2} столов" for r in data.rounds)
-        preview = (
-            f"🔄 Обновление AetherHub\n\n"
-            f"Игроков в стендингах: {len(data.players)}\n"
-            f"Раунды: {rounds_summary}\n\n"
-            f"Первые 5 игроков:\n"
-            + "\n".join(f"  • {p}" for p in data.players[:5])
-            + (f"\n  …ещё {len(data.players) - 5}" if len(data.players) > 5 else "")
+        context.user_data[USER_DATA_AETHERHUB_DATA] = data
+        await status_msg.edit_text(
+            _build_preview(data, "🔄 Обновление AetherHub"),
+            reply_markup=aetherhub_confirm_keyboard(tournament_id),
         )
-        await status_msg.edit_text(preview, reply_markup=aetherhub_confirm_keyboard(tournament_id))
     else:
         context.user_data[USER_DATA_PENDING_AETHERHUB_URL] = tournament_id
         await query.answer()
@@ -95,18 +102,12 @@ async def handle_pending_aetherhub_url(msg: Message, user: User, text: str, cont
         return True
 
     context.user_data[USER_DATA_AETHERHUB_URL] = text.strip()
+    context.user_data[USER_DATA_AETHERHUB_DATA] = data
 
-    rounds_summary = ", ".join(f"R{r.number}: {len(r.pairings) // 2} столов" for r in data.rounds)
-    preview = (
-        f"📥 Импорт AetherHub\n\n"
-        f"Игроков в стендингах: {len(data.players)}\n"
-        f"Раунды: {rounds_summary}\n\n"
-        f"Первые 5 игроков:\n"
-        + "\n".join(f"  • {p}" for p in data.players[:5])
-        + (f"\n  …ещё {len(data.players) - 5}" if len(data.players) > 5 else "")
+    await status_msg.edit_text(
+        _build_preview(data, "📥 Импорт AetherHub"),
+        reply_markup=aetherhub_confirm_keyboard(tournament_id),
     )
-
-    await status_msg.edit_text(preview, reply_markup=aetherhub_confirm_keyboard(tournament_id))
     return True
 
 
@@ -122,30 +123,23 @@ async def callback_aetherhub_confirm(update: Update, context: ContextTypes.DEFAU
     (tournament_id,) = ids
 
     url = context.user_data.pop(USER_DATA_AETHERHUB_URL, None)
-    if not url:
+    data: AetherhubTournamentData | None = context.user_data.pop(USER_DATA_AETHERHUB_DATA, None)
+    if not url or data is None:
         await query.answer("Сессия истекла, начните заново.", show_alert=True)
         return
 
     await query.edit_message_text("⏳ Импортирую…")
-    try:
-        data = fetch_tournament(url)
-    except Exception as e:
-        await query.edit_message_text(f"❌ Ошибка загрузки: {e}")
-        return
 
     db = SessionLocal()
     try:
         result = AetherhubImportService(db).import_tournament(tournament_id, data)
+        TournamentService(db).set_aetherhub_url(tournament_id, url)
+    except Exception as e:
+        logger.exception("Import failed for tournament %s", tournament_id)
+        await query.edit_message_text(f"❌ Ошибка импорта: {e}")
+        return
     finally:
         db.close()
-
-    db_url = SessionLocal()
-    try:
-        TournamentService(db_url).set_aetherhub_url(tournament_id, url)
-    except Exception:
-        logger.exception("Failed to save aetherhub_url for tournament %s", tournament_id)
-    finally:
-        db_url.close()
 
     lines = [
         "✅ Импорт завершён",
@@ -177,5 +171,6 @@ async def callback_aetherhub_cancel(update: Update, context: ContextTypes.DEFAUL
     """Отмена импорта."""
     query = update.callback_query
     context.user_data.pop(USER_DATA_AETHERHUB_URL, None)
+    context.user_data.pop(USER_DATA_AETHERHUB_DATA, None)
     await query.edit_message_text("Импорт отменён.")
     await query.answer()

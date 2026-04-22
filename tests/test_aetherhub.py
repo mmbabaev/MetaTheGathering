@@ -443,3 +443,53 @@ class TestGetUnfilledOpponents:
         assert err is None
         assert len(result) == 1
         assert result[0].user_id == player_b.id
+
+
+# ── TestImportTournamentValidation ───────────────────────────────────────────
+
+
+class TestImportTournamentValidation:
+    """import_tournament must reject invalid tournament states."""
+
+    def test_raises_on_nonexistent_tournament(self, import_svc):
+        from services.errors import TournamentNotFound
+
+        data = _make_data(players=[], rounds_pairings=[])
+        with pytest.raises(TournamentNotFound):
+            import_svc.import_tournament(99999, data)
+
+    def test_raises_on_closed_tournament(self, import_svc, svc, tournament):
+        from services.errors import TournamentInvalidState
+
+        svc.close_tournament(tournament.id)
+        data = _make_data(players=[], rounds_pairings=[])
+        with pytest.raises(TournamentInvalidState):
+            import_svc.import_tournament(tournament.id, data)
+
+    def test_allows_import_into_open_tournament(self, import_svc, tournament):
+        data = _make_data(players=[], rounds_pairings=[])
+        result = import_svc.import_tournament(tournament.id, data)
+        assert result.registered == 0
+
+
+# ── TestSavePairingsUpsert ───────────────────────────────────────────────────
+
+
+class TestSavePairingsUpsert:
+    """_save_pairings updates existing bye → real opponent on re-import."""
+
+    def test_updates_bye_to_opponent_on_reimport(self, import_svc, tournament):
+        rounds_with_bye = [AetherhubRound(number=1, pairings=[AetherhubPairing(player="Alice", opponent=None)])]
+        import_svc._save_pairings(tournament.id, rounds_with_bye)
+        assert import_svc.get_opponent(tournament.id, "Alice", 1) is None
+
+        rounds_with_opp = [AetherhubRound(number=1, pairings=[AetherhubPairing(player="Alice", opponent="Bob")])]
+        count = import_svc._save_pairings(tournament.id, rounds_with_opp)
+        assert count == 1
+        assert import_svc.get_opponent(tournament.id, "Alice", 1) == "Bob"
+
+    def test_no_update_when_opponent_unchanged(self, import_svc, tournament):
+        rounds = [AetherhubRound(number=1, pairings=[AetherhubPairing(player="Alice", opponent="Bob")])]
+        import_svc._save_pairings(tournament.id, rounds)
+        count = import_svc._save_pairings(tournament.id, rounds)
+        assert count == 0

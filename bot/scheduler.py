@@ -189,6 +189,11 @@ class AetherhubImportJob:
     async def run(self, now: datetime, db=None) -> None:
         if not self.club.aetherhub_url:
             return
+        if now.weekday() != DAYS[self.schedule.weekday]:
+            logger.info(
+                f"AetherhubImportJob: skipping '{self.club.name}' — not {self.schedule.weekday} (now={now.strftime('%A')})"
+            )
+            return
 
         close_db = db is None
         if close_db:
