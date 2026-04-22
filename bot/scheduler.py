@@ -59,6 +59,7 @@ def get_clubs() -> list[Club]:
                     weekday="monday",
                     game_time="19:30",
                     create_time="12:00",
+                    aetherhub_fetch_times=["20:00", "20:30", "21:00", "21:30", "22:00", "22:30", "23:00", "23:30", "00:00", "00:30"],
                 ),
             ],
         ),
