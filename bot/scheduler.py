@@ -9,7 +9,10 @@ from telegram.ext import Application, ContextTypes
 from core.config import settings, ClubConfig
 from core.database import SessionLocal
 from core.schemas import TournamentCreate
+from core import models
 from services.tournament import TournamentService
+from services.aetherhub_import import AetherhubImportService
+from services.aetherhub import fetch_tournament, find_todays_pauper_tournament
 
 logger = logging.getLogger(__name__)
 
@@ -26,9 +29,22 @@ DAYS = {
 def get_clubs() -> list[ClubConfig]:
     """Возвращает список клубов. chat_id=0 означает «создать турнир, но не писать в чат»."""
     clubs = [
-        ClubConfig(name="Goldfish",  weekday="thursday", chat_id=settings.GOLDFISH_CHAT_ID or 0,  game_time="19:30"),
-        ClubConfig(name="Edinorog",  weekday="monday",  chat_id=settings.EDINOROG_CHAT_ID or 0,  game_time="19:30",
-                   create_time="12:00", title_prefix="🦄 "),
+        ClubConfig(
+            name="Goldfish",
+            weekday="thursday",
+            chat_id=settings.GOLDFISH_CHAT_ID or 0,
+            game_time="19:30",
+            aetherhub_url="https://aetherhub.com/User/GoldFish",
+            aetherhub_fetch_times=["21:00", "22:00", "23:00"],
+        ),
+        ClubConfig(
+            name="Edinorog",
+            weekday="monday",
+            chat_id=settings.EDINOROG_CHAT_ID or 0,
+            game_time="19:30",
+            create_time="12:00",
+            title_prefix="🦄 ",
+        ),
     ]
     if settings.DEBUG:
         clubs.append(
@@ -98,6 +114,89 @@ async def _create_club_tournament(bot, club: ClubConfig) -> None:
         db.close()
 
 
+def _find_active_club_tournament(db, club_name: str):
+    """Find the current non-CLOSED tournament for a club."""
+    from sqlalchemy import select
+    stmt = (
+        select(models.Tournament)
+        .where(
+            models.Tournament.club == club_name,
+            models.Tournament.status != models.TournamentStatus.CLOSED,
+        )
+        .order_by(models.Tournament.created_at.desc())
+        .limit(1)
+    )
+    return db.execute(stmt).scalar_one_or_none()
+
+
+async def _aetherhub_auto_import(club: ClubConfig) -> None:
+    """Fetch today's pauper tournament from AetherHub and import it automatically."""
+    if not club.aetherhub_url:
+        return
+
+    tz = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
+    now = datetime.now(tz)
+    target_weekday = DAYS.get(club.weekday.lower())
+
+    if target_weekday is None or now.weekday() != target_weekday:
+        logger.info(f"AetherHub import: not the right weekday for '{club.name}', skipping.")
+        return
+
+    db = SessionLocal()
+    try:
+        tournament = _find_active_club_tournament(db, club.name)
+        if not tournament:
+            logger.warning(f"AetherHub import: no active tournament for club '{club.name}'")
+            return
+
+        url = tournament.aetherhub_url
+        if not url:
+            logger.info(f"AetherHub import: fetching club page for '{club.name}'")
+            try:
+                url = find_todays_pauper_tournament(club.aetherhub_url, today=now.date())
+            except Exception:
+                logger.exception(f"AetherHub import: failed to fetch club page for '{club.name}'")
+                return
+            if not url:
+                logger.info(f"AetherHub import: no pauper tournament found today for '{club.name}'")
+                return
+
+        logger.info(f"AetherHub import: importing {url} for tournament #{tournament.id}")
+        try:
+            data = fetch_tournament(url)
+        except Exception:
+            logger.exception(f"AetherHub import: failed to fetch tournament data from {url}")
+            return
+
+        try:
+            result = AetherhubImportService(db).import_tournament(tournament.id, data)
+            logger.info(
+                f"AetherHub import done for '{club.name}' #{tournament.id}: "
+                f"registered={result.registered}, already={result.already_registered}, "
+                f"pairings={result.pairings_saved}"
+            )
+        except Exception:
+            logger.exception(f"AetherHub import: import_tournament failed for '{club.name}'")
+            return
+    finally:
+        db.close()
+
+    db2 = SessionLocal()
+    try:
+        TournamentService(db2).set_aetherhub_url(tournament.id, url)
+    except Exception:
+        logger.exception(f"AetherHub import: failed to save aetherhub_url for tournament #{tournament.id}")
+    finally:
+        db2.close()
+
+
+def _make_aetherhub_job(club: ClubConfig):
+    async def job(context: ContextTypes.DEFAULT_TYPE) -> None:
+        await _aetherhub_auto_import(club)
+    job.__name__ = f"aetherhub_import_job[{club.name}]"
+    return job
+
+
 def _make_club_job(club: ClubConfig):
     async def job(context: ContextTypes.DEFAULT_TYPE) -> None:
         await _create_club_tournament(context.bot, club)
@@ -123,6 +222,13 @@ def setup_scheduler(app: Application) -> None:
             f"Scheduler: {club.name} every {club.weekday} at {time_str} "
             f"({settings.TOURNAMENT_TIMEZONE}), game at {club.game_time}, chat={club.chat_id}"
         )
+
+        for fetch_time_str in club.aetherhub_fetch_times:
+            fetch_time = datetime.strptime(fetch_time_str, "%H:%M").time().replace(tzinfo=tz)
+            app.job_queue.run_daily(_make_aetherhub_job(club), time=fetch_time)
+            logger.info(
+                f"Scheduler: AetherHub import for '{club.name}' at {fetch_time_str} ({settings.TOURNAMENT_TIMEZONE})"
+            )
 
 
 # ---------------------------------------------------------------------------
