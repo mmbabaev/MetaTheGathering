@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from core import models
+from services import errors
 from services.aetherhub import AetherhubRound, AetherhubTournamentData
 from services.user import UserService
 
@@ -106,10 +107,19 @@ class AetherhubImportService:
                         )
                     )
                     saved += 1
+                elif existing.opponent_name != pairing.opponent:
+                    existing.opponent_name = pairing.opponent
+                    saved += 1
         self.db.commit()
         return saved
 
     def import_tournament(self, tournament_id: int, data: AetherhubTournamentData) -> ImportResult:
+        tournament = self.db.get(models.Tournament, tournament_id)
+        if tournament is None:
+            raise errors.TournamentNotFound(f"Tournament {tournament_id} not found")
+        if tournament.status == models.TournamentStatus.CLOSED:
+            raise errors.TournamentInvalidState(f"Tournament {tournament_id} is closed, cannot import")
+
         registered = 0
         already_registered = 0
         created: list[str] = []

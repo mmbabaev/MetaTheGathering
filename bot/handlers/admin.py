@@ -437,6 +437,11 @@ class AdminHandler:
         ]
         return HandlerResult("\n\n---\n\n".join(blocks))
 
+    def handle_schedule(self, tg_id: int, schedule_text: str) -> HandlerResult:
+        if not self.user_svc.is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN)
+        return HandlerResult(schedule_text)
+
     def handle_close_tournament(self, tg_id: int) -> HandlerResult:
         if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)

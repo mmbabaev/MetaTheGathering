@@ -8,7 +8,7 @@ from sqlalchemy import select
 from telegram.ext import Application, ContextTypes
 
 from core import models
-from core.config import Club, ClubSchedule, settings
+from core.config import Club, ClubSchedule, app_cfg, settings
 from core.database import SessionLocal
 from core.schemas import TournamentCreate
 from services.aetherhub import fetch_tournament, find_todays_pauper_tournament
@@ -38,14 +38,14 @@ def get_clubs() -> list[Club]:
     clubs = [
         Club(
             name="Goldfish",
-            chat_id=settings.GOLDFISH_CHAT_ID or 0,
+            chat_id=app_cfg.goldfish_chat_id or 0,
             aetherhub_url="https://aetherhub.com/User/GoldFish",
             title_prefix="🐠 ",
             schedules=[
                 ClubSchedule(
                     weekday="thursday",
                     game_time="19:45",
-                    create_time="12:00",
+                    create_time="03:10",
                     aetherhub_fetch_times=[
                         "20:00",
                         "20:30",
@@ -80,7 +80,7 @@ def get_clubs() -> list[Club]:
         ),
         Club(
             name="Edinorog",
-            chat_id=settings.EDINOROG_CHAT_ID or 0,
+            chat_id=app_cfg.edinorog_chat_id or 0,
             aetherhub_url="https://aetherhub.com/User/Edinorog/",
             title_prefix="🦄 ",
             schedules=[
@@ -108,7 +108,7 @@ def get_clubs() -> list[Club]:
         clubs.append(
             Club(
                 name="Debug",
-                chat_id=settings.GOLDFISH_CHAT_ID or 0,
+                chat_id=app_cfg.goldfish_chat_id or 0,
                 schedules=[ClubSchedule(weekday="saturday", game_time="14:20")],
             )
         )
@@ -128,6 +128,12 @@ class CreateTournamentJob:
         self.schedule = schedule
 
     async def run(self, bot, now: datetime, db=None) -> None:
+        if now.weekday() != DAYS[self.schedule.weekday]:
+            logger.info(
+                f"CreateTournamentJob: skipping '{self.club.name}' — not {self.schedule.weekday} (now={now.strftime('%A')})"
+            )
+            return
+
         date_str = now.strftime("%Y-%m-%d")
         title = f"{self.club.title_prefix}{self.club.name} Pauper {now.strftime('%d.%m.%Y')}"
         slug = f"{date_str}-{self.club.name.lower()}-pauper"
@@ -153,12 +159,12 @@ class CreateTournamentJob:
                 )
                 logger.info(f"Created tournament #{new_t.id} '{title}' for '{self.club.name}'")
 
-                if self.club.chat_id and bot is not None:
+                if settings.ANNOUNCE_CHAT_ID and bot is not None:
                     await bot.send_message(
-                        chat_id=self.club.chat_id,
+                        chat_id=settings.ANNOUNCE_CHAT_ID,
                         text=(
                             f"🏆 {self.club.name} Pauper — сегодня в {self.schedule.game_time}\n"
-                            f"Регистрация открыта! Используйте /tournaments для записи."
+                            f"Турнир создан. Регистрация открыта."
                         ),
                     )
             except Exception as e:
@@ -182,6 +188,11 @@ class AetherhubImportJob:
 
     async def run(self, now: datetime, db=None) -> None:
         if not self.club.aetherhub_url:
+            return
+        if now.weekday() != DAYS[self.schedule.weekday]:
+            logger.info(
+                f"AetherhubImportJob: skipping '{self.club.name}' — not {self.schedule.weekday} (now={now.strftime('%A')})"
+            )
             return
 
         close_db = db is None
@@ -299,6 +310,37 @@ def setup_scheduler(app: Application) -> None:
                 _import.__name__ = f"aetherhub_import[{club.name}/{schedule.weekday}/{fetch_time_str}]"
                 app.job_queue.run_daily(_import, time=fetch_time, days=(DAYS[schedule.weekday],))
                 logger.info(f"Scheduler: AetherHub import for '{club.name}' ({schedule.weekday}) at {fetch_time_str}")
+
+
+_DAY_RU = {
+    "monday": "понедельник",
+    "tuesday": "вторник",
+    "wednesday": "среда",
+    "thursday": "четверг",
+    "friday": "пятница",
+    "saturday": "суббота",
+    "sunday": "воскресенье",
+}
+
+
+def _format_club_schedule(club: Club) -> str:
+    lines = [f"\n{club.title_prefix}{club.name}:"]
+    for schedule in club.schedules:
+        time_str = schedule.create_time or settings.TOURNAMENT_CREATE_TIME
+        day_ru = _DAY_RU.get(schedule.weekday.lower(), schedule.weekday)
+        lines.append(f"  {day_ru}: создание {time_str}, игра {schedule.game_time}")
+        if schedule.aetherhub_fetch_times:
+            lines.append(f"    импорт: {', '.join(schedule.aetherhub_fetch_times)}")
+    return "\n".join(lines)
+
+
+def format_schedule_text() -> str:
+    """Возвращает текстовое описание расписания для команды /schedule."""
+    tz = settings.TOURNAMENT_TIMEZONE
+    lines = [f"📅 Расписание ({tz}):"]
+    for club in get_clubs():
+        lines.append(_format_club_schedule(club))
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
