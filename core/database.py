@@ -4,7 +4,7 @@ from sqlalchemy.orm import declarative_base, scoped_session, sessionmaker
 from core.config import settings
 
 engine = create_engine(
-    settings.DATABASE_URL.unicode_string(),  # pydantic AnyUrl → str
+    settings.DATABASE_URL.unicode_string(),
     echo=settings.DEBUG,
     future=True,
 )
