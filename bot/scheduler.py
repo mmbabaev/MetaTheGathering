@@ -28,6 +28,15 @@ DAYS = {
 }
 
 
+def _ptb_day(weekday: str) -> int:
+    """Convert weekday string to PTB run_daily days= value (0=Sunday, 6=Saturday).
+
+    PTB v20+ changed the convention from 0=Monday to 0=Sunday (cron-style).
+    Python's datetime.weekday() uses 0=Monday. Conversion: ptb = (py + 1) % 7.
+    """
+    return (DAYS[weekday] + 1) % 7
+
+
 # ---------------------------------------------------------------------------
 # Club definitions
 # ---------------------------------------------------------------------------
@@ -114,9 +123,9 @@ def get_clubs() -> list[Club]:
                 schedules=[
                     ClubSchedule(
                         weekday="thursday",
-                        game_time="12:15",
-                        create_time="12:15",
-                        aetherhub_fetch_times=["12:16"],
+                        game_time="12:30",
+                        create_time="12:30",
+                        aetherhub_fetch_times=["12:31"],
                         find_latest=True,
                     )
                 ],
@@ -138,6 +147,7 @@ class CreateTournamentJob:
         self.schedule = schedule
 
     async def run(self, bot, now: datetime, db=None) -> None:
+        logger.info(f"CreateTournamentJob: running for '{self.club.name}', now={now.strftime('%A %H:%M')}")
         if now.weekday() != DAYS[self.schedule.weekday]:
             logger.info(
                 f"CreateTournamentJob: skipping '{self.club.name}' — not {self.schedule.weekday} (now={now.strftime('%A')})"
@@ -197,7 +207,9 @@ class AetherhubImportJob:
         self.schedule = schedule
 
     async def run(self, now: datetime, db=None) -> None:
+        logger.info(f"AetherhubImportJob: running for '{self.club.name}', now={now.strftime('%A %H:%M')}")
         if not self.club.aetherhub_url:
+            logger.warning(f"AetherhubImportJob: no aetherhub_url for '{self.club.name}', skipping")
             return
         if now.weekday() != DAYS[self.schedule.weekday]:
             logger.info(
@@ -288,7 +300,10 @@ class AetherhubTimedImportJob:
                 db.close()
 
         if not tournaments:
+            logger.debug(f"AetherhubTimedImportJob: no tournaments scheduled for {current_time}")
             return
+
+        logger.info(f"AetherhubTimedImportJob: found {len(tournaments)} tournament(s) for {current_time}")
 
         club_url_map = {c.name: c.aetherhub_url for c in get_clubs() if c.aetherhub_url}
         today = None if settings.DEBUG else now.date()
@@ -388,7 +403,7 @@ def setup_scheduler(app: Application) -> None:
                 await _job.run(bot=context.bot, now=datetime.now(tz_))
 
             _create.__name__ = f"create_tournament[{club.name}/{schedule.weekday}]"
-            app.job_queue.run_daily(_create, time=create_time, days=(DAYS[schedule.weekday],))
+            app.job_queue.run_daily(_create, time=create_time, days=(_ptb_day(schedule.weekday),))
             logger.info(
                 f"Scheduler: {club.name} create on {schedule.weekday} at {time_str} "
                 f"({settings.TOURNAMENT_TIMEZONE}), game at {schedule.game_time}"
@@ -403,7 +418,7 @@ def setup_scheduler(app: Application) -> None:
                     await _job.run(now=datetime.now(tz_))
 
                 _import.__name__ = f"aetherhub_import[{club.name}/{schedule.weekday}/{fetch_time_str}]"
-                app.job_queue.run_daily(_import, time=fetch_time, days=(DAYS[schedule.weekday],))
+                app.job_queue.run_daily(_import, time=fetch_time, days=(_ptb_day(schedule.weekday),))
                 logger.info(f"Scheduler: AetherHub import for '{club.name}' ({schedule.weekday}) at {fetch_time_str}")
 
     timed_job = AetherhubTimedImportJob()

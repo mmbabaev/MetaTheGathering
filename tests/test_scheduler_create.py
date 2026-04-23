@@ -165,7 +165,7 @@ class TestSetupScheduler:
         with patch("bot.scheduler.settings", _mock_settings()), patch("bot.scheduler.get_clubs", return_value=clubs):
             setup_scheduler(app)
         call_kwargs = app.job_queue.run_daily.call_args.kwargs
-        assert call_kwargs["days"] == (3,)  # thursday = 3
+        assert call_kwargs["days"] == (4,)  # thursday = 4 in PTB (0=Sunday)
 
     def test_import_job_days_matches_weekday(self):
         """Import jobs also get the correct days= parameter."""
@@ -182,9 +182,9 @@ class TestSetupScheduler:
         ]
         with patch("bot.scheduler.settings", _mock_settings()), patch("bot.scheduler.get_clubs", return_value=clubs):
             setup_scheduler(app)
-        # Both calls (create + import) should use days=(4,) for Friday
+        # Both calls (create + import) should use days=(5,) for Friday in PTB (0=Sunday)
         for call in app.job_queue.run_daily.call_args_list:
-            assert call.kwargs["days"] == (4,)  # friday = 4
+            assert call.kwargs["days"] == (5,)  # friday = 5 in PTB (0=Sunday)
 
     def test_goldfish_full_config_registers_correct_count(self):
         """Goldfish fri(1+3) + sat(1+2) + Edinorog mon(1) = 8 jobs."""

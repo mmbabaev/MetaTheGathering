@@ -537,7 +537,7 @@ class TestDebugClubConfig:
 
         debug = next(c for c in clubs if c.name == "Debug")
         all_times = [t for s in debug.schedules for t in s.aetherhub_fetch_times]
-        assert "12:16" in all_times
+        assert "12:31" in all_times
 
     def test_debug_club_has_aetherhub_url(self):
         from unittest.mock import patch as _patch
