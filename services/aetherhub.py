@@ -7,67 +7,41 @@ from datetime import date, datetime
 import cloudscraper
 from bs4 import BeautifulSoup
 
+from services.aetherhub_models import (
+    AetherhubPairing,
+    AetherhubRound,
+    AetherhubTournamentData,
+)
+from services.aetherhub_parser_edinorog import AetherhubEdinorogParser
+from services.aetherhub_parser_js_format import AetherhubJSFormatParser
 
-@dataclass
-class AetherhubPairing:
-    player: str
-    opponent: str | None  # None = bye
-
-
-@dataclass
-class AetherhubRound:
-    number: int
-    pairings: list[AetherhubPairing]
-
-
-@dataclass
-class AetherhubTournamentData:
-    url: str
-    players: list[str]  # from round 1 standings
-    rounds: list[AetherhubRound]
-
-
-def _strip_points(name: str) -> str:
-    return re.sub(r"\s*\(\d+ Points?\)\s*$", "", name).strip()
+# Re-export models for backward compatibility
+__all__ = [
+    "AetherhubTournamentData",
+    "AetherhubRound",
+    "AetherhubPairing",
+    "fetch_tournament",
+    "fetch_club_tournaments",
+    "find_todays_pauper_tournament",
+    "ClubTournamentLink",
+]
 
 
 def _scraper():
     return cloudscraper.create_scraper()
 
 
+# Backward compatibility: re-export internal functions used by tests
+def _strip_points(name: str) -> str:
+    """Remove points suffix from player name (backward compatibility)."""
+    parser = AetherhubEdinorogParser()
+    return parser._strip_points(name)
+
+
 def _parse_page(html: str) -> tuple[list[str], list[AetherhubPairing], int]:
-    """Returns (player_names_from_standings, pairings, max_round_found)."""
-    soup = BeautifulSoup(html, "html.parser")
-    tables = soup.find_all("table")
-
-    pairings: list[AetherhubPairing] = []
-    if len(tables) >= 1:
-        for row in tables[0].find_all("tr")[1:]:
-            cells = [td.get_text(strip=True) for td in row.find_all("td")]
-            if len(cells) < 3:
-                continue
-            p1 = _strip_points(cells[1])
-            p2 = _strip_points(cells[2]) if cells[2] else None
-            if p1:
-                pairings.append(AetherhubPairing(player=p1, opponent=p2 or None))
-            if p2:
-                pairings.append(AetherhubPairing(player=p2, opponent=p1 or None))
-
-    players: list[str] = []
-    if len(tables) >= 2:
-        for row in tables[1].find_all("tr")[1:]:
-            cells = [td.get_text(strip=True) for td in row.find_all("td")]
-            if len(cells) >= 2 and cells[1]:
-                players.append(cells[1].strip())
-
-    # Detect max round number from nav links (?p=N)
-    max_round = 1
-    for a in soup.find_all("a", href=True):
-        m = re.search(r"\?p=(\d+)", a["href"])
-        if m:
-            max_round = max(max_round, int(m.group(1)))
-
-    return players, pairings, max_round
+    """Parse edinorog format page (backward compatibility)."""
+    parser = AetherhubEdinorogParser()
+    return parser._parse_page(html)
 
 
 @dataclass
@@ -164,28 +138,70 @@ def fetch_club_tournaments(club_url: str) -> list[ClubTournamentLink]:
 
 
 def find_todays_pauper_tournament(club_url: str, today: date | None = None) -> str | None:
-    """Return the URL of today's pauper tournament from a club page, or None."""
-    if today is None:
-        today = date.today()
+    """Return the URL of a pauper tournament from a club page.
+
+    If today is given, matches only that date.
+    If today is None, returns the first (latest) pauper tournament found regardless of date.
+    """
     for link in fetch_club_tournaments(club_url):
-        if link.date == today and PAUPER_RE.search(link.name):
-            return link.url
+        if PAUPER_RE.search(link.name):
+            if today is None or link.date == today:
+                return link.url
     return None
 
 
+def _detect_tournament_format(html: str) -> str:
+    """
+    Detect tournament format from HTML.
+
+    Returns:
+        "js" for JavaScript-loaded format (Format 2)
+        "edinorog" for embedded HTML format (Format 1)
+    """
+    soup = BeautifulSoup(html, "html.parser")
+
+    # Check if pairings tab exists and is empty (JS format indicator)
+    pairings_tab = soup.find("div", {"id": "tab_pairings"})
+    if pairings_tab is not None:
+        # JS format has empty pairings tab with data-page attribute
+        has_data_page = pairings_tab.get("data-page") is not None
+        is_empty = len(pairings_tab.find_all("table")) == 0
+
+        if has_data_page and is_empty:
+            return "js"
+
+    # Default to edinorog format
+    return "edinorog"
+
+
 def fetch_tournament(url: str) -> AetherhubTournamentData:
-    """Fetch aetherhub tournament: players from round 1, pairings from all rounds."""
+    """
+    Fetch aetherhub tournament: players from round 1, pairings from all rounds.
+
+    Automatically detects the tournament format and uses the appropriate parser:
+    - Format 1 (edinorog): Uses ?p=X URL parameters, pairings embedded in HTML
+    - Format 2 (JS): Uses /Tourney/RoundTourneyPublicPairings API endpoint
+
+    Args:
+        url: Tournament URL (query parameters will be stripped)
+
+    Returns:
+        AetherhubTournamentData with players and all round pairings
+    """
+    # Strip query parameters from URL
+    if "?" in url:
+        url = url.split("?")[0]
+
     scraper = _scraper()
 
-    # Round 1: get player list + round 1 pairings
-    r1_html = scraper.get(f"{url}?p=1", timeout=30).text
-    players, r1_pairings, max_round = _parse_page(r1_html)
+    # Fetch main page to detect format
+    main_html = scraper.get(url, timeout=30).text
+    format_type = _detect_tournament_format(main_html)
 
-    rounds = [AetherhubRound(number=1, pairings=r1_pairings)]
-
-    for rn in range(2, max_round + 1):
-        html = scraper.get(f"{url}?p={rn}", timeout=30).text
-        _, pairings, _ = _parse_page(html)
-        rounds.append(AetherhubRound(number=rn, pairings=pairings))
-
-    return AetherhubTournamentData(url=url, players=players, rounds=rounds)
+    # Use appropriate parser
+    if format_type == "js":
+        parser = AetherhubJSFormatParser(scraper=scraper)
+        return parser.parse_tournament(url)
+    else:  # edinorog
+        parser = AetherhubEdinorogParser(scraper=scraper)
+        return parser.parse_tournament(url)

@@ -71,6 +71,7 @@ class TournamentRead(TournamentBase):
     status: TournamentStatus
     decks_hidden: bool = True
     aetherhub_url: Optional[str] = None
+    aetherhub_import_time: Optional[str] = None
     registration_open_at: Optional[datetime] = None
     registration_close_at: Optional[datetime] = None
     started_at: Optional[datetime] = None

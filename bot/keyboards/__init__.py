@@ -36,6 +36,7 @@ CB_NOTIFY_CANCEL = "notify_cancel"  # notify_cancel:{tournament_id}
 CB_AETHERHUB_IMPORT = "ah_import"  # ah_import:{tournament_id}
 CB_AETHERHUB_CONFIRM = "ah_confirm"  # ah_confirm:{tournament_id}
 CB_AETHERHUB_CANCEL = "ah_cancel"  # ah_cancel:{tournament_id}
+CB_SET_IMPORT_TIME = "set_import_time"  # set_import_time:{tournament_id}
 CB_ADMIN_MORE = "adm_more"  # adm_more:{tournament_id}
 CB_CLOSE_TOURNAMENT = "close_t"  # close_t:{tournament_id}
 CB_ADMIN_OPPONENTS = "adm_opps"  # adm_opps:{tournament_id}
@@ -55,6 +56,7 @@ def tournament_card_keyboard(
     has_pairings: bool = False,
     has_deck: bool = True,
     aetherhub_url: str | None = None,
+    import_time: str | None = None,
 ) -> InlineKeyboardMarkup:
     """Кнопки для карточки турнира — зависят от статуса регистрации и роли пользователя."""
     if is_registered:
