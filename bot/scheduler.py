@@ -110,12 +110,13 @@ def get_clubs() -> list[Club]:
                 name="Debug",
                 chat_id=app_cfg.goldfish_chat_id or 0,
                 aetherhub_url="https://aetherhub.com/User/GoldFish",
-                title_prefix="🐠 ",
+                title_prefix="[DEBUG] 🐠 ",
                 schedules=[
                     ClubSchedule(
-                        weekday="saturday",
-                        game_time="14:20",
-                        aetherhub_fetch_times=["11:40", "12:00"],
+                        weekday="thursday",
+                        game_time="11:50",
+                        create_time="11:50",
+                        aetherhub_fetch_times=["11:51"],
                         find_latest=True,
                     )
                 ],
