@@ -207,6 +207,32 @@ async def callback_aetherhub_confirm(update: Update, context: ContextTypes.DEFAU
     await query.message.reply_text(card.text, reply_markup=card.keyboard)
 
 
+async def callback_set_import_time(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка для настройки авто-импорта AetherHub."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+
+    db = SessionLocal()
+    try:
+        if not UserService(db).is_admin(user.id):
+            await query.answer("Нет прав.", show_alert=True)
+            return
+    finally:
+        db.close()
+
+    context.user_data[USER_DATA_PENDING_IMPORT_TIME] = tournament_id
+    await query.answer()
+    await query.message.reply_text(
+        "Отправьте время авто-импорта в формате HH:MM (например: 12:30)\nИли отправьте «-» чтобы отключить авто-импорт."
+    )
+
+
 async def callback_aetherhub_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Отмена импорта."""
     query = update.callback_query
