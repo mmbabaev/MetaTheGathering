@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from bot.scheduler import setup_scheduler
+from bot.scheduler import _ptb_day, setup_scheduler
 from core.config import Club, ClubSchedule
 
 TZ = "Europe/Moscow"
@@ -212,3 +212,50 @@ class TestSetupScheduler:
         with patch("bot.scheduler.settings", _mock_settings()), patch("bot.scheduler.get_clubs", return_value=clubs):
             setup_scheduler(app)
         assert app.job_queue.run_daily.call_count == 8
+
+
+# ---------------------------------------------------------------------------
+# _ptb_day: PTB uses 0=Sunday, Python weekday uses 0=Monday
+# ---------------------------------------------------------------------------
+
+
+class TestPtbDay:
+    @pytest.mark.parametrize(
+        "weekday, expected",
+        [
+            ("monday", 1),
+            ("tuesday", 2),
+            ("wednesday", 3),
+            ("thursday", 4),
+            ("friday", 5),
+            ("saturday", 6),
+            ("sunday", 0),  # wraps: (6+1) % 7 == 0
+        ],
+    )
+    def test_all_weekdays(self, weekday, expected):
+        assert _ptb_day(weekday) == expected
+
+    def test_sunday_wraps_to_zero(self):
+        assert _ptb_day("sunday") == 0
+
+    def test_thursday_is_4_not_3(self):
+        """The original bug: thursday was passing days=(3,) which PTB treated as Wednesday."""
+        assert _ptb_day("thursday") == 4
+
+    def test_friday_is_5_not_4(self):
+        assert _ptb_day("friday") == 5
+
+    def test_create_job_uses_ptb_day(self):
+        """setup_scheduler passes the PTB-correct day value to run_daily."""
+        app = _make_app()
+        clubs = [
+            Club(
+                name="T",
+                chat_id=1,
+                schedules=[ClubSchedule(weekday="sunday", game_time="10:00", create_time="10:00")],
+            )
+        ]
+        with patch("bot.scheduler.settings", _mock_settings()), patch("bot.scheduler.get_clubs", return_value=clubs):
+            setup_scheduler(app)
+        call_kwargs = app.job_queue.run_daily.call_args.kwargs
+        assert call_kwargs["days"] == (0,)  # sunday = 0 in PTB
