@@ -223,9 +223,6 @@ def main() -> None:
 
     setup_scheduler(app)
 
-    if settings.DEBUG:
-        _debug_create_tournament()
-
     logger.info("Bot starting (polling)...")
     app.run_polling(allowed_updates=["message", "callback_query", "poll_answer"])
 
