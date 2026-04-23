@@ -1,6 +1,7 @@
 # Telegram-обёртки для импорта из AetherHub
 
 import logging
+import re
 
 from telegram import Message, Update, User
 from telegram.ext import ContextTypes
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 USER_DATA_PENDING_AETHERHUB_URL = "pending_aetherhub_url_tournament_id"
 USER_DATA_AETHERHUB_URL = "aetherhub_url"
 USER_DATA_AETHERHUB_DATA = "aetherhub_data"
+USER_DATA_PENDING_IMPORT_TIME = "pending_import_time_tournament_id"
 
 
 def _build_preview(data: AetherhubTournamentData, header: str) -> str:
@@ -174,3 +176,67 @@ async def callback_aetherhub_cancel(update: Update, context: ContextTypes.DEFAUL
     context.user_data.pop(USER_DATA_AETHERHUB_DATA, None)
     await query.edit_message_text("Импорт отменён.")
     await query.answer()
+
+
+async def callback_set_import_time(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка «⏰ Авто-импорт» — запрашивает время авто-импорта."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+
+    db = SessionLocal()
+    try:
+        if not UserService(db).is_admin(user.id):
+            await query.answer("Нет прав.", show_alert=True)
+            return
+    finally:
+        db.close()
+
+    context.user_data[USER_DATA_PENDING_IMPORT_TIME] = tournament_id
+    await query.answer()
+    await query.message.reply_text(
+        "Введите время авто-импорта в формате HH:MM (например: 12:30)\nОтправьте «-» чтобы отключить авто-импорт."
+    )
+
+
+async def handle_pending_import_time(msg: Message, user: User, text: str, context) -> bool:
+    """Обрабатывает ввод времени авто-импорта. Возвращает True если обработал."""
+    tournament_id = context.user_data.get(USER_DATA_PENDING_IMPORT_TIME)
+    if tournament_id is None:
+        return False
+
+    context.user_data.pop(USER_DATA_PENDING_IMPORT_TIME)
+    text = text.strip()
+
+    if text == "-":
+        db = SessionLocal()
+        try:
+            TournamentService(db).set_import_time(tournament_id, None)
+        finally:
+            db.close()
+        await msg.reply_text("⏰ Авто-импорт отключён.")
+        return True
+
+    if not re.match(r"^\d{1,2}:\d{2}$", text):
+        await msg.reply_text("❌ Неверный формат. Введите время как HH:MM (например: 12:30)")
+        return True
+
+    parts = text.split(":")
+    h, m = int(parts[0]), int(parts[1])
+    if not (0 <= h <= 23 and 0 <= m <= 59):
+        await msg.reply_text("❌ Некорректное время. Часы 0–23, минуты 0–59.")
+        return True
+
+    time_str = f"{h:02d}:{m:02d}"
+    db = SessionLocal()
+    try:
+        TournamentService(db).set_import_time(tournament_id, time_str)
+    finally:
+        db.close()
+    await msg.reply_text(f"✅ Авто-импорт установлен на {time_str}")
+    return True

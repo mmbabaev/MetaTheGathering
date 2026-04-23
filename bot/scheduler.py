@@ -265,6 +265,90 @@ class AetherhubImportJob:
 
 
 # ---------------------------------------------------------------------------
+# Job: per-tournament timed import (set via admin button)
+# ---------------------------------------------------------------------------
+
+
+class AetherhubTimedImportJob:
+    """Runs every minute; triggers import for tournaments with matching aetherhub_import_time."""
+
+    async def run(self, now: datetime, db=None) -> None:
+        current_time = now.strftime("%H:%M")
+        close_db = db is None
+        if close_db:
+            db = SessionLocal()
+        try:
+            stmt = select(models.Tournament).where(
+                models.Tournament.aetherhub_import_time == current_time,
+                models.Tournament.status != models.TournamentStatus.CLOSED,
+            )
+            tournaments = db.execute(stmt).scalars().all()
+        finally:
+            if close_db:
+                db.close()
+
+        if not tournaments:
+            return
+
+        club_url_map = {c.name: c.aetherhub_url for c in get_clubs() if c.aetherhub_url}
+        today = None if settings.DEBUG else now.date()
+
+        for t in tournaments:
+            await self._import_tournament(t.id, t.aetherhub_url, t.club, club_url_map, today)
+
+    async def _import_tournament(
+        self,
+        tournament_id: int,
+        stored_url: str | None,
+        club_name: str | None,
+        club_url_map: dict,
+        today,
+    ) -> None:
+        url = stored_url
+        if not url:
+            club_page_url = club_url_map.get(club_name or "")
+            if not club_page_url:
+                logger.warning(f"AetherhubTimedImportJob: no club URL for tournament #{tournament_id}")
+                return
+            try:
+                url = find_todays_pauper_tournament(club_page_url, today=today)
+            except Exception:
+                logger.exception(f"AetherhubTimedImportJob: failed to fetch club page for #{tournament_id}")
+                return
+            if not url:
+                logger.info(f"AetherhubTimedImportJob: no pauper tournament found for #{tournament_id}")
+                return
+
+        logger.info(f"AetherhubTimedImportJob: importing {url} for tournament #{tournament_id}")
+        db = SessionLocal()
+        try:
+            try:
+                data = fetch_tournament(url)
+            except Exception:
+                logger.exception(f"AetherhubTimedImportJob: failed to fetch data from {url}")
+                return
+            try:
+                result = AetherhubImportService(db).import_tournament(tournament_id, data)
+                logger.info(
+                    f"AetherhubTimedImportJob done #{tournament_id}: "
+                    f"registered={result.registered}, pairings={result.pairings_saved}"
+                )
+            except Exception:
+                logger.exception(f"AetherhubTimedImportJob: import failed for #{tournament_id}")
+                return
+        finally:
+            db.close()
+
+        db2 = SessionLocal()
+        try:
+            TournamentService(db2).set_aetherhub_url(tournament_id, url)
+        except Exception:
+            logger.exception(f"AetherhubTimedImportJob: failed to save aetherhub_url for #{tournament_id}")
+        finally:
+            db2.close()
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -321,6 +405,15 @@ def setup_scheduler(app: Application) -> None:
                 _import.__name__ = f"aetherhub_import[{club.name}/{schedule.weekday}/{fetch_time_str}]"
                 app.job_queue.run_daily(_import, time=fetch_time, days=(DAYS[schedule.weekday],))
                 logger.info(f"Scheduler: AetherHub import for '{club.name}' ({schedule.weekday}) at {fetch_time_str}")
+
+    timed_job = AetherhubTimedImportJob()
+
+    async def _timed_import(context: ContextTypes.DEFAULT_TYPE) -> None:
+        tz_ = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
+        await timed_job.run(now=datetime.now(tz_))
+
+    app.job_queue.run_repeating(_timed_import, interval=60, first=10)
+    logger.info("Scheduler: AetherhubTimedImportJob registered (every 60s)")
 
 
 _DAY_RU = {

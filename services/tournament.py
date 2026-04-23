@@ -178,6 +178,14 @@ class TournamentService:
         )
         self.db.commit()
 
+    def set_import_time(self, tournament_id: int, time_str: str | None) -> None:
+        self.db.execute(
+            update(models.Tournament)
+            .where(models.Tournament.id == tournament_id)
+            .values(aetherhub_import_time=time_str)
+        )
+        self.db.commit()
+
     def set_decks_hidden(self, tournament_id: int, hidden: bool) -> TournamentRead:
         tournament = get_tournament(self.db, tournament_id)
         tournament.decks_hidden = hidden

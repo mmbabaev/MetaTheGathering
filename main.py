@@ -47,6 +47,7 @@ from bot.keyboards import (
     CB_POLL_MENU,
     CB_REGISTER,
     CB_REVEAL_DECKS,
+    CB_SET_IMPORT_TIME,
     CB_SETTINGS_NAME,
     CB_TOURNAMENT,
     CB_TSTATUS,
@@ -210,6 +211,7 @@ def main() -> None:
     app.add_handler(
         CallbackQueryHandler(aetherhub_handler.callback_aetherhub_cancel, pattern=f"^{CB_AETHERHUB_CANCEL}:")
     )
+    app.add_handler(CallbackQueryHandler(aetherhub_handler.callback_set_import_time, pattern=f"^{CB_SET_IMPORT_TIME}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_admin_more, pattern=f"^{CB_ADMIN_MORE}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_close_tournament, pattern=f"^{CB_CLOSE_TOURNAMENT}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_admin_opponents, pattern=f"^{CB_ADMIN_OPPONENTS}:"))

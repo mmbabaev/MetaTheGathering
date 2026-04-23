@@ -346,6 +346,7 @@ async def _handle_pending_custom_arch(msg, user, text, context) -> bool:
 
 
 from bot.telegram.aetherhub import handle_pending_aetherhub_url as _handle_pending_aetherhub_url
+from bot.telegram.aetherhub import handle_pending_import_time as _handle_pending_import_time
 from bot.telegram.poll import handle_pending_link_poll as _handle_pending_link_poll
 
 _TEXT_INPUT_HANDLERS = [
@@ -356,6 +357,7 @@ _TEXT_INPUT_HANDLERS = [
     _handle_pending_custom_arch,
     _handle_pending_link_poll,
     _handle_pending_aetherhub_url,
+    _handle_pending_import_time,
 ]
 
 

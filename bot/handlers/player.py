@@ -112,6 +112,7 @@ class PlayerHandler:
                 has_pairings=has_pairings,
                 has_deck=has_deck,
                 aetherhub_url=getattr(t, "aetherhub_url", None),
+                import_time=getattr(t, "aetherhub_import_time", None),
             ),
         )
 
