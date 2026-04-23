@@ -114,9 +114,9 @@ def get_clubs() -> list[Club]:
                 schedules=[
                     ClubSchedule(
                         weekday="thursday",
-                        game_time="11:50",
-                        create_time="11:50",
-                        aetherhub_fetch_times=["11:51"],
+                        game_time="11:55",
+                        create_time="11:55",
+                        aetherhub_fetch_times=["11:56"],
                         find_latest=True,
                     )
                 ],
