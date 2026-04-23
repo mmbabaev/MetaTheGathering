@@ -448,6 +448,112 @@ class TestAetherhubImportJob:
 
 
 # ---------------------------------------------------------------------------
+# AetherhubImportJob find_latest — end-to-end
+# ---------------------------------------------------------------------------
+
+
+class TestAetherhubImportJobFindLatest:
+    """Full-path tests: find_latest=True runs import with first pauper on page."""
+
+    def test_find_latest_imports_old_tournament(self, db, svc):
+        """find_latest=True fetches and imports even when tournament date is in the past."""
+        job = _make_import_job(find_latest=True)
+        svc.create_tournament(TournamentCreate(title="T", chat_id=0, slug="t", club="Goldfish"))
+        old_url = "https://aetherhub.com/Tourney/RoundTourney/999"
+
+        mock_data = MagicMock()
+        mock_data.registered = 2
+        mock_data.already_registered = 0
+        mock_data.pairings_saved = 4
+
+        with (
+            patch("bot.scheduler.find_todays_pauper_tournament", return_value=old_url),
+            patch("bot.scheduler.fetch_tournament", return_value=MagicMock()),
+            patch("bot.scheduler.AetherhubImportService") as mock_import_cls,
+            patch("bot.scheduler.SessionLocal", return_value=MagicMock()),
+        ):
+            mock_import_cls.return_value.import_tournament.return_value = mock_data
+            asyncio.run(job.run(now=FRIDAY_NOW, db=db))
+            mock_import_cls.return_value.import_tournament.assert_called_once()
+
+    def test_find_latest_no_pauper_on_page_skips_import(self, db, svc):
+        """find_latest=True + no pauper on page → import is skipped."""
+        job = _make_import_job(find_latest=True)
+        svc.create_tournament(TournamentCreate(title="T", chat_id=0, slug="t", club="Goldfish"))
+
+        with (
+            patch("bot.scheduler.find_todays_pauper_tournament", return_value=None),
+            patch("bot.scheduler.fetch_tournament") as mock_fetch,
+        ):
+            asyncio.run(job.run(now=FRIDAY_NOW, db=db))
+            mock_fetch.assert_not_called()
+
+    def test_find_latest_multiple_paupers_returns_first(self):
+        """today=None returns the first pauper in page order, regardless of date."""
+        from services.aetherhub import find_todays_pauper_tournament
+
+        html = _club_page_html(
+            [
+                {"name": "Pauper 2026-04-17", "url": "/Tourney/RoundTourney/100", "date_str": "2026-04-17"},
+                {"name": "Pauper 2026-04-10", "url": "/Tourney/RoundTourney/99", "date_str": "2026-04-10"},
+            ]
+        )
+        with patch("services.aetherhub._scraper") as mock_scraper:
+            mock_scraper.return_value.get.return_value.text = html
+            result = find_todays_pauper_tournament("https://aetherhub.com/User/GoldFish", today=None)
+        assert result == "https://aetherhub.com/Tourney/RoundTourney/100"
+
+
+# ---------------------------------------------------------------------------
+# Debug club configuration
+# ---------------------------------------------------------------------------
+
+
+class TestDebugClubConfig:
+    """Verify debug club has correct find_latest and fetch times."""
+
+    def test_debug_club_has_find_latest(self):
+        from unittest.mock import patch as _patch
+
+        with _patch("bot.scheduler.settings") as mock_settings:
+            mock_settings.DEBUG = True
+            from bot.scheduler import get_clubs
+
+            clubs = get_clubs()
+
+        debug_clubs = [c for c in clubs if c.name == "Debug"]
+        assert debug_clubs, "Debug club should exist when DEBUG=True"
+        debug = debug_clubs[0]
+        assert any(s.find_latest for s in debug.schedules)
+
+    def test_debug_club_fetch_times(self):
+        from unittest.mock import patch as _patch
+
+        with _patch("bot.scheduler.settings") as mock_settings:
+            mock_settings.DEBUG = True
+            from bot.scheduler import get_clubs
+
+            clubs = get_clubs()
+
+        debug = next(c for c in clubs if c.name == "Debug")
+        all_times = [t for s in debug.schedules for t in s.aetherhub_fetch_times]
+        assert "11:40" in all_times
+        assert "12:00" in all_times
+
+    def test_debug_club_has_aetherhub_url(self):
+        from unittest.mock import patch as _patch
+
+        with _patch("bot.scheduler.settings") as mock_settings:
+            mock_settings.DEBUG = True
+            from bot.scheduler import get_clubs
+
+            clubs = get_clubs()
+
+        debug = next(c for c in clubs if c.name == "Debug")
+        assert debug.aetherhub_url is not None
+
+
+# ---------------------------------------------------------------------------
 # CreateTournamentJob
 # ---------------------------------------------------------------------------
 
