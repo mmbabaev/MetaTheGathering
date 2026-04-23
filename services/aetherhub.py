@@ -183,11 +183,15 @@ def fetch_tournament(url: str) -> AetherhubTournamentData:
     - Format 2 (JS): Uses /Tourney/RoundTourneyPublicPairings API endpoint
 
     Args:
-        url: Tournament URL
+        url: Tournament URL (query parameters will be stripped)
 
     Returns:
         AetherhubTournamentData with players and all round pairings
     """
+    # Strip query parameters from URL
+    if "?" in url:
+        url = url.split("?")[0]
+
     scraper = _scraper()
 
     # Fetch main page to detect format

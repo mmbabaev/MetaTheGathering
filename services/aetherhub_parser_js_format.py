@@ -19,7 +19,9 @@ class AetherhubJSFormatParser:
 
     This format is identified by having an empty pairings tab in the main HTML,
     with pairings loaded via the API endpoint:
-    /Tourney/RoundTourneyPublicPairings?id={tournament_id}&round={round_num}
+    /Tourney/RoundTourneyPublicPairings?id={tournament_id}&p={round_num}
+
+    Note: The parameter is 'p' not 'round'. This correctly retrieves historical rounds.
 
     Example: https://aetherhub.com/Tourney/RoundTourney/99024
     """
@@ -32,7 +34,7 @@ class AetherhubJSFormatParser:
 
     def parse_tournament(self, url: str) -> AetherhubTournamentData:
         """
-        Parse a complete tournament from Aetherhub.
+        Parse a complete tournament from Aetherhub (JS format).
 
         Args:
             url: Tournament URL (e.g., https://aetherhub.com/Tourney/RoundTourney/99024)
@@ -132,7 +134,7 @@ class AetherhubJSFormatParser:
         Returns:
             AetherhubRound if successful, None if failed
         """
-        url = f"https://aetherhub.com{self.PAIRINGS_ENDPOINT}?id={tournament_id}&round={round_num}"
+        url = f"https://aetherhub.com{self.PAIRINGS_ENDPOINT}?id={tournament_id}&p={round_num}"
 
         try:
             resp = self.scraper.get(url, timeout=30)
@@ -189,12 +191,16 @@ class AetherhubJSFormatParser:
             text: Raw text from table cell
 
         Returns:
-            Clean player name or None if empty
+            Clean player name or None if empty or BYE
         """
         if not text:
             return None
 
         # Remove points in parentheses
         name = text.split("(")[0].strip()
+
+        # Check if it's a bye
+        if name.upper() == "BYE":
+            return None
 
         return name if name else None

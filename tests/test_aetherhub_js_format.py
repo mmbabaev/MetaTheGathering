@@ -47,6 +47,13 @@ class TestAetherhubJSFormatParser:
         assert parser._extract_player_name(None) is None
         assert parser._extract_player_name("   ") is None
 
+    def test_extract_player_name_bye(self, parser):
+        """Test that BYE is treated as None."""
+        assert parser._extract_player_name("BYE") is None
+        assert parser._extract_player_name("bye") is None
+        assert parser._extract_player_name("BYE (0 Points)") is None
+        assert parser._extract_player_name("Bye (0 Points)") is None
+
     def test_parse_players(self, parser):
         """Test parsing players from standings table."""
         html = """
@@ -238,11 +245,11 @@ class TestAetherhubJSFormatParser:
             response.status_code = 200
             response.raise_for_status = Mock()
 
-            if "RoundTourney/99024" in url:
+            if "RoundTourney/99024" in url and "?" not in url:
                 response.text = main_html
-            elif "round=1" in url:
+            elif "p=1" in url:
                 response.text = round1_html
-            elif "round=2" in url:
+            elif "p=2" in url:
                 response.text = round2_html
             else:
                 response.text = ""
