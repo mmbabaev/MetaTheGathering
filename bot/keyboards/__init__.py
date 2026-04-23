@@ -65,11 +65,11 @@ def tournament_card_keyboard(
     rows = [[action_btn], [status_btn]]
     if is_registered and not has_deck:
         rows.insert(1, [InlineKeyboardButton("🃏 Выбрать колоду", callback_data=f"{CB_REGISTER}:{tournament_id}")])
+    if is_registered and has_pairings:
+        rows.append(
+            [InlineKeyboardButton("🤝 Записать оппонентов", callback_data=f"{CB_ADMIN_OPPONENTS}:{tournament_id}")]
+        )
     if is_admin:
-        if is_registered and has_pairings:
-            rows.append(
-                [InlineKeyboardButton("🤝 Записать оппонентов", callback_data=f"{CB_ADMIN_OPPONENTS}:{tournament_id}")]
-            )
         if decks_hidden:
             rows.append([InlineKeyboardButton("👁 Показать колоды", callback_data=f"{CB_REVEAL_DECKS}:{tournament_id}")])
         aetherhub_emoji = "🔄" if aetherhub_url else "📥"
@@ -108,8 +108,8 @@ def delete_tournament_confirm_keyboard(tournament_id: int) -> InlineKeyboardMark
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("✅ Да, удалить", callback_data=f"{CB_DELETE_TOURNAMENT_CONFIRM}:{tournament_id}"),
                 InlineKeyboardButton("❌ Отмена", callback_data=f"{CB_DELETE_TOURNAMENT_CANCEL}:{tournament_id}"),
+                InlineKeyboardButton("✅ Да, удалить", callback_data=f"{CB_DELETE_TOURNAMENT_CONFIRM}:{tournament_id}"),
             ]
         ]
     )
@@ -152,8 +152,8 @@ def notify_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("✅ Отправить", callback_data=f"{CB_NOTIFY_CONFIRM}:{tournament_id}"),
                 InlineKeyboardButton("❌ Отмена", callback_data=f"{CB_NOTIFY_CANCEL}:{tournament_id}"),
+                InlineKeyboardButton("✅ Отправить", callback_data=f"{CB_NOTIFY_CONFIRM}:{tournament_id}"),
             ]
         ]
     )
@@ -164,8 +164,8 @@ def aetherhub_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("✅ Импортировать", callback_data=f"{CB_AETHERHUB_CONFIRM}:{tournament_id}"),
                 InlineKeyboardButton("❌ Отмена", callback_data=f"{CB_AETHERHUB_CANCEL}:{tournament_id}"),
+                InlineKeyboardButton("✅ Импортировать", callback_data=f"{CB_AETHERHUB_CONFIRM}:{tournament_id}"),
             ]
         ]
     )
@@ -176,8 +176,8 @@ def leave_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("✅ Да, выйти", callback_data=f"{CB_LEAVE_CONFIRM}:{tournament_id}"),
                 InlineKeyboardButton("❌ Отмена", callback_data=f"{CB_LEAVE_CANCEL}:{tournament_id}"),
+                InlineKeyboardButton("✅ Да, выйти", callback_data=f"{CB_LEAVE_CONFIRM}:{tournament_id}"),
             ]
         ]
     )
