@@ -109,7 +109,16 @@ def get_clubs() -> list[Club]:
             Club(
                 name="Debug",
                 chat_id=app_cfg.goldfish_chat_id or 0,
-                schedules=[ClubSchedule(weekday="saturday", game_time="14:20")],
+                aetherhub_url="https://aetherhub.com/User/GoldFish",
+                title_prefix="🐠 ",
+                schedules=[
+                    ClubSchedule(
+                        weekday="saturday",
+                        game_time="14:20",
+                        aetherhub_fetch_times=["11:40", "12:00"],
+                        find_latest=True,
+                    )
+                ],
             )
         )
     return clubs
@@ -213,13 +222,14 @@ class AetherhubImportJob:
 
             if not url:
                 logger.info(f"AetherhubImportJob: fetching club page for '{self.club.name}'")
+                today = None if self.schedule.find_latest else now.date()
                 try:
-                    url = find_todays_pauper_tournament(self.club.aetherhub_url, today=now.date())
+                    url = find_todays_pauper_tournament(self.club.aetherhub_url, today=today)
                 except Exception:
                     logger.exception(f"AetherhubImportJob: failed to fetch club page for '{self.club.name}'")
                     return
                 if not url:
-                    logger.info(f"AetherhubImportJob: no pauper tournament found today for '{self.club.name}'")
+                    logger.info(f"AetherhubImportJob: no pauper tournament found for '{self.club.name}'")
                     return
 
             logger.info(f"AetherhubImportJob: importing {url} for tournament #{tournament_id}")

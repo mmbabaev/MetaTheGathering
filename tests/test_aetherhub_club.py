@@ -254,6 +254,30 @@ class TestFindTodaysPauperTournament:
         result = find_todays_pauper_tournament("https://aetherhub.com/User/GoldFish", today=TODAY)
         assert result is None
 
+    @patch("services.aetherhub._scraper")
+    def test_find_latest_ignores_date(self, mock_scraper):
+        """today=None returns first pauper regardless of date."""
+        html = _club_page_html(
+            [
+                {"name": "Pauper 2026-03-01", "url": "/Tourney/RoundTourney/OLD", "date_str": "2026-03-01"},
+            ]
+        )
+        mock_scraper.return_value.get.return_value.text = html
+        result = find_todays_pauper_tournament("https://aetherhub.com/User/GoldFish", today=None)
+        assert result == "https://aetherhub.com/Tourney/RoundTourney/OLD"
+
+    @patch("services.aetherhub._scraper")
+    def test_find_latest_skips_non_pauper(self, mock_scraper):
+        """today=None still filters by pauper name."""
+        html = _club_page_html(
+            [
+                {"name": "Modern League 2026-03-01", "url": "/Tourney/RoundTourney/1", "date_str": "2026-03-01"},
+            ]
+        )
+        mock_scraper.return_value.get.return_value.text = html
+        result = find_todays_pauper_tournament("https://aetherhub.com/User/GoldFish", today=None)
+        assert result is None
+
 
 # ---------------------------------------------------------------------------
 # AetherhubImportJob
@@ -261,13 +285,17 @@ class TestFindTodaysPauperTournament:
 
 
 def _make_import_job(
-    weekday="friday", aetherhub_url="https://aetherhub.com/User/GoldFish", fetch_times=None
+    weekday="friday",
+    aetherhub_url="https://aetherhub.com/User/GoldFish",
+    fetch_times=None,
+    find_latest=False,
 ) -> AetherhubImportJob:
     club = Club(name="Goldfish", chat_id=0, aetherhub_url=aetherhub_url, schedules=[])
     schedule = ClubSchedule(
         weekday=weekday,
         game_time="19:30",
         aetherhub_fetch_times=fetch_times or ["21:00"],
+        find_latest=find_latest,
     )
     return AetherhubImportJob(club, schedule)
 
@@ -391,6 +419,32 @@ class TestAetherhubImportJob:
         ):
             asyncio.run(job.run(now=FRIDAY_NOW, db=db))
             mock_import_cls.return_value.import_tournament.assert_not_called()
+
+    def test_find_latest_passes_today_none(self, db, svc):
+        """When find_latest=True, find_todays_pauper_tournament is called with today=None."""
+        job = _make_import_job(find_latest=True)
+        svc.create_tournament(TournamentCreate(title="T", chat_id=0, slug="t", club="Goldfish"))
+
+        with (
+            patch("bot.scheduler.find_todays_pauper_tournament", return_value=None) as mock_find,
+        ):
+            asyncio.run(job.run(now=FRIDAY_NOW, db=db))
+            mock_find.assert_called_once()
+            _, kwargs = mock_find.call_args
+            assert kwargs.get("today") is None
+
+    def test_find_today_passes_date(self, db, svc):
+        """When find_latest=False, find_todays_pauper_tournament is called with today=now.date()."""
+        job = _make_import_job(find_latest=False)
+        svc.create_tournament(TournamentCreate(title="T", chat_id=0, slug="t", club="Goldfish"))
+
+        with (
+            patch("bot.scheduler.find_todays_pauper_tournament", return_value=None) as mock_find,
+        ):
+            asyncio.run(job.run(now=FRIDAY_NOW, db=db))
+            mock_find.assert_called_once()
+            _, kwargs = mock_find.call_args
+            assert kwargs.get("today") == FRIDAY_NOW.date()
 
 
 # ---------------------------------------------------------------------------

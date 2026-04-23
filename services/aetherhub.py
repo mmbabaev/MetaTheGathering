@@ -164,12 +164,15 @@ def fetch_club_tournaments(club_url: str) -> list[ClubTournamentLink]:
 
 
 def find_todays_pauper_tournament(club_url: str, today: date | None = None) -> str | None:
-    """Return the URL of today's pauper tournament from a club page, or None."""
-    if today is None:
-        today = date.today()
+    """Return the URL of a pauper tournament from a club page.
+
+    If today is given, matches only that date.
+    If today is None, returns the first (latest) pauper tournament found regardless of date.
+    """
     for link in fetch_club_tournaments(club_url):
-        if link.date == today and PAUPER_RE.search(link.name):
-            return link.url
+        if PAUPER_RE.search(link.name):
+            if today is None or link.date == today:
+                return link.url
     return None
 
 
