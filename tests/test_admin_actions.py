@@ -1083,8 +1083,8 @@ class TestHandleAdminOpponents:
         assert result.is_alert
 
     def test_returns_unfilled_opponents(self, db, handler, svc, user_svc, admin_user, active_tournament):
-        from services.aetherhub import AetherhubPairing, AetherhubRound, AetherhubTournamentData
-        from services.aetherhub_import import AetherhubImportService
+        from services.aetherhub_import_service import AetherhubImportService
+        from services.aetherhub_service import AetherhubPairing, AetherhubRound, AetherhubTournamentData
 
         # admin_user fixture creates first_name="Admin" (no last_name) — match by single word
         user_svc.get_or_create(tg_id=8800, username=None, first_name="Bob", last_name="Smith")
@@ -1111,8 +1111,8 @@ class TestHandleAdminOpponents:
         assert any(cb.startswith(CB_ADMIN_PICK_ARCH) for cb in cbs)
 
     def test_all_filled_returns_alert(self, db, handler, svc, user_svc, arch_svc, admin_user, active_tournament):
-        from services.aetherhub import AetherhubPairing, AetherhubRound, AetherhubTournamentData
-        from services.aetherhub_import import AetherhubImportService
+        from services.aetherhub_import_service import AetherhubImportService
+        from services.aetherhub_service import AetherhubPairing, AetherhubRound, AetherhubTournamentData
 
         opp = user_svc.get_or_create(tg_id=8800, username=None, first_name="Bob", last_name="Smith")
         import_svc = AetherhubImportService(db)

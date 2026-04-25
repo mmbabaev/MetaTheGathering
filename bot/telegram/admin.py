@@ -25,7 +25,7 @@ from core.config import app_cfg, settings
 from core.database import SessionLocal
 from core.models import TournamentStatus
 from services import errors as svc_errors
-from services.aetherhub_import import AetherhubImportService
+from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeService
 from services.tournament import TournamentService
 from services.user import UserService

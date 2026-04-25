@@ -1,18 +1,12 @@
 """Tests for aetherhub scraper and import service."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-from services.aetherhub import (
-    AetherhubPairing,
-    AetherhubRound,
-    AetherhubTournamentData,
-    _parse_page,
-    _strip_points,
-    fetch_tournament,
-)
-from services.aetherhub_import import AetherhubImportService
+from services.aetherhub_import_service import AetherhubImportService
+from services.aetherhub_models import AetherhubPairing, AetherhubRound, AetherhubTournamentData
+from services.aetherhub_service import AetherhubService
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -41,15 +35,15 @@ def _mock_scraper(html_by_url: dict[str, str]):
     return scraper
 
 
+def _svc(html_by_url: dict[str, str]) -> AetherhubService:
+    return AetherhubService(scraper=_mock_scraper(html_by_url))
+
+
 # ── Sample HTML fixtures ─────────────────────────────────────────────────────
 
-ROUND1_HTML = """
+# Main tournament page: standings table + navigation links
+STANDINGS_HTML = """
 <html><body>
-<table>
-  <tr><th>Table</th><th>Player 1</th><th>Player 2</th><th>Result</th></tr>
-  <tr><td>1</td><td>Alice (3 Points)</td><td>Bob (3 Points)</td><td>2-1</td></tr>
-  <tr><td>2</td><td>Carol (0 Points)</td><td></td><td></td></tr>
-</table>
 <table>
   <tr><th>Rank</th><th>Name</th><th>Points</th></tr>
   <tr><td>1</td><td>Alice</td><td>3</td></tr>
@@ -61,20 +55,32 @@ ROUND1_HTML = """
 </body></html>
 """
 
-ROUND2_HTML = """
+STANDINGS_EMPTY_HTML = """
 <html><body>
 <table>
-  <tr><th>Table</th><th>Player 1</th><th>Player 2</th><th>Result</th></tr>
-  <tr><td>1</td><td>Bob (3 Points)</td><td>Carol (3 Points)</td><td>2-0</td></tr>
-</table>
-<table>
   <tr><th>Rank</th><th>Name</th><th>Points</th></tr>
-  <tr><td>1</td><td>Alice</td><td>6</td></tr>
-  <tr><td>2</td><td>Bob</td><td>6</td></tr>
-  <tr><td>3</td><td>Carol</td><td>3</td></tr>
 </table>
 <a href="?p=1">1</a>
-<a href="?p=2">2</a>
+</body></html>
+"""
+
+# AJAX pairings endpoint responses (one table: Table, Player 1, Player 2)
+PAIRINGS_R1_HTML = """
+<html><body>
+<table>
+  <tr><th>Table</th><th>Player 1</th><th>Player 2</th><th></th></tr>
+  <tr><td>1</td><td>Alice (3 Points)</td><td>Bob (3 Points)</td><td>2-1</td></tr>
+  <tr><td>2</td><td>Carol (0 Points)</td><td></td><td></td></tr>
+</table>
+</body></html>
+"""
+
+PAIRINGS_R2_HTML = """
+<html><body>
+<table>
+  <tr><th>Table</th><th>Player 1</th><th>Player 2</th><th></th></tr>
+  <tr><td>1</td><td>Bob (3 Points)</td><td>Carol (3 Points)</td><td>2-0</td></tr>
+</table>
 </body></html>
 """
 
@@ -83,72 +89,102 @@ ROUND2_HTML = """
 
 
 class TestStripPoints:
+    svc = AetherhubService()
+
     def test_removes_points_suffix(self):
-        assert _strip_points("Иванов Иван (9 Points)") == "Иванов Иван"
+        assert self.svc._strip_points("Иванов Иван (9 Points)") == "Иванов Иван"
 
     def test_removes_singular_point(self):
-        assert _strip_points("Петров Петр (1 Point)") == "Петров Петр"
+        assert self.svc._strip_points("Петров Петр (1 Point)") == "Петров Петр"
 
     def test_no_suffix_unchanged(self):
-        assert _strip_points("Сидоров Сидор") == "Сидоров Сидор"
+        assert self.svc._strip_points("Сидоров Сидор") == "Сидоров Сидор"
 
     def test_strips_leading_trailing_whitespace(self):
-        assert _strip_points("  Иванов Иван  ") == "Иванов Иван"
+        assert self.svc._strip_points("  Иванов Иван  ") == "Иванов Иван"
 
     def test_empty_string(self):
-        assert _strip_points("") == ""
+        assert self.svc._strip_points("") == ""
 
 
-# ── TestParsePage ────────────────────────────────────────────────────────────
+# ── TestParseStandingsPage ───────────────────────────────────────────────────
 
 
-class TestParsePage:
-    def test_extracts_all_players_from_standings(self):
-        players, _, _ = _parse_page(ROUND1_HTML)
+class TestParseStandingsPage:
+    svc = AetherhubService()
+
+    def test_extracts_all_players(self):
+        players, _ = self.svc._parse_standings_page(STANDINGS_HTML)
         assert set(players) == {"Alice", "Bob", "Carol"}
 
+    def test_detects_max_round_from_nav_links(self):
+        _, max_round = self.svc._parse_standings_page(STANDINGS_HTML)
+        assert max_round == 2
+
+    def test_no_nav_links_defaults_to_round_1(self):
+        html = "<html><body><table><tr><th>Rank</th><th>Name</th></tr></table></body></html>"
+        _, max_round = self.svc._parse_standings_page(html)
+        assert max_round == 1
+
+    def test_empty_standings_returns_empty_list(self):
+        players, _ = self.svc._parse_standings_page(STANDINGS_EMPTY_HTML)
+        assert players == []
+
+    def test_no_tables_returns_empty(self):
+        players, max_round = self.svc._parse_standings_page("<html><body></body></html>")
+        assert players == []
+        assert max_round == 1
+
+
+# ── TestParsePairingsPage ────────────────────────────────────────────────────
+
+
+class TestParsePairingsPage:
+    svc = AetherhubService()
+
     def test_pairings_both_directions(self):
-        _, pairings, _ = _parse_page(ROUND1_HTML)
+        pairings = self.svc._parse_pairings_page(PAIRINGS_R1_HTML)
         by_player = {p.player: p.opponent for p in pairings}
         assert by_player["Alice"] == "Bob"
         assert by_player["Bob"] == "Alice"
 
     def test_bye_stored_as_none_opponent(self):
-        _, pairings, _ = _parse_page(ROUND1_HTML)
+        pairings = self.svc._parse_pairings_page(PAIRINGS_R1_HTML)
         carol = next(p for p in pairings if p.player == "Carol")
         assert carol.opponent is None
 
-    def test_detects_max_round_from_nav_links(self):
-        _, _, max_round = _parse_page(ROUND1_HTML)
-        assert max_round == 2
-
-    def test_no_nav_links_defaults_to_round_1(self):
-        html = "<html><body><table><tr><th>Table</th><th>Player 1</th><th>Player 2</th></tr></table><table></table></body></html>"
-        _, _, max_round = _parse_page(html)
-        assert max_round == 1
-
-    def test_empty_tables_return_empty_lists(self):
-        html = "<html><body><table><tr><th>h</th></tr></table><table><tr><th>h</th></tr></table></body></html>"
-        players, pairings, _ = _parse_page(html)
-        assert players == []
-        assert pairings == []
-
-    def test_points_stripped_from_pairing_names(self):
-        _, pairings, _ = _parse_page(ROUND1_HTML)
+    def test_points_stripped_from_names(self):
+        pairings = self.svc._parse_pairings_page(PAIRINGS_R1_HTML)
         for p in pairings:
             assert "Points" not in p.player
             if p.opponent:
                 assert "Points" not in p.opponent
 
+    def test_empty_table_returns_empty(self):
+        html = "<html><body><table><tr><th>Table</th><th>Player 1</th><th>Player 2</th></tr></table></body></html>"
+        assert self.svc._parse_pairings_page(html) == []
+
+    def test_no_tables_returns_empty(self):
+        assert self.svc._parse_pairings_page("<html><body></body></html>") == []
+
 
 # ── TestFetchTournament ──────────────────────────────────────────────────────
 
 
+_BASE_URL = "https://aetherhub.com/Tourney/RoundTourney/1"
+_PAIRINGS_R1 = "https://aetherhub.com/Tourney/RoundTourneyPublicPairings?id=1&p=1"
+_PAIRINGS_R2 = "https://aetherhub.com/Tourney/RoundTourneyPublicPairings?id=1&p=2"
+
+
 class TestFetchTournament:
-    def _fetch(self, url="https://aetherhub.com/Tourney/RoundTourney/1"):
-        html_map = {f"{url}?p=1": ROUND1_HTML, f"{url}?p=2": ROUND2_HTML}
-        with patch("services.aetherhub._scraper", return_value=_mock_scraper(html_map)):
-            return fetch_tournament(url)
+    def _fetch(self, url=_BASE_URL):
+        tid = url.rstrip("/").split("/")[-1]
+        html_map = {
+            url: STANDINGS_HTML,
+            f"https://aetherhub.com/Tourney/RoundTourneyPublicPairings?id={tid}&p=1": PAIRINGS_R1_HTML,
+            f"https://aetherhub.com/Tourney/RoundTourneyPublicPairings?id={tid}&p=2": PAIRINGS_R2_HTML,
+        }
+        return _svc(html_map).fetch_tournament(url)
 
     def test_players_taken_from_round1_standings(self):
         data = self._fetch()
@@ -173,17 +209,24 @@ class TestFetchTournament:
         assert by_player["Bob"] == "Carol"
 
     def test_url_preserved(self):
-        url = "https://aetherhub.com/Tourney/RoundTourney/1"
-        data = self._fetch(url)
-        assert data.url == url
+        data = self._fetch()
+        assert data.url == _BASE_URL
 
     def test_single_round_tournament(self):
-        url = "https://aetherhub.com/Tourney/RoundTourney/1"
-        single_round_html = ROUND1_HTML.replace('<a href="?p=2">2</a>', "")
-        html_map = {f"{url}?p=1": single_round_html}
-        with patch("services.aetherhub._scraper", return_value=_mock_scraper(html_map)):
-            data = fetch_tournament(url)
+        single_standings = STANDINGS_HTML.replace('<a href="?p=2">2</a>', "")
+        data = _svc({_BASE_URL: single_standings, _PAIRINGS_R1: PAIRINGS_R1_HTML}).fetch_tournament(_BASE_URL)
         assert len(data.rounds) == 1
+
+    def test_players_from_pairings_when_standings_empty(self):
+        """When standings are empty, player names are taken from round 1 pairings."""
+        data = _svc({_BASE_URL: STANDINGS_EMPTY_HTML, _PAIRINGS_R1: PAIRINGS_R1_HTML}).fetch_tournament(_BASE_URL)
+        assert set(data.players) == {"Alice", "Bob", "Carol"}
+
+    def test_invalid_url_raises(self):
+        import pytest
+
+        with pytest.raises(ValueError):
+            AetherhubService().fetch_tournament("https://aetherhub.com/Tourney/RoundTourney/")
 
 
 # ── TestFindUserByName ───────────────────────────────────────────────────────

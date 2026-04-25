@@ -31,7 +31,7 @@ from bot.messages import (
 )
 from core.schemas import TournamentCreate
 from services import errors
-from services.aetherhub_import import AetherhubImportService
+from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeService
 from services.export import ExportService
 from services.poll import PollService

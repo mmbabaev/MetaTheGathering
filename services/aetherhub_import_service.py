@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from core import models
 from services import errors
-from services.aetherhub import AetherhubRound, AetherhubTournamentData
+from services.aetherhub_models import AetherhubRound, AetherhubTournamentData
 from services.user import UserService
 
 
