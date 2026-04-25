@@ -8,10 +8,7 @@ from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from bot.handlers.admin import AdminHandler, parse_add_player_command, parse_bulk_player_line
-from bot.handlers.player import PlayerHandler
-from bot.keyboards import (
-    admin_more_keyboard,
-)
+from bot.keyboards import admin_more_keyboard
 from bot.messages import ADD_PLAYERS_USAGE, BULK_ADD_PROMPT, TELEGRAM_USER_LOOKUP_FAILED
 from bot.scheduler import format_schedule_text
 from bot.telegram.common import log_event as _log
@@ -20,6 +17,8 @@ from bot.telegram.player import (
     USER_DATA_OPPONENTS_MODE,
     USER_DATA_PENDING_ADMIN_CUSTOM_ARCH,
     USER_DATA_PENDING_BULK_ADD,
+    _make_features,
+    _make_keyboards,
 )
 from core.config import app_cfg, settings
 from core.database import SessionLocal
@@ -27,18 +26,19 @@ from core.models import TournamentStatus
 from services import errors as svc_errors
 from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeService
-from services.feature_flags import FeatureFlagService
 from services.tournament import TournamentService
 from services.user import UserService
 from services.utils import get_tournament
 
 
 def _admin_handler(db) -> AdminHandler:
-    return AdminHandler(TournamentService(db), UserService(db), ArchetypeService(db))
+    return AdminHandler(
+        TournamentService(db), UserService(db), ArchetypeService(db), _make_keyboards(), _make_features()
+    )
 
 
 def _player_handler(db) -> PlayerHandler:
-    return PlayerHandler(TournamentService(db), UserService(db), ArchetypeService(db), FeatureFlagService(db))
+    return PlayerHandler(TournamentService(db), UserService(db), ArchetypeService(db), _make_keyboards())
 
 
 async def callback_bulk_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

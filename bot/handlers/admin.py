@@ -3,14 +3,10 @@
 import re
 from datetime import datetime
 
+from bot.features import FeatureService
 from bot.handlers.base import HandlerResult
 from bot.handlers.player import build_archetype_menu
-from bot.keyboards import (
-    admin_archetype_select_keyboard,
-    admin_participants_keyboard,
-    delete_tournament_confirm_keyboard,
-    tournament_list_keyboard,
-)
+from bot.keyboards import Keyboards
 from bot.messages import (
     ADMIN_ARCH_SAVED,
     BULK_ADD_EMPTY,
@@ -106,10 +102,19 @@ def _player_display_label(username: str | None, first_name: str | None, tg_id: i
 
 
 class AdminHandler:
-    def __init__(self, svc: TournamentService, user_svc: UserService, arch_svc: ArchetypeService) -> None:
+    def __init__(
+        self,
+        svc: TournamentService,
+        user_svc: UserService,
+        arch_svc: ArchetypeService,
+        keyboards: Keyboards,
+        features: FeatureService,
+    ) -> None:
         self.svc = svc
         self.user_svc = user_svc
         self.arch_svc = arch_svc
+        self.keyboards = keyboards
+        self._features = features
 
     def _resolve_tournament(self):
         """Возвращает (tournament, error_result). Один из них None."""
@@ -310,7 +315,9 @@ class AdminHandler:
         text = f"{prefix}\n\n{status_text}" if prefix else status_text
         return HandlerResult(
             text,
-            keyboard=admin_participants_keyboard(participants, tournament_id=tournament_id, show_filled=show_filled),
+            keyboard=self.keyboards.admin_participants_keyboard(
+                participants, tournament_id=tournament_id, show_filled=show_filled
+            ),
         )
 
     def handle_admin_status(self, tg_id: int, tournament_id: int) -> HandlerResult:
@@ -342,7 +349,7 @@ class AdminHandler:
         arch_list, has_more = build_archetype_menu(self.arch_svc, player_tg_id, expanded)
         return HandlerResult(
             CHOOSE_ARCHETYPE,
-            keyboard=admin_archetype_select_keyboard(participant_id, arch_list, has_more),
+            keyboard=self.keyboards.admin_archetype_select_keyboard(participant_id, arch_list, has_more),
         )
 
     def handle_admin_pick_arch(self, tg_id: int, participant_id: int, expanded: bool = False) -> HandlerResult:
@@ -388,7 +395,7 @@ class AdminHandler:
 
     def handle_admin_opponents(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Показывает незаполненных оппонентов пользователя из AetherHub-пейрингов."""
-        if not self.user_svc.is_admin(tg_id):
+        if not self.user_svc.is_admin(tg_id) and not self._features.opponents_for_all():
             return HandlerResult(NOT_ADMIN, is_alert=True)
 
         user = self.user_svc.get_by_tg_id(tg_id)
@@ -410,7 +417,7 @@ class AdminHandler:
 
         return HandlerResult(
             "Выберите оппонента для записи колоды:",
-            keyboard=admin_participants_keyboard(opponent_participants),
+            keyboard=self.keyboards.admin_participants_keyboard(opponent_participants),
         )
 
     def handle_archive(self, tg_id: int) -> HandlerResult:
@@ -421,7 +428,7 @@ class AdminHandler:
         if not tournaments:
             return HandlerResult("Архив пуст — закрытых турниров нет.")
         tour_list = [(t.id, t.title) for t in tournaments]
-        return HandlerResult("📁 Архив турниров:", keyboard=tournament_list_keyboard(tour_list))
+        return HandlerResult("📁 Архив турниров:", keyboard=self.keyboards.tournament_list_keyboard(tour_list))
 
     def handle_tournament_status(self, tg_id: int) -> HandlerResult:
         if not self.user_svc.is_admin(tg_id):
@@ -506,7 +513,7 @@ class AdminHandler:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
         n = len(self.svc.list_participants_for_tournament(tournament_id))
         text = f"⚠️ Удалить турнир «{t.title}»?\nБудет удалено {n} участник(ов). Действие необратимо."
-        return HandlerResult(text, keyboard=delete_tournament_confirm_keyboard(tournament_id))
+        return HandlerResult(text, keyboard=self.keyboards.delete_tournament_confirm_keyboard(tournament_id))
 
     def handle_create_poll(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Проверяет возможность создания опроса, возвращает HandlerResult("ok") или ошибку.

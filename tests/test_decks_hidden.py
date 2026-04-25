@@ -18,13 +18,13 @@ def tournament(svc):
 
 
 @pytest.fixture
-def handler(svc, user_svc, arch_svc):
-    return PlayerHandler(svc, user_svc, arch_svc)
+def handler(svc, user_svc, arch_svc, keyboards):
+    return PlayerHandler(svc, user_svc, arch_svc, keyboards)
 
 
 @pytest.fixture
-def admin_handler(svc, user_svc, arch_svc):
-    return AdminHandler(svc, user_svc, arch_svc)
+def admin_handler(svc, user_svc, arch_svc, keyboards, features):
+    return AdminHandler(svc, user_svc, arch_svc, keyboards, features)
 
 
 # ===== TournamentService.set_decks_hidden =====

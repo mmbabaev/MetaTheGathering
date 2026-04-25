@@ -3,16 +3,18 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from bot.features import FeatureService
 from bot.handlers.admin import AdminHandler
 from bot.handlers.player import PlayerHandler
 from bot.handlers.settings import SettingsHandler
+from bot.keyboards import Keyboards
 from bot.messages import CUSTOM_ARCHETYPE_PROMPT
 from bot.telegram.common import log_event as _log
 from bot.telegram.common import parse_callback_ints
+from core.config import settings
 from core.database import SessionLocal
 from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeService
-from services.feature_flags import FeatureFlagService
 from services.tournament import TournamentService
 from services.user import UserService
 
@@ -24,16 +26,26 @@ USER_DATA_PENDING_ADMIN_CUSTOM_ARCH = "pending_admin_custom_arch_participant_id"
 USER_DATA_OPPONENTS_MODE = "opponents_tournament_id"
 
 
+def _make_keyboards() -> Keyboards:
+    return Keyboards(FeatureService(debug=settings.DEBUG))
+
+
 def _player_handler(db) -> PlayerHandler:
-    return PlayerHandler(TournamentService(db), UserService(db), ArchetypeService(db), FeatureFlagService(db))
+    return PlayerHandler(TournamentService(db), UserService(db), ArchetypeService(db), _make_keyboards())
 
 
 def _settings_handler(db) -> SettingsHandler:
     return SettingsHandler(UserService(db))
 
 
+def _make_features() -> FeatureService:
+    return FeatureService(debug=settings.DEBUG)
+
+
 def _admin_handler(db) -> AdminHandler:
-    return AdminHandler(TournamentService(db), UserService(db), ArchetypeService(db))
+    return AdminHandler(
+        TournamentService(db), UserService(db), ArchetypeService(db), _make_keyboards(), _make_features()
+    )
 
 
 async def cmd_tournaments(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
