@@ -25,7 +25,7 @@ from bot.messages import (
 )
 from services import errors
 from services.archetype import ArchetypeItem, ArchetypeService
-from services.feature_flags import FeatureFlagService
+from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.tournament import TournamentService
 from services.user import UserService
 from services.utils import get_tournament
@@ -110,7 +110,9 @@ class PlayerHandler:
             total=len(participants),
             with_deck=with_deck,
         )
-        record_opponents_enabled = is_admin or (self.ff_svc.is_enabled("recordOpponents") if self.ff_svc else True)
+        record_opponents_enabled = is_admin or (
+            self.ff_svc.is_enabled(FeatureFlags.RECORD_OPPONENTS) if self.ff_svc else True
+        )
         return HandlerResult(
             text,
             keyboard=tournament_card_keyboard(
