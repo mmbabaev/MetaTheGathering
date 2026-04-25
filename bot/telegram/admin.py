@@ -27,6 +27,7 @@ from core.models import TournamentStatus
 from services import errors as svc_errors
 from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeService
+from services.feature_flags import FeatureFlagService
 from services.tournament import TournamentService
 from services.user import UserService
 from services.utils import get_tournament
@@ -34,6 +35,10 @@ from services.utils import get_tournament
 
 def _admin_handler(db) -> AdminHandler:
     return AdminHandler(TournamentService(db), UserService(db), ArchetypeService(db))
+
+
+def _player_handler(db) -> PlayerHandler:
+    return PlayerHandler(TournamentService(db), UserService(db), ArchetypeService(db), FeatureFlagService(db))
 
 
 async def callback_bulk_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -100,9 +105,9 @@ async def callback_admin_set_arch(update: Update, context: ContextTypes.DEFAULT_
             if opponents_result.is_alert:
                 context.user_data.pop(USER_DATA_OPPONENTS_MODE, None)
                 has_pairings = bool(AetherhubImportService(db).get_pairings(opponents_tournament_id))
-                card = PlayerHandler(
-                    TournamentService(db), UserService(db), ArchetypeService(db)
-                ).handle_tournament_select(opponents_tournament_id, tg_id=user.id, has_pairings=has_pairings)
+                card = _player_handler(db).handle_tournament_select(
+                    opponents_tournament_id, tg_id=user.id, has_pairings=has_pairings
+                )
                 await query.message.reply_text(card.text, reply_markup=card.keyboard)
             else:
                 await query.message.reply_text(opponents_result.text, reply_markup=opponents_result.keyboard)
@@ -335,9 +340,7 @@ async def cmd_create_tournament(update: Update, context: ContextTypes.DEFAULT_TY
             return
         _log("create_tournament", user, chat_id=chat_id, title=title)
         await msg.reply_text(result.text)
-        card = PlayerHandler(TournamentService(db), UserService(db), ArchetypeService(db)).handle_tournament_select(
-            result.tournament_id, tg_id=user.id
-        )
+        card = _player_handler(db).handle_tournament_select(result.tournament_id, tg_id=user.id)
         await msg.reply_text(card.text, reply_markup=card.keyboard)
     finally:
         db.close()
@@ -442,11 +445,7 @@ async def callback_delete_tournament_cancel(update: Update, context: ContextType
     (tournament_id,) = ids
     db = SessionLocal()
     try:
-        svc = TournamentService(db)
-        user_svc = UserService(db)
-        result = PlayerHandler(svc, user_svc, ArchetypeService(db)).handle_tournament_select(
-            tournament_id, tg_id=user.id
-        )
+        result = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id)
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
     finally:

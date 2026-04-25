@@ -244,6 +244,20 @@ class PollVote(Base):
     __table_args__ = (UniqueConstraint("poll_id", "tg_user_id", name="uq_poll_vote_unique"),)
 
 
+class FeatureFlag(Base):
+    """Глобальный feature flag — вкл/выкл функциональности для всех чатов."""
+
+    __tablename__ = "feature_flags"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(64), unique=True, nullable=False, index=True)
+    description = Column(String(255), nullable=False)
+    value_type = Column(String(16), nullable=False, default="bool")
+    default_value = Column(String(64), nullable=False)
+    current_value = Column(String(64), nullable=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+
 class RoundPairing(Base):
     """Паринг одного игрока в конкретном раунде турнира (импорт из AetherHub)."""
 

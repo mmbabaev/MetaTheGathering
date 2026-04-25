@@ -23,6 +23,18 @@ jobs:
       - name: Lint (ruff)
         run: ruff check .
 
+      - name: Check single alembic head
+        run: |
+          COUNT=$(python -m alembic heads 2>/dev/null | grep -c "(head)" || true)
+          if [ "$COUNT" -ne 1 ]; then
+            echo "ERROR: Expected 1 alembic head, got $COUNT. Fix down_revision in your migration."
+            python -m alembic heads
+            exit 1
+          fi
+        env:
+          TELEGRAM_BOT_TOKEN: "0000000000:test_token_for_ci"
+          DATABASE_URL: "sqlite:///:memory:"
+
       - name: Run tests
         run: python -m pytest tests/ -v --ignore=tests/e2e
         env:

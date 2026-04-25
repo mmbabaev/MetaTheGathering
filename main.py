@@ -37,6 +37,8 @@ from bot.keyboards import (
     CB_DELETE_TOURNAMENT_CANCEL,
     CB_DELETE_TOURNAMENT_CONFIRM,
     CB_EXPORT_EXCEL,
+    CB_FEATURE_INFO,
+    CB_FEATURE_TOGGLE,
     CB_LEAVE,
     CB_LEAVE_CANCEL,
     CB_LEAVE_CONFIRM,
@@ -55,12 +57,14 @@ from bot.keyboards import (
 from bot.scheduler import setup_scheduler
 from bot.telegram import admin, common, player
 from bot.telegram import aetherhub as aetherhub_handler
+from bot.telegram import features as features_handler
 from bot.telegram import poll as poll_handler
 from bot.telegram import settings as settings_handler
 from core import models
 from core.config import settings
 from core.database import SessionLocal
 from core.schemas import TournamentCreate
+from services.feature_flags import FeatureFlagService
 from services.tournament import TournamentService
 
 logging.basicConfig(
@@ -98,7 +102,17 @@ _ADMIN_COMMANDS = _USER_COMMANDS + [
     BotCommand("create_tournament", "Создать турнир"),
     BotCommand("delete_tournament", "Удалить турнир"),
     BotCommand("schedule", "Расписание автозаданий"),
+    BotCommand("features", "Feature flags"),
 ]
+
+
+async def _post_init(app: Application) -> None:
+    db = SessionLocal()
+    try:
+        FeatureFlagService(db).ensure_defaults()
+    finally:
+        db.close()
+    await _set_commands(app)
 
 
 async def _set_commands(app: Application) -> None:
@@ -154,7 +168,7 @@ def _debug_create_tournament() -> None:
 
 
 def main() -> None:
-    app = Application.builder().token(settings.TELEGRAM_BOT_TOKEN).post_init(_set_commands).build()
+    app = Application.builder().token(settings.TELEGRAM_BOT_TOKEN).post_init(_post_init).build()
 
     private = filters.ChatType.PRIVATE
     app.add_handler(CommandHandler("start", common.cmd_start, filters=private))
@@ -170,6 +184,7 @@ def main() -> None:
     app.add_handler(CommandHandler("create_tournament", admin.cmd_create_tournament, filters=private))
     app.add_handler(CommandHandler("delete_tournament", admin.cmd_delete_tournament, filters=private))
     app.add_handler(CommandHandler("schedule", admin.cmd_schedule, filters=private))
+    app.add_handler(CommandHandler("features", features_handler.cmd_features, filters=private))
 
     app.add_handler(CallbackQueryHandler(player.callback_tournament_select, pattern=f"^{CB_TOURNAMENT}:"))
     app.add_handler(CallbackQueryHandler(player.callback_register, pattern=f"^{CB_REGISTER}:"))
@@ -215,6 +230,8 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(admin.callback_admin_more, pattern=f"^{CB_ADMIN_MORE}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_close_tournament, pattern=f"^{CB_CLOSE_TOURNAMENT}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_admin_opponents, pattern=f"^{CB_ADMIN_OPPONENTS}:"))
+    app.add_handler(CallbackQueryHandler(features_handler.callback_feature_info, pattern=f"^{CB_FEATURE_INFO}:"))
+    app.add_handler(CallbackQueryHandler(features_handler.callback_feature_toggle, pattern=f"^{CB_FEATURE_TOGGLE}:"))
     app.add_handler(PollAnswerHandler(poll_handler.handle_poll_answer))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & private, player.message_text_input))

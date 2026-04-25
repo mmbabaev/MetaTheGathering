@@ -25,6 +25,7 @@ from bot.messages import (
 )
 from services import errors
 from services.archetype import ArchetypeItem, ArchetypeService
+from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.tournament import TournamentService
 from services.user import UserService
 from services.utils import get_tournament
@@ -77,10 +78,17 @@ def build_archetype_list(
 
 
 class PlayerHandler:
-    def __init__(self, svc: TournamentService, user_svc: UserService, arch_svc: ArchetypeService) -> None:
+    def __init__(
+        self,
+        svc: TournamentService,
+        user_svc: UserService,
+        arch_svc: ArchetypeService,
+        ff_svc: FeatureFlagService | None = None,
+    ) -> None:
         self.svc = svc
         self.user_svc = user_svc
         self.arch_svc = arch_svc
+        self.ff_svc = ff_svc
 
     def _tournament_card(self, t, tg_id: int | None, has_pairings: bool = False) -> HandlerResult:
         is_registered = False
@@ -102,6 +110,9 @@ class PlayerHandler:
             total=len(participants),
             with_deck=with_deck,
         )
+        record_opponents_enabled = is_admin or (
+            self.ff_svc.is_enabled(FeatureFlags.RECORD_OPPONENTS) if self.ff_svc else True
+        )
         return HandlerResult(
             text,
             keyboard=tournament_card_keyboard(
@@ -113,6 +124,7 @@ class PlayerHandler:
                 has_deck=has_deck,
                 aetherhub_url=getattr(t, "aetherhub_url", None),
                 import_time=getattr(t, "aetherhub_import_time", None),
+                record_opponents_enabled=record_opponents_enabled,
             ),
         )
 
