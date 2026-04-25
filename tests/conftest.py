@@ -3,6 +3,8 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session
 
 import core.models  # noqa: F401 — регистрирует все модели на Base.metadata
+from bot.features import FeatureService
+from bot.keyboards import Keyboards
 from core.database import Base
 from core.models import TournamentStatus, VoteType
 from core.schemas import TournamentCreate
@@ -71,3 +73,13 @@ def archetype_burn(arch_svc):
 @pytest.fixture
 def archetype_affinity(arch_svc):
     return arch_svc.get_or_create_by_name("Affinity")
+
+
+@pytest.fixture
+def features():
+    return FeatureService(debug=False)
+
+
+@pytest.fixture
+def keyboards(features):
+    return Keyboards(features)

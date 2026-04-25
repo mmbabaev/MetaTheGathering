@@ -11,6 +11,7 @@ from bot.handlers.player import PlayerHandler
 from bot.keyboards import aetherhub_confirm_keyboard
 from bot.scheduler import get_clubs
 from bot.telegram.common import parse_callback_ints
+from bot.telegram.player import _make_keyboards
 from core.database import SessionLocal
 from services.aetherhub_import_service import AetherhubImportService
 from services.aetherhub_models import AetherhubTournamentData
@@ -191,9 +192,9 @@ async def callback_aetherhub_confirm(update: Update, context: ContextTypes.DEFAU
 
     db2 = SessionLocal()
     try:
-        card = PlayerHandler(TournamentService(db2), UserService(db2), ArchetypeService(db2)).handle_tournament_select(
-            tournament_id, tg_id=user.id, has_pairings=True
-        )
+        card = PlayerHandler(
+            TournamentService(db2), UserService(db2), ArchetypeService(db2), _make_keyboards()
+        ).handle_tournament_select(tournament_id, tg_id=user.id, has_pairings=True)
     finally:
         db2.close()
     await query.message.reply_text(card.text, reply_markup=card.keyboard)

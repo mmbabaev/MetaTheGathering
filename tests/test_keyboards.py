@@ -1,4 +1,7 @@
+import pytest
+
 from bot.deck_emoji import deck_emoji
+from bot.features import FeatureService
 from bot.keyboards import (
     CB_ADMIN_ARCH_MORE,
     CB_ADMIN_CUSTOM_ARCH,
@@ -7,6 +10,7 @@ from bot.keyboards import (
     CB_CUSTOM_ARCHETYPE,
     CB_REGISTER,
     CB_TOURNAMENT,
+    Keyboards,
     admin_archetype_select_keyboard,
     archetype_keyboard,
     register_button,
@@ -174,3 +178,33 @@ class TestTournamentCardKeyboard:
         markup = tournament_card_keyboard(1, is_registered=False, is_admin=True)
         texts = self._all_texts(markup)
         assert any("📥" in t and "AetherHub" in t for t in texts)
+
+    def test_opponents_button_shown_for_admin_with_pairings(self):
+        kb = Keyboards(FeatureService(debug=False))
+        markup = kb.tournament_card_keyboard(1, is_registered=True, is_admin=True, has_pairings=True)
+        texts = self._all_texts(markup)
+        assert any("оппонент" in t.lower() for t in texts)
+
+    def test_opponents_button_hidden_for_non_admin_without_debug(self):
+        kb = Keyboards(FeatureService(debug=False))
+        markup = kb.tournament_card_keyboard(1, is_registered=True, is_admin=False, has_pairings=True)
+        texts = self._all_texts(markup)
+        assert not any("оппонент" in t.lower() for t in texts)
+
+    def test_opponents_button_shown_for_all_in_debug_mode(self):
+        kb = Keyboards(FeatureService(debug=True))
+        markup = kb.tournament_card_keyboard(1, is_registered=True, is_admin=False, has_pairings=True)
+        texts = self._all_texts(markup)
+        assert any("оппонент" in t.lower() for t in texts)
+
+    def test_opponents_button_shown_without_deck(self):
+        kb = Keyboards(FeatureService(debug=False))
+        markup = kb.tournament_card_keyboard(1, is_registered=True, is_admin=True, has_pairings=True, has_deck=False)
+        texts = self._all_texts(markup)
+        assert any("оппонент" in t.lower() for t in texts)
+
+    def test_opponents_button_hidden_when_not_registered(self):
+        kb = Keyboards(FeatureService(debug=True))
+        markup = kb.tournament_card_keyboard(1, is_registered=False, has_pairings=True)
+        texts = self._all_texts(markup)
+        assert not any("оппонент" in t.lower() for t in texts)

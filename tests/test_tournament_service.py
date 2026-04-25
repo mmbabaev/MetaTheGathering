@@ -776,7 +776,10 @@ class TestGetOrCreateByName:
 
         from unittest.mock import patch
 
-        handler = AdminHandler(svc, user_svc, arch_svc)
+        from bot.features import FeatureService
+        from bot.keyboards import Keyboards
+
+        handler = AdminHandler(svc, user_svc, arch_svc, Keyboards(FeatureService()), FeatureService())
 
         # Добавляем в порядке Фамилия Имя (как вводит оператор)
         with patch("services.user.settings") as mock_settings:

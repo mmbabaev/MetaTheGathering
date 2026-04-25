@@ -96,8 +96,8 @@ def active_tournament(svc):
 
 
 @pytest.fixture
-def handler(svc, user_svc, arch_svc):
-    return AdminHandler(svc, user_svc, arch_svc)
+def handler(svc, user_svc, arch_svc, keyboards, features):
+    return AdminHandler(svc, user_svc, arch_svc, keyboards, features)
 
 
 # --- handle_add_me ---
@@ -1077,6 +1077,34 @@ class TestHandleAdminOpponents:
     def test_non_admin_blocked(self, handler):
         result = handler.handle_admin_opponents(tg_id=1, tournament_id=1)
         assert result.is_alert
+
+    def test_non_admin_allowed_with_flag(self, db, svc, user_svc, arch_svc, active_tournament):
+        from bot.features import FeatureService
+        from bot.keyboards import Keyboards
+        from services.aetherhub_import_service import AetherhubImportService
+        from services.aetherhub_service import AetherhubPairing, AetherhubRound, AetherhubTournamentData
+
+        debug_handler = AdminHandler(
+            svc, user_svc, arch_svc, Keyboards(FeatureService(debug=True)), FeatureService(debug=True)
+        )
+        user_svc.get_or_create(tg_id=7777, username=None, first_name="Regular", last_name=None)
+        user_svc.get_or_create(tg_id=8800, username=None, first_name="Bob", last_name="Smith")
+        data = AetherhubTournamentData(
+            url="http://x",
+            players=["Regular", "Bob Smith"],
+            rounds=[
+                AetherhubRound(
+                    number=1,
+                    pairings=[
+                        AetherhubPairing(player="Regular", opponent="Bob Smith"),
+                        AetherhubPairing(player="Bob Smith", opponent="Regular"),
+                    ],
+                )
+            ],
+        )
+        AetherhubImportService(db).import_tournament(active_tournament.id, data)
+        result = debug_handler.handle_admin_opponents(tg_id=7777, tournament_id=active_tournament.id)
+        assert not result.is_alert
 
     def test_no_pairings_returns_alert(self, handler, admin_user, active_tournament):
         result = handler.handle_admin_opponents(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)

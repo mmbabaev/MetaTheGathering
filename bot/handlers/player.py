@@ -1,12 +1,7 @@
 # Регистрация, выбор колоды — чистая бизнес-логика
 
 from bot.handlers.base import HandlerResult
-from bot.keyboards import (
-    archetype_keyboard,
-    leave_confirm_keyboard,
-    tournament_card_keyboard,
-    tournament_list_keyboard,
-)
+from bot.keyboards import Keyboards
 from bot.messages import (
     ALREADY_REGISTERED,
     CHOOSE_ARCHETYPE,
@@ -25,7 +20,6 @@ from bot.messages import (
 )
 from services import errors
 from services.archetype import ArchetypeItem, ArchetypeService
-from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.tournament import TournamentService
 from services.user import UserService
 from services.utils import get_tournament
@@ -79,16 +73,12 @@ def build_archetype_list(
 
 class PlayerHandler:
     def __init__(
-        self,
-        svc: TournamentService,
-        user_svc: UserService,
-        arch_svc: ArchetypeService,
-        ff_svc: FeatureFlagService | None = None,
+        self, svc: TournamentService, user_svc: UserService, arch_svc: ArchetypeService, keyboards: Keyboards
     ) -> None:
         self.svc = svc
         self.user_svc = user_svc
         self.arch_svc = arch_svc
-        self.ff_svc = ff_svc
+        self.keyboards = keyboards
 
     def _tournament_card(self, t, tg_id: int | None, has_pairings: bool = False) -> HandlerResult:
         is_registered = False
@@ -110,12 +100,9 @@ class PlayerHandler:
             total=len(participants),
             with_deck=with_deck,
         )
-        record_opponents_enabled = is_admin or (
-            self.ff_svc.is_enabled(FeatureFlags.RECORD_OPPONENTS) if self.ff_svc else True
-        )
         return HandlerResult(
             text,
-            keyboard=tournament_card_keyboard(
+            keyboard=self.keyboards.tournament_card_keyboard(
                 t.id,
                 is_registered,
                 is_admin=is_admin,
@@ -124,7 +111,6 @@ class PlayerHandler:
                 has_deck=has_deck,
                 aetherhub_url=getattr(t, "aetherhub_url", None),
                 import_time=getattr(t, "aetherhub_import_time", None),
-                record_opponents_enabled=record_opponents_enabled,
             ),
         )
 
@@ -133,7 +119,9 @@ class PlayerHandler:
     ) -> HandlerResult:
         """Строит HandlerResult с клавиатурой архетипов для игрока."""
         arch_list, has_more = build_archetype_menu(self.arch_svc, tg_id, expanded)
-        return HandlerResult(CHOOSE_ARCHETYPE, keyboard=archetype_keyboard(tournament_id, arch_list, has_more))
+        return HandlerResult(
+            CHOOSE_ARCHETYPE, keyboard=self.keyboards.archetype_keyboard(tournament_id, arch_list, has_more)
+        )
 
     def handle_tournaments(self, tg_id: int | None = None) -> HandlerResult:
         tournaments = self.svc.list_all_active_tournaments()
@@ -142,7 +130,7 @@ class PlayerHandler:
         if len(tournaments) == 1:
             return self._tournament_card(tournaments[0], tg_id)
         tour_list = [(t.id, t.title) for t in tournaments]
-        return HandlerResult("Выберите турнир:", keyboard=tournament_list_keyboard(tour_list))
+        return HandlerResult("Выберите турнир:", keyboard=self.keyboards.tournament_list_keyboard(tour_list))
 
     def handle_tournament_select(
         self, tournament_id: int, tg_id: int | None = None, has_pairings: bool = False
@@ -270,7 +258,7 @@ class PlayerHandler:
         participant = self.svc.get_participant(tournament_id, user.id)
         if participant is None:
             return HandlerResult(NOT_REGISTERED_IN_TOURNAMENT, is_alert=True)
-        return HandlerResult(LEAVE_CONFIRM_PROMPT, keyboard=leave_confirm_keyboard(tournament_id))
+        return HandlerResult(LEAVE_CONFIRM_PROMPT, keyboard=self.keyboards.leave_confirm_keyboard(tournament_id))
 
     def handle_leave_confirm(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Удаляет игрока из турнира после подтверждения."""

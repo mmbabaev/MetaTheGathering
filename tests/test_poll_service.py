@@ -21,8 +21,8 @@ def poll_svc(db):
 
 
 @pytest.fixture
-def admin_handler(db):
-    return AdminHandler(TournamentService(db), UserService(db), ArchetypeService(db))
+def admin_handler(db, keyboards, features):
+    return AdminHandler(TournamentService(db), UserService(db), ArchetypeService(db), keyboards, features)
 
 
 @pytest.fixture

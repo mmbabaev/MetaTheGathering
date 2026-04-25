@@ -61,13 +61,13 @@ def arch_svc(svc):
 
 
 @pytest.fixture
-def player_handler(svc, user_svc, arch_svc):
-    return PlayerHandler(svc, user_svc, arch_svc)
+def player_handler(svc, user_svc, arch_svc, keyboards):
+    return PlayerHandler(svc, user_svc, arch_svc, keyboards)
 
 
 @pytest.fixture
-def admin_handler(svc, user_svc, arch_svc):
-    return AdminHandler(svc, user_svc, arch_svc)
+def admin_handler(svc, user_svc, arch_svc, keyboards, features):
+    return AdminHandler(svc, user_svc, arch_svc, keyboards, features)
 
 
 # ---------------------------------------------------------------------------
