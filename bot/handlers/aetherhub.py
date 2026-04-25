@@ -26,6 +26,18 @@ class AetherhubHandler:
         self._import = import_service
         self._tournament = tournament_service
 
+    def handle_import_prompt(
+        self, stored_url: str | None, club_aetherhub_url: str | None
+    ) -> AetherhubFetchResult | None:
+        """Find tournament URL and fetch preview. Returns None if URL must be provided manually."""
+        url = stored_url
+        if not url and club_aetherhub_url:
+            url = self._aetherhub.find_todays_pauper_tournament(club_aetherhub_url)
+        if not url:
+            return None
+        header = "🔄 Обновление AetherHub" if stored_url else "📥 Импорт AetherHub"
+        return self.handle_fetch_preview(url, header)
+
     def handle_fetch_preview(self, url: str, header: str) -> AetherhubFetchResult:
         data = self._aetherhub.fetch_tournament(url)
         return AetherhubFetchResult(data=data, preview_text=self._build_preview(data, header))

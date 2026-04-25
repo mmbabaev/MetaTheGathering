@@ -9,6 +9,7 @@ from telegram.ext import ContextTypes
 from bot.handlers.aetherhub import AetherhubHandler
 from bot.handlers.player import PlayerHandler
 from bot.keyboards import aetherhub_confirm_keyboard
+from bot.scheduler import get_clubs
 from bot.telegram.common import parse_callback_ints
 from core.database import SessionLocal
 from services.aetherhub_import_service import AetherhubImportService
@@ -35,8 +36,14 @@ def _aetherhub_handler(db=None) -> AetherhubHandler:
     return AetherhubHandler(_aetherhub_service)
 
 
+def _club_aetherhub_url(club_name: str | None) -> str | None:
+    if not club_name:
+        return None
+    return next((c.aetherhub_url for c in get_clubs() if c.name == club_name), None)
+
+
 async def callback_aetherhub_import_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Кнопка «📥/🔄 AetherHub» — если URL уже привязан, обновляет импорт сразу."""
+    """Кнопка «📥/🔄 AetherHub»."""
     query = update.callback_query
     user = update.effective_user
     if not user:
@@ -54,32 +61,34 @@ async def callback_aetherhub_import_prompt(update: Update, context: ContextTypes
         try:
             t = get_tournament(db, tournament_id)
             stored_url = t.aetherhub_url
+            club_url = _club_aetherhub_url(t.club)
         except Exception:
             logger.exception("Failed to load tournament %s", tournament_id)
             stored_url = None
+            club_url = None
     finally:
         db.close()
 
-    if stored_url:
-        await query.answer()
+    await query.answer()
+
+    if stored_url or club_url:
         status_msg = await query.message.reply_text("⏳ Загружаю данные с AetherHub…")
         try:
-            fetch_result = _aetherhub_handler().handle_fetch_preview(stored_url, "🔄 Обновление AetherHub")
+            result = _aetherhub_handler().handle_import_prompt(stored_url, club_url)
         except Exception as e:
             await status_msg.edit_text(f"❌ Не удалось загрузить турнир: {e}")
             return
-        context.user_data[USER_DATA_AETHERHUB_URL] = stored_url
-        context.user_data[USER_DATA_AETHERHUB_DATA] = fetch_result.data
-        await status_msg.edit_text(
-            fetch_result.preview_text,
-            reply_markup=aetherhub_confirm_keyboard(tournament_id),
-        )
-    else:
-        context.user_data[USER_DATA_PENDING_AETHERHUB_URL] = tournament_id
-        await query.answer()
-        await query.message.reply_text(
-            "Отправьте ссылку на турнир AetherHub\n(например: https://aetherhub.com/Tourney/RoundTourney/98984)"
-        )
+        if result:
+            context.user_data[USER_DATA_AETHERHUB_URL] = result.data.url
+            context.user_data[USER_DATA_AETHERHUB_DATA] = result.data
+            await status_msg.edit_text(result.preview_text, reply_markup=aetherhub_confirm_keyboard(tournament_id))
+            return
+        await status_msg.edit_text("Турнир сегодня не найден автоматически.")
+
+    context.user_data[USER_DATA_PENDING_AETHERHUB_URL] = tournament_id
+    await query.message.reply_text(
+        "Отправьте ссылку на турнир AetherHub\n(например: https://aetherhub.com/Tourney/RoundTourney/98984)"
+    )
 
 
 async def handle_pending_aetherhub_url(msg: Message, user: User, text: str, context) -> bool:
