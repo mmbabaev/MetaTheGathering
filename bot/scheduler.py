@@ -285,6 +285,9 @@ class AetherhubImportJob:
 class AetherhubTimedImportJob:
     """Runs every minute; triggers import for tournaments with matching aetherhub_import_time."""
 
+    def __init__(self, aetherhub_service: AetherhubService) -> None:
+        self._aetherhub = aetherhub_service
+
     async def run(self, now: datetime, db=None) -> None:
         current_time = now.strftime("%H:%M")
         close_db = db is None
@@ -327,7 +330,7 @@ class AetherhubTimedImportJob:
                 logger.warning(f"AetherhubTimedImportJob: no club URL for tournament #{tournament_id}")
                 return
             try:
-                url = find_todays_pauper_tournament(club_page_url, today=today)
+                url = self._aetherhub.find_todays_pauper_tournament(club_page_url, today=today)
             except Exception:
                 logger.exception(f"AetherhubTimedImportJob: failed to fetch club page for #{tournament_id}")
                 return
@@ -339,7 +342,7 @@ class AetherhubTimedImportJob:
         db = SessionLocal()
         try:
             try:
-                data = fetch_tournament(url)
+                data = self._aetherhub.fetch_tournament(url)
             except Exception:
                 logger.exception(f"AetherhubTimedImportJob: failed to fetch data from {url}")
                 return
@@ -422,7 +425,7 @@ def setup_scheduler(app: Application) -> None:
                 app.job_queue.run_daily(_import, time=fetch_time, days=(_ptb_day(schedule.weekday),))
                 logger.info(f"Scheduler: AetherHub import for '{club.name}' ({schedule.weekday}) at {fetch_time_str}")
 
-    timed_job = AetherhubTimedImportJob()
+    timed_job = AetherhubTimedImportJob(AetherhubService())
 
     async def _timed_import(context: ContextTypes.DEFAULT_TYPE) -> None:
         tz_ = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
