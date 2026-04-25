@@ -8,6 +8,7 @@ from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from bot.handlers.admin import AdminHandler, parse_add_player_command, parse_bulk_player_line
+from bot.handlers.player import PlayerHandler
 from bot.keyboards import admin_more_keyboard
 from bot.messages import ADD_PLAYERS_USAGE, BULK_ADD_PROMPT, TELEGRAM_USER_LOOKUP_FAILED
 from bot.scheduler import format_schedule_text
