@@ -20,25 +20,25 @@
 #### 1. Дублирование логики мета-запросов
 > Детальный план: [docs/refactor_meta_query_dedup.md](refactor_meta_query_dedup.md)
 
-- [ ] Убрать дубликат `get_tournament_meta` из `services/tournament.py:510-535` — оставить единственную реализацию в `services/stats.py`
-- [ ] Убрать дубликат `MetaRow` из `services/tournament.py:35-41` — оставить в `services/stats.py`
-- [ ] Убрать ленивый импорт `from services.stats import StatsService` внутри метода в `services/export.py:115` — сделать обычный import на уровне модуля
+- [x] Убрать дубликат `get_tournament_meta` из `services/tournament.py:510-535` — оставить единственную реализацию в `services/stats.py`
+- [x] Убрать дубликат `MetaRow` из `services/tournament.py:35-41` — оставить в `services/stats.py`
+- [x] Убрать ленивый импорт `from services.stats import StatsService` внутри метода в `services/export.py:115` — сделать обычный import на уровне модуля
 
 #### 2. TournamentService нарушает SRP (`services/tournament.py`, 536 строк)
 > Детальный план: [docs/refactor_archetype_service.md](refactor_archetype_service.md)
 
-- [ ] Выделить `ArchetypeService` в `services/archetype.py` — вынести `list_archetypes`, `list_archetypes_for_user`, `get_or_create_archetype_by_name`, `ArchetypeItem`
-- [ ] `PlayerHandler` и `AdminHandler` получают `ArchetypeService` через DI-конструктор
-- [ ] Обновить фабрики в `bot/telegram/player.py` и `bot/telegram/admin.py`
-- [ ] Написать `tests/test_archetype_service.py`
+- [x] Выделить `ArchetypeService` в `services/archetype.py` — вынести `list_archetypes`, `list_archetypes_for_user`, `get_or_create_archetype_by_name`, `ArchetypeItem`
+- [x] `PlayerHandler` и `AdminHandler` получают `ArchetypeService` через DI-конструктор
+- [x] Обновить фабрики в `bot/telegram/player.py` и `bot/telegram/admin.py`
+- [x] Написать `tests/test_archetype_service.py`
 
 #### 3. Дублирование `_is_admin`
 > Детальный план: [docs/refactor_is_admin.md](refactor_is_admin.md)
 
-- [ ] Метод `_is_admin` дублируется в `bot/handlers/player.py:37-41` и `bot/handlers/admin.py:94-98`
-- [ ] Добавить `UserService.is_admin(tg_id: int) -> bool`
-- [ ] Удалить `_is_admin` из обоих хендлеров, заменить вызовы на `self.user_svc.is_admin(tg_id)`
-- [ ] Написать тесты для `UserService.is_admin`
+- [x] Метод `_is_admin` дублируется в `bot/handlers/player.py:37-41` и `bot/handlers/admin.py:94-98`
+- [x] Добавить `UserService.is_admin(tg_id: int) -> bool`
+- [x] Удалить `_is_admin` из обоих хендлеров, заменить вызовы на `self.user_svc.is_admin(tg_id)`
+- [x] Написать тесты для `UserService.is_admin`
 
 ---
 

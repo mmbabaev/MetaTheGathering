@@ -6,12 +6,14 @@ import re
 from telegram import Message, Update, User
 from telegram.ext import ContextTypes
 
+from bot.handlers.aetherhub import AetherhubHandler
 from bot.handlers.player import PlayerHandler
 from bot.keyboards import aetherhub_confirm_keyboard
 from bot.telegram.common import parse_callback_ints
 from core.database import SessionLocal
-from services.aetherhub import AetherhubTournamentData, fetch_tournament
-from services.aetherhub_import import AetherhubImportService
+from services.aetherhub_import_service import AetherhubImportService
+from services.aetherhub_models import AetherhubTournamentData
+from services.aetherhub_service import AetherhubService
 from services.archetype import ArchetypeService
 from services.tournament import TournamentService
 from services.user import UserService
@@ -19,22 +21,18 @@ from services.utils import get_tournament
 
 logger = logging.getLogger(__name__)
 
+_aetherhub_service = AetherhubService()
+
 USER_DATA_PENDING_AETHERHUB_URL = "pending_aetherhub_url_tournament_id"
 USER_DATA_PENDING_IMPORT_TIME = "pending_import_time_tournament_id"
 USER_DATA_AETHERHUB_URL = "aetherhub_url"
 USER_DATA_AETHERHUB_DATA = "aetherhub_data"
 
 
-def _build_preview(data: AetherhubTournamentData, header: str) -> str:
-    rounds_summary = ", ".join(f"R{r.number}: {len(r.pairings) // 2} столов" for r in data.rounds)
-    return (
-        f"{header}\n\n"
-        f"Игроков в стендингах: {len(data.players)}\n"
-        f"Раунды: {rounds_summary}\n\n"
-        f"Первые 5 игроков:\n"
-        + "\n".join(f"  • {p}" for p in data.players[:5])
-        + (f"\n  …ещё {len(data.players) - 5}" if len(data.players) > 5 else "")
-    )
+def _aetherhub_handler(db=None) -> AetherhubHandler:
+    if db:
+        return AetherhubHandler(_aetherhub_service, AetherhubImportService(db), TournamentService(db))
+    return AetherhubHandler(_aetherhub_service)
 
 
 async def callback_aetherhub_import_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -66,14 +64,14 @@ async def callback_aetherhub_import_prompt(update: Update, context: ContextTypes
         await query.answer()
         status_msg = await query.message.reply_text("⏳ Загружаю данные с AetherHub…")
         try:
-            data = fetch_tournament(stored_url)
+            fetch_result = _aetherhub_handler().handle_fetch_preview(stored_url, "🔄 Обновление AetherHub")
         except Exception as e:
             await status_msg.edit_text(f"❌ Не удалось загрузить турнир: {e}")
             return
         context.user_data[USER_DATA_AETHERHUB_URL] = stored_url
-        context.user_data[USER_DATA_AETHERHUB_DATA] = data
+        context.user_data[USER_DATA_AETHERHUB_DATA] = fetch_result.data
         await status_msg.edit_text(
-            _build_preview(data, "🔄 Обновление AetherHub"),
+            fetch_result.preview_text,
             reply_markup=aetherhub_confirm_keyboard(tournament_id),
         )
     else:
@@ -98,16 +96,15 @@ async def handle_pending_aetherhub_url(msg: Message, user: User, text: str, cont
 
     status_msg = await msg.reply_text("⏳ Загружаю данные с AetherHub…")
     try:
-        data = fetch_tournament(text.strip())
+        fetch_result = _aetherhub_handler().handle_fetch_preview(text.strip(), "📥 Импорт AetherHub")
     except Exception as e:
         await status_msg.edit_text(f"❌ Не удалось загрузить турнир: {e}")
         return True
 
     context.user_data[USER_DATA_AETHERHUB_URL] = text.strip()
-    context.user_data[USER_DATA_AETHERHUB_DATA] = data
-
+    context.user_data[USER_DATA_AETHERHUB_DATA] = fetch_result.data
     await status_msg.edit_text(
-        _build_preview(data, "📥 Импорт AetherHub"),
+        fetch_result.preview_text,
         reply_markup=aetherhub_confirm_keyboard(tournament_id),
     )
     return True
@@ -172,8 +169,7 @@ async def callback_aetherhub_confirm(update: Update, context: ContextTypes.DEFAU
 
     db = SessionLocal()
     try:
-        result = AetherhubImportService(db).import_tournament(tournament_id, data)
-        TournamentService(db).set_aetherhub_url(tournament_id, url)
+        result = _aetherhub_handler(db).handle_confirm_import(tournament_id, url, data)
     except Exception as e:
         logger.exception("Import failed for tournament %s", tournament_id)
         await query.edit_message_text(f"❌ Ошибка импорта: {e}")
@@ -181,20 +177,7 @@ async def callback_aetherhub_confirm(update: Update, context: ContextTypes.DEFAU
     finally:
         db.close()
 
-    lines = [
-        "✅ Импорт завершён",
-        f"Зарегистрировано новых: {result.registered}",
-        f"Уже были: {result.already_registered}",
-        f"Паринги сохранены: {result.pairings_saved}",
-    ]
-    if result.created_names:
-        lines.append(
-            f"Созданы как новые игроки ({len(result.created_names)}): "
-            + ", ".join(result.created_names[:5])
-            + ("…" if len(result.created_names) > 5 else "")
-        )
-
-    await query.edit_message_text("\n".join(lines))
+    await query.edit_message_text(result.text)
     await query.answer()
 
     db2 = SessionLocal()

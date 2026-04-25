@@ -10,7 +10,7 @@ from bot.messages import CUSTOM_ARCHETYPE_PROMPT
 from bot.telegram.common import log_event as _log
 from bot.telegram.common import parse_callback_ints
 from core.database import SessionLocal
-from services.aetherhub_import import AetherhubImportService
+from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeService
 from services.tournament import TournamentService
 from services.user import UserService

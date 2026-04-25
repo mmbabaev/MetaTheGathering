@@ -11,8 +11,8 @@ from core import models
 from core.config import Club, ClubSchedule, app_cfg, settings
 from core.database import SessionLocal
 from core.schemas import TournamentCreate
-from services.aetherhub import fetch_tournament, find_todays_pauper_tournament
-from services.aetherhub_import import AetherhubImportService
+from services.aetherhub_import_service import AetherhubImportService
+from services.aetherhub_service import AetherhubService
 from services.tournament import TournamentService
 
 logger = logging.getLogger(__name__)
@@ -202,9 +202,10 @@ class CreateTournamentJob:
 class AetherhubImportJob:
     """Fetches today's pauper tournament from AetherHub and imports it automatically."""
 
-    def __init__(self, club: Club, schedule: ClubSchedule) -> None:
+    def __init__(self, club: Club, schedule: ClubSchedule, aetherhub_service: AetherhubService | None = None) -> None:
         self.club = club
         self.schedule = schedule
+        self._aetherhub = aetherhub_service or AetherhubService()
 
     async def run(self, now: datetime, db=None) -> None:
         logger.info(f"AetherhubImportJob: running for '{self.club.name}', now={now.strftime('%A %H:%M')}")
@@ -237,7 +238,7 @@ class AetherhubImportJob:
                 logger.info(f"AetherhubImportJob: fetching club page for '{self.club.name}'")
                 today = None if self.schedule.find_latest else now.date()
                 try:
-                    url = find_todays_pauper_tournament(self.club.aetherhub_url, today=today)
+                    url = self._aetherhub.find_todays_pauper_tournament(self.club.aetherhub_url, today=today)
                 except Exception:
                     logger.exception(f"AetherhubImportJob: failed to fetch club page for '{self.club.name}'")
                     return
@@ -247,7 +248,7 @@ class AetherhubImportJob:
 
             logger.info(f"AetherhubImportJob: importing {url} for tournament #{tournament_id}")
             try:
-                data = fetch_tournament(url)
+                data = self._aetherhub.fetch_tournament(url)
             except Exception:
                 logger.exception(f"AetherhubImportJob: failed to fetch tournament data from {url}")
                 return
