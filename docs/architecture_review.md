@@ -48,9 +48,9 @@
 - [ ] Каждый callback в `bot/telegram/` повторяет ~20 строк: открытие сессии, парсинг `query.data`, `try/finally`, отправку ответа
 - [ ] Написать декоратор `@callback_handler(parser)` или контекст-менеджер `async with get_db_session() as db` в `bot/telegram/session.py`
 
-#### 5. Разбросанный state management
-- [ ] `bot/telegram/player.py:15-18` — 4 строковых ключа `USER_DATA_PENDING_*` без реестра
-- [ ] Роутинг через последовательные `if key in user_data` — хрупкий
+#### 5. Разбросанный state management *(частично сделано)*
+- [x] Роутинг через последовательные `if key in user_data` — разделён на `_handle_pending_*` функции (`refactor/text-input-router`)
+- [ ] `bot/telegram/player.py` — 5 строковых ключей `USER_DATA_PENDING_*` без реестра
 - [ ] Ввести `enum PendingStateType` + датакласс `PendingState` в `bot/telegram/state.py`; диспетчеризация через `match state.type`
 
 #### 6. Неполная обработка ошибок в handlers
