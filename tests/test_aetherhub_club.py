@@ -66,6 +66,32 @@ class TestExtractDate:
     def test_date_in_cell_next_to_name(self):
         assert self.svc._extract_date("Tournament Name 2026-04-24 some extra text") == date(2026, 4, 24)
 
+    def test_day_month_without_year(self):
+        assert self.svc._extract_date("Паупер 24.04") is not None
+
+    def test_day_month_full_format_takes_priority(self):
+        # 24.04.2026 should parse as ISO date, not DD.MM
+        assert self.svc._extract_date("Goldfish 24.04.2026") == date(2026, 4, 24)
+
+
+class TestExtractDayMonth:
+    svc = AetherhubService()
+
+    def test_infers_current_year_when_not_future(self):
+        today = date(2026, 4, 25)
+        assert self.svc._extract_day_month("Паупер 24.04", today=today) == date(2026, 4, 24)
+
+    def test_uses_previous_year_for_future_date(self):
+        today = date(2026, 1, 5)
+        result = self.svc._extract_day_month("Паупер 24.04", today=today)
+        assert result == date(2025, 4, 24)
+
+    def test_returns_none_without_day_month(self):
+        assert self.svc._extract_day_month("Pauper Spring Series") is None
+
+    def test_invalid_date_returns_none(self):
+        assert self.svc._extract_day_month("Паупер 99.99") is None
+
 
 # ---------------------------------------------------------------------------
 # PAUPER_RE
@@ -82,6 +108,9 @@ class TestPauperPattern:
             "Goldfish пупер",
             "ПУПЕР ЛИГА",
             "Edinorog Pauper Monthly",
+            "Паупер 24.04",
+            "ПАУПЕР",
+            "паупер лига",
         ],
     )
     def test_matches(self, name):
@@ -190,6 +219,45 @@ class TestParseClubPage:
         )
         links = self.svc._parse_club_page(html)
         assert links[0].date is None
+
+    def test_extracts_date_from_days_ago(self):
+        html = (
+            "<html><body>"
+            '<div class="w-100">'
+            '<a href="/Tourney/RoundTourney/1">Паупер</a>'
+            '<small class="text-muted">1 day ago</small>'
+            "</div>"
+            "</body></html>"
+        )
+        today = date(2026, 4, 25)
+        links = self.svc._parse_club_page(html, today=today)
+        assert links[0].date == date(2026, 4, 24)
+
+    def test_days_ago_fallback_when_no_date_in_name(self):
+        html = (
+            "<html><body>"
+            '<div class="w-100">'
+            '<a href="/Tourney/RoundTourney/1">Паупер</a>'
+            '<small class="text-muted">3 days ago</small>'
+            "</div>"
+            "</body></html>"
+        )
+        today = date(2026, 4, 25)
+        links = self.svc._parse_club_page(html, today=today)
+        assert links[0].date == date(2026, 4, 22)
+
+    def test_name_date_takes_priority_over_days_ago(self):
+        html = (
+            "<html><body>"
+            '<div class="w-100">'
+            '<a href="/Tourney/RoundTourney/1">Pauper 2026-04-24</a>'
+            '<small class="text-muted">3 days ago</small>'
+            "</div>"
+            "</body></html>"
+        )
+        today = date(2026, 4, 25)
+        links = self.svc._parse_club_page(html, today=today)
+        assert links[0].date == date(2026, 4, 24)
 
 
 # ---------------------------------------------------------------------------

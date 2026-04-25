@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import cloudscraper
 from bs4 import BeautifulSoup
@@ -13,7 +13,7 @@ from services.aetherhub_models import (
     ClubTournamentLink,
 )
 
-PAUPER_RE = re.compile(r"pauper|пупер", re.IGNORECASE)
+PAUPER_RE = re.compile(r"pauper|паупер|пупер", re.IGNORECASE)
 
 _DATE_FORMATS = [
     (re.compile(r"\d{4}-\d{2}-\d{2}"), "%Y-%m-%d"),
@@ -21,6 +21,11 @@ _DATE_FORMATS = [
     (re.compile(r"\d{1,2}/\d{1,2}/\d{4}"), "%m/%d/%Y"),
     (re.compile(r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+\d{1,2},?\s+\d{4}", re.IGNORECASE), None),
 ]
+
+# DD.MM without year — matched separately to infer year
+_DAY_MONTH_RE = re.compile(r"\b(\d{1,2})\.(\d{2})\b")
+
+_DAYS_AGO_RE = re.compile(r"(\d+)\s+days?\s+ago", re.IGNORECASE)
 
 _MONTH_MAP = {
     "jan": 1,
@@ -109,10 +114,37 @@ class AetherhubService:
                     return date(year, month, day)
             except (ValueError, IndexError):
                 continue
-        return None
+        return self._extract_day_month(text)
 
-    def _parse_club_page(self, html: str) -> list[ClubTournamentLink]:
+    def _extract_day_month(self, text: str, today: date | None = None) -> date | None:
+        """Parse DD.MM without year, inferring year so the date is not in the future."""
+        m = _DAY_MONTH_RE.search(text)
+        if not m:
+            return None
+        try:
+            day, month = int(m.group(1)), int(m.group(2))
+            ref = today or date.today()
+            candidate = date(ref.year, month, day)
+            if candidate > ref + timedelta(days=1):
+                candidate = date(ref.year - 1, month, day)
+            return candidate
+        except ValueError:
+            return None
+
+    def _extract_days_ago(self, container, today: date) -> date | None:
+        if container is None:
+            return None
+        small = container.find("small", class_="text-muted")
+        if small is None:
+            return None
+        m = _DAYS_AGO_RE.search(small.get_text(strip=True))
+        if not m:
+            return None
+        return today - timedelta(days=int(m.group(1)))
+
+    def _parse_club_page(self, html: str, today: date | None = None) -> list[ClubTournamentLink]:
         soup = BeautifulSoup(html, "html.parser")
+        today = today or date.today()
         results: list[ClubTournamentLink] = []
         seen: set[str] = set()
 
@@ -129,9 +161,12 @@ class AetherhubService:
             if not name:
                 continue
 
-            row = a.find_parent("tr") or a.find_parent("li") or a.parent
-            context_text = row.get_text(" ", strip=True) if row else name
-            tournament_date = self._extract_date(context_text) or self._extract_date(name)
+            container = a.find_parent("div", class_="w-100") or a.find_parent("tr") or a.find_parent("li") or a.parent
+            tournament_date = (
+                self._extract_date(name)
+                or self._extract_days_ago(container, today)
+                or self._extract_date(container.get_text(" ", strip=True) if container else name)
+            )
 
             results.append(ClubTournamentLink(name=name, url=url, date=tournament_date))
 
@@ -139,7 +174,7 @@ class AetherhubService:
 
     def fetch_club_tournaments(self, club_url: str, today: date | None = None) -> list[ClubTournamentLink]:
         html = self._scraper.get(club_url, timeout=30).text
-        return self._parse_club_page(html)
+        return self._parse_club_page(html, today=today)
 
     def find_todays_pauper_tournament(self, club_url: str, today: date | None = None) -> str | None:
         for link in self.fetch_club_tournaments(club_url, today=today):
