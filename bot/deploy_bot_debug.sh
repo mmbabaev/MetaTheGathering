@@ -99,8 +99,16 @@ python3 -m venv venv
 ./venv/bin/pip install --upgrade pip -q
 ./venv/bin/pip install -r requirements.txt -q
 
-echo "→ Запускаем миграции..."
+echo "→ Проверяем миграции..."
 cp "$ENV_DEST" .env
+HEAD_COUNT=$(./venv/bin/alembic heads 2>/dev/null | grep -c "(head)" || true)
+if [ "$HEAD_COUNT" -ne 1 ]; then
+    echo "ERROR: Multiple alembic heads ($HEAD_COUNT). Merge conflict in migrations — deploy aborted."
+    ./venv/bin/alembic heads
+    rm -f .env
+    exit 1
+fi
+echo "→ Запускаем миграции..."
 ./venv/bin/alembic upgrade head
 rm -f .env
 

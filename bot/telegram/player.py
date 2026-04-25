@@ -12,6 +12,7 @@ from bot.telegram.common import parse_callback_ints
 from core.database import SessionLocal
 from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeService
+from services.feature_flags import FeatureFlagService
 from services.tournament import TournamentService
 from services.user import UserService
 
@@ -24,7 +25,7 @@ USER_DATA_OPPONENTS_MODE = "opponents_tournament_id"
 
 
 def _player_handler(db) -> PlayerHandler:
-    return PlayerHandler(TournamentService(db), UserService(db), ArchetypeService(db))
+    return PlayerHandler(TournamentService(db), UserService(db), ArchetypeService(db), FeatureFlagService(db))
 
 
 def _settings_handler(db) -> SettingsHandler:

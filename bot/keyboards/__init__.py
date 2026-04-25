@@ -40,6 +40,18 @@ CB_SET_IMPORT_TIME = "set_import_time"  # set_import_time:{tournament_id}
 CB_ADMIN_MORE = "adm_more"  # adm_more:{tournament_id}
 CB_CLOSE_TOURNAMENT = "close_t"  # close_t:{tournament_id}
 CB_ADMIN_OPPONENTS = "adm_opps"  # adm_opps:{tournament_id}
+CB_FEATURE_TOGGLE = "feat_toggle"  # feat_toggle:{flag_name}
+
+
+def features_keyboard(flags: list) -> InlineKeyboardMarkup:
+    """Кнопки feature flags — каждый флаг как отдельная строка с текущим статусом."""
+    buttons = []
+    for flag in flags:
+        status = "✅" if flag.enabled else "❌"
+        buttons.append(
+            [InlineKeyboardButton(f"{status} {flag.description}", callback_data=f"{CB_FEATURE_TOGGLE}:{flag.name}")]
+        )
+    return InlineKeyboardMarkup(buttons)
 
 
 def tournament_list_keyboard(tournaments: list) -> InlineKeyboardMarkup:
@@ -57,6 +69,7 @@ def tournament_card_keyboard(
     has_deck: bool = True,
     aetherhub_url: str | None = None,
     import_time: str | None = None,
+    record_opponents_enabled: bool = True,
 ) -> InlineKeyboardMarkup:
     """Кнопки для карточки турнира — зависят от статуса регистрации и роли пользователя."""
     if is_registered:
@@ -67,7 +80,7 @@ def tournament_card_keyboard(
     rows = [[action_btn], [status_btn]]
     if is_registered and not has_deck:
         rows.insert(1, [InlineKeyboardButton("🃏 Выбрать колоду", callback_data=f"{CB_REGISTER}:{tournament_id}")])
-    if is_registered and has_pairings:
+    if is_registered and has_pairings and record_opponents_enabled:
         rows.append(
             [InlineKeyboardButton("🤝 Записать оппонентов", callback_data=f"{CB_ADMIN_OPPONENTS}:{tournament_id}")]
         )
