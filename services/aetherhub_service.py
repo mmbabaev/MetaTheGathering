@@ -49,27 +49,14 @@ class AetherhubService:
         names = [p.player for p in pairings] + [p.opponent for p in pairings if p.opponent]
         return list(dict.fromkeys(names))
 
-    def _parse_page(self, html: str) -> tuple[list[str], list[AetherhubPairing], int]:
-        """Returns (player_names_from_standings, pairings, max_round_found)."""
+    def _parse_standings_page(self, html: str) -> tuple[list[str], int]:
+        """Returns (player_names_from_standings, max_round_found) from the main tournament page."""
         soup = BeautifulSoup(html, "html.parser")
         tables = soup.find_all("table")
 
-        pairings: list[AetherhubPairing] = []
-        if len(tables) >= 1:
-            for row in tables[0].find_all("tr")[1:]:
-                cells = [td.get_text(strip=True) for td in row.find_all("td")]
-                if len(cells) < 3:
-                    continue
-                p1 = self._strip_points(cells[1])
-                p2 = self._strip_points(cells[2]) if cells[2] else None
-                if p1:
-                    pairings.append(AetherhubPairing(player=p1, opponent=p2 or None))
-                if p2:
-                    pairings.append(AetherhubPairing(player=p2, opponent=p1 or None))
-
         players: list[str] = []
-        if len(tables) >= 2:
-            for row in tables[1].find_all("tr")[1:]:
+        if tables:
+            for row in tables[0].find_all("tr")[1:]:
                 cells = [td.get_text(strip=True) for td in row.find_all("td")]
                 if len(cells) >= 2 and cells[1]:
                     players.append(cells[1].strip())
@@ -80,7 +67,26 @@ class AetherhubService:
             if m:
                 max_round = max(max_round, int(m.group(1)))
 
-        return players, pairings, max_round
+        return players, max_round
+
+    def _parse_pairings_page(self, html: str) -> list[AetherhubPairing]:
+        """Parse pairings from /Tourney/RoundTourneyPublicPairings response."""
+        soup = BeautifulSoup(html, "html.parser")
+        tables = soup.find_all("table")
+        pairings: list[AetherhubPairing] = []
+        if not tables:
+            return pairings
+        for row in tables[0].find_all("tr")[1:]:
+            cells = [td.get_text(strip=True) for td in row.find_all("td")]
+            if len(cells) < 3:
+                continue
+            p1 = self._strip_points(cells[1])
+            p2 = self._strip_points(cells[2]) if cells[2] else None
+            if p1:
+                pairings.append(AetherhubPairing(player=p1, opponent=p2 or None))
+            if p2:
+                pairings.append(AetherhubPairing(player=p2, opponent=p1 or None))
+        return pairings
 
     def _extract_date(self, text: str) -> date | None:
         for pattern, fmt in _DATE_FORMATS:
@@ -141,17 +147,25 @@ class AetherhubService:
                 return link.url
         return None
 
+    def _pairings_url(self, tourney_id: str, round_num: int) -> str:
+        return f"https://aetherhub.com/Tourney/RoundTourneyPublicPairings?id={tourney_id}&p={round_num}"
+
     def fetch_tournament(self, url: str) -> AetherhubTournamentData:
-        r1_html = self._scraper.get(f"{url}?p=1", timeout=30).text
-        players, r1_pairings, max_round = self._parse_page(r1_html)
-        if not players:
-            players = self._players_from_pairings(r1_pairings)
+        m = re.search(r"/(\d+)/?$", url)
+        if not m:
+            raise ValueError(f"Cannot extract tournament ID from URL: {url}")
+        tourney_id = m.group(1)
 
-        rounds = [AetherhubRound(number=1, pairings=r1_pairings)]
+        main_html = self._scraper.get(url, timeout=30).text
+        players, max_round = self._parse_standings_page(main_html)
 
-        for rn in range(2, max_round + 1):
-            html = self._scraper.get(f"{url}?p={rn}", timeout=30).text
-            _, pairings, _ = self._parse_page(html)
+        rounds = []
+        for rn in range(1, max_round + 1):
+            pairings_html = self._scraper.get(self._pairings_url(tourney_id, rn), timeout=30).text
+            pairings = self._parse_pairings_page(pairings_html)
             rounds.append(AetherhubRound(number=rn, pairings=pairings))
+
+        if not players and rounds:
+            players = self._players_from_pairings(rounds[0].pairings)
 
         return AetherhubTournamentData(url=url, players=players, rounds=rounds)
