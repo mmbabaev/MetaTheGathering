@@ -3,7 +3,7 @@ from telegram.ext import ContextTypes
 
 from bot.handlers.features import FeaturesHandler
 from core.database import SessionLocal
-from services.feature_flags import FeatureFlagService
+from services.feature_flags import KNOWN_FLAGS, FeatureFlagService
 from services.user import UserService
 
 
@@ -22,6 +22,16 @@ async def cmd_features(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await msg.reply_text(result.text, reply_markup=result.keyboard)
     finally:
         db.close()
+
+
+async def callback_feature_info(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not query or not query.data:
+        return
+    flag_name = query.data.split(":", 1)[1]
+    meta = KNOWN_FLAGS.get(flag_name)
+    text = meta.description if meta else flag_name
+    await query.answer(text, show_alert=True)
 
 
 async def callback_feature_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

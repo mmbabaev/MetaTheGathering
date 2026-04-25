@@ -101,21 +101,33 @@ class TestFeaturesHandler:
 
 
 class TestFeaturesKeyboard:
-    def test_enabled_flag_shows_checkmark(self, ff_svc):
+    def test_each_flag_has_two_buttons(self, ff_svc):
         flags = ff_svc.list_flags()
         kb = features_keyboard(flags)
-        buttons = [btn.text for row in kb.inline_keyboard for btn in row]
-        assert any(b.startswith("✅") for b in buttons)
+        for row in kb.inline_keyboard:
+            assert len(row) == 2
 
-    def test_disabled_flag_shows_cross(self, ff_svc):
+    def test_enabled_flag_toggle_shows_checkmark(self, ff_svc):
+        flags = ff_svc.list_flags()
+        kb = features_keyboard(flags)
+        toggle_buttons = [row[1].text for row in kb.inline_keyboard]
+        assert any(b == "✅" for b in toggle_buttons)
+
+    def test_disabled_flag_toggle_shows_cross(self, ff_svc):
         ff_svc.toggle(FeatureFlags.RECORD_OPPONENTS)
         flags = ff_svc.list_flags()
         kb = features_keyboard(flags)
-        buttons = [btn.text for row in kb.inline_keyboard for btn in row]
-        assert any(b.startswith("❌") for b in buttons)
+        toggle_buttons = [row[1].text for row in kb.inline_keyboard]
+        assert any(b == "❌" for b in toggle_buttons)
 
-    def test_callback_data_contains_flag_name(self, ff_svc):
+    def test_info_button_callback_contains_flag_name(self, ff_svc):
         flags = ff_svc.list_flags()
         kb = features_keyboard(flags)
-        callbacks = [btn.callback_data for row in kb.inline_keyboard for btn in row]
-        assert any(FeatureFlags.RECORD_OPPONENTS in cb for cb in callbacks)
+        info_callbacks = [row[0].callback_data for row in kb.inline_keyboard]
+        assert any(FeatureFlags.RECORD_OPPONENTS in cb for cb in info_callbacks)
+
+    def test_toggle_button_callback_contains_flag_name(self, ff_svc):
+        flags = ff_svc.list_flags()
+        kb = features_keyboard(flags)
+        toggle_callbacks = [row[1].callback_data for row in kb.inline_keyboard]
+        assert any(FeatureFlags.RECORD_OPPONENTS in cb for cb in toggle_callbacks)

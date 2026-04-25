@@ -41,15 +41,19 @@ CB_ADMIN_MORE = "adm_more"  # adm_more:{tournament_id}
 CB_CLOSE_TOURNAMENT = "close_t"  # close_t:{tournament_id}
 CB_ADMIN_OPPONENTS = "adm_opps"  # adm_opps:{tournament_id}
 CB_FEATURE_TOGGLE = "feat_toggle"  # feat_toggle:{flag_name}
+CB_FEATURE_INFO = "feat_info"  # feat_info:{flag_name}
 
 
 def features_keyboard(flags: list) -> InlineKeyboardMarkup:
-    """Кнопки feature flags — каждый флаг как отдельная строка с текущим статусом."""
+    """Кнопки feature flags — каждый флаг как строка из двух кнопок: описание (алерт) + тогл."""
     buttons = []
     for flag in flags:
         status = "✅" if flag.enabled else "❌"
         buttons.append(
-            [InlineKeyboardButton(f"{status} {flag.description}", callback_data=f"{CB_FEATURE_TOGGLE}:{flag.name}")]
+            [
+                InlineKeyboardButton(flag.name, callback_data=f"{CB_FEATURE_INFO}:{flag.name}"),
+                InlineKeyboardButton(status, callback_data=f"{CB_FEATURE_TOGGLE}:{flag.name}"),
+            ]
         )
     return InlineKeyboardMarkup(buttons)
 
