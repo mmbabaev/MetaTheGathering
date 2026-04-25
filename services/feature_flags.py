@@ -27,7 +27,7 @@ class FeatureFlags:
 
 KNOWN_FLAGS: dict[str, FeatureFlagMeta] = {
     FeatureFlags.RECORD_OPPONENTS: FeatureFlagMeta(
-        description="Кнопка «Записать оппонентов» на карточке турнира",
+        description="Записать оппонентов",
         value_type="bool",
         default_value="true",
     ),
