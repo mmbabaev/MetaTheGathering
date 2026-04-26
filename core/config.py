@@ -1,4 +1,5 @@
 import os
+import sys
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -8,6 +9,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Load .env early so BOT_ENV is available via os.getenv before Settings() runs
 load_dotenv()
+
+
+def _is_pytest_running() -> bool:
+    # We need this to work during test collection/import time (before any test runs),
+    # so PYTEST_CURRENT_TEST is not reliable here.
+    if "pytest" in sys.modules:
+        return True
+    return any("pytest" in (arg or "") for arg in sys.argv)
+
 
 _bot_env = os.getenv("BOT_ENV", "prod")
 if _bot_env == "debug":
@@ -35,8 +45,9 @@ class Club:
 
 
 class Settings(BaseSettings):
-    TELEGRAM_BOT_TOKEN: str
-    DATABASE_URL: AnyUrl
+    # In tests we don't want env requirements to block imports.
+    TELEGRAM_BOT_TOKEN: str = "TEST_TOKEN" if _is_pytest_running() else ...
+    DATABASE_URL: AnyUrl = "sqlite+pysqlite:///:memory:" if _is_pytest_running() else ...
 
     # Через запятую в .env: ADMIN_IDS=123,456
     ADMIN_IDS: str = ""

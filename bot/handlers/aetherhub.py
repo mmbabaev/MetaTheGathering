@@ -61,7 +61,7 @@ class AetherhubHandler:
         rounds_summary = ", ".join(f"R{r.number}: {len(r.pairings) // 2} столов" for r in data.rounds)
         preview = (
             f"{header}\n\n"
-            f"Игроков в стендингах: {len(data.players)}\n"
+            f"Игроков: {len(data.players)}\n"
             f"Раунды: {rounds_summary}\n\n"
             f"Первые 5 игроков:\n" + "\n".join(f"  • {p}" for p in data.players[:5])
         )

@@ -65,3 +65,32 @@ class TestHandleImportPrompt:
         h = _handler(fetch_data=_make_tournament_data(url=url))
         result = h.handle_import_prompt(stored_url=url, club_aetherhub_url=None)
         assert result.data.url == url
+
+
+class TestPreviewMessage:
+    def test_preview_contains_header_counts_and_first5(self):
+        data = AetherhubTournamentData(
+            url="https://aetherhub.com/Tourney/RoundTourney/99049",
+            players=["P1", "P2", "P3", "P4", "P5", "P6"],
+            rounds=[],
+        )
+        h = _handler(fetch_data=data)
+        result = h.handle_fetch_preview(data.url, header="📥 Импорт AetherHub")
+        assert isinstance(result, AetherhubFetchResult)
+        assert "📥 Импорт AetherHub" in result.preview_text
+        assert "Игроков: 6" in result.preview_text
+        assert "Первые 5 игроков:" in result.preview_text
+        assert "• P1" in result.preview_text
+        assert "• P5" in result.preview_text
+        assert "…ещё 1" in result.preview_text
+
+    def test_preview_does_not_show_points_label(self):
+        """Preview should not contain Aetherhub points labels in player names."""
+        data = AetherhubTournamentData(
+            url="https://aetherhub.com/Tourney/RoundTourney/99049",
+            players=["Валентин Задорожний", "Иван Юров"],
+            rounds=[],
+        )
+        h = _handler(fetch_data=data)
+        result = h.handle_fetch_preview(data.url, header="📥 Импорт AetherHub")
+        assert "Points" not in result.preview_text
