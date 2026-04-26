@@ -179,32 +179,22 @@ class TestTournamentCardKeyboard:
         texts = self._all_texts(markup)
         assert any("📥" in t and "AetherHub" in t for t in texts)
 
-    def test_opponents_button_shown_when_feature_enabled_with_pairings(self):
-        kb = Keyboards(FeatureService(debug=True))
-        markup = kb.tournament_card_keyboard(1, is_registered=True, has_pairings=True)
+    def test_opponents_button_shown_when_enabled(self):
+        markup = Keyboards().tournament_card_keyboard(1, is_registered=True, show_fill_opponents=True)
         texts = self._all_texts(markup)
         assert any("оппонент" in t.lower() for t in texts)
 
-    def test_opponents_button_hidden_when_feature_disabled(self):
-        kb = Keyboards(FeatureService(debug=False))
-        markup = kb.tournament_card_keyboard(1, is_registered=True, has_pairings=True)
-        texts = self._all_texts(markup)
-        assert not any("оппонент" in t.lower() for t in texts)
-
-    def test_opponents_button_hidden_without_pairings(self):
-        kb = Keyboards(FeatureService(debug=True))
-        markup = kb.tournament_card_keyboard(1, is_registered=True, has_pairings=False)
+    def test_opponents_button_hidden_when_not_enabled(self):
+        markup = Keyboards().tournament_card_keyboard(1, is_registered=True, show_fill_opponents=False)
         texts = self._all_texts(markup)
         assert not any("оппонент" in t.lower() for t in texts)
 
     def test_opponents_button_shown_without_deck(self):
-        kb = Keyboards(FeatureService(debug=True))
-        markup = kb.tournament_card_keyboard(1, is_registered=True, has_pairings=True, has_deck=False)
+        markup = Keyboards().tournament_card_keyboard(1, is_registered=True, show_fill_opponents=True, has_deck=False)
         texts = self._all_texts(markup)
         assert any("оппонент" in t.lower() for t in texts)
 
     def test_opponents_button_hidden_when_not_registered(self):
-        kb = Keyboards(FeatureService(debug=True))
-        markup = kb.tournament_card_keyboard(1, is_registered=False, has_pairings=True)
+        markup = Keyboards().tournament_card_keyboard(1, is_registered=False, show_fill_opponents=True)
         texts = self._all_texts(markup)
         assert not any("оппонент" in t.lower() for t in texts)

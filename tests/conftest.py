@@ -10,6 +10,7 @@ from core.models import TournamentStatus, VoteType
 from core.schemas import TournamentCreate
 from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeService
+from services.feature_flags import FeatureFlagService
 from services.tournament import TournamentService
 from services.user import UserService
 
@@ -82,10 +83,15 @@ def aetherhub_svc(db):
 
 
 @pytest.fixture
-def features():
-    return FeatureService(debug=False)
+def ff_svc(db):
+    return FeatureFlagService(db)
 
 
 @pytest.fixture
-def keyboards(features):
-    return Keyboards(features)
+def features(ff_svc):
+    return FeatureService(ff_svc)
+
+
+@pytest.fixture
+def keyboards():
+    return Keyboards()

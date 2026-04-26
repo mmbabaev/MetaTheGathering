@@ -694,7 +694,7 @@ class TestHandleAdminStatus:
         assert any("✏️" in t for t in buttons_text)
 
 
-# --- handle_admin_pick_arch ---
+# --- handle_pick_participant_arch ---
 
 
 class TestHandleAdminPickArch:
@@ -704,12 +704,15 @@ class TestHandleAdminPickArch:
         svc.bulk_add_participants(active_tournament.id, [(user.id, "Игрок")])
         return svc.get_participant(active_tournament.id, user.id)
 
-    def test_non_admin_returns_not_admin(self, handler, active_tournament, participant):
-        result = handler.handle_admin_pick_arch(tg_id=42, participant_id=participant.id)
+    def test_non_admin_blocked_when_feature_disabled(self, handler, ff_svc, active_tournament, participant):
+        from services.feature_flags import FeatureFlags
+
+        ff_svc.toggle(FeatureFlags.RECORD_OPPONENTS)  # default true → false
+        result = handler.handle_pick_participant_arch(tg_id=42, participant_id=participant.id)
         assert result.text == NOT_ADMIN
 
     def test_returns_archetype_keyboard(self, handler, admin_user, active_tournament, participant, archetype_burn):
-        result = handler.handle_admin_pick_arch(tg_id=ADMIN_TG_ID, participant_id=participant.id)
+        result = handler.handle_pick_participant_arch(tg_id=ADMIN_TG_ID, participant_id=participant.id)
         from bot.messages import CHOOSE_ARCHETYPE
 
         assert result.text == CHOOSE_ARCHETYPE
@@ -718,19 +721,19 @@ class TestHandleAdminPickArch:
     def test_participant_not_found(self, handler, admin_user):
         from bot.messages import PARTICIPANT_NOT_FOUND
 
-        result = handler.handle_admin_pick_arch(tg_id=ADMIN_TG_ID, participant_id=99999)
+        result = handler.handle_pick_participant_arch(tg_id=ADMIN_TG_ID, participant_id=99999)
         assert result.text == PARTICIPANT_NOT_FOUND
         assert result.is_alert
 
     def test_keyboard_uses_admin_callbacks(self, handler, admin_user, active_tournament, participant, archetype_burn):
-        result = handler.handle_admin_pick_arch(tg_id=ADMIN_TG_ID, participant_id=participant.id)
+        result = handler.handle_pick_participant_arch(tg_id=ADMIN_TG_ID, participant_id=participant.id)
         from bot.keyboards import CB_ADMIN_SET_ARCH
 
         buttons = [b for row in result.keyboard.inline_keyboard for b in row]
         assert any(b.callback_data.startswith(CB_ADMIN_SET_ARCH) for b in buttons)
 
 
-# --- handle_admin_set_arch ---
+# --- handle_set_participant_arch ---
 
 
 class TestHandleAdminSetArch:
@@ -740,14 +743,21 @@ class TestHandleAdminSetArch:
         svc.bulk_add_participants(active_tournament.id, [(user.id, "Игрок")])
         return svc.get_participant(active_tournament.id, user.id)
 
-    def test_non_admin_returns_not_admin(self, handler, active_tournament, participant, archetype_burn):
-        result = handler.handle_admin_set_arch(tg_id=42, participant_id=participant.id, archetype_id=archetype_burn.id)
+    def test_non_admin_blocked_when_feature_disabled(
+        self, handler, ff_svc, active_tournament, participant, archetype_burn
+    ):
+        from services.feature_flags import FeatureFlags
+
+        ff_svc.toggle(FeatureFlags.RECORD_OPPONENTS)  # default true → false
+        result = handler.handle_set_participant_arch(
+            tg_id=42, participant_id=participant.id, archetype_id=archetype_burn.id
+        )
         assert result.text == NOT_ADMIN
 
     def test_sets_archetype_successfully(
         self, handler, svc, admin_user, active_tournament, participant, archetype_burn
     ):
-        result = handler.handle_admin_set_arch(
+        result = handler.handle_set_participant_arch(
             tg_id=ADMIN_TG_ID, participant_id=participant.id, archetype_id=archetype_burn.id
         )
         from bot.messages import ADMIN_ARCH_SAVED
@@ -760,12 +770,14 @@ class TestHandleAdminSetArch:
     def test_participant_not_found(self, handler, admin_user, archetype_burn):
         from bot.messages import PARTICIPANT_NOT_FOUND
 
-        result = handler.handle_admin_set_arch(tg_id=ADMIN_TG_ID, participant_id=99999, archetype_id=archetype_burn.id)
+        result = handler.handle_set_participant_arch(
+            tg_id=ADMIN_TG_ID, participant_id=99999, archetype_id=archetype_burn.id
+        )
         assert result.text == PARTICIPANT_NOT_FOUND
         assert result.is_alert
 
 
-# --- handle_admin_custom_arch_text ---
+# --- handle_set_participant_custom_arch ---
 
 
 class TestHandleAdminCustomArchText:
@@ -775,12 +787,15 @@ class TestHandleAdminCustomArchText:
         svc.bulk_add_participants(active_tournament.id, [(user.id, "Игрок")])
         return svc.get_participant(active_tournament.id, user.id)
 
-    def test_non_admin_returns_not_admin(self, handler, participant):
-        result = handler.handle_admin_custom_arch_text(tg_id=42, participant_id=participant.id, arch_name="Elves")
+    def test_non_admin_blocked_when_feature_disabled(self, handler, ff_svc, participant):
+        from services.feature_flags import FeatureFlags
+
+        ff_svc.toggle(FeatureFlags.RECORD_OPPONENTS)  # default true → false
+        result = handler.handle_set_participant_custom_arch(tg_id=42, participant_id=participant.id, arch_name="Elves")
         assert result.text == NOT_ADMIN
 
     def test_creates_archetype_and_sets(self, handler, svc, admin_user, participant):
-        result = handler.handle_admin_custom_arch_text(
+        result = handler.handle_set_participant_custom_arch(
             tg_id=ADMIN_TG_ID, participant_id=participant.id, arch_name="Turbo Fog"
         )
         from bot.messages import ADMIN_ARCH_SAVED
@@ -791,7 +806,7 @@ class TestHandleAdminCustomArchText:
     def test_participant_not_found(self, handler, admin_user):
         from bot.messages import PARTICIPANT_NOT_FOUND
 
-        result = handler.handle_admin_custom_arch_text(tg_id=ADMIN_TG_ID, participant_id=99999, arch_name="Elves")
+        result = handler.handle_set_participant_custom_arch(tg_id=ADMIN_TG_ID, participant_id=99999, arch_name="Elves")
         assert result.text == PARTICIPANT_NOT_FOUND
         assert result.is_alert
 
@@ -823,7 +838,7 @@ class TestHandleAdminPickArchUsesParticipantHistory:
 
     def test_first_archetype_is_player_history_not_admin_history(self, handler, admin_user, active_tournament, setup):
         participant, burn, elves = setup
-        result = handler.handle_admin_pick_arch(tg_id=ADMIN_TG_ID, participant_id=participant.id)
+        result = handler.handle_pick_participant_arch(tg_id=ADMIN_TG_ID, participant_id=participant.id)
 
         first_btn = result.keyboard.inline_keyboard[0][0]
         # Elves — история игрока, должна стоять первой
@@ -865,7 +880,7 @@ class TestHandleAdminPickArchUsesParticipantHistory:
         svc.bulk_add_participants(active_tournament.id, [(player.id, "Bulk Player")])
         participant = svc.get_participant(active_tournament.id, player.id)
 
-        result = handler.handle_admin_pick_arch(tg_id=ADMIN_TG_ID, participant_id=participant.id)
+        result = handler.handle_pick_participant_arch(tg_id=ADMIN_TG_ID, participant_id=participant.id)
 
         all_btn_names = [b.text for row in result.keyboard.inline_keyboard for b in row]
         first_btn = result.keyboard.inline_keyboard[0][0]
@@ -945,7 +960,7 @@ class TestStatusReturnedAfterSetArch:
         return arch_svc.get_or_create_by_name("Burn")
 
     def test_result_contains_arch_name(self, handler, admin_user, active_tournament, participant, archetype_burn):
-        result = handler.handle_admin_set_arch(
+        result = handler.handle_set_participant_arch(
             tg_id=ADMIN_TG_ID, participant_id=participant.id, archetype_id=archetype_burn.id
         )
         assert "Burn" in result.text
@@ -953,7 +968,7 @@ class TestStatusReturnedAfterSetArch:
     def test_result_contains_tournament_status(
         self, handler, admin_user, active_tournament, participant, archetype_burn
     ):
-        result = handler.handle_admin_set_arch(
+        result = handler.handle_set_participant_arch(
             tg_id=ADMIN_TG_ID, participant_id=participant.id, archetype_id=archetype_burn.id
         )
         assert active_tournament.title in result.text
@@ -963,7 +978,7 @@ class TestStatusReturnedAfterSetArch:
     ):
         from bot.keyboards import CB_ADMIN_SHOW_FILLED
 
-        result = handler.handle_admin_set_arch(
+        result = handler.handle_set_participant_arch(
             tg_id=ADMIN_TG_ID, participant_id=participant.id, archetype_id=archetype_burn.id
         )
         assert result.keyboard is not None
@@ -974,7 +989,7 @@ class TestStatusReturnedAfterSetArch:
     def test_arch_saved_message_comes_before_status(
         self, handler, admin_user, active_tournament, participant, archetype_burn
     ):
-        result = handler.handle_admin_set_arch(
+        result = handler.handle_set_participant_arch(
             tg_id=ADMIN_TG_ID, participant_id=participant.id, archetype_id=archetype_burn.id
         )
         pos_arch = result.text.index("Burn")
@@ -984,7 +999,9 @@ class TestStatusReturnedAfterSetArch:
     def test_archetype_actually_saved_in_db(
         self, handler, svc, admin_user, active_tournament, participant, archetype_burn
     ):
-        handler.handle_admin_set_arch(tg_id=ADMIN_TG_ID, participant_id=participant.id, archetype_id=archetype_burn.id)
+        handler.handle_set_participant_arch(
+            tg_id=ADMIN_TG_ID, participant_id=participant.id, archetype_id=archetype_burn.id
+        )
         updated = svc.get_participant(active_tournament.id, participant.user_id)
         assert updated.archetype_id == archetype_burn.id
 
@@ -994,7 +1011,9 @@ class TestStatusReturnedAfterSetArch:
         """После назначения колоды кнопка участника видна через show_filled и имеет prefix ✏️."""
         result = handler.handle_admin_show_filled(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
         # set arch first so participant is filled
-        handler.handle_admin_set_arch(tg_id=ADMIN_TG_ID, participant_id=participant.id, archetype_id=archetype_burn.id)
+        handler.handle_set_participant_arch(
+            tg_id=ADMIN_TG_ID, participant_id=participant.id, archetype_id=archetype_burn.id
+        )
         result = handler.handle_admin_show_filled(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
         btns = [b for row in result.keyboard.inline_keyboard for b in row]
         participant_btn = next((b for b in btns if str(participant.id) in b.callback_data), None)
@@ -1067,10 +1086,8 @@ class TestHandleArchive:
 
 class TestHandleAdminOpponents:
     @pytest.fixture
-    def handler(self, svc, user_svc, arch_svc, keyboards):
-        from bot.features import FeatureService
-
-        return AdminHandler(svc, user_svc, arch_svc, keyboards, FeatureService(debug=True))
+    def handler(self, svc, user_svc, arch_svc, keyboards, features):
+        return AdminHandler(svc, user_svc, arch_svc, keyboards, features)
 
     @pytest.fixture
     def admin_user_obj(self, user_svc):
@@ -1080,10 +1097,12 @@ class TestHandleAdminOpponents:
     def opponent_user(self, user_svc):
         return user_svc.get_or_create(tg_id=8800, username=None, first_name="Bob", last_name="Smith")
 
-    def test_feature_disabled_blocks_access(self, svc, user_svc, arch_svc, keyboards):
+    def test_feature_disabled_blocks_access(self, svc, user_svc, arch_svc, keyboards, ff_svc):
         from bot.features import FeatureService
+        from services.feature_flags import FeatureFlags
 
-        disabled_handler = AdminHandler(svc, user_svc, arch_svc, keyboards, FeatureService(debug=False))
+        ff_svc.toggle(FeatureFlags.RECORD_OPPONENTS)  # default is true → now false
+        disabled_handler = AdminHandler(svc, user_svc, arch_svc, keyboards, FeatureService(ff_svc))
         result = disabled_handler.handle_fill_opponents(tg_id=1, tournament_id=1)
         assert result.is_alert
 

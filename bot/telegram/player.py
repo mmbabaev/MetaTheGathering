@@ -11,10 +11,10 @@ from bot.keyboards import Keyboards
 from bot.messages import CUSTOM_ARCHETYPE_PROMPT
 from bot.telegram.common import log_event as _log
 from bot.telegram.common import parse_callback_ints
-from core.config import settings
 from core.database import SessionLocal
 from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeService
+from services.feature_flags import FeatureFlagService
 from services.tournament import TournamentService
 from services.user import UserService
 
@@ -26,13 +26,18 @@ USER_DATA_PENDING_ADMIN_CUSTOM_ARCH = "pending_admin_custom_arch_participant_id"
 USER_DATA_OPPONENTS_MODE = "opponents_tournament_id"
 
 
-def _make_keyboards() -> Keyboards:
-    return Keyboards(FeatureService(debug=settings.DEBUG))
+def _make_features(db) -> FeatureService:
+    return FeatureService(FeatureFlagService(db))
 
 
 def _player_handler(db) -> PlayerHandler:
     return PlayerHandler(
-        TournamentService(db), UserService(db), ArchetypeService(db), _make_keyboards(), AetherhubImportService(db)
+        TournamentService(db),
+        UserService(db),
+        ArchetypeService(db),
+        Keyboards(),
+        AetherhubImportService(db),
+        _make_features(db),
     )
 
 
@@ -40,14 +45,8 @@ def _settings_handler(db) -> SettingsHandler:
     return SettingsHandler(UserService(db))
 
 
-def _make_features() -> FeatureService:
-    return FeatureService(debug=settings.DEBUG)
-
-
 def _admin_handler(db) -> AdminHandler:
-    return AdminHandler(
-        TournamentService(db), UserService(db), ArchetypeService(db), _make_keyboards(), _make_features()
-    )
+    return AdminHandler(TournamentService(db), UserService(db), ArchetypeService(db), Keyboards(), _make_features(db))
 
 
 async def cmd_tournaments(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -303,7 +302,7 @@ async def _handle_pending_admin_custom_arch(msg, user, text, context) -> bool:
     context.user_data.pop(USER_DATA_PENDING_ADMIN_CUSTOM_ARCH)
     db = SessionLocal()
     try:
-        result = _admin_handler(db).handle_admin_custom_arch_text(user.id, participant_id, text)
+        result = _admin_handler(db).handle_set_participant_custom_arch(user.id, participant_id, text)
         if not result.is_alert:
             _log("admin_custom_arch", user, participant_id=participant_id, arch_name=text)
         await msg.reply_text(result.text)

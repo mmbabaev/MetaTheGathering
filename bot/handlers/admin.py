@@ -352,9 +352,9 @@ class AdminHandler:
             keyboard=self.keyboards.admin_archetype_select_keyboard(participant_id, arch_list, has_more),
         )
 
-    def handle_admin_pick_arch(self, tg_id: int, participant_id: int, expanded: bool = False) -> HandlerResult:
+    def handle_pick_participant_arch(self, tg_id: int, participant_id: int, expanded: bool = False) -> HandlerResult:
         """Показывает выбор архетипа для конкретного участника."""
-        if not self.user_svc.is_admin(tg_id):
+        if not self.user_svc.is_admin(tg_id) and not self._features.can_fill_opponent_decks():
             return HandlerResult(NOT_ADMIN)
         p = self.svc.get_participant_by_id(participant_id)
         if p is None:
@@ -363,13 +363,13 @@ class AdminHandler:
         player_tg_id = user.tg_id if user else None
         return self._archetype_keyboard_for_participant(participant_id, player_tg_id, expanded)
 
-    def handle_admin_arch_more(self, tg_id: int, participant_id: int) -> HandlerResult:
+    def handle_pick_participant_arch_more(self, tg_id: int, participant_id: int) -> HandlerResult:
         """Разворачивает полный список архетипов для участника (история + топ)."""
-        return self.handle_admin_pick_arch(tg_id, participant_id, expanded=True)
+        return self.handle_pick_participant_arch(tg_id, participant_id, expanded=True)
 
-    def handle_admin_set_arch(self, tg_id: int, participant_id: int, archetype_id: int) -> HandlerResult:
+    def handle_set_participant_arch(self, tg_id: int, participant_id: int, archetype_id: int) -> HandlerResult:
         """Устанавливает архетип участнику, затем возвращает обновлённый статус турнира."""
-        if not self.user_svc.is_admin(tg_id):
+        if not self.user_svc.is_admin(tg_id) and not self._features.can_fill_opponent_decks():
             return HandlerResult(NOT_ADMIN)
         p = self.svc.get_participant_by_id(participant_id)
         if p is None:
@@ -382,9 +382,9 @@ class AdminHandler:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
         return self._tournament_status_result(p.tournament_id, prefix=ADMIN_ARCH_SAVED.format(archetype_name=arch_name))
 
-    def handle_admin_custom_arch_text(self, tg_id: int, participant_id: int, arch_name: str) -> HandlerResult:
+    def handle_set_participant_custom_arch(self, tg_id: int, participant_id: int, arch_name: str) -> HandlerResult:
         """Создаёт архетип по введённому названию и присваивает участнику."""
-        if not self.user_svc.is_admin(tg_id):
+        if not self.user_svc.is_admin(tg_id) and not self._features.can_fill_opponent_decks():
             return HandlerResult(NOT_ADMIN)
         try:
             arch = self.arch_svc.get_or_create_by_name(arch_name, is_custom=True)
