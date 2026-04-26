@@ -48,7 +48,11 @@ class AetherhubService:
         self._scraper = scraper or cloudscraper.create_scraper()
 
     def _strip_points(self, name: str) -> str:
-        return re.sub(r"\s*\(\d+ Points?\)\s*$", "", name).strip()
+        # Aetherhub sometimes injects points inside the player label, e.g.
+        # "Валентин (6 Points) Задорожний". Remove it anywhere, case-insensitive.
+        s = re.sub(r"\(\s*\d+\s*points?\s*\)", "", name or "", flags=re.IGNORECASE)
+        s = re.sub(r"\s+", " ", s).strip()
+        return s
 
     def _players_from_pairings(self, pairings: list[AetherhubPairing]) -> list[str]:
         names = [p.player for p in pairings] + [p.opponent for p in pairings if p.opponent]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -24,10 +25,18 @@ class AetherhubImportService:
         self.db = db
         self._user_svc = UserService(db)
 
+    def _normalize_import_name(self, full_name: str) -> str:
+        """Normalize names coming from Aetherhub before matching users."""
+        # Strip "(N Points)" inserted inside the name label; do it case-insensitively.
+        s = re.sub(r"\(\s*\d+\s*points?\s*\)", "", full_name or "", flags=re.IGNORECASE)
+        s = re.sub(r"\s+", " ", s).strip()
+        return s
+
     def find_user_by_name(self, full_name: str) -> models.User | None:
         """Match full_name against User records using flexible name matching
         (both orderings, case-insensitive, ё/е normalization)."""
-        if not full_name.strip():
+        full_name = self._normalize_import_name(full_name)
+        if not full_name:
             return None
         return self._user_svc.find_by_name(full_name)
 

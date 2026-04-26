@@ -94,6 +94,13 @@ class TestStripPoints:
     def test_removes_points_suffix(self):
         assert self.svc._strip_points("Иванов Иван (9 Points)") == "Иванов Иван"
 
+    def test_removes_points_in_middle(self):
+        assert self.svc._strip_points("Валентин (6 Points) Задорожний") == "Валентин Задорожний"
+
+    def test_removes_points_case_insensitive(self):
+        assert self.svc._strip_points("Валентин (6 points) Задорожний") == "Валентин Задорожний"
+        assert self.svc._strip_points("Валентин (6 POINTS) Задорожний") == "Валентин Задорожний"
+
     def test_removes_singular_point(self):
         assert self.svc._strip_points("Петров Петр (1 Point)") == "Петров Петр"
 
@@ -265,6 +272,15 @@ class TestFindUserByName:
         result = import_svc.find_user_by_name("Иван Петров")
         assert result is not None
         assert result.first_name == "Иван"
+
+    def test_finds_user_when_points_injected_and_case_mixed(self, import_svc, db):
+        from services.user import UserService
+
+        UserService(db).get_or_create(tg_id=9003, username=None, first_name="Валентин", last_name="Задорожний")
+        result = import_svc.find_user_by_name("Валентин (6 points) Задорожний")
+        assert result is not None
+        assert result.first_name == "Валентин"
+        assert result.last_name == "Задорожний"
 
 
 # ── TestSavePairings ─────────────────────────────────────────────────────────
