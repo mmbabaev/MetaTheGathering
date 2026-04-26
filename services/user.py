@@ -200,6 +200,14 @@ class UserService:
             .values(user_id=real_user.id)
         )
 
+        # If the user entered their name in reversed order, adopt the placeholder's canonical form
+        if placeholder.first_name and placeholder.last_name:
+            rev_fn = _normalize_name(placeholder.first_name) == _normalize_name(real_user.last_name or "")
+            rev_ln = _normalize_name(placeholder.last_name) == _normalize_name(real_user.first_name or "")
+            if rev_fn and rev_ln:
+                real_user.first_name = placeholder.first_name
+                real_user.last_name = placeholder.last_name
+
         self.db.delete(placeholder)
         self.db.commit()
         return True
