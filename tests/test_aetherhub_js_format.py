@@ -30,10 +30,16 @@ class TestAetherhubJSFormatParser:
             parser._extract_tournament_id("https://example.com/invalid")
 
     def test_extract_player_name_with_points(self, parser):
-        """Test extracting player name from text with points."""
+        """Test extracting player name from text with points at the end."""
         text = "Старостин Владислав (9 Points)"
         name = parser._extract_player_name(text)
         assert name == "Старостин Владислав"
+
+    def test_extract_player_name_with_points_in_middle(self, parser):
+        """Test extracting player name when points label is between first and last name."""
+        assert parser._extract_player_name("Валентин (6 Points) Задорожний") == "Валентин Задорожний"
+        assert parser._extract_player_name("Иван (3 Points) Юров") == "Иван Юров"
+        assert parser._extract_player_name("Илья (9 Points) Емельянов") == "Илья Емельянов"
 
     def test_extract_player_name_without_points(self, parser):
         """Test extracting player name from plain text."""
@@ -54,44 +60,31 @@ class TestAetherhubJSFormatParser:
         assert parser._extract_player_name("BYE (0 Points)") is None
         assert parser._extract_player_name("Bye (0 Points)") is None
 
-    def test_parse_players(self, parser):
-        """Test parsing players from standings table."""
-        html = """
-        <table class="table">
-            <thead><tr><th>Rank</th><th>Name</th><th>Points</th></tr></thead>
-            <tbody>
-                <tr>
-                    <td>1</td>
-                    <td><a data-name="Player One">Player One</a></td>
-                    <td>9</td>
-                </tr>
-                <tr>
-                    <td>2</td>
-                    <td><a data-name="Player Two">Player Two</a></td>
-                    <td>6</td>
-                </tr>
-                <tr>
-                    <td>3</td>
-                    <td><a data-name="Player Three">Player Three</a></td>
-                    <td>3</td>
-                </tr>
-            </tbody>
-        </table>
-        """
-        soup = BeautifulSoup(html, "html.parser")
-        players = parser._parse_players(soup)
+    def test_players_from_round(self, parser):
+        """Test extracting unique players from round 1 pairings."""
+        round_data = AetherhubRound(
+            number=1,
+            pairings=[
+                AetherhubPairing(player="Player One", opponent="Player Two"),
+                AetherhubPairing(player="Player Two", opponent="Player One"),
+                AetherhubPairing(player="Player Three", opponent=None),
+            ],
+        )
+        players = parser._players_from_round(round_data)
+        assert players == ["Player One", "Player Two", "Player Three"]
 
-        assert len(players) == 3
-        assert players[0] == "Player One"
-        assert players[1] == "Player Two"
-        assert players[2] == "Player Three"
-
-    def test_parse_players_empty_table(self, parser):
-        """Test parsing players when no table exists."""
-        html = "<div>No table here</div>"
-        soup = BeautifulSoup(html, "html.parser")
-        players = parser._parse_players(soup)
-        assert players == []
+    def test_players_from_round_preserves_order(self, parser):
+        """Test that player order from round 1 pairings is preserved."""
+        round_data = AetherhubRound(
+            number=1,
+            pairings=[
+                AetherhubPairing(player="Charlie", opponent="Alice"),
+                AetherhubPairing(player="Alice", opponent="Charlie"),
+                AetherhubPairing(player="Bob", opponent=None),
+            ],
+        )
+        players = parser._players_from_round(round_data)
+        assert players == ["Charlie", "Alice", "Bob"]
 
     def test_parse_num_rounds_from_span(self, parser):
         """Test parsing number of rounds from numberOfRounds span."""
@@ -207,11 +200,6 @@ class TestAetherhubJSFormatParser:
         main_html = """
         <html>
             <span id="numberOfRounds">Rounds 2</span>
-            <table>
-                <tr><th>Rank</th><th>Name</th></tr>
-                <tr><td>1</td><td><a>Player One</a></td></tr>
-                <tr><td>2</td><td><a>Player Two</a></td></tr>
-            </table>
         </html>
         """
 
