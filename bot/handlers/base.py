@@ -12,3 +12,4 @@ class HandlerResult:
     needs_name: bool = False  # wrapper должен запросить имя перед продолжением
     parse_mode: Optional[str] = None
     tournament_id: Optional[int] = None  # set when result references a specific tournament
+    yookassa_id: Optional[str] = None  # set after successful payment creation

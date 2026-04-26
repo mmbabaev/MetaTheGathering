@@ -258,6 +258,35 @@ class FeatureFlag(Base):
     created_at = Column(DateTime, default=utc_now, nullable=False)
 
 
+class PaymentStatus(str, enum.Enum):
+    PENDING = "pending"
+    SUCCEEDED = "succeeded"
+    CANCELLED = "cancelled"
+
+
+class Payment(Base):
+    """Платёж участника за турнир через ЮKassa."""
+
+    __tablename__ = "payments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tg_id = Column(BigInteger, nullable=False, index=True)
+    tournament_id = Column(Integer, ForeignKey("tournaments.id", ondelete="CASCADE"), nullable=False)
+    amount = Column(String(16), nullable=False)  # "525.00"
+    yookassa_payment_id = Column(String(64), nullable=True, unique=True)
+    status = Column(
+        Enum(PaymentStatus, values_callable=lambda obj: [e.value for e in obj]),
+        default=PaymentStatus.PENDING,
+        nullable=False,
+    )
+    confirmation_url = Column(String(512), nullable=True)
+    tg_chat_id = Column(BigInteger, nullable=True)
+    tg_message_id = Column(BigInteger, nullable=True)
+
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, nullable=False)
+
+
 class RoundPairing(Base):
     """Паринг одного игрока в конкретном раунде турнира (импорт из AetherHub)."""
 

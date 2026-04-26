@@ -22,6 +22,7 @@ from bot.messages import (
 from services import errors
 from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeItem, ArchetypeService
+from services.payment_service import PaymentService
 from services.tournament import TournamentService
 from services.user import UserService
 from services.utils import get_tournament
@@ -82,6 +83,7 @@ class PlayerHandler:
         keyboards: Keyboards,
         aetherhub_svc: AetherhubImportService,
         feature_svc: FeatureService,
+        payment_svc: PaymentService | None = None,
     ) -> None:
         self.svc = svc
         self.user_svc = user_svc
@@ -89,6 +91,7 @@ class PlayerHandler:
         self.keyboards = keyboards
         self.aetherhub_svc = aetherhub_svc
         self.feature_svc = feature_svc
+        self.payment_svc = payment_svc
 
     def _tournament_card(self, t, tg_id: int | None) -> HandlerResult:
         is_registered = False
@@ -112,6 +115,14 @@ class PlayerHandler:
             total=len(participants),
             with_deck=with_deck,
         )
+        payment_enabled = self.feature_svc.is_payment_enabled()
+        payment_confirmed = (
+            payment_enabled
+            and is_registered
+            and tg_id is not None
+            and self.payment_svc is not None
+            and self.payment_svc.is_paid(tg_id, t.id)
+        )
         return HandlerResult(
             text,
             keyboard=self.keyboards.tournament_card_keyboard(
@@ -123,6 +134,8 @@ class PlayerHandler:
                 has_deck=has_deck,
                 aetherhub_url=getattr(t, "aetherhub_url", None),
                 import_time=getattr(t, "aetherhub_import_time", None),
+                payment_enabled=payment_enabled,
+                payment_confirmed=payment_confirmed,
             ),
         )
 

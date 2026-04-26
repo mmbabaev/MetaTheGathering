@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     MONIUM_PROJECT: str = ""
     MONIUM_API_KEY: str = ""
 
+    YOOKASSA_SHOP_ID: str = ""
+    YOOKASSA_SECRET_KEY: str = ""
+    PAYMENT_AMOUNT: str = "525.00"
+
     # Несекретные настройки — берутся из config/prod.py или config/debug.py
     DEBUG: bool = _app_cfg.debug
     TOURNAMENT_TIMEZONE: str = _app_cfg.tournament_timezone

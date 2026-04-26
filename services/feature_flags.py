@@ -23,6 +23,7 @@ class FeatureFlagInfo:
 
 class FeatureFlags:
     RECORD_OPPONENTS = "recordOpponents"
+    PAYMENT = "payment"
 
 
 KNOWN_FLAGS: dict[str, FeatureFlagMeta] = {
@@ -30,6 +31,11 @@ KNOWN_FLAGS: dict[str, FeatureFlagMeta] = {
         description="Кнопка «Записать оппонентов» на карточке турнира",
         value_type="bool",
         default_value="true",
+    ),
+    FeatureFlags.PAYMENT: FeatureFlagMeta(
+        description="Оплата взноса через бота (ЮKassa)",
+        value_type="bool",
+        default_value="false",
     ),
 }
 

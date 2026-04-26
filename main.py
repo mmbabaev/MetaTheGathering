@@ -46,6 +46,8 @@ from bot.keyboards import (
     CB_NOTIFY_CANCEL,
     CB_NOTIFY_CONFIRM,
     CB_NOTIFY_NO_DECK,
+    CB_PAY,
+    CB_PAY_STATUS,
     CB_POLL_MENU,
     CB_REGISTER,
     CB_REVEAL_DECKS,
@@ -58,6 +60,7 @@ from bot.scheduler import setup_scheduler
 from bot.telegram import admin, common, player
 from bot.telegram import aetherhub as aetherhub_handler
 from bot.telegram import features as features_handler
+from bot.telegram import payment as payment_handler
 from bot.telegram import poll as poll_handler
 from bot.telegram import settings as settings_handler
 from core import models
@@ -232,6 +235,8 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(admin.callback_fill_opponents, pattern=f"^{CB_ADMIN_OPPONENTS}:"))
     app.add_handler(CallbackQueryHandler(features_handler.callback_feature_info, pattern=f"^{CB_FEATURE_INFO}:"))
     app.add_handler(CallbackQueryHandler(features_handler.callback_feature_toggle, pattern=f"^{CB_FEATURE_TOGGLE}:"))
+    app.add_handler(CallbackQueryHandler(payment_handler.callback_pay, pattern=f"^{CB_PAY}:"))
+    app.add_handler(CallbackQueryHandler(payment_handler.callback_pay_status, pattern=f"^{CB_PAY_STATUS}:"))
     app.add_handler(PollAnswerHandler(poll_handler.handle_poll_answer))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & private, player.message_text_input))
