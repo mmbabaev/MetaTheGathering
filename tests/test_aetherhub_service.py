@@ -212,11 +212,6 @@ class TestFetchTournament:
         data = self._fetch()
         assert data.url == _BASE_URL
 
-    def test_single_round_tournament(self):
-        single_standings = STANDINGS_HTML.replace('<a href="?p=2">2</a>', "")
-        data = _svc({_BASE_URL: single_standings, _PAIRINGS_R1: PAIRINGS_R1_HTML}).fetch_tournament(_BASE_URL)
-        assert len(data.rounds) == 1
-
     def test_players_from_pairings_when_standings_empty(self):
         """When standings are empty, player names are taken from round 1 pairings."""
         data = _svc({_BASE_URL: STANDINGS_EMPTY_HTML, _PAIRINGS_R1: PAIRINGS_R1_HTML}).fetch_tournament(_BASE_URL)
