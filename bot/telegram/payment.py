@@ -1,11 +1,9 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from bot.features import FeatureService
 from bot.handlers.payment import PaymentHandler
 from bot.keyboards import Keyboards
 from bot.telegram.common import parse_callback_ints
-from core.config import settings
 from core.database import SessionLocal
 from services import errors
 from services.payment_service import PaymentService
@@ -13,12 +11,8 @@ from services.user import UserService
 from services.utils import get_tournament
 
 
-def _make_keyboards() -> Keyboards:
-    return Keyboards(FeatureService(debug=settings.DEBUG))
-
-
 def _payment_handler(db) -> PaymentHandler:
-    return PaymentHandler(PaymentService(db), UserService(db), _make_keyboards())
+    return PaymentHandler(PaymentService(db), UserService(db), Keyboards())
 
 
 async def callback_pay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
