@@ -778,8 +778,10 @@ class TestGetOrCreateByName:
 
         from bot.features import FeatureService
         from bot.keyboards import Keyboards
+        from services.feature_flags import FeatureFlagService
 
-        handler = AdminHandler(svc, user_svc, arch_svc, Keyboards(FeatureService()), FeatureService())
+        ff_svc = FeatureFlagService(db)
+        handler = AdminHandler(svc, user_svc, arch_svc, Keyboards(), FeatureService(ff_svc))
 
         # Добавляем в порядке Фамилия Имя (как вводит оператор)
         with patch("services.user.settings") as mock_settings:

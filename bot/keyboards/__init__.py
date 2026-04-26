@@ -3,7 +3,6 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from bot.deck_emoji import deck_emoji
-from bot.features import FeatureService
 from bot.messages import format_participant_name
 
 # Callback data prefixes (max 64 bytes in Telegram)
@@ -60,9 +59,6 @@ def features_keyboard(flags: list) -> InlineKeyboardMarkup:
 
 
 class Keyboards:
-    def __init__(self, features: FeatureService) -> None:
-        self._features = features
-
     def tournament_list_keyboard(self, tournaments: list) -> InlineKeyboardMarkup:
         buttons = [[InlineKeyboardButton(title, callback_data=f"{CB_TOURNAMENT}:{tid}")] for tid, title in tournaments]
         return InlineKeyboardMarkup(buttons)
@@ -73,7 +69,7 @@ class Keyboards:
         is_registered: bool,
         is_admin: bool = False,
         decks_hidden: bool = True,
-        has_pairings: bool = False,
+        show_fill_opponents: bool = False,
         has_deck: bool = True,
         aetherhub_url: str | None = None,
         import_time: str | None = None,
@@ -86,8 +82,7 @@ class Keyboards:
         rows = [[action_btn], [status_btn]]
         if is_registered and not has_deck:
             rows.insert(1, [InlineKeyboardButton("🃏 Выбрать колоду", callback_data=f"{CB_REGISTER}:{tournament_id}")])
-        opponents_enabled = is_admin or self._features.opponents_for_all()
-        if opponents_enabled and is_registered and has_pairings:
+        if is_registered and show_fill_opponents:
             rows.append(
                 [InlineKeyboardButton("🤝 Записать оппонентов", callback_data=f"{CB_ADMIN_OPPONENTS}:{tournament_id}")]
             )
@@ -265,10 +260,7 @@ class Keyboards:
         return InlineKeyboardMarkup(buttons)
 
 
-# Module-level default instance — used by telegram layer and simple callers
-from core.config import settings as _settings  # noqa: E402
-
-_default = Keyboards(FeatureService(debug=_settings.DEBUG))
+_default = Keyboards()
 
 
 def tournament_list_keyboard(tournaments: list) -> InlineKeyboardMarkup:
@@ -280,7 +272,7 @@ def tournament_card_keyboard(
     is_registered: bool,
     is_admin: bool = False,
     decks_hidden: bool = True,
-    has_pairings: bool = False,
+    show_fill_opponents: bool = False,
     has_deck: bool = True,
     aetherhub_url: str | None = None,
     import_time: str | None = None,
@@ -290,7 +282,7 @@ def tournament_card_keyboard(
         is_registered,
         is_admin=is_admin,
         decks_hidden=decks_hidden,
-        has_pairings=has_pairings,
+        show_fill_opponents=show_fill_opponents,
         has_deck=has_deck,
         aetherhub_url=aetherhub_url,
         import_time=import_time,

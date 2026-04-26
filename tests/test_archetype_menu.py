@@ -4,8 +4,8 @@
 - build_archetype_list (чистая функция)
 - PlayerHandler.handle_register (интеграция)
 - PlayerHandler.handle_archetype_more (интеграция)
-- AdminHandler.handle_admin_pick_arch (интеграция)
-- AdminHandler.handle_admin_arch_more (интеграция)
+- AdminHandler.handle_pick_participant_arch (интеграция)
+- AdminHandler.handle_pick_participant_arch_more (интеграция)
 """
 
 import pytest
@@ -61,8 +61,8 @@ def arch_svc(svc):
 
 
 @pytest.fixture
-def player_handler(svc, user_svc, arch_svc, keyboards):
-    return PlayerHandler(svc, user_svc, arch_svc, keyboards)
+def player_handler(svc, user_svc, arch_svc, keyboards, aetherhub_svc, features):
+    return PlayerHandler(svc, user_svc, arch_svc, keyboards, aetherhub_svc, features)
 
 
 @pytest.fixture
@@ -485,7 +485,7 @@ class TestHandleArchetypeMore:
 
 
 # ---------------------------------------------------------------------------
-# 6. AdminHandler.handle_admin_pick_arch (интеграция)
+# 6. AdminHandler.handle_pick_participant_arch (интеграция)
 # ---------------------------------------------------------------------------
 
 
@@ -506,7 +506,7 @@ class TestAdminPickArchMenu:
             u = user_svc.get_or_create(tg_id=tg, username=None, first_name=f"P{tg}")
             svc.register_participant(tournament_id=t_other.id, user_id=u.id, archetype_id=popular.id)
 
-        result = admin_handler.handle_admin_pick_arch(ADMIN_TG_ID, bulk_participant.id)
+        result = admin_handler.handle_pick_participant_arch(ADMIN_TG_ID, bulk_participant.id)
         btn_names = [b.text for row in result.keyboard.inline_keyboard for b in row]
         assert "Popular" in btn_names
 
@@ -514,7 +514,7 @@ class TestAdminPickArchMenu:
         self, admin_handler, svc, arch_svc, admin_user, active_tournament, bulk_participant
     ):
         arch_svc.get_or_create_by_name("Burn")
-        result = admin_handler.handle_admin_pick_arch(ADMIN_TG_ID, bulk_participant.id)
+        result = admin_handler.handle_pick_participant_arch(ADMIN_TG_ID, bulk_participant.id)
 
         from bot.keyboards import CB_ADMIN_ARCH_MORE
 
@@ -533,7 +533,7 @@ class TestAdminPickArchMenu:
         svc.bulk_add_participants(active_tournament.id, [(p_user.id, "Player")])
         participant = svc.get_participant(active_tournament.id, p_user.id)
 
-        result = admin_handler.handle_admin_pick_arch(ADMIN_TG_ID, participant.id)
+        result = admin_handler.handle_pick_participant_arch(ADMIN_TG_ID, participant.id)
 
         from bot.keyboards import CB_ADMIN_ARCH_MORE, CB_ADMIN_SET_ARCH
 
@@ -548,7 +548,7 @@ class TestAdminPickArchMenu:
 
 
 # ---------------------------------------------------------------------------
-# 7. AdminHandler.handle_admin_arch_more (интеграция)
+# 7. AdminHandler.handle_pick_participant_arch_more (интеграция)
 # ---------------------------------------------------------------------------
 
 
@@ -576,21 +576,25 @@ class TestAdminArchMore:
                 if b.callback_data.startswith(CB_ADMIN_SET_ARCH)
             )
 
-        collapsed = admin_handler.handle_admin_pick_arch(ADMIN_TG_ID, participant_with_history.id)
-        expanded = admin_handler.handle_admin_arch_more(ADMIN_TG_ID, participant_with_history.id)
+        collapsed = admin_handler.handle_pick_participant_arch(ADMIN_TG_ID, participant_with_history.id)
+        expanded = admin_handler.handle_pick_participant_arch_more(ADMIN_TG_ID, participant_with_history.id)
         assert arch_btn_count(expanded) > arch_btn_count(collapsed)
 
     def test_expanded_no_more_button(self, admin_handler, admin_user, active_tournament, participant_with_history):
         from bot.keyboards import CB_ADMIN_ARCH_MORE
 
-        result = admin_handler.handle_admin_arch_more(ADMIN_TG_ID, participant_with_history.id)
+        result = admin_handler.handle_pick_participant_arch_more(ADMIN_TG_ID, participant_with_history.id)
         btns = [b for row in result.keyboard.inline_keyboard for b in row]
         assert not any(b.callback_data.startswith(CB_ADMIN_ARCH_MORE) for b in btns)
 
-    def test_non_admin_returns_not_admin(self, admin_handler, active_tournament, participant_with_history):
+    def test_non_admin_blocked_when_feature_disabled(
+        self, admin_handler, ff_svc, active_tournament, participant_with_history
+    ):
         from bot.messages import NOT_ADMIN
+        from services.feature_flags import FeatureFlags
 
-        result = admin_handler.handle_admin_arch_more(tg_id=42, participant_id=participant_with_history.id)
+        ff_svc.toggle(FeatureFlags.RECORD_OPPONENTS)  # default true → false
+        result = admin_handler.handle_pick_participant_arch_more(tg_id=42, participant_id=participant_with_history.id)
         assert result.text == NOT_ADMIN
 
 
@@ -648,14 +652,14 @@ class TestTournamentFillScenario:
         arch_svc.get_or_create_by_name("Elves")
 
         # Снимаем фиксацию порядка: оба на 0, алфавит → Burn < Elves
-        top_before = admin_handler.handle_admin_pick_arch(self.FILL_ADMIN, p2.id)
+        top_before = admin_handler.handle_pick_participant_arch(self.FILL_ADMIN, p2.id)
         btn_names_before = [b.text for row in top_before.keyboard.inline_keyboard for b in row]
 
         # Назначаем Burn игроку1
-        admin_handler.handle_admin_set_arch(self.FILL_ADMIN, p1.id, burn.id)
+        admin_handler.handle_set_participant_arch(self.FILL_ADMIN, p1.id, burn.id)
 
         # Меню игрока2 не должно измениться
-        top_after = admin_handler.handle_admin_pick_arch(self.FILL_ADMIN, p2.id)
+        top_after = admin_handler.handle_pick_participant_arch(self.FILL_ADMIN, p2.id)
         btn_names_after = [b.text for row in top_after.keyboard.inline_keyboard for b in row]
         assert btn_names_before == btn_names_after
 
@@ -675,10 +679,10 @@ class TestTournamentFillScenario:
         close_tournament(svc, hist.id)
 
         # Назначаем редкую колоду игроку1 в REGISTRATION-турнире
-        admin_handler.handle_admin_set_arch(self.FILL_ADMIN, p1.id, rare_deck.id)
+        admin_handler.handle_set_participant_arch(self.FILL_ADMIN, p1.id, rare_deck.id)
 
         # Игрок2 без истории видит топ: популярная историческая должна быть выше
-        result = admin_handler.handle_admin_pick_arch(self.FILL_ADMIN, p2.id)
+        result = admin_handler.handle_pick_participant_arch(self.FILL_ADMIN, p2.id)
         from bot.keyboards import CB_ADMIN_SET_ARCH
 
         arch_btns = [
@@ -703,10 +707,10 @@ class TestTournamentFillScenario:
         close_tournament(svc, hist.id)
 
         # Назначаем new_deck игроку1 в текущем REGISTRATION-турнире
-        admin_handler.handle_admin_set_arch(self.FILL_ADMIN, p1.id, new_deck.id)
+        admin_handler.handle_set_participant_arch(self.FILL_ADMIN, p1.id, new_deck.id)
 
         # Меню игрока2: popular должна быть выше new_deck
-        result = admin_handler.handle_admin_pick_arch(self.FILL_ADMIN, p2.id)
+        result = admin_handler.handle_pick_participant_arch(self.FILL_ADMIN, p2.id)
         btns = [b.text for row in result.keyboard.inline_keyboard for b in row]
 
         # Убираем emoji-prefix для поиска
@@ -748,10 +752,10 @@ class TestTournamentFillScenario:
         p_b = svc.get_participant(fill_tournament.id, player_b.id)
 
         # Назначаем Burn игроку B
-        admin_handler.handle_admin_set_arch(self.FILL_ADMIN, p_b.id, burn.id)
+        admin_handler.handle_set_participant_arch(self.FILL_ADMIN, p_b.id, burn.id)
 
         # У игрока A первой должна стоять Elves (его история)
-        result = admin_handler.handle_admin_pick_arch(self.FILL_ADMIN, p_a.id)
+        result = admin_handler.handle_pick_participant_arch(self.FILL_ADMIN, p_a.id)
         from bot.keyboards import CB_ADMIN_SET_ARCH
 
         arch_btns = [

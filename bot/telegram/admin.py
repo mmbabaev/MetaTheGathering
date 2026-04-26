@@ -7,8 +7,7 @@ from telegram.constants import ChatType
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
-from bot.handlers.admin import AdminHandler, parse_add_player_command, parse_bulk_player_line
-from bot.handlers.player import PlayerHandler
+from bot.handlers.admin import parse_add_player_command, parse_bulk_player_line
 from bot.keyboards import admin_more_keyboard
 from bot.messages import ADD_PLAYERS_USAGE, BULK_ADD_PROMPT, TELEGRAM_USER_LOOKUP_FAILED
 from bot.scheduler import format_schedule_text
@@ -18,28 +17,16 @@ from bot.telegram.player import (
     USER_DATA_OPPONENTS_MODE,
     USER_DATA_PENDING_ADMIN_CUSTOM_ARCH,
     USER_DATA_PENDING_BULK_ADD,
-    _make_features,
-    _make_keyboards,
+    _admin_handler,
+    _player_handler,
 )
 from core.config import app_cfg, settings
 from core.database import SessionLocal
 from core.models import TournamentStatus
 from services import errors as svc_errors
-from services.aetherhub_import_service import AetherhubImportService
-from services.archetype import ArchetypeService
 from services.tournament import TournamentService
 from services.user import UserService
 from services.utils import get_tournament
-
-
-def _admin_handler(db) -> AdminHandler:
-    return AdminHandler(
-        TournamentService(db), UserService(db), ArchetypeService(db), _make_keyboards(), _make_features()
-    )
-
-
-def _player_handler(db) -> PlayerHandler:
-    return PlayerHandler(TournamentService(db), UserService(db), ArchetypeService(db), _make_keyboards())
 
 
 async def callback_bulk_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -58,7 +45,7 @@ async def callback_bulk_add_start(update: Update, context: ContextTypes.DEFAULT_
     await query.answer()
 
 
-async def callback_admin_pick_arch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def callback_pick_participant_arch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Нажатие на участника в admin status → показывает выбор архетипа."""
     query = update.callback_query
     user = update.effective_user
@@ -70,7 +57,7 @@ async def callback_admin_pick_arch(update: Update, context: ContextTypes.DEFAULT
     (participant_id,) = ids
     db = SessionLocal()
     try:
-        result = _admin_handler(db).handle_admin_pick_arch(user.id, participant_id)
+        result = _admin_handler(db).handle_pick_participant_arch(user.id, participant_id)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
@@ -80,7 +67,7 @@ async def callback_admin_pick_arch(update: Update, context: ContextTypes.DEFAULT
         db.close()
 
 
-async def callback_admin_set_arch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def callback_set_participant_arch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Выбор конкретного архетипа для участника."""
     query = update.callback_query
     user = update.effective_user
@@ -92,7 +79,7 @@ async def callback_admin_set_arch(update: Update, context: ContextTypes.DEFAULT_
     participant_id, archetype_id = ids
     db = SessionLocal()
     try:
-        result = _admin_handler(db).handle_admin_set_arch(user.id, participant_id, archetype_id)
+        result = _admin_handler(db).handle_set_participant_arch(user.id, participant_id, archetype_id)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
@@ -102,13 +89,10 @@ async def callback_admin_set_arch(update: Update, context: ContextTypes.DEFAULT_
         if opponents_tournament_id is not None:
             await query.edit_message_text(result.text)
             await query.answer()
-            opponents_result = _admin_handler(db).handle_admin_opponents(user.id, opponents_tournament_id)
+            opponents_result = _admin_handler(db).handle_fill_opponents(user.id, opponents_tournament_id)
             if opponents_result.is_alert:
                 context.user_data.pop(USER_DATA_OPPONENTS_MODE, None)
-                has_pairings = bool(AetherhubImportService(db).get_pairings(opponents_tournament_id))
-                card = _player_handler(db).handle_tournament_select(
-                    opponents_tournament_id, tg_id=user.id, has_pairings=has_pairings
-                )
+                card = _player_handler(db).handle_tournament_select(opponents_tournament_id, tg_id=user.id)
                 await query.message.reply_text(card.text, reply_markup=card.keyboard)
             else:
                 await query.message.reply_text(opponents_result.text, reply_markup=opponents_result.keyboard)
@@ -119,7 +103,7 @@ async def callback_admin_set_arch(update: Update, context: ContextTypes.DEFAULT_
         db.close()
 
 
-async def callback_admin_arch_more(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def callback_pick_participant_arch_more(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """«... ещё» в admin pick arch — разворачивает полный список архетипов."""
     query = update.callback_query
     user = update.effective_user
@@ -131,7 +115,7 @@ async def callback_admin_arch_more(update: Update, context: ContextTypes.DEFAULT
     (participant_id,) = ids
     db = SessionLocal()
     try:
-        result = _admin_handler(db).handle_admin_arch_more(user.id, participant_id)
+        result = _admin_handler(db).handle_pick_participant_arch_more(user.id, participant_id)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
@@ -141,7 +125,7 @@ async def callback_admin_arch_more(update: Update, context: ContextTypes.DEFAULT
         db.close()
 
 
-async def callback_admin_custom_arch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def callback_participant_custom_arch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """«Свой вариант» — ждём текст с названием архетипа."""
     query = update.callback_query
     ids = await parse_callback_ints(query, 1)
@@ -453,7 +437,7 @@ async def callback_delete_tournament_cancel(update: Update, context: ContextType
         db.close()
 
 
-async def callback_admin_opponents(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def callback_fill_opponents(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Кнопка «👥 Записать оппонентов» — показывает незаполненных оппонентов."""
     query = update.callback_query
     user = update.effective_user
@@ -465,7 +449,7 @@ async def callback_admin_opponents(update: Update, context: ContextTypes.DEFAULT
     (tournament_id,) = ids
     db = SessionLocal()
     try:
-        result = _admin_handler(db).handle_admin_opponents(user.id, tournament_id)
+        result = _admin_handler(db).handle_fill_opponents(user.id, tournament_id)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
