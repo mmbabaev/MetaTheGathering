@@ -22,7 +22,6 @@ from bot.messages import (
 from services import errors
 from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeItem, ArchetypeService
-from services.feature_flags import FeatureFlags
 from services.tournament import TournamentService
 from services.user import UserService
 from services.utils import get_tournament
