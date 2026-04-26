@@ -274,7 +274,11 @@ class Payment(Base):
     tournament_id = Column(Integer, ForeignKey("tournaments.id", ondelete="CASCADE"), nullable=False)
     amount = Column(String(16), nullable=False)  # "525.00"
     yookassa_payment_id = Column(String(64), nullable=True, unique=True)
-    status = Column(Enum(PaymentStatus), default=PaymentStatus.PENDING, nullable=False)
+    status = Column(
+        Enum(PaymentStatus, values_callable=lambda obj: [e.value for e in obj]),
+        default=PaymentStatus.PENDING,
+        nullable=False,
+    )
     confirmation_url = Column(String(512), nullable=True)
 
     created_at = Column(DateTime, default=utc_now, nullable=False)
