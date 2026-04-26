@@ -10,3 +10,6 @@ server.log
 events.jsonl
 scripts/telegram_parser/session.session
 scripts/telegram_parser/session.session-journal
+
+# Mac OS
+*.DS_Store
