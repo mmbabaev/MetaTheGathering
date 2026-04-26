@@ -10,12 +10,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Load .env early so BOT_ENV is available via os.getenv before Settings() runs
 load_dotenv()
 
+
 def _is_pytest_running() -> bool:
     # We need this to work during test collection/import time (before any test runs),
     # so PYTEST_CURRENT_TEST is not reliable here.
     if "pytest" in sys.modules:
         return True
     return any("pytest" in (arg or "") for arg in sys.argv)
+
 
 _bot_env = os.getenv("BOT_ENV", "prod")
 if _bot_env == "debug":
