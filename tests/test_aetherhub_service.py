@@ -44,6 +44,7 @@ def _svc(html_by_url: dict[str, str]) -> AetherhubService:
 # Main tournament page: standings table + navigation links
 STANDINGS_HTML = """
 <html><body>
+<span id="numberOfRounds">Rounds 2</span>
 <table>
   <tr><th>Rank</th><th>Name</th><th>Points</th></tr>
   <tr><td>1</td><td>Alice</td><td>3</td></tr>
@@ -57,6 +58,7 @@ STANDINGS_HTML = """
 
 STANDINGS_EMPTY_HTML = """
 <html><body>
+<span id="numberOfRounds">Rounds 1</span>
 <table>
   <tr><th>Rank</th><th>Name</th><th>Points</th></tr>
 </table>
@@ -219,15 +221,74 @@ class TestFetchTournament:
         data = self._fetch()
         assert data.url == _BASE_URL
 
-    def test_single_round_tournament(self):
-        single_standings = STANDINGS_HTML.replace('<a href="?p=2">2</a>', "")
-        data = _svc({_BASE_URL: single_standings, _PAIRINGS_R1: PAIRINGS_R1_HTML}).fetch_tournament(_BASE_URL)
-        assert len(data.rounds) == 1
-
     def test_players_from_pairings_when_standings_empty(self):
         """When standings are empty, player names are taken from round 1 pairings."""
         data = _svc({_BASE_URL: STANDINGS_EMPTY_HTML, _PAIRINGS_R1: PAIRINGS_R1_HTML}).fetch_tournament(_BASE_URL)
         assert set(data.players) == {"Alice", "Bob", "Carol"}
+
+    def test_players_taken_from_round1_even_if_main_page_has_subset(self):
+        """Filled tournaments can show only a subset of players on the default page; we must use round 1."""
+        main_html_subset = """
+        <html><body>
+        <span id="numberOfRounds">Rounds 1</span>
+        <table>
+          <tr><th>Rank</th><th>Name</th><th>Points</th></tr>
+          <tr><td>1</td><td>Alice (3 Points)</td><td>3</td></tr>
+          <tr><td>2</td><td>Bob (3 Points)</td><td>3</td></tr>
+        </table>
+        </body></html>
+        """
+        # Pairings contain Carol too; also points are injected in labels.
+        pairings_html = """
+        <html><body>
+        <table>
+          <tr><th>Table</th><th>Player 1</th><th>Player 2</th><th></th></tr>
+          <tr><td>1</td><td>Alice (3 Points)</td><td>Bob (3 Points)</td><td>2-1</td></tr>
+          <tr><td>2</td><td>Carol (0 Points)</td><td></td><td></td></tr>
+        </table>
+        </body></html>
+        """
+        data = _svc({_BASE_URL: main_html_subset, _PAIRINGS_R1: pairings_html}).fetch_tournament(_BASE_URL)
+        assert set(data.players) == {"Alice", "Bob", "Carol"}
+
+    def test_99049_real_html_round4_subset_but_round1_has_all_12(self):
+        """Regression: real Aetherhub HTML for 99049.
+
+        For filled tournaments the default main page shows 'Pairings round 4' and a subset in standings,
+        but round 1 pairings still contain the full participant list. We must take players from round 1.
+        """
+        from pathlib import Path
+
+        base_url = "https://aetherhub.com/Tourney/RoundTourney/99049"
+        tid = "99049"
+
+        fixtures_dir = Path(__file__).resolve().parents[1] / "scripts" / "aetherhub" / "fixtures"
+        main_path = fixtures_dir / "99049_main.html"
+        p1_path = fixtures_dir / "99049_pairings_p1.html"
+        p2_path = fixtures_dir / "99049_pairings_p2.html"
+        p3_path = fixtures_dir / "99049_pairings_p3.html"
+        p4_path = fixtures_dir / "99049_pairings_p4.html"
+
+        missing = [p for p in [main_path, p1_path, p2_path, p3_path, p4_path] if not p.exists()]
+        if missing:
+            pytest.skip(
+                "Real 99049 fixtures are missing. Run: "
+                "python3 scripts/aetherhub/fetch_99049_fixtures.py"
+            )
+
+        html_map = {
+            base_url: main_path.read_text(encoding="utf-8"),
+            f"https://aetherhub.com/Tourney/RoundTourneyPublicPairings?id={tid}&p=1": p1_path.read_text(encoding="utf-8"),
+            f"https://aetherhub.com/Tourney/RoundTourneyPublicPairings?id={tid}&p=2": p2_path.read_text(encoding="utf-8"),
+            f"https://aetherhub.com/Tourney/RoundTourneyPublicPairings?id={tid}&p=3": p3_path.read_text(encoding="utf-8"),
+            f"https://aetherhub.com/Tourney/RoundTourneyPublicPairings?id={tid}&p=4": p4_path.read_text(encoding="utf-8"),
+        }
+
+        data = _svc(html_map).fetch_tournament(base_url)
+
+        assert len(data.rounds) == 4
+        assert len(data.players) == 12
+        assert all("Points" not in p for p in data.players)
 
     def test_invalid_url_raises(self):
         import pytest
