@@ -54,9 +54,6 @@ class AetherhubJSFormatParser:
 
         soup = BeautifulSoup(resp.text, "html.parser")
 
-        # Extract players from standings
-        players = self._parse_players(soup)
-
         # Extract number of rounds
         num_rounds = self._parse_num_rounds(soup)
 
@@ -66,6 +63,9 @@ class AetherhubJSFormatParser:
             round_data = self._parse_round(tournament_id, round_num)
             if round_data:
                 rounds.append(round_data)
+
+        # Round 1 pairings contain all participants with canonical names
+        players = self._players_from_round(rounds[0]) if rounds else []
 
         return AetherhubTournamentData(
             url=url,
@@ -81,27 +81,14 @@ class AetherhubJSFormatParser:
             raise ValueError(f"Cannot extract tournament ID from URL: {url}")
         return match.group(1)
 
-    def _parse_players(self, soup: BeautifulSoup) -> list[str]:
-        """Extract player list from standings table."""
-        players = []
-
-        # Find the standings table (first table on page)
-        table = soup.find("table")
-        if not table:
-            return players
-
-        # Skip header row, iterate through player rows
-        rows = table.find_all("tr")[1:]
-        for row in rows:
-            cells = row.find_all("td")
-            if len(cells) >= 2:
-                name_cell = cells[1]
-                link = name_cell.find("a")
-                if link:
-                    player_name = link.text.strip()
-                    if player_name:
-                        players.append(player_name)
-
+    def _players_from_round(self, round_data: AetherhubRound) -> list[str]:
+        """Extract unique player names from a round's pairings, preserving order."""
+        seen: set[str] = set()
+        players: list[str] = []
+        for pairing in round_data.pairings:
+            if pairing.player not in seen:
+                seen.add(pairing.player)
+                players.append(pairing.player)
         return players
 
     def _parse_num_rounds(self, soup: BeautifulSoup) -> int:
@@ -185,7 +172,7 @@ class AetherhubJSFormatParser:
 
     def _extract_player_name(self, text: str) -> Optional[str]:
         """
-        Extract player name from text like 'Name (9 Points)'.
+        Extract player name from text like 'Name (9 Points)' or 'First (6 Points) Last'.
 
         Args:
             text: Raw text from table cell
@@ -196,11 +183,15 @@ class AetherhubJSFormatParser:
         if not text:
             return None
 
-        # Remove points in parentheses
-        name = text.split("(")[0].strip()
+        # Remove "(N Points)" from anywhere in the name, then collapse extra spaces
+        name = re.sub(r"\(\d+ Points?\)", "", text)
+        name = re.sub(r"\s+", " ", name).strip()
+
+        if not name:
+            return None
 
         # Check if it's a bye
         if name.upper() == "BYE":
             return None
 
-        return name if name else None
+        return name
