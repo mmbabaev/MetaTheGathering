@@ -56,6 +56,21 @@ class TestMergePlaceholderByName:
         merged = svc.merge_placeholder_by_name(REAL_TG_ID, "Крипков", "Сергей")
         assert merged is True
 
+    def test_swapped_name_adopts_canonical_form(self, db, placeholder, real_user):
+        """Если пользователь ввёл имя в обратном порядке (Имя Фамилия вместо Фамилия Имя),
+        после слияния его имя исправляется по плейсхолдеру."""
+        svc = UserService(db)
+        # real_user already has wrong order set (as if they typed "Сергей Крипков")
+        real_user.first_name = "Крипков"
+        real_user.last_name = "Сергей"
+        db.commit()
+
+        svc.merge_placeholder_by_name(REAL_TG_ID, "Крипков", "Сергей")
+
+        db.refresh(real_user)
+        assert real_user.first_name == "Сергей"  # placeholder's first_name
+        assert real_user.last_name == "Крипков"  # placeholder's last_name
+
     def test_no_placeholder_returns_false(self, db, real_user):
         svc = UserService(db)
         result = svc.merge_placeholder_by_name(REAL_TG_ID, "Неизвестный", "Игрок")
