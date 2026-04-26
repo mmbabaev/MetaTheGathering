@@ -19,6 +19,7 @@ from bot.messages import (
     sort_participants,
 )
 from services import errors
+from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeItem, ArchetypeService
 from services.tournament import TournamentService
 from services.user import UserService
@@ -73,14 +74,20 @@ def build_archetype_list(
 
 class PlayerHandler:
     def __init__(
-        self, svc: TournamentService, user_svc: UserService, arch_svc: ArchetypeService, keyboards: Keyboards
+        self,
+        svc: TournamentService,
+        user_svc: UserService,
+        arch_svc: ArchetypeService,
+        keyboards: Keyboards,
+        aetherhub_svc: AetherhubImportService,
     ) -> None:
         self.svc = svc
         self.user_svc = user_svc
         self.arch_svc = arch_svc
         self.keyboards = keyboards
+        self.aetherhub_svc = aetherhub_svc
 
-    def _tournament_card(self, t, tg_id: int | None, has_pairings: bool = False) -> HandlerResult:
+    def _tournament_card(self, t, tg_id: int | None) -> HandlerResult:
         is_registered = False
         is_admin = False
         has_deck = True
@@ -94,6 +101,7 @@ class PlayerHandler:
             is_admin = self.user_svc.is_admin(tg_id)
         participants = self.svc.list_participants_for_tournament(t.id)
         with_deck = sum(1 for p in participants if p.archetype)
+        has_pairings = bool(self.aetherhub_svc.get_pairings(t.id))
         text = format_tournament_card(
             t.title,
             t.status.label_ru,
@@ -132,14 +140,12 @@ class PlayerHandler:
         tour_list = [(t.id, t.title) for t in tournaments]
         return HandlerResult("Выберите турнир:", keyboard=self.keyboards.tournament_list_keyboard(tour_list))
 
-    def handle_tournament_select(
-        self, tournament_id: int, tg_id: int | None = None, has_pairings: bool = False
-    ) -> HandlerResult:
+    def handle_tournament_select(self, tournament_id: int, tg_id: int | None = None) -> HandlerResult:
         try:
             t = get_tournament(self.svc.db, tournament_id)
         except errors.TournamentNotFound:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
-        return self._tournament_card(t, tg_id, has_pairings=has_pairings)
+        return self._tournament_card(t, tg_id)
 
     def handle_register(self, tournament_id: int, tg_id: int | None = None) -> HandlerResult:
         """Возвращает выбор архетипа. Если имя не задано — needs_name=True."""

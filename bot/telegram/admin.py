@@ -25,7 +25,6 @@ from core.config import app_cfg, settings
 from core.database import SessionLocal
 from core.models import TournamentStatus
 from services import errors as svc_errors
-from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeService
 from services.tournament import TournamentService
 from services.user import UserService
@@ -102,13 +101,10 @@ async def callback_admin_set_arch(update: Update, context: ContextTypes.DEFAULT_
         if opponents_tournament_id is not None:
             await query.edit_message_text(result.text)
             await query.answer()
-            opponents_result = _admin_handler(db).handle_admin_opponents(user.id, opponents_tournament_id)
+            opponents_result = _admin_handler(db).handle_fill_opponents(user.id, opponents_tournament_id)
             if opponents_result.is_alert:
                 context.user_data.pop(USER_DATA_OPPONENTS_MODE, None)
-                has_pairings = bool(AetherhubImportService(db).get_pairings(opponents_tournament_id))
-                card = _player_handler(db).handle_tournament_select(
-                    opponents_tournament_id, tg_id=user.id, has_pairings=has_pairings
-                )
+                card = _player_handler(db).handle_tournament_select(opponents_tournament_id, tg_id=user.id)
                 await query.message.reply_text(card.text, reply_markup=card.keyboard)
             else:
                 await query.message.reply_text(opponents_result.text, reply_markup=opponents_result.keyboard)
@@ -453,7 +449,7 @@ async def callback_delete_tournament_cancel(update: Update, context: ContextType
         db.close()
 
 
-async def callback_admin_opponents(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def callback_fill_opponents(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Кнопка «👥 Записать оппонентов» — показывает незаполненных оппонентов."""
     query = update.callback_query
     user = update.effective_user
@@ -465,7 +461,7 @@ async def callback_admin_opponents(update: Update, context: ContextTypes.DEFAULT
     (tournament_id,) = ids
     db = SessionLocal()
     try:
-        result = _admin_handler(db).handle_admin_opponents(user.id, tournament_id)
+        result = _admin_handler(db).handle_fill_opponents(user.id, tournament_id)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return

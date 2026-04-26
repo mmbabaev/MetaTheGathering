@@ -31,7 +31,9 @@ def _make_keyboards() -> Keyboards:
 
 
 def _player_handler(db) -> PlayerHandler:
-    return PlayerHandler(TournamentService(db), UserService(db), ArchetypeService(db), _make_keyboards())
+    return PlayerHandler(
+        TournamentService(db), UserService(db), ArchetypeService(db), _make_keyboards(), AetherhubImportService(db)
+    )
 
 
 def _settings_handler(db) -> SettingsHandler:
@@ -71,10 +73,7 @@ async def callback_tournament_select(update: Update, context: ContextTypes.DEFAU
     _log("view_tournament", user, tournament_id=tournament_id)
     db = SessionLocal()
     try:
-        has_pairings = bool(AetherhubImportService(db).get_pairings(tournament_id))
-        result = _player_handler(db).handle_tournament_select(
-            tournament_id, tg_id=user.id if user else None, has_pairings=has_pairings
-        )
+        result = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id if user else None)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
@@ -130,8 +129,7 @@ async def callback_archetype(update: Update, context: ContextTypes.DEFAULT_TYPE)
         _log("register", user, tournament_id=tournament_id, archetype_id=archetype_id)
         await query.edit_message_text(result.text)
         await query.answer()
-        has_pairings = bool(AetherhubImportService(db).get_pairings(tournament_id))
-        card = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id, has_pairings=has_pairings)
+        card = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id)
         await query.message.reply_text(card.text, reply_markup=card.keyboard)
     finally:
         db.close()
@@ -350,8 +348,7 @@ async def _handle_pending_custom_arch(msg, user, text, context) -> bool:
         )
         await msg.reply_text(result.text)
         if not result.is_alert:
-            has_pairings = bool(AetherhubImportService(db).get_pairings(tournament_id))
-            card = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id, has_pairings=has_pairings)
+            card = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id)
             await msg.reply_text(card.text, reply_markup=card.keyboard)
     finally:
         db.close()

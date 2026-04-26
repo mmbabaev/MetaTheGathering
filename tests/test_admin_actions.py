@@ -1062,10 +1062,16 @@ class TestHandleArchive:
             assert not any(str(active_tournament.id) in cb for cb in cbs)
 
 
-# ── handle_admin_opponents ───────────────────────────────────────────────────
+# ── handle_fill_opponents ─────────────────────────────────────────────────────
 
 
 class TestHandleAdminOpponents:
+    @pytest.fixture
+    def handler(self, svc, user_svc, arch_svc, keyboards):
+        from bot.features import FeatureService
+
+        return AdminHandler(svc, user_svc, arch_svc, keyboards, FeatureService(debug=True))
+
     @pytest.fixture
     def admin_user_obj(self, user_svc):
         return user_svc.get_or_create(tg_id=ADMIN_TG_ID, username="admin", first_name="Admin", last_name="User")
@@ -1074,19 +1080,17 @@ class TestHandleAdminOpponents:
     def opponent_user(self, user_svc):
         return user_svc.get_or_create(tg_id=8800, username=None, first_name="Bob", last_name="Smith")
 
-    def test_non_admin_blocked(self, handler):
-        result = handler.handle_admin_opponents(tg_id=1, tournament_id=1)
+    def test_feature_disabled_blocks_access(self, svc, user_svc, arch_svc, keyboards):
+        from bot.features import FeatureService
+
+        disabled_handler = AdminHandler(svc, user_svc, arch_svc, keyboards, FeatureService(debug=False))
+        result = disabled_handler.handle_fill_opponents(tg_id=1, tournament_id=1)
         assert result.is_alert
 
-    def test_non_admin_allowed_with_flag(self, db, svc, user_svc, arch_svc, active_tournament):
-        from bot.features import FeatureService
-        from bot.keyboards import Keyboards
+    def test_feature_enabled_allows_non_admin(self, handler, db, user_svc, active_tournament):
         from services.aetherhub_import_service import AetherhubImportService
         from services.aetherhub_service import AetherhubPairing, AetherhubRound, AetherhubTournamentData
 
-        debug_handler = AdminHandler(
-            svc, user_svc, arch_svc, Keyboards(FeatureService(debug=True)), FeatureService(debug=True)
-        )
         user_svc.get_or_create(tg_id=7777, username=None, first_name="Regular", last_name=None)
         user_svc.get_or_create(tg_id=8800, username=None, first_name="Bob", last_name="Smith")
         data = AetherhubTournamentData(
@@ -1103,11 +1107,11 @@ class TestHandleAdminOpponents:
             ],
         )
         AetherhubImportService(db).import_tournament(active_tournament.id, data)
-        result = debug_handler.handle_admin_opponents(tg_id=7777, tournament_id=active_tournament.id)
+        result = handler.handle_fill_opponents(tg_id=7777, tournament_id=active_tournament.id)
         assert not result.is_alert
 
     def test_no_pairings_returns_alert(self, handler, admin_user, active_tournament):
-        result = handler.handle_admin_opponents(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+        result = handler.handle_fill_opponents(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
         assert result.is_alert
 
     def test_returns_unfilled_opponents(self, db, handler, svc, user_svc, admin_user, active_tournament):
@@ -1131,7 +1135,7 @@ class TestHandleAdminOpponents:
             ],
         )
         import_svc.import_tournament(active_tournament.id, data)
-        result = handler.handle_admin_opponents(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+        result = handler.handle_fill_opponents(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
         assert not result.is_alert
         from bot.keyboards import CB_ADMIN_PICK_ARCH
 
@@ -1161,6 +1165,6 @@ class TestHandleAdminOpponents:
         burn = arch_svc.get_or_create_by_name("Burn")
         p = svc.get_participant(active_tournament.id, opp.id)
         svc.set_participant_archetype(participant_id=p.id, archetype_id=burn.id)
-        result = handler.handle_admin_opponents(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+        result = handler.handle_fill_opponents(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
         assert result.is_alert
         assert "заполнены" in result.text

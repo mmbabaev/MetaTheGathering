@@ -18,8 +18,8 @@ def tournament(svc):
 
 
 @pytest.fixture
-def handler(svc, user_svc, arch_svc, keyboards):
-    return PlayerHandler(svc, user_svc, arch_svc, keyboards)
+def handler(svc, user_svc, arch_svc, keyboards, aetherhub_svc):
+    return PlayerHandler(svc, user_svc, arch_svc, keyboards, aetherhub_svc)
 
 
 @pytest.fixture

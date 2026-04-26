@@ -8,6 +8,7 @@ from bot.keyboards import Keyboards
 from core.database import Base
 from core.models import TournamentStatus, VoteType
 from core.schemas import TournamentCreate
+from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeService
 from services.tournament import TournamentService
 from services.user import UserService
@@ -73,6 +74,11 @@ def archetype_burn(arch_svc):
 @pytest.fixture
 def archetype_affinity(arch_svc):
     return arch_svc.get_or_create_by_name("Affinity")
+
+
+@pytest.fixture
+def aetherhub_svc(db):
+    return AetherhubImportService(db)
 
 
 @pytest.fixture

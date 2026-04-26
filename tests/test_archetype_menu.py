@@ -61,8 +61,8 @@ def arch_svc(svc):
 
 
 @pytest.fixture
-def player_handler(svc, user_svc, arch_svc, keyboards):
-    return PlayerHandler(svc, user_svc, arch_svc, keyboards)
+def player_handler(svc, user_svc, arch_svc, keyboards, aetherhub_svc):
+    return PlayerHandler(svc, user_svc, arch_svc, keyboards, aetherhub_svc)
 
 
 @pytest.fixture

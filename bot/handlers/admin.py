@@ -393,9 +393,9 @@ class AdminHandler:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
         return HandlerResult(ADMIN_ARCH_SAVED.format(archetype_name=arch.name))
 
-    def handle_admin_opponents(self, tg_id: int, tournament_id: int) -> HandlerResult:
+    def handle_fill_opponents(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Показывает незаполненных оппонентов пользователя из AetherHub-пейрингов."""
-        if not self.user_svc.is_admin(tg_id) and not self._features.opponents_for_all():
+        if not self._features.can_fill_opponent_decks():
             return HandlerResult(NOT_ADMIN, is_alert=True)
 
         user = self.user_svc.get_by_tg_id(tg_id)

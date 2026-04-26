@@ -86,8 +86,7 @@ class Keyboards:
         rows = [[action_btn], [status_btn]]
         if is_registered and not has_deck:
             rows.insert(1, [InlineKeyboardButton("🃏 Выбрать колоду", callback_data=f"{CB_REGISTER}:{tournament_id}")])
-        opponents_enabled = is_admin or self._features.opponents_for_all()
-        if opponents_enabled and is_registered and has_pairings:
+        if is_registered and has_pairings and self._features.can_fill_opponent_decks():
             rows.append(
                 [InlineKeyboardButton("🤝 Записать оппонентов", callback_data=f"{CB_ADMIN_OPPONENTS}:{tournament_id}")]
             )
