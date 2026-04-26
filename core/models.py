@@ -280,6 +280,8 @@ class Payment(Base):
         nullable=False,
     )
     confirmation_url = Column(String(512), nullable=True)
+    tg_chat_id = Column(BigInteger, nullable=True)
+    tg_message_id = Column(BigInteger, nullable=True)
 
     created_at = Column(DateTime, default=utc_now, nullable=False)
     updated_at = Column(DateTime, default=utc_now, nullable=False)

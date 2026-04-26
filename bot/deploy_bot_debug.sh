@@ -76,6 +76,7 @@ if [ "$MODE" = "release" ]; then
 else
     ENV_DEST="$REMOTE_DIR/bot/.env.debug"
     SYSTEMD_SERVICE_FILE="$REMOTE_DIR/bot/systemd/meta-the-gathering-debug.service"
+    SYSTEMD_WEB_SERVICE_FILE="$REMOTE_DIR/bot/systemd/meta-the-gathering-debug-web.service"
     OTEL_SERVICE_FILE="$REMOTE_DIR/bot/systemd/otel-collector-debug.service"
     OTEL_SERVICE_NAME="otel-collector-debug"
 fi
@@ -83,6 +84,7 @@ fi
 ssh -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no "${SERVER_USER}@${SERVER_IP}" \
     ARCHIVE_NAME="$ARCHIVE_NAME" REMOTE_DIR="$REMOTE_DIR" SERVICE_NAME="$SERVICE_NAME" \
     ENV_DEST="$ENV_DEST" SYSTEMD_SERVICE_FILE="$SYSTEMD_SERVICE_FILE" \
+    SYSTEMD_WEB_SERVICE_FILE="${SYSTEMD_WEB_SERVICE_FILE:-}" \
     OTEL_SERVICE_FILE="$OTEL_SERVICE_FILE" OTEL_SERVICE_NAME="$OTEL_SERVICE_NAME" \
     'bash -s' <<'REMOTE'
 set -e
@@ -126,11 +128,19 @@ fi
 
 sudo cp "$OTEL_SERVICE_FILE" /etc/systemd/system/
 sudo cp "$SYSTEMD_SERVICE_FILE" /etc/systemd/system/
+if [ -n "$SYSTEMD_WEB_SERVICE_FILE" ]; then
+    sudo cp "$SYSTEMD_WEB_SERVICE_FILE" /etc/systemd/system/
+fi
 sudo systemctl daemon-reload
 sudo systemctl enable "$OTEL_SERVICE_NAME"
 sudo systemctl restart "$OTEL_SERVICE_NAME"
 sudo systemctl enable "$SERVICE_NAME"
 sudo systemctl restart "$SERVICE_NAME"
+if [ -n "$SYSTEMD_WEB_SERVICE_FILE" ]; then
+    WEB_SERVICE_NAME="$(basename "$SYSTEMD_WEB_SERVICE_FILE" .service)"
+    sudo systemctl enable "$WEB_SERVICE_NAME"
+    sudo systemctl restart "$WEB_SERVICE_NAME"
+fi
 
 rm -f "/tmp/$ARCHIVE_NAME"
 echo "→ Сервис $SERVICE_NAME запущен"

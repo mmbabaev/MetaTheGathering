@@ -40,4 +40,4 @@ class PaymentHandler:
             f"Ссылка действует 1 час.\n"
             f"После оплаты ты автоматически появишься в подтверждённом списке."
         )
-        return HandlerResult(text, keyboard=self.keyboards.pay_keyboard(result.url))
+        return HandlerResult(text, keyboard=self.keyboards.pay_keyboard(result.url), yookassa_id=result.yookassa_id)

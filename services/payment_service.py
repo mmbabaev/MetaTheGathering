@@ -20,6 +20,13 @@ class PaymentCreated:
     yookassa_id: str
 
 
+@dataclass
+class WebhookResult:
+    tg_id: int
+    tg_chat_id: int | None
+    tg_message_id: int | None
+
+
 class PaymentService:
     def __init__(self, db: Session) -> None:
         self.db = db
@@ -58,8 +65,15 @@ class PaymentService:
             yookassa_id=data["id"],
         )
 
-    def handle_webhook(self, data: dict) -> int | None:
-        """Обрабатывает событие от ЮKassa. Возвращает tg_id игрока если платёж прошёл."""
+    def set_message_info(self, yookassa_id: str, tg_chat_id: int, tg_message_id: int) -> None:
+        payment = self.db.query(models.Payment).filter_by(yookassa_payment_id=yookassa_id).first()
+        if payment:
+            payment.tg_chat_id = tg_chat_id
+            payment.tg_message_id = tg_message_id
+            self.db.commit()
+
+    def handle_webhook(self, data: dict) -> WebhookResult | None:
+        """Обрабатывает событие от ЮKassa. Возвращает WebhookResult если платёж прошёл."""
         if data.get("event") != "payment.succeeded":
             return None
         payment_obj = data["object"]
@@ -70,4 +84,8 @@ class PaymentService:
             return None
         payment.status = models.PaymentStatus.SUCCEEDED
         self.db.commit()
-        return payment.tg_id
+        return WebhookResult(
+            tg_id=payment.tg_id,
+            tg_chat_id=payment.tg_chat_id,
+            tg_message_id=payment.tg_message_id,
+        )

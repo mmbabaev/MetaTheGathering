@@ -37,7 +37,16 @@ async def callback_pay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
+
         await query.answer()
-        await query.message.reply_text(result.text, reply_markup=result.keyboard)
+        sent = await query.message.reply_text(result.text, reply_markup=result.keyboard)
+
+        # Сохраняем chat_id + message_id чтобы webhook мог обновить сообщение
+        if result.yookassa_id:
+            PaymentService(db).set_message_info(
+                yookassa_id=result.yookassa_id,
+                tg_chat_id=sent.chat_id,
+                tg_message_id=sent.message_id,
+            )
     finally:
         db.close()

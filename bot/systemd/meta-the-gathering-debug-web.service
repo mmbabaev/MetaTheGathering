@@ -1,0 +1,20 @@
+[Unit]
+Description=Meta The Gathering Web API (Debug)
+After=network.target meta-the-gathering-debug.service
+
+[Service]
+Type=simple
+User=mbabaev
+WorkingDirectory=/home/mbabaev/MetaTheGathering/meta_the_gatheringDebug
+Environment="PATH=/home/mbabaev/MetaTheGathering/meta_the_gatheringDebug/venv/bin"
+Environment="PYTHONPATH=/home/mbabaev/MetaTheGathering/meta_the_gatheringDebug"
+Environment="BOT_ENV=debug"
+EnvironmentFile=/home/mbabaev/MetaTheGathering/meta_the_gatheringDebug/bot/.env.debug
+ExecStart=/home/mbabaev/MetaTheGathering/meta_the_gatheringDebug/venv/bin/uvicorn web.api.app:app --host 127.0.0.1 --port 8080
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
