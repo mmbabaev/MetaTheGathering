@@ -22,6 +22,7 @@ from bot.messages import (
 from services import errors
 from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeItem, ArchetypeService
+from services.feature_flags import FeatureFlags
 from services.tournament import TournamentService
 from services.user import UserService
 from services.utils import get_tournament
@@ -112,6 +113,7 @@ class PlayerHandler:
             total=len(participants),
             with_deck=with_deck,
         )
+        payment_enabled = self.feature_svc.is_payment_enabled()
         return HandlerResult(
             text,
             keyboard=self.keyboards.tournament_card_keyboard(
@@ -123,6 +125,7 @@ class PlayerHandler:
                 has_deck=has_deck,
                 aetherhub_url=getattr(t, "aetherhub_url", None),
                 import_time=getattr(t, "aetherhub_import_time", None),
+                payment_enabled=payment_enabled,
             ),
         )
 

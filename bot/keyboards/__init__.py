@@ -42,6 +42,7 @@ CB_CLOSE_TOURNAMENT = "close_t"  # close_t:{tournament_id}
 CB_ADMIN_OPPONENTS = "adm_opps"  # adm_opps:{tournament_id}
 CB_FEATURE_TOGGLE = "feat_toggle"  # feat_toggle:{flag_name}
 CB_FEATURE_INFO = "feat_info"  # feat_info:{flag_name}
+CB_PAY = "pay"  # pay:{tournament_id}
 
 
 def features_keyboard(flags: list) -> InlineKeyboardMarkup:
@@ -63,6 +64,9 @@ class Keyboards:
         buttons = [[InlineKeyboardButton(title, callback_data=f"{CB_TOURNAMENT}:{tid}")] for tid, title in tournaments]
         return InlineKeyboardMarkup(buttons)
 
+    def pay_keyboard(self, url: str) -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup([[InlineKeyboardButton("💳 Перейти к оплате", url=url)]])
+
     def tournament_card_keyboard(
         self,
         tournament_id: int,
@@ -73,6 +77,7 @@ class Keyboards:
         has_deck: bool = True,
         aetherhub_url: str | None = None,
         import_time: str | None = None,
+        payment_enabled: bool = False,
     ) -> InlineKeyboardMarkup:
         if is_registered:
             action_btn = InlineKeyboardButton("🚪 Выйти из турнира", callback_data=f"{CB_LEAVE}:{tournament_id}")
@@ -82,6 +87,8 @@ class Keyboards:
         rows = [[action_btn], [status_btn]]
         if is_registered and not has_deck:
             rows.insert(1, [InlineKeyboardButton("🃏 Выбрать колоду", callback_data=f"{CB_REGISTER}:{tournament_id}")])
+        if payment_enabled and is_registered:
+            rows.insert(1, [InlineKeyboardButton("💳 Оплатить взнос", callback_data=f"{CB_PAY}:{tournament_id}")])
         if is_registered and show_fill_opponents:
             rows.append(
                 [InlineKeyboardButton("🤝 Записать оппонентов", callback_data=f"{CB_ADMIN_OPPONENTS}:{tournament_id}")]
@@ -276,6 +283,7 @@ def tournament_card_keyboard(
     has_deck: bool = True,
     aetherhub_url: str | None = None,
     import_time: str | None = None,
+    payment_enabled: bool = False,
 ) -> InlineKeyboardMarkup:
     return _default.tournament_card_keyboard(
         tournament_id,
@@ -286,6 +294,7 @@ def tournament_card_keyboard(
         has_deck=has_deck,
         aetherhub_url=aetherhub_url,
         import_time=import_time,
+        payment_enabled=payment_enabled,
     )
 
 

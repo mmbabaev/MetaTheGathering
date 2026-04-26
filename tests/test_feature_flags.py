@@ -3,7 +3,7 @@ import pytest
 from bot.handlers.features import FeaturesHandler
 from bot.keyboards import features_keyboard
 from bot.messages import NOT_ADMIN
-from services.feature_flags import FeatureFlags, FeatureFlagService
+from services.feature_flags import KNOWN_FLAGS, FeatureFlags, FeatureFlagService
 from services.user import UserService
 
 
@@ -35,7 +35,7 @@ class TestFeatureFlagService:
     def test_ensure_defaults_creates_rows(self, ff_svc, db):
         ff_svc.ensure_defaults()
         flags = ff_svc.list_flags()
-        assert len(flags) == len(ff_svc.KNOWN_FLAGS if hasattr(ff_svc, "KNOWN_FLAGS") else [flags])
+        assert len(flags) == len(KNOWN_FLAGS)
         assert any(f.name == FeatureFlags.RECORD_OPPONENTS for f in flags)
 
     def test_list_flags_enabled_by_default(self, ff_svc):
