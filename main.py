@@ -47,6 +47,7 @@ from bot.keyboards import (
     CB_NOTIFY_CONFIRM,
     CB_NOTIFY_NO_DECK,
     CB_PAY,
+    CB_PAY_STATUS,
     CB_POLL_MENU,
     CB_REGISTER,
     CB_REVEAL_DECKS,
@@ -235,6 +236,7 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(features_handler.callback_feature_info, pattern=f"^{CB_FEATURE_INFO}:"))
     app.add_handler(CallbackQueryHandler(features_handler.callback_feature_toggle, pattern=f"^{CB_FEATURE_TOGGLE}:"))
     app.add_handler(CallbackQueryHandler(payment_handler.callback_pay, pattern=f"^{CB_PAY}:"))
+    app.add_handler(CallbackQueryHandler(payment_handler.callback_pay_status, pattern=f"^{CB_PAY_STATUS}:"))
     app.add_handler(PollAnswerHandler(poll_handler.handle_poll_answer))
 
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & private, player.message_text_input))

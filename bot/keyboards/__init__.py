@@ -43,6 +43,7 @@ CB_ADMIN_OPPONENTS = "adm_opps"  # adm_opps:{tournament_id}
 CB_FEATURE_TOGGLE = "feat_toggle"  # feat_toggle:{flag_name}
 CB_FEATURE_INFO = "feat_info"  # feat_info:{flag_name}
 CB_PAY = "pay"  # pay:{tournament_id}
+CB_PAY_STATUS = "pay_status"  # pay_status:{tournament_id} — no-op, показывает статус оплаты
 
 
 def features_keyboard(flags: list) -> InlineKeyboardMarkup:
@@ -78,6 +79,7 @@ class Keyboards:
         aetherhub_url: str | None = None,
         import_time: str | None = None,
         payment_enabled: bool = False,
+        payment_confirmed: bool = False,
     ) -> InlineKeyboardMarkup:
         if is_registered:
             action_btn = InlineKeyboardButton("🚪 Выйти из турнира", callback_data=f"{CB_LEAVE}:{tournament_id}")
@@ -88,7 +90,10 @@ class Keyboards:
         if is_registered and not has_deck:
             rows.insert(1, [InlineKeyboardButton("🃏 Выбрать колоду", callback_data=f"{CB_REGISTER}:{tournament_id}")])
         if payment_enabled and is_registered:
-            rows.insert(1, [InlineKeyboardButton("💳 Оплатить взнос", callback_data=f"{CB_PAY}:{tournament_id}")])
+            if payment_confirmed:
+                rows.insert(1, [InlineKeyboardButton("✅ Оплачено", callback_data=f"{CB_PAY_STATUS}:{tournament_id}")])
+            else:
+                rows.insert(1, [InlineKeyboardButton("💳 Оплатить взнос", callback_data=f"{CB_PAY}:{tournament_id}")])
         if is_registered and show_fill_opponents:
             rows.append(
                 [InlineKeyboardButton("🤝 Записать оппонентов", callback_data=f"{CB_ADMIN_OPPONENTS}:{tournament_id}")]
@@ -284,6 +289,7 @@ def tournament_card_keyboard(
     aetherhub_url: str | None = None,
     import_time: str | None = None,
     payment_enabled: bool = False,
+    payment_confirmed: bool = False,
 ) -> InlineKeyboardMarkup:
     return _default.tournament_card_keyboard(
         tournament_id,
@@ -295,6 +301,7 @@ def tournament_card_keyboard(
         aetherhub_url=aetherhub_url,
         import_time=import_time,
         payment_enabled=payment_enabled,
+        payment_confirmed=payment_confirmed,
     )
 
 

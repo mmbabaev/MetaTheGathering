@@ -65,6 +65,14 @@ class PaymentService:
             yookassa_id=data["id"],
         )
 
+    def is_paid(self, tg_id: int, tournament_id: int) -> bool:
+        return (
+            self.db.query(models.Payment)
+            .filter_by(tg_id=tg_id, tournament_id=tournament_id, status=models.PaymentStatus.SUCCEEDED)
+            .first()
+            is not None
+        )
+
     def set_message_info(self, yookassa_id: str, tg_chat_id: int, tg_message_id: int) -> None:
         payment = self.db.query(models.Payment).filter_by(yookassa_payment_id=yookassa_id).first()
         if payment:

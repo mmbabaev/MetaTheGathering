@@ -15,6 +15,11 @@ def _payment_handler(db) -> PaymentHandler:
     return PaymentHandler(PaymentService(db), UserService(db), Keyboards())
 
 
+async def callback_pay_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer("✅ Оплата подтверждена!", show_alert=False)
+
+
 async def callback_pay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     user = update.effective_user

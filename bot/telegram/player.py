@@ -15,6 +15,7 @@ from core.database import SessionLocal
 from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeService
 from services.feature_flags import FeatureFlagService
+from services.payment_service import PaymentService
 from services.tournament import TournamentService
 from services.user import UserService
 
@@ -38,6 +39,7 @@ def _player_handler(db) -> PlayerHandler:
         Keyboards(),
         AetherhubImportService(db),
         _make_features(db),
+        PaymentService(db),
     )
 
 
