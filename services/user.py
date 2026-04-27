@@ -38,9 +38,21 @@ class UserService:
         first_name: Optional[str] = None,
         last_name: Optional[str] = None,
     ) -> models.User:
-        """Найти пользователя по tg_id или создать нового."""
+        """Найти пользователя по tg_id или создать нового. Обновляет username/имя при изменении."""
         user = self.get_by_tg_id(tg_id)
         if user:
+            changed = False
+            if username is not None and user.username != username:
+                user.username = username
+                changed = True
+            if first_name is not None and not user.first_name:
+                user.first_name = first_name
+                changed = True
+            if last_name is not None and not user.last_name:
+                user.last_name = last_name
+                changed = True
+            if changed:
+                self.db.commit()
             return user
         user = models.User(
             tg_id=tg_id,

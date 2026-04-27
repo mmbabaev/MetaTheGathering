@@ -110,6 +110,18 @@ class ExportService:
             )
         return buf.getvalue()
 
+    def export_players_list(self, tournament_id: int) -> str:
+        """Возвращает plain-text «Имя Фамилия» по одному на строку, отсортировано."""
+        participants = self.db.query(models.Participant).filter_by(tournament_id=tournament_id).all()
+        names = sorted(
+            format_participant_name(
+                p.user.first_name if p.user else None,
+                p.user.last_name if p.user else None,
+            )
+            for p in participants
+        )
+        return "\n".join(names)
+
     def export_participants_excel(self, tournament_id: int) -> tuple[bytes, str]:
         """Возвращает (bytes, filename) для Excel-файла списка участников."""
         t = get_tournament(self.db, tournament_id)

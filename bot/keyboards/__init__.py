@@ -22,6 +22,8 @@ CB_ADMIN_SET_ARCH = "adm_set"  # adm_set:{participant_id}:{archetype_id}
 CB_ADMIN_CUSTOM_ARCH = "adm_custom"  # adm_custom:{participant_id}
 CB_ADMIN_ARCH_MORE = "adm_arch_more"  # adm_arch_more:{participant_id}
 CB_EXPORT_EXCEL = "export_excel"  # export_excel:{tournament_id}
+CB_EXPORT_MENU = "export_menu"  # export_menu:{tournament_id}
+CB_EXPORT_PLAYERS = "export_players"  # export_players:{tournament_id}
 CB_DELETE_TOURNAMENT = "del_t"  # del_t:{tournament_id}
 CB_DELETE_TOURNAMENT_CONFIRM = "del_t_yes"  # del_t_yes:{tournament_id}
 CB_DELETE_TOURNAMENT_CANCEL = "del_t_no"  # del_t_no:{tournament_id}
@@ -114,11 +116,20 @@ class Keyboards:
             )
             rows.append(
                 [
-                    InlineKeyboardButton("📈 Выгрузка Excel", callback_data=f"{CB_EXPORT_EXCEL}:{tournament_id}"),
+                    InlineKeyboardButton("📈 Выгрузка", callback_data=f"{CB_EXPORT_MENU}:{tournament_id}"),
                     InlineKeyboardButton("• • •", callback_data=f"{CB_ADMIN_MORE}:{tournament_id}"),
                 ]
             )
         return InlineKeyboardMarkup(rows)
+
+    def export_menu_keyboard(self, tournament_id: int) -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("📊 Meta (Excel)", callback_data=f"{CB_EXPORT_EXCEL}:{tournament_id}")],
+                [InlineKeyboardButton("👥 Список игроков", callback_data=f"{CB_EXPORT_PLAYERS}:{tournament_id}")],
+                [InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_TOURNAMENT}:{tournament_id}")],
+            ]
+        )
 
     def admin_more_keyboard(self, tournament_id: int, is_closed: bool = False) -> InlineKeyboardMarkup:
         rows = [
@@ -303,6 +314,10 @@ def tournament_card_keyboard(
         payment_enabled=payment_enabled,
         payment_confirmed=payment_confirmed,
     )
+
+
+def export_menu_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
+    return _default.export_menu_keyboard(tournament_id)
 
 
 def admin_more_keyboard(tournament_id: int, is_closed: bool = False) -> InlineKeyboardMarkup:

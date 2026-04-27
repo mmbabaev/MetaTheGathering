@@ -8,7 +8,7 @@ from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from bot.handlers.admin import parse_add_player_command, parse_bulk_player_line
-from bot.keyboards import admin_more_keyboard
+from bot.keyboards import admin_more_keyboard, export_menu_keyboard
 from bot.messages import ADD_PLAYERS_USAGE, BULK_ADD_PROMPT, TELEGRAM_USER_LOOKUP_FAILED
 from bot.scheduler import format_schedule_text
 from bot.telegram.common import log_event as _log
@@ -341,6 +341,43 @@ async def cmd_delete_tournament(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         result = _admin_handler(db).handle_delete_tournament(user.id)
         await msg.reply_text(result.text)
+    finally:
+        db.close()
+
+
+async def callback_export_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка «📈 Выгрузка» — открывает подменю экспорта."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+    await query.answer()
+    await query.edit_message_text("Выберите формат выгрузки:", reply_markup=export_menu_keyboard(tournament_id))
+
+
+async def callback_export_players(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка «👥 Список игроков» — отправляет plain-text список имён."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+    await query.answer()
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_export_players(user.id, tournament_id)
+        if result is None:
+            await query.answer("Нет прав или турнир не найден.", show_alert=True)
+            return
+        await query.message.reply_text(f"<pre>{result}</pre>", parse_mode="HTML")
+        _log("export_players", user, tournament_id=tournament_id)
     finally:
         db.close()
 

@@ -271,17 +271,22 @@ class TestFetchTournament:
 
         missing = [p for p in [main_path, p1_path, p2_path, p3_path, p4_path] if not p.exists()]
         if missing:
-            pytest.skip(
-                "Real 99049 fixtures are missing. Run: "
-                "python3 scripts/aetherhub/fetch_99049_fixtures.py"
-            )
+            pytest.skip("Real 99049 fixtures are missing. Run: python3 scripts/aetherhub/fetch_99049_fixtures.py")
 
         html_map = {
             base_url: main_path.read_text(encoding="utf-8"),
-            f"https://aetherhub.com/Tourney/RoundTourneyPublicPairings?id={tid}&p=1": p1_path.read_text(encoding="utf-8"),
-            f"https://aetherhub.com/Tourney/RoundTourneyPublicPairings?id={tid}&p=2": p2_path.read_text(encoding="utf-8"),
-            f"https://aetherhub.com/Tourney/RoundTourneyPublicPairings?id={tid}&p=3": p3_path.read_text(encoding="utf-8"),
-            f"https://aetherhub.com/Tourney/RoundTourneyPublicPairings?id={tid}&p=4": p4_path.read_text(encoding="utf-8"),
+            f"https://aetherhub.com/Tourney/RoundTourneyPublicPairings?id={tid}&p=1": p1_path.read_text(
+                encoding="utf-8"
+            ),
+            f"https://aetherhub.com/Tourney/RoundTourneyPublicPairings?id={tid}&p=2": p2_path.read_text(
+                encoding="utf-8"
+            ),
+            f"https://aetherhub.com/Tourney/RoundTourneyPublicPairings?id={tid}&p=3": p3_path.read_text(
+                encoding="utf-8"
+            ),
+            f"https://aetherhub.com/Tourney/RoundTourneyPublicPairings?id={tid}&p=4": p4_path.read_text(
+                encoding="utf-8"
+            ),
         }
 
         data = _svc(html_map).fetch_tournament(base_url)
