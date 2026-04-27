@@ -37,6 +37,8 @@ from bot.keyboards import (
     CB_DELETE_TOURNAMENT_CANCEL,
     CB_DELETE_TOURNAMENT_CONFIRM,
     CB_EXPORT_EXCEL,
+    CB_EXPORT_MENU,
+    CB_EXPORT_PLAYERS,
     CB_FEATURE_INFO,
     CB_FEATURE_TOGGLE,
     CB_LEAVE,
@@ -204,6 +206,8 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(admin.callback_set_participant_arch, pattern=f"^{CB_ADMIN_SET_ARCH}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_pick_participant_arch_more, pattern=f"^{CB_ADMIN_ARCH_MORE}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_participant_custom_arch, pattern=f"^{CB_ADMIN_CUSTOM_ARCH}:"))
+    app.add_handler(CallbackQueryHandler(admin.callback_export_menu, pattern=f"^{CB_EXPORT_MENU}:"))
+    app.add_handler(CallbackQueryHandler(admin.callback_export_players, pattern=f"^{CB_EXPORT_PLAYERS}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_export_excel, pattern=f"^{CB_EXPORT_EXCEL}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_delete_tournament_prompt, pattern=f"^{CB_DELETE_TOURNAMENT}:"))
     app.add_handler(

@@ -494,6 +494,15 @@ class AdminHandler:
         self.svc.delete_tournament(active.id)
         return HandlerResult(f"🗑 Турнир «{title}» удалён.")
 
+    def handle_export_players(self, tg_id: int, tournament_id: int) -> str | None:
+        """Возвращает plain-text список «Имя Фамилия» или None если нет прав."""
+        if not self.user_svc.is_admin(tg_id):
+            return None
+        try:
+            return ExportService(self.svc.db).export_players_list(tournament_id)
+        except errors.TournamentNotFound:
+            return None
+
     def handle_export_excel(self, tg_id: int, tournament_id: int) -> tuple[bytes, str] | None:
         """Возвращает (bytes, filename) или None если нет прав."""
         if not self.user_svc.is_admin(tg_id):
