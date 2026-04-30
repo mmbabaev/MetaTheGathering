@@ -21,7 +21,7 @@ router = APIRouter()
 async def login_page(request: Request, user=Depends(get_current_user_optional)):
     if user:
         return RedirectResponse("/", status_code=303)
-    return templates.TemplateResponse("login.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="login.html")
 
 
 @router.post("/login", response_class=HTMLResponse)
@@ -31,7 +31,7 @@ async def login_submit(request: Request, email: str = Form(...), db: Session = D
     token = create_magic_token(db, user)
     magic_url = f"{settings.WEB_BASE_URL}/auth/verify?token={token}"
     await send_magic_link(email, magic_url)
-    return templates.TemplateResponse("login.html", {"request": request, "sent": True, "email": email})
+    return templates.TemplateResponse(request=request, name="login.html", context={"sent": True, "email": email})
 
 
 @router.get("/auth/verify", response_class=HTMLResponse)
@@ -39,7 +39,7 @@ async def auth_verify(request: Request, token: str, db: Session = Depends(get_db
     user = verify_magic_token(db, token)
     if not user:
         return templates.TemplateResponse(
-            "login.html", {"request": request, "error": "Ссылка недействительна или истекла."}
+            request=request, name="login.html", context={"error": "Ссылка недействительна или истекла."}
         )
 
     needs_name = not (user.display_name or user.first_name)

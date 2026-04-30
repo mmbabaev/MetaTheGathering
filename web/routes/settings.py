@@ -10,7 +10,7 @@ router = APIRouter()
 
 @router.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request, user=Depends(get_current_user)):
-    return templates.TemplateResponse("settings.html", {"request": request, "user": user})
+    return templates.TemplateResponse(request=request, name="settings.html", context={"user": user})
 
 
 @router.post("/settings")

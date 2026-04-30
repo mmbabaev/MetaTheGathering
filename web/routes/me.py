@@ -23,4 +23,6 @@ async def my_registrations(request: Request, user=Depends(get_current_user), db:
         .scalars()
         .all()
     )
-    return templates.TemplateResponse("me.html", {"request": request, "user": user, "participants": participants})
+    return templates.TemplateResponse(
+        request=request, name="me.html", context={"user": user, "participants": participants}
+    )

@@ -22,7 +22,7 @@ async def tournament_list(request: Request, user=Depends(get_current_user), db: 
     )
     tournaments = db.execute(stmt).scalars().all()
     return templates.TemplateResponse(
-        "tournaments.html", {"request": request, "user": user, "tournaments": tournaments}
+        request=request, name="tournaments.html", context={"user": user, "tournaments": tournaments}
     )
 
 
@@ -51,9 +51,9 @@ async def tournament_detail(
 
     my_participant = next((p for p in tournament.participants if p.user_id == user.id), None)
     return templates.TemplateResponse(
-        "tournament.html",
-        {
-            "request": request,
+        request=request,
+        name="tournament.html",
+        context={
             "user": user,
             "tournament": tournament,
             "archetypes": archetypes,
