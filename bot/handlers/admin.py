@@ -388,12 +388,15 @@ class AdminHandler:
         """Создаёт архетип по введённому названию и присваивает участнику."""
         if not self.user_svc.is_admin(tg_id) and not self._features.can_fill_opponent_decks():
             return HandlerResult(NOT_ADMIN)
+        p = self.svc.get_participant_by_id(participant_id)
+        if p is None:
+            return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
         try:
             arch = self.arch_svc.get_or_create_by_name(arch_name, is_custom=True)
             self.svc.set_participant_archetype(participant_id=participant_id, archetype_id=arch.id)
         except errors.ParticipantNotFound:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
-        return HandlerResult(ADMIN_ARCH_SAVED.format(archetype_name=arch.name))
+        return self._tournament_status_result(p.tournament_id, prefix=ADMIN_ARCH_SAVED.format(archetype_name=arch.name))
 
     def handle_fill_opponents(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Показывает незаполненных оппонентов пользователя из AetherHub-пейрингов."""

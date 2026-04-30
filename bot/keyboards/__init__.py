@@ -254,6 +254,9 @@ class Keyboards:
                 ]
             )
 
+        if tournament_id is not None:
+            buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_TOURNAMENT}:{tournament_id}")])
+
         return InlineKeyboardMarkup(buttons)
 
     def admin_archetype_select_keyboard(
