@@ -1,0 +1,32 @@
+name: Deploy Web — Production
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - 'bot/systemd/meta-the-gathering-web.service'
+      - 'bot/deploy_web*.sh'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy Web PROD
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Write prod .env
+        run: echo "${{ secrets.ENV_FILE }}" > bot/.env
+
+      - name: Deploy web production
+        run: bash bot/deploy_web.sh
+        env:
+          SSH_KEY: ~/.ssh/deploy_key

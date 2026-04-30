@@ -10,7 +10,7 @@ Environment="PATH=/home/mbabaev/MetaTheGathering/meta_the_gatheringDebug/venv/bi
 Environment="PYTHONPATH=/home/mbabaev/MetaTheGathering/meta_the_gatheringDebug"
 Environment="BOT_ENV=debug"
 EnvironmentFile=/home/mbabaev/MetaTheGathering/meta_the_gatheringDebug/bot/.env.debug
-ExecStart=/home/mbabaev/MetaTheGathering/meta_the_gatheringDebug/venv/bin/uvicorn web.api.app:app --host 127.0.0.1 --port 8080
+ExecStart=/home/mbabaev/MetaTheGathering/meta_the_gatheringDebug/venv/bin/uvicorn web.app:app --host 127.0.0.1 --port 8081
 Restart=always
 RestartSec=10
 StandardOutput=journal

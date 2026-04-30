@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}MetaGatherer{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { -webkit-tap-highlight-color: transparent; }
+    .btn { @apply block w-full py-3 px-4 rounded-xl text-center font-medium transition-colors; }
+    .btn-primary { @apply bg-blue-600 text-white active:bg-blue-700; }
+    .btn-secondary { @apply bg-gray-100 text-gray-800 active:bg-gray-200; }
+    .btn-danger { @apply bg-red-100 text-red-700 active:bg-red-200; }
+    .card { @apply bg-white rounded-2xl shadow-sm border border-gray-100 p-4; }
+    .input { @apply w-full border border-gray-300 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-500; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  {% if user is defined and user %}
+  <nav class="bg-white border-b border-gray-200 sticky top-0 z-10">
+    <div class="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
+      <a href="/" class="font-bold text-gray-900">MetaGatherer</a>
+      <div class="flex gap-4 text-sm">
+        <a href="/me" class="text-gray-600">Мои записи</a>
+        <a href="/settings" class="text-gray-600">Настройки</a>
+        <a href="/logout" class="text-gray-400">Выйти</a>
+      </div>
+    </div>
+  </nav>
+  {% endif %}
+  <main class="max-w-lg mx-auto px-4 py-6">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

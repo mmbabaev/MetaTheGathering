@@ -40,7 +40,7 @@ class TournamentStatus(str, enum.Enum):
 
 
 class User(Base):
-    """Телеграм-пользователь в контексте бота (игрок/админ)."""
+    """Пользователь — Telegram-аккаунт или веб-пользователь (отрицательный tg_id)."""
 
     __tablename__ = "users"
 
@@ -49,6 +49,8 @@ class User(Base):
     username = Column(String(255), nullable=True)
     first_name = Column(String(255), nullable=True)
     last_name = Column(String(255), nullable=True)
+    display_name = Column(String(255), nullable=True)
+    email = Column(String(255), unique=True, nullable=True, index=True)
 
     is_admin = Column(Boolean, default=False, nullable=False)
     is_superadmin = Column(Boolean, default=False, nullable=False)
@@ -58,6 +60,23 @@ class User(Base):
     participants = relationship("Participant", back_populates="user", cascade="all, delete-orphan")
     votes = relationship("Vote", back_populates="voter", cascade="all, delete-orphan")
     deck_history = relationship("UserDeckHistory", back_populates="user", cascade="all, delete-orphan")
+    web_auth_tokens = relationship("WebAuthToken", back_populates="user", cascade="all, delete-orphan")
+
+
+class WebAuthToken(Base):
+    """Magic-link токен для веб-авторизации."""
+
+    __tablename__ = "web_auth_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    token_hash = Column(String(64), nullable=False, unique=True, index=True)  # SHA-256 hex
+    expires_at = Column(DateTime, nullable=False)
+    used_at = Column(DateTime, nullable=True)
+
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+    user = relationship("User", back_populates="web_auth_tokens")
 
 
 class Tournament(Base):

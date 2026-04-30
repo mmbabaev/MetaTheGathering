@@ -59,7 +59,30 @@ jobs:
       - name: Write debug .env
         run: echo "${{ secrets.ENV_FILE_DEBUG }}" > bot/.env.debug
 
-      - name: Deploy debug
+      - name: Deploy debug bot
         run: bash bot/deploy_bot_debug.sh
+        env:
+          SSH_KEY: ~/.ssh/deploy_key
+
+  deploy-debug-web:
+    name: Deploy DEBUG Web
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Write debug .env
+        run: echo "${{ secrets.ENV_FILE_DEBUG }}" > bot/.env.debug
+
+      - name: Deploy debug web
+        run: bash bot/deploy_web_debug.sh
         env:
           SSH_KEY: ~/.ssh/deploy_key
