@@ -803,6 +803,19 @@ class TestHandleAdminCustomArchText:
         assert "Turbo Fog" in result.text
         assert not result.is_alert
 
+    def test_returns_participants_keyboard_after_custom_arch(self, handler, svc, admin_user, participant):
+        result = handler.handle_set_participant_custom_arch(
+            tg_id=ADMIN_TG_ID, participant_id=participant.id, arch_name="Turbo Fog"
+        )
+        assert result.keyboard is not None
+
+    def test_back_button_present_after_custom_arch(self, handler, svc, admin_user, participant):
+        result = handler.handle_set_participant_custom_arch(
+            tg_id=ADMIN_TG_ID, participant_id=participant.id, arch_name="Turbo Fog"
+        )
+        buttons = [b.text for row in result.keyboard.inline_keyboard for b in row]
+        assert any("Назад" in t for t in buttons)
+
     def test_participant_not_found(self, handler, admin_user):
         from bot.messages import PARTICIPANT_NOT_FOUND
 
