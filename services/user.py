@@ -246,3 +246,12 @@ class UserService:
         self.db.commit()
         self.db.refresh(user)
         return user
+
+    def toggle_hide_deck_emoji(self, tg_id: int) -> bool:
+        """Инвертирует hide_deck_emoji. Возвращает новое значение флага."""
+        user = self.get_by_tg_id(tg_id)
+        if not user:
+            return False
+        user.hide_deck_emoji = not user.hide_deck_emoji
+        self.db.commit()
+        return user.hide_deck_emoji

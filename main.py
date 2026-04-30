@@ -55,6 +55,7 @@ from bot.keyboards import (
     CB_REVEAL_DECKS,
     CB_SET_IMPORT_TIME,
     CB_SETTINGS_NAME,
+    CB_SETTINGS_TOGGLE_EMOJI,
     CB_TOURNAMENT,
     CB_TSTATUS,
 )
@@ -203,6 +204,9 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(player.callback_leave_confirm, pattern=f"^{CB_LEAVE_CONFIRM}:"))
     app.add_handler(CallbackQueryHandler(player.callback_leave_cancel, pattern=f"^{CB_LEAVE_CANCEL}:"))
     app.add_handler(CallbackQueryHandler(settings_handler.callback_settings_name, pattern=f"^{CB_SETTINGS_NAME}$"))
+    app.add_handler(
+        CallbackQueryHandler(settings_handler.callback_toggle_emoji, pattern=f"^{CB_SETTINGS_TOGGLE_EMOJI}$")
+    )
     app.add_handler(CallbackQueryHandler(admin.callback_bulk_add_start, pattern=f"^{CB_BULK_ADD}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_pick_participant_arch, pattern=f"^{CB_ADMIN_PICK_ARCH}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_set_participant_arch, pattern=f"^{CB_ADMIN_SET_ARCH}:"))

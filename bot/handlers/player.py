@@ -144,8 +144,10 @@ class PlayerHandler:
     ) -> HandlerResult:
         """Строит HandlerResult с клавиатурой архетипов для игрока."""
         arch_list, has_more = build_archetype_menu(self.arch_svc, tg_id, expanded)
+        user = self.user_svc.get_by_tg_id(tg_id) if tg_id else None
+        show_emoji = not (user and user.hide_deck_emoji)
         return HandlerResult(
-            CHOOSE_ARCHETYPE, keyboard=self.keyboards.archetype_keyboard(tournament_id, arch_list, has_more)
+            CHOOSE_ARCHETYPE, keyboard=self.keyboards.archetype_keyboard(tournament_id, arch_list, has_more, show_emoji)
         )
 
     def handle_tournaments(self, tg_id: int | None = None) -> HandlerResult:

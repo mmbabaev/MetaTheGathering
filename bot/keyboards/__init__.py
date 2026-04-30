@@ -12,6 +12,7 @@ CB_CUSTOM_ARCHETYPE = "custom"
 CB_ARCHETYPE_MORE = "arch_more"  # arch_more:{tournament_id}
 CB_TOURNAMENT = "t"
 CB_SETTINGS_NAME = "settings_name"
+CB_SETTINGS_TOGGLE_EMOJI = "settings_toggle_emoji"
 CB_TSTATUS = "tstatus"
 CB_LEAVE = "leave"
 CB_LEAVE_CONFIRM = "leave_confirm"
@@ -216,8 +217,12 @@ class Keyboards:
             ]
         )
 
-    def settings_keyboard(self, is_admin: bool = False) -> InlineKeyboardMarkup:
-        rows = [[InlineKeyboardButton("✏️ Изменить имя", callback_data=CB_SETTINGS_NAME)]]
+    def settings_keyboard(self, is_admin: bool = False, hide_deck_emoji: bool = False) -> InlineKeyboardMarkup:
+        emoji_label = "🚫 Эмоджи колод: выкл" if hide_deck_emoji else "🎨 Эмоджи колод: вкл"
+        rows = [
+            [InlineKeyboardButton("✏️ Изменить имя", callback_data=CB_SETTINGS_NAME)],
+            [InlineKeyboardButton(emoji_label, callback_data=CB_SETTINGS_TOGGLE_EMOJI)],
+        ]
         return InlineKeyboardMarkup(rows)
 
     def admin_participants_keyboard(
@@ -256,9 +261,15 @@ class Keyboards:
         participant_id: int,
         archetypes: list,
         has_more: bool = False,
+        show_emoji: bool = True,
     ) -> InlineKeyboardMarkup:
         buttons = [
-            [InlineKeyboardButton(deck_emoji.format(name), callback_data=f"{CB_ADMIN_SET_ARCH}:{participant_id}:{aid}")]
+            [
+                InlineKeyboardButton(
+                    deck_emoji.format(name) if show_emoji else name,
+                    callback_data=f"{CB_ADMIN_SET_ARCH}:{participant_id}:{aid}",
+                )
+            ]
             for aid, name in archetypes
         ]
         if has_more:
@@ -271,9 +282,15 @@ class Keyboards:
         tournament_id: int,
         archetypes: list,
         has_more: bool = False,
+        show_emoji: bool = True,
     ) -> InlineKeyboardMarkup:
         buttons = [
-            [InlineKeyboardButton(deck_emoji.format(name), callback_data=f"{CB_ARCHETYPE}:{tournament_id}:{aid}")]
+            [
+                InlineKeyboardButton(
+                    deck_emoji.format(name) if show_emoji else name,
+                    callback_data=f"{CB_ARCHETYPE}:{tournament_id}:{aid}",
+                )
+            ]
             for aid, name in archetypes
         ]
         if has_more:
@@ -352,8 +369,8 @@ def leave_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
     return _default.leave_confirm_keyboard(tournament_id)
 
 
-def settings_keyboard(is_admin: bool = False) -> InlineKeyboardMarkup:
-    return _default.settings_keyboard(is_admin=is_admin)
+def settings_keyboard(is_admin: bool = False, hide_deck_emoji: bool = False) -> InlineKeyboardMarkup:
+    return _default.settings_keyboard(is_admin=is_admin, hide_deck_emoji=hide_deck_emoji)
 
 
 def admin_participants_keyboard(

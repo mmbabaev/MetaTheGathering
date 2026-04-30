@@ -102,3 +102,86 @@ class TestHandleSettingsNameText:
     def test_returns_name_saved_message(self, handler):
         result = handler.handle_settings_name_text(tg_id=8012, name_text="Анна")
         assert result.text == NAME_SAVED.format(full_name="Анна")
+
+
+# --- UserService.toggle_hide_deck_emoji ---
+
+
+class TestToggleHideDeckEmoji:
+    def test_default_is_false(self, user_svc):
+        user_svc.get_or_create(tg_id=9100, username="u", first_name="X")
+        user = user_svc.get_by_tg_id(9100)
+        assert user.hide_deck_emoji is False
+
+    def test_toggle_enables(self, user_svc):
+        user_svc.get_or_create(tg_id=9101, username="u", first_name="X")
+        new_val = user_svc.toggle_hide_deck_emoji(9101)
+        assert new_val is True
+        assert user_svc.get_by_tg_id(9101).hide_deck_emoji is True
+
+    def test_toggle_disables(self, user_svc):
+        user_svc.get_or_create(tg_id=9102, username="u", first_name="X")
+        user_svc.toggle_hide_deck_emoji(9102)
+        new_val = user_svc.toggle_hide_deck_emoji(9102)
+        assert new_val is False
+
+    def test_toggle_unknown_user_returns_false(self, user_svc):
+        assert user_svc.toggle_hide_deck_emoji(99999) is False
+
+
+# --- handle_toggle_emoji ---
+
+
+class TestHandleToggleEmoji:
+    def test_toggles_flag_and_returns_settings(self, handler, user_svc):
+        user_svc.get_or_create(tg_id=9110, username="u", first_name="X")
+        result = handler.handle_toggle_emoji(tg_id=9110)
+        assert SETTINGS_MENU in result.text
+        assert user_svc.get_by_tg_id(9110).hide_deck_emoji is True
+
+    def test_keyboard_reflects_hidden_state(self, handler, user_svc):
+        user_svc.get_or_create(tg_id=9111, username="u", first_name="X")
+        handler.handle_toggle_emoji(tg_id=9111)  # now hidden
+        result = handler.handle_settings(tg_id=9111)
+        buttons_text = [b.text for row in result.keyboard.inline_keyboard for b in row]
+        assert any("выкл" in t for t in buttons_text)
+
+    def test_keyboard_reflects_shown_state(self, handler, user_svc):
+        user_svc.get_or_create(tg_id=9112, username="u", first_name="X")
+        result = handler.handle_settings(tg_id=9112)
+        buttons_text = [b.text for row in result.keyboard.inline_keyboard for b in row]
+        assert any("вкл" in t for t in buttons_text)
+
+
+# --- emoji in archetype keyboards ---
+
+
+class TestArchetypeKeyboardEmoji:
+    def test_show_emoji_true_includes_emoji(self):
+        from bot.keyboards import Keyboards
+
+        kb = Keyboards()
+        archetypes = [(1, "Red Kuldotha"), (2, "Blue Delver")]
+        result = kb.archetype_keyboard(tournament_id=1, archetypes=archetypes, show_emoji=True)
+        labels = [b.text for row in result.inline_keyboard for b in row]
+        assert any("🔴" in t for t in labels)
+
+    def test_show_emoji_false_no_emoji(self):
+        from bot.keyboards import Keyboards
+
+        kb = Keyboards()
+        archetypes = [(1, "Red Kuldotha"), (2, "Blue Delver")]
+        result = kb.archetype_keyboard(tournament_id=1, archetypes=archetypes, show_emoji=False)
+        labels = [b.text for row in result.inline_keyboard for b in row]
+        assert all("🔴" not in t and "🔵" not in t for t in labels)
+        assert any(t == "Red Kuldotha" for t in labels)
+
+    def test_admin_keyboard_show_emoji_false(self):
+        from bot.keyboards import Keyboards
+
+        kb = Keyboards()
+        archetypes = [(1, "Red Kuldotha")]
+        result = kb.admin_archetype_select_keyboard(participant_id=1, archetypes=archetypes, show_emoji=False)
+        labels = [b.text for row in result.inline_keyboard for b in row]
+        assert any(t == "Red Kuldotha" for t in labels)
+        assert all("🔴" not in t for t in labels)

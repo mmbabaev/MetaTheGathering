@@ -42,3 +42,18 @@ async def callback_settings_name(update: Update, context: ContextTypes.DEFAULT_T
     context.user_data[USER_DATA_PENDING_SETTINGS_NAME] = True
     await query.edit_message_text(SETTINGS_CHANGE_NAME_PROMPT)
     await query.answer()
+
+
+async def callback_toggle_emoji(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user = update.effective_user
+    if not query or not user:
+        return
+    _log("settings_toggle_emoji", user)
+    db = SessionLocal()
+    try:
+        result = _settings_handler(db).handle_toggle_emoji(user.id)
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+    finally:
+        db.close()
+    await query.answer()
