@@ -3,7 +3,22 @@
 {% block content %}
 <h1 class="text-xl font-bold text-gray-900 mb-4">Настройки</h1>
 
-{% if tg_match %}
+{% if pending_request %}
+<div class="card mb-4 border border-blue-300 bg-blue-50">
+  <p class="font-medium text-gray-900 mb-1">Введите код из Telegram</p>
+  <p class="text-sm text-gray-600 mb-3">Мы отправили 6-значный код в Telegram. Введите его ниже для подтверждения.</p>
+  {% if code_error %}
+  <p class="text-red-600 text-sm mb-2">Неверный код. Попробуйте ещё раз.</p>
+  {% endif %}
+  <form method="post" action="/settings/verify-link">
+    <input type="hidden" name="link_request_id" value="{{ pending_request.id }}">
+    <input class="input mb-3" type="text" name="code" placeholder="123456"
+           inputmode="numeric" maxlength="6" autofocus required>
+    <button class="btn btn-primary" type="submit">Подтвердить</button>
+  </form>
+</div>
+
+{% elif tg_match %}
 <div class="card mb-4 border border-yellow-300 bg-yellow-50">
   <p class="font-medium text-gray-900 mb-1">Это вы в Telegram?</p>
   <p class="text-sm text-gray-600 mb-3">
@@ -11,9 +26,10 @@
     {% if tg_match.username %}(@{{ tg_match.username }}){% endif %}
     — зарегистрирован через Telegram.
   </p>
+  <p class="text-sm text-gray-500 mb-3">Мы отправим код подтверждения в Telegram этому пользователю.</p>
   <div class="flex gap-2">
-    <form method="post" action="/settings/link-tg/{{ tg_match.id }}">
-      <button class="btn btn-primary" type="submit">Да, это я</button>
+    <form method="post" action="/settings/request-link/{{ tg_match.id }}">
+      <button class="btn btn-primary" type="submit">Отправить код в Telegram</button>
     </form>
     <form method="post" action="/settings/skip-link">
       <button class="btn" type="submit">Нет, это другой человек</button>

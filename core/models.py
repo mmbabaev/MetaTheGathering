@@ -63,6 +63,20 @@ class User(Base):
     web_auth_tokens = relationship("WebAuthToken", back_populates="user", cascade="all, delete-orphan")
 
 
+class WebLinkRequest(Base):
+    """Запрос на привязку веб-аккаунта к Telegram-аккаунту через код."""
+
+    __tablename__ = "web_link_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    web_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    tg_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    code = Column(String(6), nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    used_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+
 class WebAuthToken(Base):
     """Magic-link токен для веб-авторизации."""
 
