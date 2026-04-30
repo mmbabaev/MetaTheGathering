@@ -62,6 +62,16 @@ class Settings(BaseSettings):
     YOOKASSA_SECRET_KEY: str = ""
     PAYMENT_AMOUNT: str = "525.00"
 
+    # Web UI
+    WEB_SECRET_KEY: str = "dev-secret-change-in-prod"
+    WEB_BASE_URL: str = "http://localhost:8080"
+    WEB_PORT: int = 8080
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = "MetaGatherer <noreply@example.com>"
+
     # Несекретные настройки — берутся из config/prod.py или config/debug.py
     DEBUG: bool = _app_cfg.debug
     TOURNAMENT_TIMEZONE: str = _app_cfg.tournament_timezone

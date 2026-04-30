@@ -1,0 +1,19 @@
+[Unit]
+Description=Meta The Gathering Web UI
+After=network.target meta-the-gathering.service
+
+[Service]
+Type=simple
+User=mbabaev
+WorkingDirectory=/home/mbabaev/MetaTheGathering/meta_the_gathering
+Environment="PATH=/home/mbabaev/MetaTheGathering/meta_the_gathering/venv/bin"
+Environment="PYTHONPATH=/home/mbabaev/MetaTheGathering/meta_the_gathering"
+EnvironmentFile=/home/mbabaev/MetaTheGathering/meta_the_gathering/bot/.env
+ExecStart=/home/mbabaev/MetaTheGathering/meta_the_gathering/venv/bin/uvicorn web.app:app --host 127.0.0.1 --port 8080
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

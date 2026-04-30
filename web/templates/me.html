@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Мои записи — MetaGatherer{% endblock %}
+{% block content %}
+<h1 class="text-xl font-bold text-gray-900 mb-4">Мои записи</h1>
+
+{% if not participants %}
+<div class="card text-center text-gray-400 py-8">Вы пока не записаны ни на один турнир</div>
+{% endif %}
+
+{% for p in participants %}
+<a href="/t/{{ p.tournament.id }}" class="card mb-3 block active:bg-gray-50">
+  <p class="font-semibold text-gray-900">{{ p.tournament.title }}</p>
+  <div class="flex items-center justify-between mt-1">
+    <span class="text-sm text-gray-500">{{ p.archetype.name if p.archetype else "Архетип не указан" }}</span>
+    <span class="text-xs font-medium px-2 py-1 rounded-full
+      {% if p.tournament.status.value == 'registration' %}bg-green-100 text-green-700
+      {% elif p.tournament.status.value == 'ongoing' %}bg-blue-100 text-blue-700
+      {% elif p.tournament.status.value == 'voting' %}bg-yellow-100 text-yellow-700
+      {% else %}bg-gray-100 text-gray-500{% endif %}">
+      {{ p.tournament.status.label_ru }}
+    </span>
+  </div>
+</a>
+{% endfor %}
+{% endblock %}

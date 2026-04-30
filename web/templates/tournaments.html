@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Турниры — MetaGatherer{% endblock %}
+{% block content %}
+<h1 class="text-xl font-bold text-gray-900 mb-4">Активные турниры</h1>
+
+{% if not tournaments %}
+<div class="card text-center text-gray-400 py-8">Нет активных турниров</div>
+{% endif %}
+
+{% for t in tournaments %}
+<a href="/t/{{ t.id }}" class="card mb-3 block active:bg-gray-50">
+  <div class="flex items-start justify-between">
+    <div>
+      <p class="font-semibold text-gray-900">{{ t.title }}</p>
+      {% if t.club %}<p class="text-sm text-gray-400">{{ t.club }}</p>{% endif %}
+    </div>
+    <span class="text-xs font-medium px-2 py-1 rounded-full
+      {% if t.status.value == 'registration' %}bg-green-100 text-green-700
+      {% elif t.status.value == 'ongoing' %}bg-blue-100 text-blue-700
+      {% elif t.status.value == 'voting' %}bg-yellow-100 text-yellow-700
+      {% else %}bg-gray-100 text-gray-500{% endif %}">
+      {{ t.status.label_ru }}
+    </span>
+  </div>
+  <p class="text-sm text-gray-500 mt-1">{{ t.participants | length }} участников →</p>
+</a>
+{% endfor %}
+{% endblock %}
