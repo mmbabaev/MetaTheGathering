@@ -68,9 +68,19 @@ set -e
 
 echo "→ Разворачиваем в $REMOTE_DIR"
 mkdir -p "$REMOTE_DIR"
+
+# Protect env file from being overwritten by tar extraction
+[ -f "$ENV_DEST" ] && cp "$ENV_DEST" /tmp/.env.protected
+
 tar -xzf "/tmp/$ARCHIVE_NAME" -C "$REMOTE_DIR"
 
-[ ! -f "$ENV_DEST" ] && { echo "ERROR: $ENV_DEST не найден на сервере. Загрузите его вручную."; exit 1; }
+# Restore env file if it was protected
+if [ -f /tmp/.env.protected ]; then
+    mv /tmp/.env.protected "$ENV_DEST"
+else
+    echo "ERROR: $ENV_DEST не найден на сервере. Загрузите его вручную."
+    exit 1
+fi
 
 echo "→ Создаём venv..."
 cd "$REMOTE_DIR"
