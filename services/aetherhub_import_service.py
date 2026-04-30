@@ -134,6 +134,8 @@ class AetherhubImportService:
         created: list[str] = []
 
         for name in data.players:
+            if name.upper() == "BYE":
+                continue
             user = self.find_user_by_name(name)
             was_created = False
             if user is None:

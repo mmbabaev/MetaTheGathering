@@ -77,6 +77,10 @@ class AetherhubService:
 
         return 4
 
+    @staticmethod
+    def _is_bye(name: str) -> bool:
+        return name.upper() == "BYE"
+
     def _parse_standings_page(self, html: str) -> tuple[list[str], int]:
         """Returns (player_names_from_standings, max_round_found) from the main tournament page."""
         soup = BeautifulSoup(html, "html.parser")
@@ -87,7 +91,9 @@ class AetherhubService:
             for row in tables[0].find_all("tr")[1:]:
                 cells = [td.get_text(strip=True) for td in row.find_all("td")]
                 if len(cells) >= 2 and cells[1]:
-                    players.append(cells[1].strip())
+                    name = cells[1].strip()
+                    if not self._is_bye(name):
+                        players.append(name)
 
         max_round = 1
         for a in soup.find_all("a", href=True):
@@ -109,8 +115,9 @@ class AetherhubService:
             if len(cells) < 3:
                 continue
             p1 = self._strip_points(cells[1])
-            p2 = self._strip_points(cells[2]) if cells[2] else None
-            if p1:
+            p2_raw = self._strip_points(cells[2]) if cells[2] else None
+            p2 = None if (p2_raw and self._is_bye(p2_raw)) else p2_raw
+            if p1 and not self._is_bye(p1):
                 pairings.append(AetherhubPairing(player=p1, opponent=p2 or None))
             if p2:
                 pairings.append(AetherhubPairing(player=p2, opponent=p1 or None))
