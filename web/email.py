@@ -9,10 +9,11 @@ from core.config import settings
 logger = logging.getLogger(__name__)
 
 
-async def send_magic_link(to_email: str, magic_url: str) -> None:
+async def send_magic_link(to_email: str, magic_url: str) -> str | None:
+    """Send magic link email. Returns magic_url when SMTP is not configured (for debug display)."""
     if not settings.SMTP_HOST:
         logger.warning("SMTP not configured, magic link for %s: %s", to_email, magic_url)
-        return
+        return magic_url
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = "Вход в MetaGatherer"

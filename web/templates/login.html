@@ -7,8 +7,13 @@
 
   {% if sent %}
   <div class="card">
+    {% if debug_link %}
+    <p class="text-yellow-700 font-medium mb-1">SMTP не настроен — ссылка для входа:</p>
+    <a href="{{ debug_link }}" class="btn btn-primary block text-center mt-2">Войти</a>
+    {% else %}
     <p class="text-green-700 font-medium mb-1">Письмо отправлено!</p>
     <p class="text-gray-600 text-sm">Проверьте почту <strong>{{ email }}</strong> и нажмите ссылку для входа. Ссылка действительна 15 минут.</p>
+    {% endif %}
   </div>
   {% else %}
   {% if error %}

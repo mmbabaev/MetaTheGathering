@@ -30,8 +30,10 @@ async def login_submit(request: Request, email: str = Form(...), db: Session = D
     user = get_or_create_web_user(db, email)
     token = create_magic_token(db, user)
     magic_url = f"{settings.WEB_BASE_URL}/auth/verify?token={token}"
-    await send_magic_link(email, magic_url)
-    return templates.TemplateResponse(request=request, name="login.html", context={"sent": True, "email": email})
+    debug_link = await send_magic_link(email, magic_url)
+    return templates.TemplateResponse(
+        request=request, name="login.html", context={"sent": True, "email": email, "debug_link": debug_link}
+    )
 
 
 @router.get("/auth/verify", response_class=HTMLResponse)
