@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import List
 
@@ -8,6 +9,8 @@ from sqlalchemy import func, nulls_last, select
 from sqlalchemy.orm import Session
 
 from core import models
+
+_LEADING_EMOJI_RE = re.compile(r"^[^\w]+", re.UNICODE)
 
 logger = logging.getLogger(__name__)
 
@@ -126,11 +129,12 @@ class ArchetypeService:
 
     def get_or_create_by_name(self, name: str, is_custom: bool = False) -> models.Archetype:
         """Найти архетип по имени или создать новый."""
+        name = _LEADING_EMOJI_RE.sub("", name).strip()
         stmt = select(models.Archetype).where(models.Archetype.name == name)
         archetype = self.db.execute(stmt).scalar_one_or_none()
         if archetype:
             return archetype
-        archetype = models.Archetype(name=name.strip(), is_custom=is_custom)
+        archetype = models.Archetype(name=name, is_custom=is_custom)
         self.db.add(archetype)
         self.db.commit()
         self.db.refresh(archetype)

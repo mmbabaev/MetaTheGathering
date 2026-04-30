@@ -58,6 +58,10 @@ _DECK_EMOJI: dict[str, str] = {
     "Jund Wildfire": "🔴🟢⚫🔥",
     "Gruul Ponza": "🔴🟢🪨",
     "Gruul Rhino Friends + Eldrazi": "🔴🟢🦏",
+    # ── Skred семейство ──────────────────────────────────────────────────
+    "UR Skred": "🔴🔵🐍",
+    "Red Skred": "🔴🧊",
+    "Skred": "🔴🧊",
 }
 
 
