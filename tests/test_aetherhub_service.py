@@ -176,6 +176,27 @@ class TestParsePairingsPage:
     def test_no_tables_returns_empty(self):
         assert self.svc._parse_pairings_page("<html><body></body></html>") == []
 
+    def test_bye_as_p2_not_added_as_player(self):
+        html = """<html><body><table>
+          <tr><th>Table</th><th>Player 1</th><th>Player 2</th></tr>
+          <tr><td>1</td><td>Alice</td><td>BYE</td></tr>
+        </table></body></html>"""
+        pairings = self.svc._parse_pairings_page(html)
+        players = [p.player for p in pairings]
+        assert "BYE" not in players
+        assert len(pairings) == 1
+        assert pairings[0].player == "Alice"
+        assert pairings[0].opponent is None
+
+    def test_bye_case_insensitive(self):
+        html = """<html><body><table>
+          <tr><th>Table</th><th>Player 1</th><th>Player 2</th></tr>
+          <tr><td>1</td><td>Alice</td><td>Bye</td></tr>
+        </table></body></html>"""
+        pairings = self.svc._parse_pairings_page(html)
+        assert all(p.player != "Bye" for p in pairings)
+        assert pairings[0].opponent is None
+
 
 # ── TestFetchTournament ──────────────────────────────────────────────────────
 
