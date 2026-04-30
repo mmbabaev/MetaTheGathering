@@ -23,9 +23,6 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Write prod .env
-        run: echo "${{ secrets.ENV_FILE }}" > bot/.env
-
       - name: Deploy web production
         run: bash bot/deploy_web.sh
         env:

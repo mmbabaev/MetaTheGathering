@@ -1,7 +1,7 @@
 #!/bin/bash
 # deploy_web_debug.sh — Deploy MetaGatherer Web UI to server (prod or debug)
 # Usage:
-#   bash deploy_web_debug.sh           → DEBUG deploy (port 8080)
+#   bash deploy_web_debug.sh           → DEBUG deploy (port 8081)
 #   bash deploy_web_debug.sh --release → PROD deploy  (port 8080)
 
 set -e
@@ -23,18 +23,17 @@ if [ "$1" = "--release" ]; then
 fi
 
 if [ "$MODE" = "release" ]; then
-    ENV_FILE="${SCRIPT_DIR}/.env"
     REMOTE_DIR="/home/mbabaev/MetaTheGathering/meta_the_gathering"
+    ENV_DEST="$REMOTE_DIR/bot/.env"
     SERVICE_NAME="meta-the-gathering-web"
     info "Mode: \033[1mPRODUCTION\033[0m"
 else
-    ENV_FILE="${SCRIPT_DIR}/.env.debug"
     REMOTE_DIR="/home/mbabaev/MetaTheGathering/meta_the_gatheringDebug"
+    ENV_DEST="$REMOTE_DIR/bot/.env.debug"
     SERVICE_NAME="meta-the-gathering-debug-web"
     info "Mode: \033[1mDEBUG\033[0m"
 fi
 
-[ ! -f "$ENV_FILE" ] && error "Файл $ENV_FILE не найден"
 [ ! -f "${SSH_KEY/#\~/$HOME}" ] && error "SSH-ключ $SSH_KEY не найден"
 
 ARCHIVE="/tmp/meta-web-deploy-$(date +%Y%m%d%H%M%S).tar.gz"
@@ -54,21 +53,12 @@ COPYFILE_DISABLE=1 tar -czf "$ARCHIVE" \
 
 info "Архив создан: $(du -sh $ARCHIVE | cut -f1)"
 
+ARCHIVE_NAME="$(basename "$ARCHIVE")"
+SYSTEMD_SERVICE_FILE="$REMOTE_DIR/bot/systemd/$SERVICE_NAME.service"
+
 info "Копируем на сервер..."
 scp -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no \
     "$ARCHIVE" "${SERVER_USER}@${SERVER_IP}:/tmp/"
-scp -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no \
-    "$ENV_FILE" "${SERVER_USER}@${SERVER_IP}:/tmp/.env.deploy"
-
-ARCHIVE_NAME="$(basename "$ARCHIVE")"
-
-if [ "$MODE" = "release" ]; then
-    ENV_DEST="$REMOTE_DIR/bot/.env"
-    SYSTEMD_SERVICE_FILE="$REMOTE_DIR/bot/systemd/meta-the-gathering-web.service"
-else
-    ENV_DEST="$REMOTE_DIR/bot/.env.debug"
-    SYSTEMD_SERVICE_FILE="$REMOTE_DIR/bot/systemd/meta-the-gathering-debug-web.service"
-fi
 
 ssh -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no "${SERVER_USER}@${SERVER_IP}" \
     ARCHIVE_NAME="$ARCHIVE_NAME" REMOTE_DIR="$REMOTE_DIR" SERVICE_NAME="$SERVICE_NAME" \
@@ -80,7 +70,7 @@ echo "→ Разворачиваем в $REMOTE_DIR"
 mkdir -p "$REMOTE_DIR"
 tar -xzf "/tmp/$ARCHIVE_NAME" -C "$REMOTE_DIR"
 
-mv /tmp/.env.deploy "$ENV_DEST"
+[ ! -f "$ENV_DEST" ] && { echo "ERROR: $ENV_DEST не найден на сервере. Загрузите его вручную."; exit 1; }
 
 echo "→ Создаём venv..."
 cd "$REMOTE_DIR"
