@@ -30,6 +30,9 @@ CB_DELETE_TOURNAMENT_CONFIRM = "del_t_yes"  # del_t_yes:{tournament_id}
 CB_DELETE_TOURNAMENT_CANCEL = "del_t_no"  # del_t_no:{tournament_id}
 CB_ADMIN_SHOW_FILLED = "adm_show_filled"  # adm_show_filled:{tournament_id}
 CB_REVEAL_DECKS = "reveal_decks"  # reveal_decks:{tournament_id}
+CB_REVEAL_DECKS_CONFIRM = "reveal_decks_yes"  # reveal_decks_yes:{tournament_id}
+CB_REVEAL_DECKS_CANCEL = "reveal_decks_no"  # reveal_decks_no:{tournament_id}
+CB_HIDE_DECKS = "hide_decks"  # hide_decks:{tournament_id}
 CB_POLL_MENU = "poll_menu"  # poll_menu:{tournament_id}
 CB_LINK_POLL_BY_URL = "link_poll_url"  # link_poll_url:{tournament_id}
 CB_CREATE_POLL = "create_poll"  # create_poll:{tournament_id}
@@ -102,10 +105,6 @@ class Keyboards:
                 [InlineKeyboardButton("🤝 Записать оппонентов", callback_data=f"{CB_ADMIN_OPPONENTS}:{tournament_id}")]
             )
         if is_admin:
-            if decks_hidden:
-                rows.append(
-                    [InlineKeyboardButton("👁 Показать колоды", callback_data=f"{CB_REVEAL_DECKS}:{tournament_id}")]
-                )
             aetherhub_emoji = "🔄" if aetherhub_url else "📥"
             rows.append(
                 [
@@ -132,10 +131,26 @@ class Keyboards:
             ]
         )
 
-    def admin_more_keyboard(self, tournament_id: int, is_closed: bool = False) -> InlineKeyboardMarkup:
+    def reveal_decks_confirm_keyboard(self, tournament_id: int) -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton("❌ Отмена", callback_data=f"{CB_REVEAL_DECKS_CANCEL}:{tournament_id}"),
+                    InlineKeyboardButton("👁 Показать", callback_data=f"{CB_REVEAL_DECKS_CONFIRM}:{tournament_id}"),
+                ]
+            ]
+        )
+
+    def admin_more_keyboard(
+        self, tournament_id: int, is_closed: bool = False, decks_hidden: bool = True
+    ) -> InlineKeyboardMarkup:
         rows = [
             [InlineKeyboardButton("➕ Добавить участников", callback_data=f"{CB_BULK_ADD}:{tournament_id}")],
         ]
+        if decks_hidden:
+            rows.append([InlineKeyboardButton("👁 Показать колоды", callback_data=f"{CB_REVEAL_DECKS}:{tournament_id}")])
+        else:
+            rows.append([InlineKeyboardButton("🙈 Скрыть колоды", callback_data=f"{CB_HIDE_DECKS}:{tournament_id}")])
         if not is_closed:
             rows.append(
                 [InlineKeyboardButton("🔒 Закрыть турнир", callback_data=f"{CB_CLOSE_TOURNAMENT}:{tournament_id}")]
@@ -340,8 +355,12 @@ def export_menu_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
     return _default.export_menu_keyboard(tournament_id)
 
 
-def admin_more_keyboard(tournament_id: int, is_closed: bool = False) -> InlineKeyboardMarkup:
-    return _default.admin_more_keyboard(tournament_id, is_closed=is_closed)
+def admin_more_keyboard(tournament_id: int, is_closed: bool = False, decks_hidden: bool = True) -> InlineKeyboardMarkup:
+    return _default.admin_more_keyboard(tournament_id, is_closed=is_closed, decks_hidden=decks_hidden)
+
+
+def reveal_decks_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
+    return _default.reveal_decks_confirm_keyboard(tournament_id)
 
 
 def delete_tournament_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:

@@ -41,6 +41,7 @@ from bot.keyboards import (
     CB_EXPORT_PLAYERS,
     CB_FEATURE_INFO,
     CB_FEATURE_TOGGLE,
+    CB_HIDE_DECKS,
     CB_LEAVE,
     CB_LEAVE_CANCEL,
     CB_LEAVE_CONFIRM,
@@ -53,6 +54,8 @@ from bot.keyboards import (
     CB_POLL_MENU,
     CB_REGISTER,
     CB_REVEAL_DECKS,
+    CB_REVEAL_DECKS_CANCEL,
+    CB_REVEAL_DECKS_CONFIRM,
     CB_SET_IMPORT_TIME,
     CB_SETTINGS_NAME,
     CB_SETTINGS_TOGGLE_EMOJI,
@@ -224,6 +227,9 @@ def main() -> None:
     )
     app.add_handler(CallbackQueryHandler(admin.callback_admin_show_filled, pattern=f"^{CB_ADMIN_SHOW_FILLED}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_reveal_decks, pattern=f"^{CB_REVEAL_DECKS}:"))
+    app.add_handler(CallbackQueryHandler(admin.callback_reveal_decks_confirm, pattern=f"^{CB_REVEAL_DECKS_CONFIRM}:"))
+    app.add_handler(CallbackQueryHandler(admin.callback_reveal_decks_cancel, pattern=f"^{CB_REVEAL_DECKS_CANCEL}:"))
+    app.add_handler(CallbackQueryHandler(admin.callback_hide_decks, pattern=f"^{CB_HIDE_DECKS}:"))
     app.add_handler(CallbackQueryHandler(poll_handler.callback_poll_menu, pattern=f"^{CB_POLL_MENU}:"))
     app.add_handler(CallbackQueryHandler(poll_handler.callback_link_poll_prompt, pattern=f"^{CB_LINK_POLL_BY_URL}:"))
     app.add_handler(CallbackQueryHandler(poll_handler.callback_create_poll, pattern=f"^{CB_CREATE_POLL}:"))

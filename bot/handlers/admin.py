@@ -342,6 +342,16 @@ class AdminHandler:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
         return self._tournament_status_result(tournament_id, prefix=DECKS_REVEALED)
 
+    def handle_hide_decks(self, tg_id: int, tournament_id: int) -> HandlerResult:
+        """Скрывает колоды участников."""
+        if not self.user_svc.is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN, is_alert=True)
+        try:
+            self.svc.set_decks_hidden(tournament_id, hidden=True)
+        except errors.TournamentNotFound:
+            return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
+        return self._tournament_status_result(tournament_id, prefix="🙈 Колоды скрыты.")
+
     def _archetype_keyboard_for_participant(
         self, participant_id: int, player_tg_id: int | None, expanded: bool = False, caller_tg_id: int | None = None
     ) -> HandlerResult:

@@ -139,7 +139,8 @@ class ExportService:
 
         header_fill = PatternFill(start_color="2E7D32", end_color="2E7D32", fill_type="solid")
         header_font = Font(color="FFFFFF", bold=True)
-        for col, h in enumerate(["@Ник", "Имя Фамилия", "Колода"], 1):
+        headers = ["@Ник", "Имя Фамилия"] if t.decks_hidden else ["@Ник", "Имя Фамилия", "Колода"]
+        for col, h in enumerate(headers, 1):
             cell = ws.cell(row=1, column=col, value=h)
             cell.fill = header_fill
             cell.font = header_font
@@ -151,10 +152,11 @@ class ExportService:
                 p.user.first_name if p.user else None,
                 p.user.last_name if p.user else None,
             )
-            deck = p.archetype.name if p.archetype else ""
             ws.cell(row=row, column=1, value=username)
             ws.cell(row=row, column=2, value=full_name)
-            ws.cell(row=row, column=3, value=deck)
+            if not t.decks_hidden:
+                deck = p.archetype.name if p.archetype else ""
+                ws.cell(row=row, column=3, value=deck)
 
         ws.column_dimensions["A"].width = 22
         ws.column_dimensions["B"].width = 28
