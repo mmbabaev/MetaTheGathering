@@ -8,7 +8,7 @@ from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from bot.handlers.admin import parse_add_player_command, parse_bulk_player_line
-from bot.keyboards import admin_more_keyboard, export_menu_keyboard
+from bot.keyboards import admin_more_keyboard, export_menu_keyboard, reveal_decks_confirm_keyboard
 from bot.messages import ADD_PLAYERS_USAGE, BULK_ADD_PROMPT, TELEGRAM_USER_LOOKUP_FAILED
 from bot.scheduler import format_schedule_text
 from bot.telegram.common import log_event as _log
@@ -540,18 +540,21 @@ async def callback_admin_more(update: Update, context: ContextTypes.DEFAULT_TYPE
         try:
             t = get_tournament(TournamentService(db).db, tournament_id)
             is_closed = t.status == TournamentStatus.CLOSED
+            decks_hidden = t.decks_hidden
         except svc_errors.TournamentNotFound:
             is_closed = False
+            decks_hidden = True
     finally:
         db.close()
     await query.edit_message_text(
-        "Действия с турниром:", reply_markup=admin_more_keyboard(tournament_id, is_closed=is_closed)
+        "Действия с турниром:",
+        reply_markup=admin_more_keyboard(tournament_id, is_closed=is_closed, decks_hidden=decks_hidden),
     )
     await query.answer()
 
 
 async def callback_reveal_decks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Кнопка «👁 Показать колоды» — снимает скрытие колод для всех."""
+    """Кнопка «👁 Показать колоды» — запрашивает подтверждение."""
     query = update.callback_query
     user = update.effective_user
     if not user:
@@ -560,10 +563,76 @@ async def callback_reveal_decks(update: Update, context: ContextTypes.DEFAULT_TY
     if ids is None:
         return
     (tournament_id,) = ids
-    _log("reveal_decks", user, tournament_id=tournament_id)
+    _log("reveal_decks_prompt", user, tournament_id=tournament_id)
+    await query.edit_message_text(
+        "Показать колоды всем участникам? Это действие нельзя отменить автоматически.",
+        reply_markup=reveal_decks_confirm_keyboard(tournament_id),
+    )
+    await query.answer()
+
+
+async def callback_reveal_decks_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Подтверждение показа колод."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+    _log("reveal_decks_confirm", user, tournament_id=tournament_id)
     db = SessionLocal()
     try:
         result = _admin_handler(db).handle_reveal_decks(user.id, tournament_id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+        await query.answer()
+    finally:
+        db.close()
+
+
+async def callback_reveal_decks_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Отмена показа колод — возврат к карточке турнира."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+    db = SessionLocal()
+    try:
+        t = get_tournament(TournamentService(db).db, tournament_id)
+        is_closed = t.status == TournamentStatus.CLOSED
+        await query.edit_message_text(
+            "Действия с турниром:",
+            reply_markup=admin_more_keyboard(tournament_id, is_closed=is_closed, decks_hidden=t.decks_hidden),
+        )
+    except svc_errors.TournamentNotFound:
+        await query.answer("Турнир не найден.", show_alert=True)
+    finally:
+        db.close()
+    await query.answer()
+
+
+async def callback_hide_decks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка «🙈 Скрыть колоды»."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+    _log("hide_decks", user, tournament_id=tournament_id)
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_hide_decks(user.id, tournament_id)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
