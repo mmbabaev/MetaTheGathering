@@ -161,7 +161,7 @@ def test_cli_import_export_sorted_by_final_standings(db, svc):
 
     # 5. Проверяем порядок строк в Excel — должен совпадать с финальными стендингами
     ws = openpyxl.load_workbook(io.BytesIO(excel_bytes)).active
-    names = [ws.cell(row=r, column=2).value for r in range(2, ws.max_row + 1)]
+    names = [ws.cell(row=r, column=3).value for r in range(2, ws.max_row + 1)]
 
     assert len(names) == 39
     # Победитель первым, последний место в конце
