@@ -75,6 +75,15 @@ class AetherhubService:
             except (TypeError, ValueError):
                 pass
 
+        # Fallback: scan navigation links for ?p=N (edinorog format without data-page)
+        max_from_links = 0
+        for a in soup.find_all("a", href=True):
+            m = re.search(r"\?p=(\d+)", a["href"])
+            if m:
+                max_from_links = max(max_from_links, int(m.group(1)))
+        if max_from_links > 0:
+            return max_from_links
+
         return 4
 
     @staticmethod
@@ -84,11 +93,21 @@ class AetherhubService:
     def _parse_standings_page(self, html: str) -> tuple[list[str], int]:
         """Returns (player_names_from_standings, max_round_found) from the main tournament page."""
         soup = BeautifulSoup(html, "html.parser")
-        tables = soup.find_all("table")
+
+        # Prefer the explicit standings tab; fall back to the first table in the document.
+        # Completed tournaments show round N pairings in tab_pairings (which comes first),
+        # so using tab_results avoids reading the wrong table.
+        standings_table = None
+        tab_results = soup.find("div", {"id": "tab_results"})
+        if tab_results:
+            standings_table = tab_results.find("table")
+        if standings_table is None:
+            tables = soup.find_all("table")
+            standings_table = tables[0] if tables else None
 
         players: list[str] = []
-        if tables:
-            for row in tables[0].find_all("tr")[1:]:
+        if standings_table:
+            for row in standings_table.find_all("tr")[1:]:
                 cells = [td.get_text(strip=True) for td in row.find_all("td")]
                 if len(cells) >= 2 and cells[1]:
                     name = self._strip_points(cells[1])
