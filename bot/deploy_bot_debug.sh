@@ -93,7 +93,7 @@ set -e
 
 echo "→ Разворачиваем в $REMOTE_DIR"
 mkdir -p "$REMOTE_DIR"
-tar -xzf "/tmp/$ARCHIVE_NAME" -C "$REMOTE_DIR"
+tar -xzf "/tmp/$ARCHIVE_NAME" -C "$REMOTE_DIR" --warning=no-unknown-keyword
 mv /tmp/.env.deploy "$ENV_DEST"
 
 echo "→ Создаём venv..."
