@@ -78,8 +78,8 @@ tar -xzf "/tmp/$ARCHIVE_NAME" -C "$REMOTE_DIR" --warning=no-unknown-keyword --ex
 echo "→ Устанавливаем зависимости..."
 cd "$REMOTE_DIR"
 rm -rf venv
-python3 -m venv venv
-./venv/bin/pip install --upgrade pip certifi -q
+python3 -m venv --without-pip venv
+./venv/bin/python -m ensurepip --upgrade
 ./venv/bin/pip install -r requirements.txt -q
 
 sudo cp "$SYSTEMD_SERVICE_FILE" /etc/systemd/system/
