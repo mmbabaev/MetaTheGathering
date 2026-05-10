@@ -176,6 +176,8 @@ class Participant(Base):
     # подтверждена ли колода (по голосованию или руками админа)
     confirmed = Column(Boolean, default=False, nullable=False)
 
+    final_place = Column(Integer, nullable=True)  # место в финальных стендингах; NULL = не импортировано
+
     upvotes_count = Column(Integer, default=0, nullable=False)
     downvotes_count = Column(Integer, default=0, nullable=False)
 

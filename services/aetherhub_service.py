@@ -91,8 +91,8 @@ class AetherhubService:
             for row in tables[0].find_all("tr")[1:]:
                 cells = [td.get_text(strip=True) for td in row.find_all("td")]
                 if len(cells) >= 2 and cells[1]:
-                    name = cells[1].strip()
-                    if not self._is_bye(name):
+                    name = self._strip_points(cells[1])
+                    if name and not self._is_bye(name):
                         players.append(name)
 
         max_round = 1
@@ -235,5 +235,6 @@ class AetherhubService:
             rounds.append(AetherhubRound(number=rn, pairings=pairings))
 
         players = self._players_from_pairings(rounds[0].pairings) if rounds else []
+        standings, _ = self._parse_standings_page(main_html)
 
-        return AetherhubTournamentData(url=url, players=players, rounds=rounds)
+        return AetherhubTournamentData(url=url, players=players, rounds=rounds, standings=standings)
