@@ -98,6 +98,7 @@ mv /tmp/.env.deploy "$ENV_DEST"
 
 echo "→ Создаём venv..."
 cd "$REMOTE_DIR"
+sudo apt-get install -y python3-venv python3-pip -qq 2>/dev/null || true
 python3 -m venv venv
 ./venv/bin/pip install --upgrade pip -q
 ./venv/bin/pip install -r requirements.txt -q
