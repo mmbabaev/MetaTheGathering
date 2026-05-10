@@ -35,12 +35,6 @@ jobs:
           TELEGRAM_BOT_TOKEN: "0000000000:test_token_for_ci"
           DATABASE_URL: "sqlite:///:memory:"
 
-      - name: Run migrations
-        run: python -m alembic upgrade head
-        env:
-          TELEGRAM_BOT_TOKEN: "0000000000:test_token_for_ci"
-          DATABASE_URL: "sqlite:///:memory:"
-
       - name: Run tests
         run: python -m pytest tests/ -v --ignore=tests/e2e
         env:
