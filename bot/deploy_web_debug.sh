@@ -44,8 +44,15 @@ COPYFILE_DISABLE=1 tar -czf "$ARCHIVE" \
     --exclude='.pytest_cache' \
     --exclude='tests/' \
     --exclude='venv/' \
+    --exclude='.venv/' \
     --exclude='.git/' \
+    --exclude='.claude/' \
+    --exclude='.ruff_cache/' \
+    --exclude='.playwright_session' \
     --exclude='output/' \
+    --exclude='playgrounds/' \
+    --exclude='server.log' \
+    --exclude='events.jsonl' \
     --exclude='._*' \
     -C "$REPO_ROOT" .
 
@@ -69,7 +76,7 @@ mkdir -p "$REMOTE_DIR"
 
 [ ! -f "$REMOTE_DIR/.env" ] && { echo "ERROR: $REMOTE_DIR/.env не найден. Положите его вручную через SSH."; exit 1; }
 
-tar -xzf "/tmp/$ARCHIVE_NAME" -C "$REMOTE_DIR" --exclude='.env' --exclude='bot/.env' --exclude='bot/.env.*'
+tar -xzf "/tmp/$ARCHIVE_NAME" -C "$REMOTE_DIR" --warning=no-unknown-keyword --exclude='.env' --exclude='bot/.env' --exclude='bot/.env.*'
 
 echo "→ Устанавливаем зависимости..."
 cd "$REMOTE_DIR"
