@@ -21,8 +21,13 @@ class AetherhubRound:
 @dataclass
 class AetherhubTournamentData:
     url: str
-    players: list[str]  # from round 1 standings
+    players: list[str]  # all players for registration (from round 1 pairings)
     rounds: list[AetherhubRound]
+    standings: list[str] = None  # players ordered by final place (1st → last); empty = not available
+
+    def __post_init__(self):
+        if self.standings is None:
+            self.standings = []
 
 
 @dataclass

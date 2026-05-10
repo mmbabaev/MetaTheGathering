@@ -7,7 +7,7 @@ from typing import List, Literal
 
 import openpyxl
 from openpyxl.styles import Alignment, Font, PatternFill
-from sqlalchemy import select
+from sqlalchemy import nulls_last, select
 from sqlalchemy.orm import Session
 
 from bot.messages import format_participant_name
@@ -42,7 +42,7 @@ class ExportService:
                 isouter=True,
             )
             .where(models.Participant.tournament_id == tournament_id)
-            .order_by(models.Participant.created_at.asc())
+            .order_by(nulls_last(models.Participant.final_place.asc()), models.Participant.created_at.asc())
         )
 
     def export_participants_csv(
@@ -111,15 +111,24 @@ class ExportService:
         return buf.getvalue()
 
     def export_players_list(self, tournament_id: int) -> str:
-        """Возвращает plain-text «Имя Фамилия» по одному на строку, отсортировано."""
+        """Возвращает plain-text «Имя Фамилия» по одному на строку, отсортировано по финальным стендингам."""
         participants = self.db.query(models.Participant).filter_by(tournament_id=tournament_id).all()
-        names = sorted(
+        participants.sort(
+            key=lambda p: (
+                p.final_place if p.final_place is not None else 999999,
+                format_participant_name(
+                    p.user.first_name if p.user else None,
+                    p.user.last_name if p.user else None,
+                ).lower(),
+            )
+        )
+        names = [
             format_participant_name(
                 p.user.first_name if p.user else None,
                 p.user.last_name if p.user else None,
             )
             for p in participants
-        )
+        ]
         return "\n".join(names)
 
     def export_participants_excel(self, tournament_id: int) -> tuple[bytes, str]:
@@ -127,10 +136,13 @@ class ExportService:
         t = get_tournament(self.db, tournament_id)
         participants = self.db.query(models.Participant).filter_by(tournament_id=tournament_id).all()
         participants.sort(
-            key=lambda p: format_participant_name(
-                p.user.first_name if p.user else None,
-                p.user.last_name if p.user else None,
-            ).lower()
+            key=lambda p: (
+                p.final_place if p.final_place is not None else 999999,
+                format_participant_name(
+                    p.user.first_name if p.user else None,
+                    p.user.last_name if p.user else None,
+                ).lower(),
+            )
         )
 
         wb = openpyxl.Workbook()

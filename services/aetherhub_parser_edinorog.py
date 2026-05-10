@@ -48,7 +48,7 @@ class AetherhubEdinorogParser:
             _, pairings, _ = self._parse_page(html)
             rounds.append(AetherhubRound(number=rn, pairings=pairings))
 
-        return AetherhubTournamentData(url=url, players=players, rounds=rounds)
+        return AetherhubTournamentData(url=url, players=players, rounds=rounds, standings=players)
 
     @staticmethod
     def _is_bye(name: str) -> bool:

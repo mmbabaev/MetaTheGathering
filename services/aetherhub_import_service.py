@@ -84,16 +84,13 @@ class AetherhubImportService:
         last_name = parts[1] if len(parts) > 1 else None
         return self._user_svc.get_or_create_by_name(first_name, last_name)
 
-    def _is_registered(self, tournament_id: int, user_id: int) -> bool:
-        return (
-            self.db.execute(
-                select(models.Participant).where(
-                    models.Participant.tournament_id == tournament_id,
-                    models.Participant.user_id == user_id,
-                )
-            ).scalar_one_or_none()
-            is not None
-        )
+    def _get_participant(self, tournament_id: int, user_id: int) -> models.Participant | None:
+        return self.db.execute(
+            select(models.Participant).where(
+                models.Participant.tournament_id == tournament_id,
+                models.Participant.user_id == user_id,
+            )
+        ).scalar_one_or_none()
 
     def _save_pairings(self, tournament_id: int, rounds: list[AetherhubRound]) -> int:
         saved = 0
@@ -133,20 +130,33 @@ class AetherhubImportService:
         already_registered = 0
         created: list[str] = []
 
+        place_map: dict[str, int] = {}
+        normalized_place_map: dict[str, int] = {}
+        for idx, sname in enumerate(data.standings):
+            if sname.upper() == "BYE":
+                continue
+            place = idx + 1
+            place_map[sname] = place
+            normalized_place_map[self._normalize_import_name(sname)] = place
+
         for name in data.players:
             if name.upper() == "BYE":
                 continue
+            place = place_map.get(name) or normalized_place_map.get(self._normalize_import_name(name))
             user = self.find_user_by_name(name)
             was_created = False
             if user is None:
                 user, was_created = self._get_or_create_user_by_name(name)
-            if self._is_registered(tournament_id, user.id):
+            existing = self._get_participant(tournament_id, user.id)
+            if existing is not None:
                 already_registered += 1
+                existing.final_place = place
             else:
                 self.db.add(
                     models.Participant(
                         tournament_id=tournament_id,
                         user_id=user.id,
+                        final_place=place,
                     )
                 )
                 registered += 1
