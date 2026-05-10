@@ -11,7 +11,7 @@ from services.aetherhub_service import AetherhubService
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 
-def _make_data(players, rounds_pairings):
+def _make_data(players, rounds_pairings, standings=None):
     rounds = [
         AetherhubRound(number=i + 1, pairings=[AetherhubPairing(player=p, opponent=o) for p, o in pairs])
         for i, pairs in enumerate(rounds_pairings)
@@ -20,6 +20,7 @@ def _make_data(players, rounds_pairings):
         url="https://aetherhub.com/Tourney/RoundTourney/1",
         players=players,
         rounds=rounds,
+        standings=standings or [],
     )
 
 
@@ -639,3 +640,130 @@ class TestSavePairingsUpsert:
         import_svc._save_pairings(tournament.id, rounds)
         count = import_svc._save_pairings(tournament.id, rounds)
         assert count == 0
+
+
+# ── TestParseStandingsOrder ──────────────────────────────────────────────────
+
+
+class TestParseStandingsOrder:
+    """Part 1: standings are parsed in rank order from the main tournament page."""
+
+    svc = AetherhubService()
+
+    STANDINGS_WITH_POINTS_HTML = """
+    <html><body>
+    <span id="numberOfRounds">Rounds 3</span>
+    <table>
+      <tr><th>Rank</th><th>Name</th><th>Points</th></tr>
+      <tr><td>1</td><td>Carol (9 Points)</td><td>9</td></tr>
+      <tr><td>2</td><td>Alice (6 Points)</td><td>6</td></tr>
+      <tr><td>3</td><td>Bob (3 Points)</td><td>3</td></tr>
+    </table>
+    <a href="?p=1">1</a><a href="?p=2">2</a><a href="?p=3">3</a>
+    </body></html>
+    """
+
+    def test_standings_returned_in_rank_order(self):
+        players, _ = self.svc._parse_standings_page(self.STANDINGS_WITH_POINTS_HTML)
+        assert players == ["Carol", "Alice", "Bob"]
+
+    def test_points_stripped_from_standings_names(self):
+        players, _ = self.svc._parse_standings_page(self.STANDINGS_WITH_POINTS_HTML)
+        assert all("Points" not in name for name in players)
+
+    def test_fetch_tournament_populates_standings(self):
+        tid = "1"
+        base = f"https://aetherhub.com/Tourney/RoundTourney/{tid}"
+        p1_url = f"https://aetherhub.com/Tourney/RoundTourneyPublicPairings?id={tid}&p=1"
+        data = _svc({base: self.STANDINGS_WITH_POINTS_HTML, p1_url: PAIRINGS_R1_HTML}).fetch_tournament(base)
+        assert data.standings == ["Carol", "Alice", "Bob"]
+
+    def test_fetch_tournament_standings_empty_when_no_table_data(self):
+        tid = "1"
+        base = f"https://aetherhub.com/Tourney/RoundTourney/{tid}"
+        p1_url = f"https://aetherhub.com/Tourney/RoundTourneyPublicPairings?id={tid}&p=1"
+        data = _svc({base: STANDINGS_EMPTY_HTML, p1_url: PAIRINGS_R1_HTML}).fetch_tournament(base)
+        assert data.standings == []
+
+    def test_players_still_from_round1_pairings_regardless_of_standings(self):
+        """players field must not be affected by standings; it comes from round 1 pairings."""
+        tid = "1"
+        base = f"https://aetherhub.com/Tourney/RoundTourney/{tid}"
+        p1_url = f"https://aetherhub.com/Tourney/RoundTourneyPublicPairings?id={tid}&p=1"
+        # standings has 2 players, pairings has 3
+        data = _svc({base: self.STANDINGS_WITH_POINTS_HTML, p1_url: PAIRINGS_R1_HTML}).fetch_tournament(base)
+        assert set(data.players) == {"Alice", "Bob", "Carol"}
+
+
+# ── TestImportFinalPlace ─────────────────────────────────────────────────────
+
+
+class TestImportFinalPlace:
+    """Part 2: final_place is saved to DB from standings during import."""
+
+    def _participant(self, db, tournament_id, user_id):
+        from sqlalchemy import select
+
+        from core import models
+
+        return db.execute(
+            select(models.Participant).where(
+                models.Participant.tournament_id == tournament_id,
+                models.Participant.user_id == user_id,
+            )
+        ).scalar_one_or_none()
+
+    def test_final_place_assigned_from_standings_order(self, import_svc, db, tournament, user_alice):
+        data = _make_data(
+            players=["Alice"],
+            rounds_pairings=[[("Alice", None)]],
+            standings=["Alice"],
+        )
+        import_svc.import_tournament(tournament.id, data)
+        p = self._participant(db, tournament.id, user_alice.id)
+        assert p.final_place == 1
+
+    def test_first_in_standings_gets_place_1(self, import_svc, db, tournament, user_alice, user_bob):
+        data = _make_data(
+            players=["Alice", "Bob"],
+            rounds_pairings=[[("Alice", "Bob"), ("Bob", "Alice")]],
+            standings=["Bob", "Alice"],
+        )
+        import_svc.import_tournament(tournament.id, data)
+        alice = self._participant(db, tournament.id, user_alice.id)
+        bob = self._participant(db, tournament.id, user_bob.id)
+        assert bob.final_place == 1
+        assert alice.final_place == 2
+
+    def test_final_place_null_when_standings_empty(self, import_svc, db, tournament, user_alice):
+        data = _make_data(
+            players=["Alice"],
+            rounds_pairings=[[("Alice", None)]],
+            standings=[],
+        )
+        import_svc.import_tournament(tournament.id, data)
+        p = self._participant(db, tournament.id, user_alice.id)
+        assert p.final_place is None
+
+    def test_final_place_updated_on_reimport(self, import_svc, svc, db, tournament, user_alice):
+        svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id)
+        data = _make_data(
+            players=["Alice"],
+            rounds_pairings=[[("Alice", None)]],
+            standings=["Alice"],
+        )
+        import_svc.import_tournament(tournament.id, data)
+        p = self._participant(db, tournament.id, user_alice.id)
+        assert p.final_place == 1
+
+    def test_bye_not_counted_in_place_numbering(self, import_svc, db, tournament, user_alice, user_bob):
+        data = _make_data(
+            players=["Alice", "Bob"],
+            rounds_pairings=[[("Alice", "Bob"), ("Bob", "Alice")]],
+            standings=["Alice", "BYE", "Bob"],
+        )
+        import_svc.import_tournament(tournament.id, data)
+        alice = self._participant(db, tournament.id, user_alice.id)
+        bob = self._participant(db, tournament.id, user_bob.id)
+        assert alice.final_place == 1
+        assert bob.final_place == 3  # BYE occupies index 1, Bob is index 2 → place 3
