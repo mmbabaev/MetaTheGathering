@@ -28,6 +28,20 @@ python main.py
 
 Requires `TELEGRAM_BOT_TOKEN` and `DATABASE_URL` in `.env`. PostgreSQL must be running. `core/config.py` is not yet implemented — this is the first thing to set up.
 
+## Debug CLI
+
+`cli.py` — локальный инструмент для работы с debug-базой и E2E-тестирования. Переиспользует `services/` напрямую. Подробнее: [`docs/cli.md`](docs/cli.md).
+
+```bash
+python3 cli.py tournament list
+python3 cli.py tournament delete-last -y
+python3 cli.py tournament create "Pauper Friday #42"
+python3 cli.py tournament import https://aetherhub.com/Tourney/RoundTourney/99291
+python3 cli.py tournament export-excel -o /tmp/results.xlsx
+
+python3 -m pytest tests/e2e/ -v   # регрессионные E2E тесты
+```
+
 ## Architecture
 
 ### Layered structure
