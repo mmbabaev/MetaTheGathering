@@ -44,8 +44,15 @@ COPYFILE_DISABLE=1 tar -czf "$ARCHIVE" \
     --exclude='.pytest_cache' \
     --exclude='tests/' \
     --exclude='venv/' \
+    --exclude='.venv/' \
     --exclude='.git/' \
+    --exclude='.claude/' \
+    --exclude='.ruff_cache/' \
+    --exclude='.playwright_session' \
     --exclude='output/' \
+    --exclude='playgrounds/' \
+    --exclude='server.log' \
+    --exclude='events.jsonl' \
     --exclude='._*' \
     -C "$REPO_ROOT" .
 
@@ -67,21 +74,25 @@ set -e
 echo "→ Разворачиваем в $REMOTE_DIR"
 mkdir -p "$REMOTE_DIR"
 
-tar -xzf "/tmp/$ARCHIVE_NAME" -C "$REMOTE_DIR" --exclude='bot/.env' --exclude='bot/.env.*'
+[ ! -f "$REMOTE_DIR/.env" ] && { echo "ERROR: $REMOTE_DIR/.env не найден. Положите его вручную через SSH."; exit 1; }
+
+tar -xzf "/tmp/$ARCHIVE_NAME" -C "$REMOTE_DIR" --warning=no-unknown-keyword --exclude='.env' --exclude='bot/.env' --exclude='bot/.env.*'
 
 echo "→ Устанавливаем зависимости..."
 cd "$REMOTE_DIR"
-pip3 install -r requirements.txt -q
+rm -rf venv
+python3 -m venv venv
+./venv/bin/pip install -r requirements.txt -q
 
 echo "→ Проверяем миграции..."
-HEAD_COUNT=$(python3 -m alembic heads 2>/dev/null | grep -c "(head)" || true)
+HEAD_COUNT=$(./venv/bin/alembic heads 2>/dev/null | grep -c "(head)" || true)
 if [ "$HEAD_COUNT" -ne 1 ]; then
     echo "ERROR: Multiple alembic heads ($HEAD_COUNT). Merge conflict in migrations — deploy aborted."
-    python3 -m alembic heads
+    ./venv/bin/alembic heads
     exit 1
 fi
 echo "→ Запускаем миграции..."
-python3 -m alembic upgrade head
+./venv/bin/alembic upgrade head
 
 sudo cp "$SYSTEMD_SERVICE_FILE" /etc/systemd/system/
 sudo systemctl daemon-reload
