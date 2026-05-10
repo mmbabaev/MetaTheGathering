@@ -224,6 +224,49 @@ class UserService:
         self.db.commit()
         return True
 
+    def merge_users_by_id(self, source_id: int, target_id: int, adopt_name: bool = True) -> bool:
+        """Перенести Participant и UserDeckHistory от source к target, затем удалить source.
+
+        adopt_name=True — скопировать имя source в target (полезно когда source
+        содержит каноничную форму имени, например из AetherHub).
+        Возвращает True если слияние выполнено.
+        """
+        source = self.get_by_id(source_id)
+        target = self.get_by_id(target_id)
+        if not source or not target or source.id == target.id:
+            return False
+
+        self.db.execute(
+            sa_update(models.UserDeckHistory)
+            .where(models.UserDeckHistory.user_id == source.id)
+            .values(user_id=target.id)
+        )
+
+        already_in = {
+            row[0]
+            for row in self.db.execute(
+                select(models.Participant.tournament_id).where(models.Participant.user_id == target.id)
+            ).all()
+        }
+        if already_in:
+            self.db.execute(
+                sa_delete(models.Participant).where(
+                    models.Participant.user_id == source.id,
+                    models.Participant.tournament_id.in_(already_in),
+                )
+            )
+        self.db.execute(
+            sa_update(models.Participant).where(models.Participant.user_id == source.id).values(user_id=target.id)
+        )
+
+        if adopt_name and source.first_name:
+            target.first_name = source.first_name
+            target.last_name = source.last_name
+
+        self.db.delete(source)
+        self.db.commit()
+        return True
+
     def is_admin(self, tg_id: int) -> bool:
         if tg_id in settings.admin_ids:
             return True
