@@ -71,17 +71,19 @@ tar -xzf "/tmp/$ARCHIVE_NAME" -C "$REMOTE_DIR" --exclude='bot/.env' --exclude='b
 
 echo "→ Устанавливаем зависимости..."
 cd "$REMOTE_DIR"
-pip3 install -r requirements.txt -q
+rm -rf venv
+python3 -m venv venv
+./venv/bin/pip install -r requirements.txt -q
 
 echo "→ Проверяем миграции..."
-HEAD_COUNT=$(python3 -m alembic heads 2>/dev/null | grep -c "(head)" || true)
+HEAD_COUNT=$(./venv/bin/alembic heads 2>/dev/null | grep -c "(head)" || true)
 if [ "$HEAD_COUNT" -ne 1 ]; then
     echo "ERROR: Multiple alembic heads ($HEAD_COUNT). Merge conflict in migrations — deploy aborted."
-    python3 -m alembic heads
+    ./venv/bin/alembic heads
     exit 1
 fi
 echo "→ Запускаем миграции..."
-python3 -m alembic upgrade head
+./venv/bin/alembic upgrade head
 
 sudo cp "$SYSTEMD_SERVICE_FILE" /etc/systemd/system/
 sudo systemctl daemon-reload
