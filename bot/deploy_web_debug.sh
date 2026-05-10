@@ -67,7 +67,9 @@ set -e
 echo "→ Разворачиваем в $REMOTE_DIR"
 mkdir -p "$REMOTE_DIR"
 
-tar -xzf "/tmp/$ARCHIVE_NAME" -C "$REMOTE_DIR" --exclude='bot/.env' --exclude='bot/.env.*'
+[ ! -f "$REMOTE_DIR/.env" ] && { echo "ERROR: $REMOTE_DIR/.env не найден. Положите его вручную через SSH."; exit 1; }
+
+tar -xzf "/tmp/$ARCHIVE_NAME" -C "$REMOTE_DIR" --exclude='.env' --exclude='bot/.env' --exclude='bot/.env.*'
 
 echo "→ Устанавливаем зависимости..."
 cd "$REMOTE_DIR"
