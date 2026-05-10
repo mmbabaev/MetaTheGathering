@@ -24,12 +24,10 @@ fi
 
 if [ "$MODE" = "release" ]; then
     REMOTE_DIR="/home/mbabaev/MetaTheGathering/meta_the_gathering"
-    ENV_DEST="$REMOTE_DIR/bot/.env"
     SERVICE_NAME="meta-the-gathering-web"
     info "Mode: \033[1mPRODUCTION\033[0m"
 else
     REMOTE_DIR="/home/mbabaev/MetaTheGathering/meta_the_gatheringDebug"
-    ENV_DEST="$REMOTE_DIR/bot/.env.debug"
     SERVICE_NAME="meta-the-gathering-debug-web"
     info "Mode: \033[1mDEBUG\033[0m"
 fi
@@ -62,35 +60,28 @@ scp -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no \
 
 ssh -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no "${SERVER_USER}@${SERVER_IP}" \
     ARCHIVE_NAME="$ARCHIVE_NAME" REMOTE_DIR="$REMOTE_DIR" SERVICE_NAME="$SERVICE_NAME" \
-    ENV_DEST="$ENV_DEST" SYSTEMD_SERVICE_FILE="$SYSTEMD_SERVICE_FILE" \
+    SYSTEMD_SERVICE_FILE="$SYSTEMD_SERVICE_FILE" \
     'bash -s' <<'REMOTE'
 set -e
 
 echo "→ Разворачиваем в $REMOTE_DIR"
 mkdir -p "$REMOTE_DIR"
 
-[ ! -f "$ENV_DEST" ] && { echo "ERROR: $ENV_DEST не найден на сервере. Загрузите его вручную."; exit 1; }
-
 tar -xzf "/tmp/$ARCHIVE_NAME" -C "$REMOTE_DIR" --exclude='bot/.env' --exclude='bot/.env.*'
 
-echo "→ Создаём venv..."
+echo "→ Устанавливаем зависимости..."
 cd "$REMOTE_DIR"
-python3 -m venv venv
-./venv/bin/pip install --upgrade pip -q
-./venv/bin/pip install -r requirements.txt -q
+pip3 install -r requirements.txt -q
 
 echo "→ Проверяем миграции..."
-cp "$ENV_DEST" .env
-HEAD_COUNT=$(./venv/bin/alembic heads 2>/dev/null | grep -c "(head)" || true)
+HEAD_COUNT=$(python3 -m alembic heads 2>/dev/null | grep -c "(head)" || true)
 if [ "$HEAD_COUNT" -ne 1 ]; then
     echo "ERROR: Multiple alembic heads ($HEAD_COUNT). Merge conflict in migrations — deploy aborted."
-    ./venv/bin/alembic heads
-    rm -f .env
+    python3 -m alembic heads
     exit 1
 fi
 echo "→ Запускаем миграции..."
-./venv/bin/alembic upgrade head
-rm -f .env
+python3 -m alembic upgrade head
 
 sudo cp "$SYSTEMD_SERVICE_FILE" /etc/systemd/system/
 sudo systemctl daemon-reload
