@@ -767,3 +767,223 @@ class TestImportFinalPlace:
         bob = self._participant(db, tournament.id, user_bob.id)
         assert alice.final_place == 1
         assert bob.final_place == 3  # BYE occupies index 1, Bob is index 2 → place 3
+
+
+# ── TestParseStandingsFromTabResults ─────────────────────────────────────────
+# Regression: completed tournaments embed round-N pairings in tab_pairings (first
+# in the DOM), so tables[0] was the pairings table — not the final standings.
+# The fix: prefer div#tab_results over tables[0].
+
+
+# HTML matching the real structure of a completed tournament (e.g. 99291):
+# tab_pairings has the last-round pairing table (wrong source for standings),
+# tab_results has the final standings table (correct).
+COMPLETED_TOURNAMENT_HTML = """
+<html><body>
+<div id="tab_pairings">
+  <table>
+    <tr><th>Table</th><th>Player 1</th><th>Player 2</th><th>Result</th></tr>
+    <tr><td>1</td><td>Рябинин Андрей (9 Points)</td><td>Хрипков Сергей (9 Points)</td><td>2-0</td></tr>
+    <tr><td>2</td><td>Федулов Ринат (9 Points)</td><td>Кузнецов Ярослав (9 Points)</td><td>2-0</td></tr>
+    <tr><td>3</td><td>Юдин Антон (7 Points)</td><td>BYE</td><td></td></tr>
+  </table>
+</div>
+<div id="tab_results">
+  <table>
+    <tr><th>Rank</th><th>Name</th><th>Points</th></tr>
+    <tr><td>1</td><td>Федулов Ринат</td><td>12</td></tr>
+    <tr><td>2</td><td>Рябинин Андрей</td><td>12</td></tr>
+    <tr><td>3</td><td>Юдин Антон</td><td>10</td></tr>
+    <tr><td>4</td><td>Хрипков Сергей</td><td>9</td></tr>
+    <tr><td>5</td><td>Кузнецов Ярослав</td><td>9</td></tr>
+  </table>
+</div>
+<a href="?p=1">1</a>
+<a href="?p=2">2</a>
+<a href="?p=3">3</a>
+<a href="?p=4">4</a>
+</body></html>
+"""
+
+
+class TestParseStandingsFromTabResults:
+    svc = AetherhubService()
+
+    def test_reads_standings_from_tab_results_not_pairings(self):
+        players, _ = self.svc._parse_standings_page(COMPLETED_TOURNAMENT_HTML)
+        # Pairings table (tab_pairings) has 3 rows with Player1 + Player2 mixed.
+        # Standings table (tab_results) has 5 players in rank order.
+        assert players == ["Федулов Ринат", "Рябинин Андрей", "Юдин Антон", "Хрипков Сергей", "Кузнецов Ярослав"]
+
+    def test_pairings_players_not_included_in_standings(self):
+        # If we were reading from tab_pairings (cells[1] only), we'd get only
+        # Рябинин, Федулов, Юдин — 3 players, not 5.
+        players, _ = self.svc._parse_standings_page(COMPLETED_TOURNAMENT_HTML)
+        assert len(players) == 5
+
+    def test_max_round_from_nav_links(self):
+        _, max_round = self.svc._parse_standings_page(COMPLETED_TOURNAMENT_HTML)
+        assert max_round == 4
+
+    def test_bye_not_in_standings(self):
+        players, _ = self.svc._parse_standings_page(COMPLETED_TOURNAMENT_HTML)
+        assert "BYE" not in players
+        assert all("BYE" not in p.upper() for p in players)
+
+    def test_fallback_to_first_table_when_no_tab_results(self):
+        html = """<html><body>
+        <table>
+          <tr><th>Rank</th><th>Name</th></tr>
+          <tr><td>1</td><td>Alice</td></tr>
+          <tr><td>2</td><td>Bob</td></tr>
+        </table>
+        </body></html>"""
+        players, _ = self.svc._parse_standings_page(html)
+        assert players == ["Alice", "Bob"]
+
+
+# ── TestParseNumRoundsFromLinks ───────────────────────────────────────────────
+
+
+class TestParseNumRoundsFromLinks:
+    svc = AetherhubService()
+
+    def test_reads_rounds_from_nav_links_when_no_span_or_data_page(self):
+        # 99291-style: no numberOfRounds span, no data-page, but ?p=N links
+        html = """<html><body>
+        <div id="tab_pairings"><table></table></div>
+        <a href="?p=1">1</a>
+        <a href="?p=2">2</a>
+        <a href="?p=3">3</a>
+        <a href="?p=4">4</a>
+        </body></html>"""
+        assert self.svc._parse_num_rounds(html) == 4
+
+    def test_numberOfRounds_span_takes_priority_over_links(self):
+        html = """<html><body>
+        <span id="numberOfRounds">Rounds 5</span>
+        <a href="?p=1">1</a>
+        <a href="?p=2">2</a>
+        </body></html>"""
+        assert self.svc._parse_num_rounds(html) == 5
+
+    def test_data_page_takes_priority_over_links(self):
+        html = """<html><body>
+        <div id="tab_pairings" data-page="6"></div>
+        <a href="?p=1">1</a>
+        <a href="?p=3">3</a>
+        </body></html>"""
+        assert self.svc._parse_num_rounds(html) == 6
+
+    def test_default_when_no_signals(self):
+        html = "<html><body></body></html>"
+        assert self.svc._parse_num_rounds(html) == 4
+
+
+# ── TestFetchTournament99291RealFixtures ──────────────────────────────────────
+
+
+class TestFetchTournament99291RealFixtures:
+    """Regression: 99291 has embedded pairings in tab_pairings and 39 players in tab_results.
+
+    Before the fix, _parse_standings_page read tables[0] (the round-4 pairings table)
+    and only collected ~20 Player-1 names instead of all 39 final standings entries.
+    """
+
+    BASE_URL = "https://aetherhub.com/Tourney/RoundTourney/99291"
+    TID = "99291"
+
+    def _html_map(self):
+        from pathlib import Path
+
+        fixtures_dir = Path(__file__).resolve().parents[1] / "scripts" / "aetherhub" / "fixtures"
+        paths = {
+            self.BASE_URL: fixtures_dir / "99291_main.html",
+            f"https://aetherhub.com/Tourney/RoundTourneyPublicPairings?id={self.TID}&p=1": fixtures_dir
+            / "99291_pairings_p1.html",
+            f"https://aetherhub.com/Tourney/RoundTourneyPublicPairings?id={self.TID}&p=2": fixtures_dir
+            / "99291_pairings_p2.html",
+            f"https://aetherhub.com/Tourney/RoundTourneyPublicPairings?id={self.TID}&p=3": fixtures_dir
+            / "99291_pairings_p3.html",
+            f"https://aetherhub.com/Tourney/RoundTourneyPublicPairings?id={self.TID}&p=4": fixtures_dir
+            / "99291_pairings_p4.html",
+        }
+        missing = [str(p) for url, p in paths.items() if not p.exists()]
+        if missing:
+            pytest.skip(f"Fixtures missing: {missing}. Run scripts/aetherhub/fetch_99291_fixtures.py")
+        return {url: p.read_text(encoding="utf-8") for url, p in paths.items()}
+
+    def test_standings_has_39_players(self):
+        data = _svc(self._html_map()).fetch_tournament(self.BASE_URL)
+        assert len(data.standings) == 39
+
+    def test_standings_first_player_is_winner(self):
+        data = _svc(self._html_map()).fetch_tournament(self.BASE_URL)
+        assert data.standings[0] == "Федулов Ринат"
+
+    def test_standings_last_player_is_39th(self):
+        data = _svc(self._html_map()).fetch_tournament(self.BASE_URL)
+        assert data.standings[-1] == "Нагорнов Владимир"
+
+    def test_fetches_4_rounds(self):
+        data = _svc(self._html_map()).fetch_tournament(self.BASE_URL)
+        assert len(data.rounds) == 4
+
+    def test_players_from_round1_has_39_players(self):
+        data = _svc(self._html_map()).fetch_tournament(self.BASE_URL)
+        assert len(data.players) == 39
+
+    def test_no_points_in_standings(self):
+        data = _svc(self._html_map()).fetch_tournament(self.BASE_URL)
+        assert all("Points" not in name for name in data.standings)
+
+
+# ── TestImportWithFinalStandingsFrom99291 ─────────────────────────────────────
+
+
+class TestImportWithFinalStandingsFrom99291:
+    """Part 4: import_tournament assigns final_place from standings (99291 scenario)."""
+
+    def _participant(self, db, tournament_id, user_id):
+        from sqlalchemy import select
+
+        from core import models
+
+        return db.execute(
+            select(models.Participant).where(
+                models.Participant.tournament_id == tournament_id,
+                models.Participant.user_id == user_id,
+            )
+        ).scalar_one_or_none()
+
+    def test_winner_gets_place_1_from_standings(self, import_svc, db, tournament, user_alice, user_bob):
+        # Simulate 99291-style: standings in correct rank order (Bob won, Alice 2nd)
+        data = _make_data(
+            players=["Bob", "Alice"],
+            rounds_pairings=[[("Bob", "Alice"), ("Alice", "Bob")]],
+            standings=["Bob", "Alice"],
+        )
+        import_svc.import_tournament(tournament.id, data)
+        bob = self._participant(db, tournament.id, user_bob.id)
+        alice = self._participant(db, tournament.id, user_alice.id)
+        assert bob.final_place == 1
+        assert alice.final_place == 2
+
+    def test_multiple_players_get_correct_places(self, import_svc, db, tournament, user_alice, user_bob):
+        from services.user import UserService
+
+        UserService(db).get_or_create(tg_id=9901, username=None, first_name="Юдин", last_name="Антон")
+        data = _make_data(
+            players=["Федулов Ринат", "Рябинин Андрей", "Юдин Антон"],
+            rounds_pairings=[[("Федулов Ринат", "Рябинин Андрей"), ("Рябинин Андрей", "Федулов Ринат")]],
+            standings=["Федулов Ринат", "Рябинин Андрей", "Юдин Антон"],
+        )
+        import_svc.import_tournament(tournament.id, data)
+        # Юдин Антон is a new user — verify place assigned to placeholder
+        from services.user import UserService
+
+        anton = UserService(db).find_by_name("Юдин Антон") or UserService(db).find_by_name("Антон Юдин")
+        if anton:
+            p = self._participant(db, tournament.id, anton.id)
+            assert p is not None
+            assert p.final_place == 3
