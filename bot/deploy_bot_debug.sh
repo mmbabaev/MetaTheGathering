@@ -27,11 +27,13 @@ if [ "$MODE" = "release" ]; then
     ENV_FILE="${SCRIPT_DIR}/.env"
     REMOTE_DIR="/home/mbabaev/MetaTheGathering/meta_the_gathering"
     SERVICE_NAME="meta-the-gathering"
+    BOT_ENV="prod"
     info "Mode: \033[1mPRODUCTION\033[0m"
 else
     ENV_FILE="${SCRIPT_DIR}/.env.debug"
     REMOTE_DIR="/home/mbabaev/MetaTheGathering/meta_the_gatheringDebug"
     SERVICE_NAME="meta-the-gathering-debug"
+    BOT_ENV="debug"
     info "Mode: \033[1mDEBUG\033[0m"
 fi
 
@@ -83,7 +85,7 @@ fi
 
 ssh -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no "${SERVER_USER}@${SERVER_IP}" \
     ARCHIVE_NAME="$ARCHIVE_NAME" REMOTE_DIR="$REMOTE_DIR" SERVICE_NAME="$SERVICE_NAME" \
-    ENV_DEST="$ENV_DEST" SYSTEMD_SERVICE_FILE="$SYSTEMD_SERVICE_FILE" \
+    ENV_DEST="$ENV_DEST" BOT_ENV="$BOT_ENV" SYSTEMD_SERVICE_FILE="$SYSTEMD_SERVICE_FILE" \
     SYSTEMD_WEB_SERVICE_FILE="${SYSTEMD_WEB_SERVICE_FILE:-}" \
     OTEL_SERVICE_FILE="$OTEL_SERVICE_FILE" OTEL_SERVICE_NAME="$OTEL_SERVICE_NAME" \
     'bash -s' <<'REMOTE'
@@ -92,7 +94,6 @@ set -e
 echo "→ Разворачиваем в $REMOTE_DIR"
 mkdir -p "$REMOTE_DIR"
 tar -xzf "/tmp/$ARCHIVE_NAME" -C "$REMOTE_DIR"
-
 mv /tmp/.env.deploy "$ENV_DEST"
 
 echo "→ Создаём venv..."
@@ -102,7 +103,7 @@ python3 -m venv venv
 ./venv/bin/pip install -r requirements.txt -q
 
 echo "→ Проверяем миграции..."
-set -a; source "$ENV_DEST"; set +a
+export BOT_ENV
 HEAD_COUNT=$(./venv/bin/alembic heads 2>/dev/null | grep -c "(head)" || true)
 if [ "$HEAD_COUNT" -ne 1 ]; then
     echo "ERROR: Multiple alembic heads ($HEAD_COUNT). Merge conflict in migrations — deploy aborted."

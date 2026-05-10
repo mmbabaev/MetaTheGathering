@@ -7,8 +7,9 @@ from dotenv import load_dotenv
 from pydantic import AnyUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Load .env early so BOT_ENV is available via os.getenv before Settings() runs
-load_dotenv()
+_bot_env = os.getenv("BOT_ENV", "prod")
+_env_file = "bot/.env.debug" if _bot_env == "debug" else "bot/.env"
+load_dotenv(_env_file)
 
 
 def _is_pytest_running() -> bool:
@@ -19,7 +20,6 @@ def _is_pytest_running() -> bool:
     return any("pytest" in (arg or "") for arg in sys.argv)
 
 
-_bot_env = os.getenv("BOT_ENV", "prod")
 if _bot_env == "debug":
     from config.debug import app_config as _app_cfg
 else:
@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     TOURNAMENT_CREATE_TIME: str = _app_cfg.tournament_create_time
     VERSION: str = _app_cfg.version
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=_env_file, env_file_encoding="utf-8", extra="ignore")
 
     @property
     def admin_ids(self) -> List[int]:
