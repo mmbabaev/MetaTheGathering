@@ -4,8 +4,10 @@ from pathlib import Path
 from typing import Optional
 
 import typer
+from sqlalchemy import select
 
 from cli.db import get_db
+from core import models
 from core.config import app_cfg
 from core.schemas import TournamentCreate
 from services.aetherhub_import_service import AetherhubImportService
@@ -25,16 +27,62 @@ def _default_chat_id() -> int:
 
 
 @app.command("list")
-def list_tournaments():
+def list_tournaments(
+    all_chats: bool = typer.Option(False, "--all", help="Показать турниры всех чатов"),
+    chat_id: Optional[int] = typer.Option(None, "--chat-id", help="Фильтр по chat_id"),
+    limit: int = typer.Option(20, "--limit", "-n", help="Сколько турниров показать"),
+):
     """Список последних турниров."""
     with get_db() as db:
         svc = TournamentService(db)
-        tournaments = svc.list_tournaments_for_chat(_default_chat_id(), limit=10)
+        if all_chats:
+            stmt = select(models.Tournament).order_by(models.Tournament.created_at.desc()).limit(limit)
+            tournaments = db.execute(stmt).scalars().all()
+        else:
+            cid = chat_id or _default_chat_id()
+            tournaments = svc.list_tournaments_for_chat(cid, limit=limit)
         if not tournaments:
             typer.echo("Турниров нет")
             return
         for t in tournaments:
-            typer.echo(f"#{t.id:3}  [{t.status.value:12}]  {t.title}  ({t.created_at:%Y-%m-%d %H:%M})")
+            typer.echo(
+                f"#{t.id:3}  chat={t.chat_id}  [{t.status.value:12}]  {t.title}  ({t.created_at:%Y-%m-%d %H:%M})"
+            )
+
+
+@app.command("participants")
+def list_participants(
+    tournament_id: Optional[int] = typer.Option(None, "--id", help="ID турнира (по умолчанию — последний)"),
+):
+    """Список участников турнира с местом, архетипом и user_id."""
+    with get_db() as db:
+        svc = TournamentService(db)
+        if tournament_id is None:
+            tournaments = svc.list_tournaments_for_chat(_default_chat_id(), limit=1)
+            if not tournaments:
+                typer.echo("Турниров нет", err=True)
+                raise typer.Exit(1)
+            tournament_id = tournaments[0].id
+            typer.echo(f"Турнир #{tournament_id}: {tournaments[0].title}")
+
+        stmt = (
+            select(models.Participant)
+            .where(models.Participant.tournament_id == tournament_id)
+            .order_by(models.Participant.final_place.asc().nulls_last(), models.Participant.id.asc())
+        )
+        participants = db.execute(stmt).scalars().all()
+
+        if not participants:
+            typer.echo("Участников нет")
+            return
+
+        typer.echo(f"{'#':>4}  {'user_id':>8}  {'Имя':30}  {'Архетип'}")
+        typer.echo("-" * 70)
+        for p in participants:
+            place = str(p.final_place) if p.final_place is not None else "—"
+            name = f"{p.user.first_name or ''} {p.user.last_name or ''}".strip() if p.user else "???"
+            archetype = p.archetype.name if p.archetype else "—"
+            typer.echo(f"{place:>4}  {p.user_id:>8}  {name:30}  {archetype}")
 
 
 @app.command("create")
