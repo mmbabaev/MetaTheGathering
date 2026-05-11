@@ -1363,3 +1363,60 @@ class TestHandleRemoveParticipant:
         result = handler.handle_remove_participant(ADMIN_TG_ID, p.id, active_tournament.id)
         assert not result.is_alert
         assert svc.get_participant(active_tournament.id, user_alice.id) is None
+
+
+# ── deck_added_by_tg_id ───────────────────────────────────────────────────────
+
+
+class TestDeckAddedByTgId:
+    def test_add_me_sets_admin_tg_id(self, handler, svc, admin_user, active_tournament):
+        handler.handle_add_me(tg_id=ADMIN_TG_ID, username="admin", first_name="Admin", last_name=None, deck_name="Burn")
+        p = svc.get_participant(active_tournament.id, admin_user.id)
+        assert p.deck_added_by_tg_id == ADMIN_TG_ID
+
+    def test_add_player_sets_admin_tg_id_not_player(self, handler, svc, admin_user, active_tournament, user_alice):
+        handler.handle_add_player(
+            tg_id=ADMIN_TG_ID,
+            target_tg_id=user_alice.tg_id,
+            target_username="alice",
+            deck_name="Burn",
+            target_first_name="Alice",
+        )
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        assert p.deck_added_by_tg_id == ADMIN_TG_ID
+
+    def test_set_participant_arch_sets_caller_tg_id(
+        self, handler, svc, user_svc, admin_user, active_tournament, archetype_burn
+    ):
+        player = user_svc.get_or_create(tg_id=8400, username=None, first_name="Игрок")
+        svc.bulk_add_participants(active_tournament.id, [(player.id, "Игрок")])
+        p = svc.get_participant(active_tournament.id, player.id)
+        handler.handle_set_participant_arch(tg_id=ADMIN_TG_ID, participant_id=p.id, archetype_id=archetype_burn.id)
+        updated = svc.get_participant(active_tournament.id, player.id)
+        assert updated.deck_added_by_tg_id == ADMIN_TG_ID
+
+    def test_fill_opponents_sets_filler_tg_id(self, db, handler, svc, user_svc, arch_svc, active_tournament):
+        """When a non-admin fills an opponent's deck, deck_added_by_tg_id == filler's tg_id."""
+        filler = user_svc.get_or_create(tg_id=8500, username=None, first_name="Filler")
+        opponent = user_svc.get_or_create(tg_id=8501, username=None, first_name="Opp")
+        data = AetherhubTournamentData(
+            url="http://x",
+            players=["Filler", "Opp"],
+            rounds=[
+                AetherhubRound(
+                    number=1,
+                    pairings=[
+                        AetherhubPairing(player="Filler", opponent="Opp"),
+                        AetherhubPairing(player="Opp", opponent="Filler"),
+                    ],
+                )
+            ],
+        )
+        AetherhubImportService(db).import_tournament(active_tournament.id, data)
+
+        # Find Opp's participant and set arch as if filler clicked through fill_opponents flow
+        opp_p = svc.get_participant(active_tournament.id, opponent.id)
+        burn = arch_svc.get_or_create_by_name("Burn")
+        handler.handle_set_participant_arch(tg_id=filler.tg_id, participant_id=opp_p.id, archetype_id=burn.id)
+        updated = svc.get_participant(active_tournament.id, opponent.id)
+        assert updated.deck_added_by_tg_id == filler.tg_id
