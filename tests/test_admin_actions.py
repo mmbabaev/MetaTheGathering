@@ -1324,13 +1324,9 @@ class TestHandleRemoveParticipant:
         assert "Weekly" in result.text
 
     def test_remove_works_at_any_tournament_status(self, db, handler, svc, admin_user, active_tournament, user_alice):
-        from sqlalchemy import select as sa_select
-
-        from core import models as m
-
         svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
         p = svc.get_participant(active_tournament.id, user_alice.id)
-        obj = db.execute(sa_select(m.Tournament).where(m.Tournament.id == active_tournament.id)).scalar_one()
+        obj = db.execute(select(m.Tournament).where(m.Tournament.id == active_tournament.id)).scalar_one()
         obj.status = m.TournamentStatus.ONGOING
         db.commit()
         result = handler.handle_remove_participant(ADMIN_TG_ID, p.id, active_tournament.id)

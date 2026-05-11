@@ -11,6 +11,7 @@ from sqlalchemy import select
 from core.models import Participant, User
 from core.schemas import TournamentCreate
 from services.aetherhub_import_service import AetherhubImportService
+from services.aetherhub_models import AetherhubPairing, AetherhubRound, AetherhubTournamentData
 from services.aetherhub_service import AetherhubService
 from services.export import ExportService
 from services.tournament import TournamentService
@@ -157,8 +158,6 @@ def test_get_player_opponents_full_flow(db, svc, aetherhub_data):
 
 def test_get_player_opponents_bye(db, svc):
     """Bye отображается как opponent_name=None."""
-    from services.aetherhub_models import AetherhubPairing, AetherhubRound, AetherhubTournamentData
-
     t = svc.create_tournament(TournamentCreate(title="Bye Test", chat_id=CHAT_ID))
     data = AetherhubTournamentData(
         url="http://x",

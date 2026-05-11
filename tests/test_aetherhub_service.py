@@ -7,6 +7,8 @@ import pytest
 from sqlalchemy import select
 
 from core import models
+from core.models import Participant
+from core.schemas import TournamentCreate
 from services.aetherhub_import_service import AetherhubImportService
 from services.aetherhub_models import AetherhubPairing, AetherhubRound, AetherhubTournamentData
 from services.aetherhub_service import AetherhubService
@@ -980,8 +982,6 @@ class TestHasPairings:
             rounds_pairings=[[("Алиса", None)]],
         )
         import_svc.import_tournament(tournament.id, data)
-        from core.schemas import TournamentCreate
-
         other = svc.create_tournament(TournamentCreate(title="Other", chat_id=999))
         assert import_svc.has_pairings(other.id) is False
 
@@ -1075,9 +1075,6 @@ class TestGetPlayerOpponents:
             rounds_pairings=[[("Иван Петров", None)]],
         )
         import_svc.import_tournament(tournament.id, data)
-        from core.models import Participant
-        from services.user import UserService
-
         stranger = UserService(db).get_or_create(tg_id=7777, username=None, first_name="Странник")
         db.add(Participant(tournament_id=tournament.id, user_id=stranger.id))
         db.commit()
