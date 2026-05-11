@@ -371,3 +371,48 @@ class TestHandleLeaveConfirm:
         )
         assert "Burn" in result.text
         assert not result.is_alert
+
+
+# --- deck_added_by_tg_id ---
+
+
+class TestDeckAddedByTgId:
+    def test_self_registration_sets_own_tg_id(self, handler, svc, user_svc, active_tournament, archetype_burn):
+        handler.handle_archetype(
+            tg_id=4001,
+            username="player",
+            first_name="Player",
+            last_name=None,
+            tournament_id=active_tournament.id,
+            archetype_id=archetype_burn.id,
+        )
+        user = user_svc.get_by_tg_id(4001)
+        p = svc.get_participant(active_tournament.id, user.id)
+        assert p.deck_added_by_tg_id == 4001
+
+    def test_update_own_deck_sets_own_tg_id(self, handler, svc, user_svc, active_tournament, archetype_burn):
+        user = user_svc.get_or_create(tg_id=4002, username="player2", first_name="Player2")
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user.id)
+        handler.handle_archetype(
+            tg_id=4002,
+            username="player2",
+            first_name="Player2",
+            last_name=None,
+            tournament_id=active_tournament.id,
+            archetype_id=archetype_burn.id,
+        )
+        p = svc.get_participant(active_tournament.id, user.id)
+        assert p.deck_added_by_tg_id == 4002
+
+    def test_custom_archetype_sets_own_tg_id(self, handler, svc, user_svc, active_tournament):
+        handler.handle_custom_archetype_text(
+            tg_id=4003,
+            username="player3",
+            first_name="Player3",
+            last_name=None,
+            tournament_id=active_tournament.id,
+            name="Storm",
+        )
+        user = user_svc.get_by_tg_id(4003)
+        p = svc.get_participant(active_tournament.id, user.id)
+        assert p.deck_added_by_tg_id == 4003
