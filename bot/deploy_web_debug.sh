@@ -77,6 +77,7 @@ tar -xzf "/tmp/$ARCHIVE_NAME" -C "$REMOTE_DIR" --warning=no-unknown-keyword --ex
 
 echo "→ Устанавливаем зависимости..."
 cd "$REMOTE_DIR"
+sudo apt-get install -y python3-venv python3-pip -qq 2>/dev/null || true
 rm -rf venv
 python3 -m venv --without-pip venv
 ./venv/bin/python -m ensurepip --upgrade
