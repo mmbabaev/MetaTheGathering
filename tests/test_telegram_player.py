@@ -14,6 +14,7 @@ import pytest
 
 from bot.handlers.base import HandlerResult
 from bot.telegram.player import (
+    USER_DATA_PENDING_ADMIN_CUSTOM_ARCH,
     USER_DATA_PENDING_CUSTOM,
     USER_DATA_PENDING_NAME,
     USER_DATA_PENDING_SETTINGS_NAME,
@@ -299,6 +300,42 @@ async def test_message_text_input_settings_name():
 
     mock_sh.return_value.handle_settings_name_text.assert_called_once_with(update.effective_user.id, "Новое Имя")
     assert USER_DATA_PENDING_SETTINGS_NAME not in ctx.user_data
+
+
+# ── message_text_input — admin custom archetype ──────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_message_text_input_admin_custom_arch_sends_keyboard():
+    """Keyboard must be passed to reply_text — regression for issue #77."""
+    kb = MagicMock()
+    result = HandlerResult("✓ Turbo Fog сохранён.", keyboard=kb)
+    update = _make_update(message_text="Turbo Fog")
+    ctx = _make_context({USER_DATA_PENDING_ADMIN_CUSTOM_ARCH: 7})
+
+    with patch("bot.telegram.player.SessionLocal"), patch("bot.telegram.player.AdminHandler") as mock_ah:
+        mock_ah.return_value.handle_set_participant_custom_arch.return_value = result
+        await message_text_input(update, ctx)
+
+    update.effective_message.reply_text.assert_awaited_once()
+    _, kwargs = update.effective_message.reply_text.call_args
+    assert kwargs.get("reply_markup") is kb
+
+
+@pytest.mark.asyncio
+async def test_message_text_input_admin_custom_arch_calls_handler():
+    result = HandlerResult("ok")
+    update = _make_update(message_text="Elves")
+    ctx = _make_context({USER_DATA_PENDING_ADMIN_CUSTOM_ARCH: 42})
+
+    with patch("bot.telegram.player.SessionLocal"), patch("bot.telegram.player.AdminHandler") as mock_ah:
+        mock_ah.return_value.handle_set_participant_custom_arch.return_value = result
+        await message_text_input(update, ctx)
+
+    mock_ah.return_value.handle_set_participant_custom_arch.assert_called_once_with(
+        update.effective_user.id, 42, "Elves"
+    )
+    assert USER_DATA_PENDING_ADMIN_CUSTOM_ARCH not in ctx.user_data
 
 
 # ── db session always closed ──────────────────────────────────────────────────

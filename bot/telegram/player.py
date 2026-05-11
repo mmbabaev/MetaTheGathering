@@ -307,7 +307,7 @@ async def _handle_pending_admin_custom_arch(msg, user, text, context) -> bool:
         result = _admin_handler(db).handle_set_participant_custom_arch(user.id, participant_id, text)
         if not result.is_alert:
             _log("admin_custom_arch", user, participant_id=participant_id, arch_name=text)
-        await msg.reply_text(result.text)
+        await msg.reply_text(result.text, reply_markup=result.keyboard)
     finally:
         db.close()
     return True
