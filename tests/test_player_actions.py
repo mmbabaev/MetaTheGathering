@@ -16,6 +16,7 @@ from bot.messages import (
     REGISTRATION_CLOSED,
     TOURNAMENT_NOT_FOUND,
 )
+from core import models
 from core.models import TournamentStatus, utc_now
 from core.schemas import TournamentCreate
 
@@ -47,8 +48,6 @@ class TestHandleTournaments:
         assert result.keyboard is not None
 
     def test_multiple_tournaments_returns_list(self, db, handler):
-        from core import models
-
         for i, slug in enumerate(("t1", "t2"), start=1):
             db.add(
                 models.Tournament(

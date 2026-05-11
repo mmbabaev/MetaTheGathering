@@ -6,16 +6,16 @@ that would crash the bot at runtime even though unit tests pass.
 
 
 def test_import_player():
-    import bot.telegram.player  # noqa: F401
+    import bot.telegram.player  # noqa: F401, PLC0415
 
 
 def test_import_admin():
-    import bot.telegram.admin  # noqa: F401
+    import bot.telegram.admin  # noqa: F401, PLC0415
 
 
 def test_import_settings():
-    import bot.telegram.settings  # noqa: F401
+    import bot.telegram.settings  # noqa: F401, PLC0415
 
 
 def test_import_common():
-    import bot.telegram.common  # noqa: F401
+    import bot.telegram.common  # noqa: F401, PLC0415

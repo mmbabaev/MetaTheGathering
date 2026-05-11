@@ -1,12 +1,18 @@
 """Tests for aetherhub scraper and import service."""
 
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+from sqlalchemy import select
 
+from core import models
 from services.aetherhub_import_service import AetherhubImportService
 from services.aetherhub_models import AetherhubPairing, AetherhubRound, AetherhubTournamentData
 from services.aetherhub_service import AetherhubService
+from services.archetype import ArchetypeService
+from services.errors import TournamentInvalidState, TournamentNotFound
+from services.user import UserService
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -279,8 +285,6 @@ class TestFetchTournament:
         For filled tournaments the default main page shows 'Pairings round 4' and a subset in standings,
         but round 1 pairings still contain the full participant list. We must take players from round 1.
         """
-        from pathlib import Path
-
         base_url = "https://aetherhub.com/Tourney/RoundTourney/99049"
         tid = "99049"
 
@@ -318,8 +322,6 @@ class TestFetchTournament:
         assert all("Points" not in p for p in data.players)
 
     def test_invalid_url_raises(self):
-        import pytest
-
         with pytest.raises(ValueError):
             AetherhubService().fetch_tournament("https://aetherhub.com/Tourney/RoundTourney/")
 
@@ -345,8 +347,6 @@ class TestFindUserByName:
         assert import_svc.find_user_by_name("") is None
 
     def test_finds_user_with_reversed_name_order(self, import_svc, db):
-        from services.user import UserService
-
         UserService(db).get_or_create(tg_id=9001, username=None, first_name="Михаил", last_name="Бабаев")
         result = import_svc.find_user_by_name("Бабаев Михаил")
         assert result is not None
@@ -354,16 +354,12 @@ class TestFindUserByName:
         assert result.last_name == "Бабаев"
 
     def test_finds_user_with_canonical_name_order(self, import_svc, db):
-        from services.user import UserService
-
         UserService(db).get_or_create(tg_id=9002, username=None, first_name="Иван", last_name="Петров")
         result = import_svc.find_user_by_name("Иван Петров")
         assert result is not None
         assert result.first_name == "Иван"
 
     def test_finds_user_when_points_injected_and_case_mixed(self, import_svc, db):
-        from services.user import UserService
-
         UserService(db).get_or_create(tg_id=9003, username=None, first_name="Валентин", last_name="Задорожний")
         result = import_svc.find_user_by_name("Валентин (6 points) Задорожний")
         assert result is not None
@@ -520,8 +516,6 @@ class TestGetUnfilledOpponents:
 
     def _setup(self, import_svc, svc, tournament, db, player_name: str, opponent_name: str):
         """Import pairings and register both players; return (player_user, opponent_participant)."""
-        from services.user import UserService
-
         data = _make_data(
             players=[player_name, opponent_name],
             rounds_pairings=[[(player_name, opponent_name), (opponent_name, player_name)]],
@@ -553,9 +547,6 @@ class TestGetUnfilledOpponents:
         assert err == "not_in_pairings"
 
     def test_all_filled_returns_error_key(self, import_svc, svc, tournament, db):
-        from services.archetype import ArchetypeService
-        from services.user import UserService
-
         data = _make_data(
             players=["PlayerA", "PlayerB"],
             rounds_pairings=[[("PlayerA", "PlayerB"), ("PlayerB", "PlayerA")]],
@@ -575,8 +566,6 @@ class TestGetUnfilledOpponents:
         assert err == "all_filled"
 
     def test_returns_unfilled_opponents(self, import_svc, svc, tournament, db):
-        from services.user import UserService
-
         data = _make_data(
             players=["PlayerA", "PlayerB"],
             rounds_pairings=[[("PlayerA", "PlayerB"), ("PlayerB", "PlayerA")]],
@@ -599,15 +588,11 @@ class TestImportTournamentValidation:
     """import_tournament must reject invalid tournament states."""
 
     def test_raises_on_nonexistent_tournament(self, import_svc):
-        from services.errors import TournamentNotFound
-
         data = _make_data(players=[], rounds_pairings=[])
         with pytest.raises(TournamentNotFound):
             import_svc.import_tournament(99999, data)
 
     def test_raises_on_closed_tournament(self, import_svc, svc, tournament):
-        from services.errors import TournamentInvalidState
-
         svc.close_tournament(tournament.id)
         data = _make_data(players=[], rounds_pairings=[])
         with pytest.raises(TournamentInvalidState):
@@ -702,10 +687,6 @@ class TestImportFinalPlace:
     """Part 2: final_place is saved to DB from standings during import."""
 
     def _participant(self, db, tournament_id, user_id):
-        from sqlalchemy import select
-
-        from core import models
-
         return db.execute(
             select(models.Participant).where(
                 models.Participant.tournament_id == tournament_id,

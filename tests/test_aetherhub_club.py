@@ -6,8 +6,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from zoneinfo import ZoneInfo
 
 import pytest
+from sqlalchemy import select
 
-from bot.scheduler import AetherhubImportJob, CreateTournamentJob
+import core.models as cm
+from bot.scheduler import (
+    AetherhubImportJob,
+    CreateTournamentJob,
+    _format_club_schedule,
+    format_schedule_text,
+    get_clubs,
+)
 from core.config import Club, ClubSchedule
 from core.models import TournamentStatus
 from core.schemas import TournamentCreate
@@ -569,12 +577,8 @@ class TestDebugClubConfig:
     """Verify debug club has correct find_latest and fetch times."""
 
     def test_debug_club_has_find_latest(self):
-        from unittest.mock import patch as _patch
-
-        with _patch("bot.scheduler.settings") as mock_settings:
+        with patch("bot.scheduler.settings") as mock_settings:
             mock_settings.DEBUG = True
-            from bot.scheduler import get_clubs
-
             clubs = get_clubs()
 
         debug_clubs = [c for c in clubs if c.name == "Debug"]
@@ -583,12 +587,8 @@ class TestDebugClubConfig:
         assert any(s.find_latest for s in debug.schedules)
 
     def test_debug_club_fetch_times(self):
-        from unittest.mock import patch as _patch
-
-        with _patch("bot.scheduler.settings") as mock_settings:
+        with patch("bot.scheduler.settings") as mock_settings:
             mock_settings.DEBUG = True
-            from bot.scheduler import get_clubs
-
             clubs = get_clubs()
 
         debug = next(c for c in clubs if c.name == "Debug")
@@ -596,12 +596,8 @@ class TestDebugClubConfig:
         assert "12:31" in all_times
 
     def test_debug_club_has_aetherhub_url(self):
-        from unittest.mock import patch as _patch
-
-        with _patch("bot.scheduler.settings") as mock_settings:
+        with patch("bot.scheduler.settings") as mock_settings:
             mock_settings.DEBUG = True
-            from bot.scheduler import get_clubs
-
             clubs = get_clubs()
 
         debug = next(c for c in clubs if c.name == "Debug")
@@ -636,11 +632,7 @@ class TestCreateTournamentJob:
         old = svc.create_tournament(TournamentCreate(title="Old", chat_id=0, slug="old", club="Goldfish"))
         bot = AsyncMock()
         asyncio.run(job.run(bot=bot, now=FRIDAY_NOW, db=db))
-        from sqlalchemy import select
-
-        import core.models as m
-
-        old_refreshed = db.get(m.Tournament, old.id)
+        old_refreshed = db.get(cm.Tournament, old.id)
         assert old_refreshed.status == TournamentStatus.CLOSED
 
     def test_sends_message_to_announce_chat_id(self, db):
@@ -696,15 +688,11 @@ class TestAetherhubImportJobWeekdayGuard:
 
 class TestFormatScheduleText:
     def test_contains_club_name(self):
-        from bot.scheduler import _format_club_schedule, format_schedule_text
-
         text = format_schedule_text()
         assert "Goldfish" in text
         assert "Edinorog" in text
 
     def test_format_club_schedule_contains_weekday_and_times(self):
-        from bot.scheduler import _format_club_schedule
-
         club = Club(
             name="TestClub",
             chat_id=0,
@@ -721,8 +709,6 @@ class TestFormatScheduleText:
         assert "20:00" in text
 
     def test_format_club_schedule_no_import_times(self):
-        from bot.scheduler import _format_club_schedule
-
         club = Club(
             name="TestClub",
             chat_id=0,

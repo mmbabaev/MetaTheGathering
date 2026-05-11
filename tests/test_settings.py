@@ -3,6 +3,7 @@
 import pytest
 
 from bot.handlers.settings import SettingsHandler
+from bot.keyboards import Keyboards
 from bot.messages import NAME_SAVED, SETTINGS_MENU
 
 
@@ -158,8 +159,6 @@ class TestHandleToggleEmoji:
 
 class TestArchetypeKeyboardEmoji:
     def test_show_emoji_true_includes_emoji(self):
-        from bot.keyboards import Keyboards
-
         kb = Keyboards()
         archetypes = [(1, "Red Kuldotha"), (2, "Blue Delver")]
         result = kb.archetype_keyboard(tournament_id=1, archetypes=archetypes, show_emoji=True)
@@ -167,8 +166,6 @@ class TestArchetypeKeyboardEmoji:
         assert any("🔴" in t for t in labels)
 
     def test_show_emoji_false_no_emoji(self):
-        from bot.keyboards import Keyboards
-
         kb = Keyboards()
         archetypes = [(1, "Red Kuldotha"), (2, "Blue Delver")]
         result = kb.archetype_keyboard(tournament_id=1, archetypes=archetypes, show_emoji=False)
@@ -177,8 +174,6 @@ class TestArchetypeKeyboardEmoji:
         assert any(t == "Red Kuldotha" for t in labels)
 
     def test_admin_keyboard_show_emoji_false(self):
-        from bot.keyboards import Keyboards
-
         kb = Keyboards()
         archetypes = [(1, "Red Kuldotha")]
         result = kb.admin_archetype_select_keyboard(participant_id=1, archetypes=archetypes, show_emoji=False)

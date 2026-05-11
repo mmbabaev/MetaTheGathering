@@ -7,6 +7,7 @@ from bot.keyboards import (
     CB_ADMIN_CUSTOM_ARCH,
     CB_ADMIN_SET_ARCH,
     CB_ARCHETYPE,
+    CB_ARCHETYPE_MORE,
     CB_CUSTOM_ARCHETYPE,
     CB_REGISTER,
     CB_TOURNAMENT,
@@ -90,15 +91,11 @@ class TestArchetypeKeyboard:
         assert label == "Unknown Brew"
 
     def test_has_more_button_present_when_flag_true(self):
-        from bot.keyboards import CB_ARCHETYPE_MORE
-
         markup = archetype_keyboard(10, [(1, "Burn")], has_more=True)
         cbs = [b.callback_data for row in markup.inline_keyboard for b in row]
         assert any(cb.startswith(CB_ARCHETYPE_MORE) for cb in cbs)
 
     def test_no_more_button_when_flag_false(self):
-        from bot.keyboards import CB_ARCHETYPE_MORE
-
         markup = archetype_keyboard(10, [(1, "Burn")], has_more=False)
         cbs = [b.callback_data for row in markup.inline_keyboard for b in row]
         assert not any(cb.startswith(CB_ARCHETYPE_MORE) for cb in cbs)

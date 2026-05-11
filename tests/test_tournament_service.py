@@ -1,18 +1,29 @@
 from datetime import timedelta
+from unittest.mock import patch
 
 import pytest
+from sqlalchemy import select
 
-from core.models import TournamentStatus, VoteType, utc_now
+from bot.features import FeatureService
+from bot.handlers.admin import AdminHandler
+from bot.keyboards import Keyboards
+from core import models
+from core import models as m
+from core.models import Tournament, TournamentStatus, Vote, VoteType, utc_now
 from core.schemas import TournamentCreate
 from services.errors import (
     ParticipantAlreadyRegistered,
+    ParticipantNotFound,
     SelfVoteNotAllowed,
     TournamentAlreadyExists,
     TournamentInvalidState,
+    TournamentNotFound,
     VotingNotAllowed,
 )
+from services.feature_flags import FeatureFlagService
 from services.stats import StatsService
 from services.tournament import CONFIRM_THRESHOLD, REJECT_THRESHOLD
+from services.utils import get_tournament
 
 # ===== Tournament lifecycle =====
 
@@ -166,8 +177,6 @@ class TestCastVote:
 
     def test_vote_outside_voting_phase_raises(self, svc, db, tournament, user_bob):
         # Закрываем турнир — голосование недоступно
-        from core.models import Tournament
-
         t_orm = db.get(Tournament, tournament.id)
         t_orm.status = TournamentStatus.CLOSED
         db.commit()
@@ -187,8 +196,6 @@ class TestCastVote:
             vote_type=VoteType.UP,
         )
         # Сдвигаем created_at голоса назад, чтобы обойти cooldown
-        from core.models import Vote
-
         vote = db.query(Vote).filter_by(participant_id=self.p_alice.id, voter_id=user_bob.id).first()
         vote.created_at = utc_now() - timedelta(seconds=60)
         db.commit()
@@ -394,9 +401,6 @@ class TestListArchetypesForUser:
         assert result[0].name == "Burn"
 
     def test_most_recent_choice_wins(self, svc, db, user_alice, archetype_burn, archetype_affinity, arch_svc):
-        import core.models as m
-        from core.schemas import TournamentCreate
-
         t1 = svc.create_tournament(TournamentCreate(title="T1", chat_id=1))
         t2 = svc.create_tournament(TournamentCreate(title="T2", chat_id=2))
         svc.register_participant(tournament_id=t1.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
@@ -419,8 +423,6 @@ class TestListArchetypesForUser:
         assert result[1].name == "Burn"
 
     def test_deduplicates_repeated_choices(self, svc, db, user_alice, archetype_burn, arch_svc):
-        from core.schemas import TournamentCreate
-
         t1 = svc.create_tournament(TournamentCreate(title="T1", chat_id=1))
         t2 = svc.create_tournament(TournamentCreate(title="T2", chat_id=2))
         svc.register_participant(tournament_id=t1.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
@@ -499,8 +501,6 @@ class TestOpenRegistration:
 
 class TestGetParticipantNotFound:
     def test_raises_on_missing_participant(self, svc):
-        from services.errors import ParticipantNotFound
-
         with pytest.raises(ParticipantNotFound):
             svc._get_participant(99999)
 
@@ -564,10 +564,6 @@ class TestCastVoteEdgeCases:
         )
         assert result.vote_type == VoteType.UP
         # Reload participant to verify counters
-        from sqlalchemy import select
-
-        from core import models as m
-
         part = svc.db.execute(select(m.Participant).where(m.Participant.id == p.id)).scalar_one()
         assert part.downvotes_count == 0
         assert part.upvotes_count == 1
@@ -632,8 +628,6 @@ class TestBulkAddParticipants:
 
     def test_raises_when_tournament_not_found(self, svc, users):
         alice, _ = users
-        from services.errors import TournamentNotFound
-
         with pytest.raises(TournamentNotFound):
             svc.bulk_add_participants(99999, [(alice.id, "Alice")])
 
@@ -729,8 +723,6 @@ class TestGetOrCreateByName:
 
     def test_prefers_user_with_deck_history(self, user_svc, db, svc, arch_svc):
         """Когда два совпадения — возвращает того, у кого есть история колод."""
-        from core import models
-
         # Два пользователя с одинаковыми именами (разный порядок слов)
         u_no_hist, _ = user_svc.get_or_create_by_name("Антон", "Ильин")
         db.commit()
@@ -758,10 +750,6 @@ class TestGetOrCreateByName:
 
     def test_bulk_add_uses_flexible_search(self, user_svc, db, svc, arch_svc):
         """handle_bulk_add_by_name находит игрока даже при перестановке имени и фамилии."""
-        from bot.handlers.admin import AdminHandler
-        from core import models as m
-        from core.schemas import TournamentCreate
-
         # Создаём пользователя в DataLens-порядке (Фамилия Имя)
         u, _ = user_svc.get_or_create_by_name("Ильин", "Антон")
         db.commit()
@@ -773,12 +761,6 @@ class TestGetOrCreateByName:
 
         # Турнир
         t = svc.create_tournament(TournamentCreate(title="T", chat_id=9999))
-
-        from unittest.mock import patch
-
-        from bot.features import FeatureService
-        from bot.keyboards import Keyboards
-        from services.feature_flags import FeatureFlagService
 
         ff_svc = FeatureFlagService(db)
         handler = AdminHandler(svc, user_svc, arch_svc, Keyboards(), FeatureService(ff_svc))
@@ -798,16 +780,12 @@ class TestSetAetherhubUrl:
     def test_stores_url(self, svc, tournament):
         url = "https://aetherhub.com/Tourney/RoundTourney/12345"
         svc.set_aetherhub_url(tournament.id, url)
-        from services.utils import get_tournament
-
         t = get_tournament(svc.db, tournament.id)
         assert t.aetherhub_url == url
 
     def test_overwrites_existing_url(self, svc, tournament):
         svc.set_aetherhub_url(tournament.id, "https://aetherhub.com/old")
         svc.set_aetherhub_url(tournament.id, "https://aetherhub.com/new")
-        from services.utils import get_tournament
-
         t = get_tournament(svc.db, tournament.id)
         assert t.aetherhub_url == "https://aetherhub.com/new"
 

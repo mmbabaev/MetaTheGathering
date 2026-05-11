@@ -3,10 +3,12 @@
 from datetime import timedelta
 
 import pytest
+from sqlalchemy import select
 
 from bot.handlers.admin import AdminHandler
 from bot.handlers.base import HandlerResult
-from core.models import utc_now
+from core.models import Participant, PollVote, utc_now
+from core.schemas import TournamentCreate
 from services.archetype import ArchetypeService
 from services.poll import DM_COOLDOWN_SECONDS, PollService
 from services.tournament import TournamentService
@@ -89,10 +91,6 @@ class TestUpsertVote:
     def test_creates_vote(self, poll_svc, tournament):
         poll = poll_svc.create_poll(tournament.id, 100, "p1", 1)
         poll_svc.upsert_vote(poll.id, tg_user_id=555, choice=0)
-        from sqlalchemy import select
-
-        from core.models import PollVote
-
         vote = poll_svc.db.execute(
             select(PollVote).where(PollVote.poll_id == poll.id, PollVote.tg_user_id == 555)
         ).scalar_one()
@@ -102,10 +100,6 @@ class TestUpsertVote:
         poll = poll_svc.create_poll(tournament.id, 100, "p1", 1)
         poll_svc.upsert_vote(poll.id, 555, choice=0)
         poll_svc.remove_vote(poll.id, 555)
-        from sqlalchemy import select
-
-        from core.models import PollVote
-
         count = len(
             poll_svc.db.execute(select(PollVote).where(PollVote.poll_id == poll.id, PollVote.tg_user_id == 555))
             .scalars()
@@ -121,10 +115,6 @@ class TestUpsertVote:
         poll = poll_svc.create_poll(tournament.id, 100, "p1", 1)
         poll_svc.upsert_vote(poll.id, 555, choice=0)
         poll_svc.upsert_vote(poll.id, 555, choice=1)
-        from sqlalchemy import select
-
-        from core.models import PollVote
-
         votes = (
             poll_svc.db.execute(select(PollVote).where(PollVote.poll_id == poll.id, PollVote.tg_user_id == 555))
             .scalars()
@@ -168,8 +158,6 @@ class TestYesVotersWithoutDeck:
 
     def test_cross_tournament_poll(self, poll_svc, svc, db, user_alice):
         """Голоса из старого опроса, колода проверяется по новому турниру."""
-        from core.schemas import TournamentCreate
-
         old_t = svc.create_tournament(TournamentCreate(title="Old", chat_id=100))
         old_poll = poll_svc.create_poll(old_t.id, 100, "old_p", 1)
         poll_svc.upsert_vote(old_poll.id, user_alice.tg_id, choice=0)
@@ -234,10 +222,6 @@ class TestDmCooldown:
     def test_mark_notified_sets_last_dm_at(self, poll_svc, svc, tournament, user_alice):
         svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id)
         poll_svc.mark_notified(tournament.id, [user_alice.tg_id])
-        from sqlalchemy import select
-
-        from core.models import Participant
-
         p = poll_svc.db.execute(
             select(Participant).where(
                 Participant.tournament_id == tournament.id,
@@ -259,10 +243,6 @@ class TestDmCooldown:
         poll_svc.upsert_vote(poll.id, user_alice.tg_id, choice=0)
         svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id)
         # Simulate old notification
-        from sqlalchemy import select
-
-        from core.models import Participant
-
         p = poll_svc.db.execute(select(Participant).where(Participant.tournament_id == tournament.id)).scalar_one()
         p.last_dm_at = utc_now() - timedelta(seconds=DM_COOLDOWN_SECONDS + 60)
         poll_svc.db.commit()
@@ -321,8 +301,6 @@ class TestChatMigration:
 
 class TestLinkPollToTournament:
     def test_links_poll_to_tournament(self, poll_svc, svc, db):
-        from core.schemas import TournamentCreate
-
         t1 = svc.create_tournament(TournamentCreate(title="T1", chat_id=100))
         poll = poll_svc.create_poll(t1.id, 100, "p1", 1)
         svc.close_tournament(t1.id)
@@ -335,8 +313,6 @@ class TestLinkPollToTournament:
 
     def test_auto_link_via_chat_when_no_tournament_poll(self, poll_svc, svc, db):
         """Simulates callback_poll_menu auto-linking logic."""
-        from core.schemas import TournamentCreate
-
         old_t = svc.create_tournament(TournamentCreate(title="Old", chat_id=100))
         poll = poll_svc.create_poll(old_t.id, 100, "p1", 1)
         svc.close_tournament(old_t.id)

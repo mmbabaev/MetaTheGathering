@@ -1,12 +1,25 @@
 """Tests for decks_hidden feature: spoiler wrapping, reveal button, service method."""
 
+import io
+from unittest.mock import patch
+
+import openpyxl
 import pytest
 
 from bot.handlers.admin import AdminHandler
 from bot.handlers.player import PlayerHandler
-from bot.keyboards import CB_REVEAL_DECKS
+from bot.keyboards import (
+    CB_HIDE_DECKS,
+    CB_REVEAL_DECKS,
+    CB_REVEAL_DECKS_CANCEL,
+    CB_REVEAL_DECKS_CONFIRM,
+    admin_more_keyboard,
+    reveal_decks_confirm_keyboard,
+)
 from bot.messages import DECKS_REVEALED, format_tournament_status
+from core import models
 from core.schemas import TournamentCreate
+from services.export import ExportService
 from services.tournament import TournamentService
 
 CHAT_ID = 777
@@ -68,8 +81,6 @@ class TestFormatTournamentStatus:
 
     def test_no_archetype_never_has_placeholder(self, db, svc, user_svc, tournament):
         user = user_svc.get_or_create(tg_id=4003, username="u3", first_name="Oleg")
-        from core import models
-
         db.add(models.Participant(tournament_id=tournament.id, user_id=user.id))
         db.commit()
         participants = svc.list_participants_for_tournament(tournament.id)
@@ -106,8 +117,6 @@ class TestHandleTournamentPublicStatus:
 
 class TestTournamentCardKeyboard:
     def test_reveal_button_not_in_tournament_card(self, handler, user_svc, svc, arch_svc, tournament, archetype_burn):
-        from unittest.mock import patch
-
         with patch("services.user.settings") as mock_settings:
             mock_settings.admin_ids = [9001]
             result = handler.handle_tournaments(tg_id=9001)
@@ -126,8 +135,6 @@ class TestTournamentCardKeyboard:
 
 class TestAdminViewDecksHidden:
     def test_admin_status_hides_decks_when_hidden(self, admin_handler, svc, user_svc, tournament, archetype_burn):
-        from unittest.mock import patch
-
         user = user_svc.get_or_create(tg_id=7001, username="p", first_name="Player")
         svc.register_participant(tournament_id=tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
 
@@ -139,8 +146,6 @@ class TestAdminViewDecksHidden:
         assert "Burn" not in result.text
 
     def test_admin_status_shows_decks_after_reveal(self, admin_handler, svc, user_svc, tournament, archetype_burn):
-        from unittest.mock import patch
-
         svc.set_decks_hidden(tournament.id, hidden=False)
         user = user_svc.get_or_create(tg_id=7002, username="p2", first_name="Player2")
         svc.register_participant(tournament_id=tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
@@ -158,8 +163,6 @@ class TestAdminViewDecksHidden:
 
 class TestHandleRevealDecks:
     def test_reveals_decks_and_returns_status(self, admin_handler, svc, user_svc, tournament, archetype_burn):
-        from unittest.mock import patch
-
         user = user_svc.get_or_create(tg_id=6001, username="p", first_name="Player")
         svc.register_participant(tournament_id=tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
 
@@ -173,8 +176,6 @@ class TestHandleRevealDecks:
         assert updated.decks_hidden is False
 
     def test_non_admin_returns_alert(self, admin_handler, tournament):
-        from unittest.mock import patch
-
         with patch("services.user.settings") as mock_settings:
             mock_settings.admin_ids = []
             result = admin_handler.handle_reveal_decks(tg_id=99999, tournament_id=tournament.id)
@@ -182,8 +183,6 @@ class TestHandleRevealDecks:
         assert result.is_alert
 
     def test_tournament_not_found_returns_alert(self, admin_handler):
-        from unittest.mock import patch
-
         with patch("services.user.settings") as mock_settings:
             mock_settings.admin_ids = [8001]
             result = admin_handler.handle_reveal_decks(tg_id=8001, tournament_id=99999)
@@ -196,8 +195,6 @@ class TestHandleRevealDecks:
 
 class TestHandleHideDecks:
     def test_hides_decks_and_returns_status(self, admin_handler, svc, user_svc, tournament, archetype_burn):
-        from unittest.mock import patch
-
         svc.set_decks_hidden(tournament.id, hidden=False)
         user = user_svc.get_or_create(tg_id=6010, username="p", first_name="Player")
         svc.register_participant(tournament_id=tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
@@ -211,8 +208,6 @@ class TestHandleHideDecks:
         assert svc.get_active_tournament_for_chat(CHAT_ID).decks_hidden is True
 
     def test_non_admin_returns_alert(self, admin_handler, tournament):
-        from unittest.mock import patch
-
         with patch("services.user.settings") as mock_settings:
             mock_settings.admin_ids = []
             result = admin_handler.handle_hide_decks(tg_id=99999, tournament_id=tournament.id)
@@ -225,8 +220,6 @@ class TestHandleHideDecks:
 
 class TestRevealDecksConfirmKeyboard:
     def test_has_confirm_and_cancel(self):
-        from bot.keyboards import CB_REVEAL_DECKS_CANCEL, CB_REVEAL_DECKS_CONFIRM, reveal_decks_confirm_keyboard
-
         kb = reveal_decks_confirm_keyboard(tournament_id=42)
         buttons = {b.callback_data for row in kb.inline_keyboard for b in row}
         assert f"{CB_REVEAL_DECKS_CONFIRM}:42" in buttons
@@ -238,15 +231,11 @@ class TestRevealDecksConfirmKeyboard:
 
 class TestAdminMoreKeyboardDecks:
     def test_shows_reveal_when_hidden(self):
-        from bot.keyboards import CB_REVEAL_DECKS, admin_more_keyboard
-
         kb = admin_more_keyboard(tournament_id=1, decks_hidden=True)
         cbs = [b.callback_data for row in kb.inline_keyboard for b in row]
         assert any(cb.startswith(CB_REVEAL_DECKS + ":") for cb in cbs)
 
     def test_shows_hide_when_revealed(self):
-        from bot.keyboards import CB_HIDE_DECKS, admin_more_keyboard
-
         kb = admin_more_keyboard(tournament_id=1, decks_hidden=False)
         cbs = [b.callback_data for row in kb.inline_keyboard for b in row]
         assert any(cb.startswith(CB_HIDE_DECKS + ":") for cb in cbs)
@@ -257,32 +246,20 @@ class TestAdminMoreKeyboardDecks:
 
 class TestExportExcelDecksHidden:
     def test_deck_column_absent_when_hidden(self, svc, user_svc, arch_svc, tournament, archetype_burn):
-        from services.export import ExportService
-
         user = user_svc.get_or_create(tg_id=7001, username="u", first_name="Test")
         svc.register_participant(tournament_id=tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
 
         data, _ = ExportService(svc.db).export_participants_excel(tournament.id)
-        import io
-
-        import openpyxl
-
         ws = openpyxl.load_workbook(io.BytesIO(data)).active
         headers = [ws.cell(1, c).value for c in range(1, ws.max_column + 1)]
         assert "Колода" not in headers
 
     def test_deck_column_present_when_revealed(self, svc, user_svc, arch_svc, tournament, archetype_burn):
-        from services.export import ExportService
-
         svc.set_decks_hidden(tournament.id, hidden=False)
         user = user_svc.get_or_create(tg_id=7002, username="u", first_name="Test")
         svc.register_participant(tournament_id=tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
 
         data, _ = ExportService(svc.db).export_participants_excel(tournament.id)
-        import io
-
-        import openpyxl
-
         ws = openpyxl.load_workbook(io.BytesIO(data)).active
         headers = [ws.cell(1, c).value for c in range(1, ws.max_column + 1)]
         assert "Колода" in headers

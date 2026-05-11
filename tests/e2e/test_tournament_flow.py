@@ -1,5 +1,8 @@
 """E2E regression tests: create → import → export flow."""
 
+from sqlalchemy import select
+
+from core.models import Participant, User
 from core.schemas import TournamentCreate
 from services.aetherhub_import_service import AetherhubImportService
 from services.export import ExportService
@@ -38,10 +41,6 @@ def test_import_aetherhub(db, tournament, aetherhub_data):
 
     participants = TournamentService(db).list_participants_for_tournament(tournament.id)
     assert len(participants) == 4
-
-    from sqlalchemy import select
-
-    from core.models import Participant, User
 
     rows = db.execute(
         select(Participant, User)
