@@ -1257,7 +1257,7 @@ class TestHandlePlayerOpponents:
         if not result.is_alert:
             assert result.keyboard is not None
             cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
-            assert any(cb.startswith(CB_ADMIN_PLAYER_ACTIONS) for cb in cbs)
+            assert any(cb.startswith(CB_ADMIN_PICK_ARCH) for cb in cbs)
 
 
 # ── TestHandleRemoveParticipantConfirm ────────────────────────────────────────
@@ -1290,7 +1290,7 @@ class TestHandleRemoveParticipantConfirm:
         result = handler.handle_remove_participant_confirm(ADMIN_TG_ID, p.id, active_tournament.id)
         cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
         assert any(cb.startswith(CB_ADMIN_REMOVE_DO) for cb in cbs)
-        assert any(cb.startswith(CB_ADMIN_PLAYER_ACTIONS) for cb in cbs)
+        assert any(cb.startswith(CB_ADMIN_PICK_ARCH) for cb in cbs)
 
 
 # ── TestHandleRemoveParticipant ───────────────────────────────────────────────

@@ -261,10 +261,7 @@ class Keyboards:
             else:
                 name = f"id{p.id}"
             prefix = "📝 " if p.archetype is None else "✏️ "
-            row = [InlineKeyboardButton(f"{prefix}{name}", callback_data=f"{CB_ADMIN_PICK_ARCH}:{p.id}")]
-            if tournament_id is not None:
-                row.append(InlineKeyboardButton("⋯", callback_data=f"{CB_ADMIN_PLAYER_ACTIONS}:{p.id}:{tournament_id}"))
-            buttons.append(row)
+            buttons.append([InlineKeyboardButton(f"{prefix}{name}", callback_data=f"{CB_ADMIN_PICK_ARCH}:{p.id}")])
 
         if not show_filled and filled and tournament_id is not None:
             buttons.append(
@@ -312,22 +309,14 @@ class Keyboards:
 
     def admin_opponents_keyboard(self, participant_id: int, tournament_id: int) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton(
-                        "⬅️ Назад", callback_data=f"{CB_ADMIN_PLAYER_ACTIONS}:{participant_id}:{tournament_id}"
-                    )
-                ]
-            ]
+            [[InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_ADMIN_PICK_ARCH}:{participant_id}")]]
         )
 
     def admin_remove_confirm_keyboard(self, participant_id: int, tournament_id: int) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(
             [
                 [
-                    InlineKeyboardButton(
-                        "❌ Отмена", callback_data=f"{CB_ADMIN_PLAYER_ACTIONS}:{participant_id}:{tournament_id}"
-                    ),
+                    InlineKeyboardButton("❌ Отмена", callback_data=f"{CB_ADMIN_PICK_ARCH}:{participant_id}"),
                     InlineKeyboardButton(
                         "✅ Удалить", callback_data=f"{CB_ADMIN_REMOVE_DO}:{participant_id}:{tournament_id}"
                     ),
@@ -341,6 +330,9 @@ class Keyboards:
         archetypes: list,
         has_more: bool = False,
         show_emoji: bool = True,
+        tournament_id: int | None = None,
+        is_admin: bool = False,
+        has_pairings: bool = False,
     ) -> InlineKeyboardMarkup:
         buttons = [
             [
@@ -354,6 +346,26 @@ class Keyboards:
         if has_more:
             buttons.append([InlineKeyboardButton("... ещё", callback_data=f"{CB_ADMIN_ARCH_MORE}:{participant_id}")])
         buttons.append([InlineKeyboardButton("Свой вариант", callback_data=f"{CB_ADMIN_CUSTOM_ARCH}:{participant_id}")])
+        if has_pairings and tournament_id is not None:
+            buttons.append(
+                [
+                    InlineKeyboardButton(
+                        "👥 Показать оппонентов",
+                        callback_data=f"{CB_ADMIN_SHOW_OPPONENTS}:{participant_id}:{tournament_id}",
+                    )
+                ]
+            )
+        if is_admin and tournament_id is not None:
+            buttons.append(
+                [
+                    InlineKeyboardButton(
+                        "🗑 Удалить из турнира",
+                        callback_data=f"{CB_ADMIN_REMOVE_CONFIRM}:{participant_id}:{tournament_id}",
+                    )
+                ]
+            )
+        if tournament_id is not None:
+            buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_TSTATUS}:{tournament_id}")])
         return InlineKeyboardMarkup(buttons)
 
     def archetype_keyboard(
@@ -487,8 +499,18 @@ def admin_archetype_select_keyboard(
     participant_id: int,
     archetypes: list,
     has_more: bool = False,
+    tournament_id: int | None = None,
+    is_admin: bool = False,
+    has_pairings: bool = False,
 ) -> InlineKeyboardMarkup:
-    return _default.admin_archetype_select_keyboard(participant_id, archetypes, has_more=has_more)
+    return _default.admin_archetype_select_keyboard(
+        participant_id,
+        archetypes,
+        has_more=has_more,
+        tournament_id=tournament_id,
+        is_admin=is_admin,
+        has_pairings=has_pairings,
+    )
 
 
 def archetype_keyboard(

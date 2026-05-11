@@ -354,15 +354,30 @@ class AdminHandler:
         return self._tournament_status_result(tournament_id, prefix="🙈 Колоды скрыты.")
 
     def _archetype_keyboard_for_participant(
-        self, participant_id: int, player_tg_id: int | None, expanded: bool = False, caller_tg_id: int | None = None
+        self,
+        participant_id: int,
+        player_tg_id: int | None,
+        expanded: bool = False,
+        caller_tg_id: int | None = None,
+        tournament_id: int | None = None,
     ) -> HandlerResult:
         """Строит HandlerResult с клавиатурой архетипов для участника."""
         arch_list, has_more = build_archetype_menu(self.arch_svc, player_tg_id, expanded)
         caller = self.user_svc.get_by_tg_id(caller_tg_id) if caller_tg_id else None
         show_emoji = not (caller and caller.hide_deck_emoji)
+        is_admin = self.user_svc.is_admin(caller_tg_id) if caller_tg_id else False
+        has_pairings = AetherhubImportService(self.svc.db).has_pairings(tournament_id) if tournament_id else False
         return HandlerResult(
             CHOOSE_ARCHETYPE,
-            keyboard=self.keyboards.admin_archetype_select_keyboard(participant_id, arch_list, has_more, show_emoji),
+            keyboard=self.keyboards.admin_archetype_select_keyboard(
+                participant_id,
+                arch_list,
+                has_more,
+                show_emoji,
+                tournament_id=tournament_id,
+                is_admin=is_admin,
+                has_pairings=has_pairings,
+            ),
         )
 
     def handle_pick_participant_arch(self, tg_id: int, participant_id: int, expanded: bool = False) -> HandlerResult:
@@ -374,7 +389,9 @@ class AdminHandler:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
         user = self.user_svc.get_by_id(p.user_id)
         player_tg_id = user.tg_id if user else None
-        return self._archetype_keyboard_for_participant(participant_id, player_tg_id, expanded, caller_tg_id=tg_id)
+        return self._archetype_keyboard_for_participant(
+            participant_id, player_tg_id, expanded, caller_tg_id=tg_id, tournament_id=p.tournament_id
+        )
 
     def handle_pick_participant_arch_more(self, tg_id: int, participant_id: int) -> HandlerResult:
         """Разворачивает полный список архетипов для участника (история + топ)."""
