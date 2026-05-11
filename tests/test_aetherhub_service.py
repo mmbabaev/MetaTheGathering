@@ -957,3 +957,131 @@ class TestImportWithFinalStandingsFrom99291:
             p = self._participant(db, tournament.id, anton.id)
             assert p is not None
             assert p.final_place == 3
+
+
+# ── TestHasPairings ───────────────────────────────────────────────────────────
+
+
+class TestHasPairings:
+    def test_returns_false_when_no_pairings(self, import_svc, tournament):
+        assert import_svc.has_pairings(tournament.id) is False
+
+    def test_returns_true_after_import(self, import_svc, tournament):
+        data = _make_data(
+            players=["Алиса", "Боб"],
+            rounds_pairings=[[("Алиса", "Боб"), ("Боб", "Алиса")]],
+        )
+        import_svc.import_tournament(tournament.id, data)
+        assert import_svc.has_pairings(tournament.id) is True
+
+    def test_returns_false_for_other_tournament(self, import_svc, tournament, svc):
+        data = _make_data(
+            players=["Алиса"],
+            rounds_pairings=[[("Алиса", None)]],
+        )
+        import_svc.import_tournament(tournament.id, data)
+        from core.schemas import TournamentCreate
+
+        other = svc.create_tournament(TournamentCreate(title="Other", chat_id=999))
+        assert import_svc.has_pairings(other.id) is False
+
+
+# ── TestGetPlayerOpponents ────────────────────────────────────────────────────
+
+
+class TestGetPlayerOpponents:
+    def _import_4player(self, import_svc, tournament):
+        data = _make_data(
+            players=["Иван Петров", "Алексей Боронко", "Ринат Федулов", "Андрей Рябинин"],
+            rounds_pairings=[
+                [
+                    ("Иван Петров", "Алексей Боронко"),
+                    ("Алексей Боронко", "Иван Петров"),
+                    ("Ринат Федулов", "Андрей Рябинин"),
+                    ("Андрей Рябинин", "Ринат Федулов"),
+                ],
+                [
+                    ("Иван Петров", "Ринат Федулов"),
+                    ("Ринат Федулов", "Иван Петров"),
+                    ("Алексей Боронко", "Андрей Рябинин"),
+                    ("Андрей Рябинин", "Алексей Боронко"),
+                ],
+            ],
+            standings=["Иван Петров", "Алексей Боронко", "Ринат Федулов", "Андрей Рябинин"],
+        )
+        import_svc.import_tournament(tournament.id, data)
+
+    def _participant_for_name(self, import_svc, tournament_id, name):
+        user = import_svc.find_user_by_name(name)
+        assert user is not None, f"User not found for name {name!r}"
+        return import_svc._get_participant(tournament_id, user.id)
+
+    def test_no_pairings_returns_error(self, import_svc, tournament):
+        opps, err = import_svc.get_player_opponents(tournament.id, 9999)
+        assert err == "no_pairings"
+        assert opps == []
+
+    def test_unknown_participant_returns_error(self, import_svc, tournament):
+        self._import_4player(import_svc, tournament)
+        opps, err = import_svc.get_player_opponents(tournament.id, 99999)
+        assert err == "not_found"
+        assert opps == []
+
+    def test_returns_opponents_in_round_order(self, import_svc, tournament):
+        self._import_4player(import_svc, tournament)
+        p = self._participant_for_name(import_svc, tournament.id, "Иван Петров")
+        opps, err = import_svc.get_player_opponents(tournament.id, p.id)
+        assert err is None
+        assert len(opps) == 2
+        assert opps[0].round_number == 1
+        assert opps[1].round_number == 2
+
+    def test_opponent_names_correct(self, import_svc, tournament):
+        self._import_4player(import_svc, tournament)
+        p = self._participant_for_name(import_svc, tournament.id, "Иван Петров")
+        opps, _ = import_svc.get_player_opponents(tournament.id, p.id)
+        opp_names = {o.opponent_name for o in opps}
+        assert "Алексей Боронко" in opp_names
+        assert "Ринат Федулов" in opp_names
+
+    def test_opponent_user_resolved(self, import_svc, tournament):
+        self._import_4player(import_svc, tournament)
+        p = self._participant_for_name(import_svc, tournament.id, "Иван Петров")
+        opps, _ = import_svc.get_player_opponents(tournament.id, p.id)
+        assert all(o.opponent_user is not None for o in opps)
+
+    def test_opponent_participant_resolved(self, import_svc, tournament):
+        self._import_4player(import_svc, tournament)
+        p = self._participant_for_name(import_svc, tournament.id, "Иван Петров")
+        opps, _ = import_svc.get_player_opponents(tournament.id, p.id)
+        assert all(o.opponent_participant is not None for o in opps)
+
+    def test_bye_represented_as_none_name(self, import_svc, tournament):
+        data = _make_data(
+            players=["Иван Петров"],
+            rounds_pairings=[[("Иван Петров", None)]],
+        )
+        import_svc.import_tournament(tournament.id, data)
+        p = self._participant_for_name(import_svc, tournament.id, "Иван Петров")
+        opps, err = import_svc.get_player_opponents(tournament.id, p.id)
+        assert err is None
+        assert len(opps) == 1
+        assert opps[0].opponent_name is None
+        assert opps[0].opponent_user is None
+
+    def test_not_in_pairings_returns_error(self, import_svc, tournament, db):
+        data = _make_data(
+            players=["Иван Петров"],
+            rounds_pairings=[[("Иван Петров", None)]],
+        )
+        import_svc.import_tournament(tournament.id, data)
+        from core.models import Participant
+        from services.user import UserService
+
+        stranger = UserService(db).get_or_create(tg_id=7777, username=None, first_name="Странник")
+        db.add(Participant(tournament_id=tournament.id, user_id=stranger.id))
+        db.commit()
+        stranger_p = import_svc._get_participant(tournament.id, stranger.id)
+        opps, err = import_svc.get_player_opponents(tournament.id, stranger_p.id)
+        assert err == "not_in_pairings"
+        assert opps == []

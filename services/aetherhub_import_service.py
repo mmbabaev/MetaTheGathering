@@ -20,6 +20,14 @@ class ImportResult:
     created_names: list[str]  # players not found in bot — created as placeholders
 
 
+@dataclass
+class OpponentInfo:
+    round_number: int
+    opponent_name: str | None  # None = bye
+    opponent_user: models.User | None
+    opponent_participant: models.Participant | None
+
+
 class AetherhubImportService:
     def __init__(self, db: Session) -> None:
         self.db = db
@@ -172,6 +180,60 @@ class AetherhubImportService:
             pairings_saved=pairings_saved,
             created_names=created,
         )
+
+    def has_pairings(self, tournament_id: int) -> bool:
+        return (
+            self.db.execute(
+                select(models.RoundPairing.id).where(models.RoundPairing.tournament_id == tournament_id).limit(1)
+            ).scalar_one_or_none()
+            is not None
+        )
+
+    def get_player_opponents(self, tournament_id: int, participant_id: int) -> tuple[list[OpponentInfo], str | None]:
+        """Return (opponents, error_key).
+
+        error_key is None on success, or one of:
+          'no_pairings'     — no pairings imported for tournament
+          'not_found'       — participant_id does not exist
+          'not_in_pairings' — participant's user not matched in pairing names
+        """
+        pairings = self.get_pairings(tournament_id)
+        if not pairings:
+            return [], "no_pairings"
+
+        participant = self.db.get(models.Participant, participant_id)
+        if participant is None:
+            return [], "not_found"
+
+        all_names = {p.player_name for p in pairings} | {p.opponent_name for p in pairings if p.opponent_name}
+        name_to_user: dict[str, models.User | None] = {name: self.find_user_by_name(name) for name in all_names}
+
+        player_pairings: list[models.RoundPairing] = []
+        for p in pairings:
+            u = name_to_user.get(p.player_name)
+            if u and u.id == participant.user_id:
+                player_pairings.append(p)
+
+        if not player_pairings:
+            return [], "not_in_pairings"
+
+        all_parts = list(
+            self.db.execute(select(models.Participant).where(models.Participant.tournament_id == tournament_id))
+            .scalars()
+            .all()
+        )
+        user_id_to_participant: dict[int, models.Participant] = {p.user_id: p for p in all_parts}
+
+        result: list[OpponentInfo] = []
+        for p in sorted(player_pairings, key=lambda x: x.round_number):
+            if p.opponent_name is None:
+                result.append(OpponentInfo(p.round_number, None, None, None))
+            else:
+                opp_user = name_to_user.get(p.opponent_name)
+                opp_part = user_id_to_participant.get(opp_user.id) if opp_user else None
+                result.append(OpponentInfo(p.round_number, p.opponent_name, opp_user, opp_part))
+
+        return result, None
 
     def get_pairings(self, tournament_id: int, round_number: int | None = None) -> list[models.RoundPairing]:
         q = select(models.RoundPairing).where(models.RoundPairing.tournament_id == tournament_id)
