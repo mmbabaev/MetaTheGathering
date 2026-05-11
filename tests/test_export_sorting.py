@@ -70,7 +70,7 @@ class TestExportExcelSorting:
     def _read_names(self, excel_bytes):
         wb = openpyxl.load_workbook(io.BytesIO(excel_bytes))
         ws = wb.active
-        return [ws.cell(row=r, column=2).value for r in range(2, ws.max_row + 1)]
+        return [ws.cell(row=r, column=3).value for r in range(2, ws.max_row + 1)]
 
     def test_rows_sorted_by_final_place(self, export_svc, db, tournament, user_alice, user_bob, user_carol):
         _add_participant(db, tournament, user_carol, final_place=1)
