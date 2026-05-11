@@ -1,5 +1,6 @@
 """Part 3: export methods sort participants by final_place (nulls last)."""
 
+import csv
 import io
 
 import openpyxl
@@ -93,8 +94,6 @@ class TestExportExcelSorting:
 
 class TestExportCsvSorting:
     def _parse_csv_usernames(self, csv_text):
-        import csv
-
         reader = csv.DictReader(io.StringIO(csv_text))
         return [row["username"] for row in reader]
 

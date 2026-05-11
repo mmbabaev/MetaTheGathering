@@ -1,23 +1,43 @@
 """Tests for admin handler business logic (AdminHandler methods)."""
 
-import pytest
+from unittest.mock import patch
 
+import pytest
+from sqlalchemy import select
+
+from bot.features import FeatureService
 from bot.handlers.admin import (
     AdminHandler,
     _player_display_label,
     parse_add_player_command,
     parse_bulk_player_line,
 )
+from bot.keyboards import (
+    CB_ADMIN_ARCH_MORE,
+    CB_ADMIN_PICK_ARCH,
+    CB_ADMIN_SET_ARCH,
+    CB_ADMIN_SHOW_FILLED,
+)
 from bot.messages import (
+    ADMIN_ARCH_SAVED,
+    BULK_ADD_EMPTY,
+    CHOOSE_ARCHETYPE,
     MULTIPLE_TOURNAMENTS_MSG,
     NO_ACTIVE_TOURNAMENT,
     NO_DECK_NAME,
     NOT_ADMIN,
+    PARTICIPANT_NOT_FOUND,
     PLAYER_ADDED,
+    REGISTRATION_CLOSED,
     TOURNAMENT_CLOSED_MSG,
+    TOURNAMENT_NOT_FOUND,
 )
+from core import models as m
 from core.models import TournamentStatus
 from core.schemas import TournamentCreate
+from services.aetherhub_import_service import AetherhubImportService
+from services.aetherhub_service import AetherhubPairing, AetherhubRound, AetherhubTournamentData
+from services.feature_flags import FeatureFlags
 
 ADMIN_TG_ID = 9999
 CHAT_ID = 100
@@ -79,11 +99,7 @@ class TestParseBulkPlayerLine:
 @pytest.fixture
 def admin_user(user_svc, svc):
     u = user_svc.get_or_create(tg_id=ADMIN_TG_ID, username="admin", first_name="Admin")
-    from sqlalchemy import select
-
-    from core import models
-
-    stmt = select(models.User).where(models.User.tg_id == ADMIN_TG_ID)
+    stmt = select(m.User).where(m.User.tg_id == ADMIN_TG_ID)
     obj = svc.db.execute(stmt).scalar_one()
     obj.is_admin = True
     svc.db.commit()
@@ -307,10 +323,6 @@ class TestHandleTournamentStatus:
         svc.register_participant(
             tournament_id=active_tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id
         )
-        from sqlalchemy import select
-
-        from core import models as m
-
         p = db.execute(select(m.Participant).where(m.Participant.user_id == user_alice.id)).scalar_one()
         p.confirmed = True
         db.commit()
@@ -318,8 +330,6 @@ class TestHandleTournamentStatus:
         assert "✅" in result.text
 
     def test_shows_all_active_tournaments(self, handler, svc, admin_user, active_tournament):
-        from core.schemas import TournamentCreate
-
         svc.create_tournament(TournamentCreate(title="Second Cup", chat_id=CHAT_ID + 1))
         result = handler.handle_tournament_status(tg_id=ADMIN_TG_ID)
         assert "Weekly" in result.text
@@ -354,22 +364,16 @@ class TestHandleCloseTournament:
 
 class TestIsAdminViaSettings:
     def test_admin_via_settings_ids(self, handler):
-        from unittest.mock import patch
-
         with patch("services.user.settings") as mock_settings:
             mock_settings.admin_ids = [555]
             assert handler.user_svc.is_admin(tg_id=555) is True
 
     def test_non_admin_not_in_settings_or_db(self, handler):
-        from unittest.mock import patch
-
         with patch("services.user.settings") as mock_settings:
             mock_settings.admin_ids = []
             assert handler.user_svc.is_admin(tg_id=42) is False
 
     def test_admin_via_db_is_admin_flag(self, handler, admin_user):
-        from unittest.mock import patch
-
         with patch("services.user.settings") as mock_settings:
             mock_settings.admin_ids = []
             assert handler.user_svc.is_admin(tg_id=ADMIN_TG_ID) is True
@@ -382,10 +386,6 @@ class TestHandleAddMeInvalidState:
     def test_registration_closed_returns_message(self, db, handler, svc, admin_user, active_tournament):
         svc.close_tournament(active_tournament.id)
         # Reopen as ONGOING so it's active but not in REGISTRATION
-        from sqlalchemy import select
-
-        from core import models as m
-
         obj = db.execute(select(m.Tournament).where(m.Tournament.id == active_tournament.id)).scalar_one()
         obj.status = m.TournamentStatus.ONGOING
         db.commit()
@@ -400,10 +400,6 @@ class TestHandleAddMeInvalidState:
 
 class TestHandleAddPlayerInvalidState:
     def test_registration_closed_returns_message(self, db, handler, svc, admin_user, active_tournament, user_alice):
-        from sqlalchemy import select
-
-        from core import models as m
-
         obj = db.execute(select(m.Tournament).where(m.Tournament.id == active_tournament.id)).scalar_one()
         obj.status = m.TournamentStatus.ONGOING
         db.commit()
@@ -421,10 +417,6 @@ class TestHandleAddPlayerInvalidState:
 
 class TestHandleAddPlayersInvalidState:
     def test_registration_closed_marks_line(self, db, handler, svc, admin_user, active_tournament, user_alice):
-        from sqlalchemy import select
-
-        from core import models as m
-
         obj = db.execute(select(m.Tournament).where(m.Tournament.id == active_tournament.id)).scalar_one()
         obj.status = m.TournamentStatus.ONGOING
         db.commit()
@@ -547,14 +539,10 @@ class TestHandleBulkAddByName:
         assert result.text == NOT_ADMIN
 
     def test_empty_names_returns_empty_message(self, handler, admin_user, active_tournament):
-        from bot.messages import BULK_ADD_EMPTY
-
         result = handler.handle_bulk_add_by_name(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=[])
         assert result.text == BULK_ADD_EMPTY
 
     def test_blank_lines_only_returns_empty(self, handler, admin_user, active_tournament):
-        from bot.messages import BULK_ADD_EMPTY
-
         result = handler.handle_bulk_add_by_name(
             tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["  ", ""]
         )
@@ -596,14 +584,10 @@ class TestHandleBulkAddByName:
         assert "✅ Новая Вера" in result.text
 
     def test_tournament_not_found(self, handler, admin_user):
-        from bot.messages import TOURNAMENT_NOT_FOUND
-
         result = handler.handle_bulk_add_by_name(tg_id=ADMIN_TG_ID, tournament_id=99999, names=["Иван"])
         assert result.text == TOURNAMENT_NOT_FOUND
 
     def test_registration_closed(self, handler, svc, admin_user, active_tournament):
-        from bot.messages import REGISTRATION_CLOSED
-
         svc.close_tournament(active_tournament.id)
         result = handler.handle_bulk_add_by_name(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["Иван"])
         assert result.text == REGISTRATION_CLOSED
@@ -627,8 +611,6 @@ class TestHandleAdminStatus:
         assert result.keyboard is not None
 
     def test_tournament_not_found(self, handler, admin_user):
-        from bot.messages import TOURNAMENT_NOT_FOUND
-
         result = handler.handle_admin_status(tg_id=ADMIN_TG_ID, tournament_id=99999)
         assert result.text == TOURNAMENT_NOT_FOUND
         assert result.is_alert
@@ -639,8 +621,6 @@ class TestHandleAdminStatus:
         svc.bulk_add_participants(active_tournament.id, [(user.id, "Тест")])
         result = handler.handle_admin_status(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
         buttons = [b for row in result.keyboard.inline_keyboard for b in row]
-        from bot.keyboards import CB_ADMIN_PICK_ARCH
-
         assert any(b.callback_data.startswith(CB_ADMIN_PICK_ARCH) for b in buttons)
 
     def test_keyboard_filled_participant_hidden_by_default(
@@ -651,8 +631,6 @@ class TestHandleAdminStatus:
         svc.register_participant(tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
         result = handler.handle_admin_status(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
         buttons = [b for row in result.keyboard.inline_keyboard for b in row]
-        from bot.keyboards import CB_ADMIN_PICK_ARCH, CB_ADMIN_SHOW_FILLED
-
         assert not any(b.callback_data.startswith(CB_ADMIN_PICK_ARCH) for b in buttons)
         assert any(b.callback_data.startswith(CB_ADMIN_SHOW_FILLED) for b in buttons)
 
@@ -664,8 +642,6 @@ class TestHandleAdminStatus:
         svc.register_participant(tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
         result = handler.handle_admin_show_filled(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
         buttons = [b for row in result.keyboard.inline_keyboard for b in row]
-        from bot.keyboards import CB_ADMIN_PICK_ARCH
-
         assert any(b.callback_data.startswith(CB_ADMIN_PICK_ARCH) for b in buttons)
 
     def test_button_label_shows_familiya_imya_order(self, handler, svc, user_svc, admin_user, active_tournament):
@@ -705,30 +681,22 @@ class TestHandleAdminPickArch:
         return svc.get_participant(active_tournament.id, user.id)
 
     def test_non_admin_blocked_when_feature_disabled(self, handler, ff_svc, active_tournament, participant):
-        from services.feature_flags import FeatureFlags
-
         ff_svc.toggle(FeatureFlags.RECORD_OPPONENTS)  # default true → false
         result = handler.handle_pick_participant_arch(tg_id=42, participant_id=participant.id)
         assert result.text == NOT_ADMIN
 
     def test_returns_archetype_keyboard(self, handler, admin_user, active_tournament, participant, archetype_burn):
         result = handler.handle_pick_participant_arch(tg_id=ADMIN_TG_ID, participant_id=participant.id)
-        from bot.messages import CHOOSE_ARCHETYPE
-
         assert result.text == CHOOSE_ARCHETYPE
         assert result.keyboard is not None
 
     def test_participant_not_found(self, handler, admin_user):
-        from bot.messages import PARTICIPANT_NOT_FOUND
-
         result = handler.handle_pick_participant_arch(tg_id=ADMIN_TG_ID, participant_id=99999)
         assert result.text == PARTICIPANT_NOT_FOUND
         assert result.is_alert
 
     def test_keyboard_uses_admin_callbacks(self, handler, admin_user, active_tournament, participant, archetype_burn):
         result = handler.handle_pick_participant_arch(tg_id=ADMIN_TG_ID, participant_id=participant.id)
-        from bot.keyboards import CB_ADMIN_SET_ARCH
-
         buttons = [b for row in result.keyboard.inline_keyboard for b in row]
         assert any(b.callback_data.startswith(CB_ADMIN_SET_ARCH) for b in buttons)
 
@@ -746,8 +714,6 @@ class TestHandleAdminSetArch:
     def test_non_admin_blocked_when_feature_disabled(
         self, handler, ff_svc, active_tournament, participant, archetype_burn
     ):
-        from services.feature_flags import FeatureFlags
-
         ff_svc.toggle(FeatureFlags.RECORD_OPPONENTS)  # default true → false
         result = handler.handle_set_participant_arch(
             tg_id=42, participant_id=participant.id, archetype_id=archetype_burn.id
@@ -760,16 +726,12 @@ class TestHandleAdminSetArch:
         result = handler.handle_set_participant_arch(
             tg_id=ADMIN_TG_ID, participant_id=participant.id, archetype_id=archetype_burn.id
         )
-        from bot.messages import ADMIN_ARCH_SAVED
-
         assert "Burn" in result.text
         assert not result.is_alert
         updated = svc.get_participant(active_tournament.id, participant.user_id)
         assert updated.archetype_id == archetype_burn.id
 
     def test_participant_not_found(self, handler, admin_user, archetype_burn):
-        from bot.messages import PARTICIPANT_NOT_FOUND
-
         result = handler.handle_set_participant_arch(
             tg_id=ADMIN_TG_ID, participant_id=99999, archetype_id=archetype_burn.id
         )
@@ -788,8 +750,6 @@ class TestHandleAdminCustomArchText:
         return svc.get_participant(active_tournament.id, user.id)
 
     def test_non_admin_blocked_when_feature_disabled(self, handler, ff_svc, participant):
-        from services.feature_flags import FeatureFlags
-
         ff_svc.toggle(FeatureFlags.RECORD_OPPONENTS)  # default true → false
         result = handler.handle_set_participant_custom_arch(tg_id=42, participant_id=participant.id, arch_name="Elves")
         assert result.text == NOT_ADMIN
@@ -798,8 +758,6 @@ class TestHandleAdminCustomArchText:
         result = handler.handle_set_participant_custom_arch(
             tg_id=ADMIN_TG_ID, participant_id=participant.id, arch_name="Turbo Fog"
         )
-        from bot.messages import ADMIN_ARCH_SAVED
-
         assert "Turbo Fog" in result.text
         assert not result.is_alert
 
@@ -817,8 +775,6 @@ class TestHandleAdminCustomArchText:
         assert any("Назад" in t for t in buttons)
 
     def test_participant_not_found(self, handler, admin_user):
-        from bot.messages import PARTICIPANT_NOT_FOUND
-
         result = handler.handle_set_participant_custom_arch(tg_id=ADMIN_TG_ID, participant_id=99999, arch_name="Elves")
         assert result.text == PARTICIPANT_NOT_FOUND
         assert result.is_alert
@@ -829,19 +785,17 @@ class TestHandleAdminPickArchUsesParticipantHistory:
 
     @pytest.fixture
     def setup(self, svc, user_svc, arch_svc, active_tournament):
-        from core.schemas import TournamentCreate as TC
-
         burn = arch_svc.get_or_create_by_name("Burn")
         elves = arch_svc.get_or_create_by_name("Elves")
 
         # Прошлый турнир: админ играл Burn
-        t_admin = svc.create_tournament(TC(title="Admin Hist", chat_id=CHAT_ID + 50, slug="ah"))
+        t_admin = svc.create_tournament(TournamentCreate(title="Admin Hist", chat_id=CHAT_ID + 50, slug="ah"))
         admin = user_svc.get_or_create(tg_id=ADMIN_TG_ID, username="admin", first_name="Admin")
         svc.register_participant(tournament_id=t_admin.id, user_id=admin.id, archetype_id=burn.id)
 
         # Прошлый турнир: игрок играл Elves
         player = user_svc.get_or_create(tg_id=8888, username=None, first_name="Player")
-        t_player = svc.create_tournament(TC(title="Player Hist", chat_id=CHAT_ID + 51, slug="ph"))
+        t_player = svc.create_tournament(TournamentCreate(title="Player Hist", chat_id=CHAT_ID + 51, slug="ph"))
         svc.register_participant(tournament_id=t_player.id, user_id=player.id, archetype_id=elves.id)
 
         # Активный турнир: игрок добавлен без колоды
@@ -871,20 +825,18 @@ class TestHandleAdminPickArchUsesParticipantHistory:
         двумя другими игроками (2 использования). Для игрока без истории топ должен
         показать «Aaa Deck» первой (она глобально популярнее).
         """
-        from core.schemas import TournamentCreate as TC
-
         aaa = arch_svc.get_or_create_by_name("Aaa Deck")
         zzz = arch_svc.get_or_create_by_name("Zzz Deck")
 
         # Прошлый турнир: админ играл Zzz (1 раз)
-        t_admin = svc.create_tournament(TC(title="Admin Z hist", chat_id=CHAT_ID + 60, slug="az"))
+        t_admin = svc.create_tournament(TournamentCreate(title="Admin Z hist", chat_id=CHAT_ID + 60, slug="az"))
         admin = user_svc.get_or_create(tg_id=ADMIN_TG_ID, username="admin", first_name="Admin")
         svc.register_participant(tournament_id=t_admin.id, user_id=admin.id, archetype_id=zzz.id)
 
         # Ещё два других игрока играли Aaa (больше использований у Aaa)
         u1 = user_svc.get_or_create(tg_id=7701, username=None, first_name="Player1")
         u2 = user_svc.get_or_create(tg_id=7702, username=None, first_name="Player2")
-        t_other = svc.create_tournament(TC(title="Other hist", chat_id=CHAT_ID + 61, slug="oh"))
+        t_other = svc.create_tournament(TournamentCreate(title="Other hist", chat_id=CHAT_ID + 61, slug="oh"))
         svc.register_participant(tournament_id=t_other.id, user_id=u1.id, archetype_id=aaa.id)
         svc.register_participant(tournament_id=t_other.id, user_id=u2.id, archetype_id=aaa.id)
 
@@ -927,8 +879,6 @@ class TestStatusReturnedAfterBulkAdd:
 
     def test_result_has_participants_keyboard(self, handler, admin_user, active_tournament):
         """После добавления клавиатура содержит кнопки участников."""
-        from bot.keyboards import CB_ADMIN_PICK_ARCH
-
         result = handler.handle_bulk_add_by_name(
             tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["Иванов Иван"]
         )
@@ -953,8 +903,6 @@ class TestStatusReturnedAfterBulkAdd:
         )
         assert "✅ Первая Анна" in result.text
         assert "✅ Второй Борис" in result.text
-        from bot.keyboards import CB_ADMIN_PICK_ARCH
-
         cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
         assert sum(1 for cb in cbs if cb.startswith(CB_ADMIN_PICK_ARCH)) == 2
 
@@ -989,8 +937,6 @@ class TestStatusReturnedAfterSetArch:
     def test_result_has_participants_keyboard(
         self, handler, admin_user, active_tournament, participant, archetype_burn
     ):
-        from bot.keyboards import CB_ADMIN_SHOW_FILLED
-
         result = handler.handle_set_participant_arch(
             tg_id=ADMIN_TG_ID, participant_id=participant.id, archetype_id=archetype_burn.id
         )
@@ -1111,18 +1057,12 @@ class TestHandleAdminOpponents:
         return user_svc.get_or_create(tg_id=8800, username=None, first_name="Bob", last_name="Smith")
 
     def test_feature_disabled_blocks_access(self, svc, user_svc, arch_svc, keyboards, ff_svc):
-        from bot.features import FeatureService
-        from services.feature_flags import FeatureFlags
-
         ff_svc.toggle(FeatureFlags.RECORD_OPPONENTS)  # default is true → now false
         disabled_handler = AdminHandler(svc, user_svc, arch_svc, keyboards, FeatureService(ff_svc))
         result = disabled_handler.handle_fill_opponents(tg_id=1, tournament_id=1)
         assert result.is_alert
 
     def test_feature_enabled_allows_non_admin(self, handler, db, user_svc, active_tournament):
-        from services.aetherhub_import_service import AetherhubImportService
-        from services.aetherhub_service import AetherhubPairing, AetherhubRound, AetherhubTournamentData
-
         user_svc.get_or_create(tg_id=7777, username=None, first_name="Regular", last_name=None)
         user_svc.get_or_create(tg_id=8800, username=None, first_name="Bob", last_name="Smith")
         data = AetherhubTournamentData(
@@ -1147,9 +1087,6 @@ class TestHandleAdminOpponents:
         assert result.is_alert
 
     def test_returns_unfilled_opponents(self, db, handler, svc, user_svc, admin_user, active_tournament):
-        from services.aetherhub_import_service import AetherhubImportService
-        from services.aetherhub_service import AetherhubPairing, AetherhubRound, AetherhubTournamentData
-
         # admin_user fixture creates first_name="Admin" (no last_name) — match by single word
         user_svc.get_or_create(tg_id=8800, username=None, first_name="Bob", last_name="Smith")
         import_svc = AetherhubImportService(db)
@@ -1169,15 +1106,10 @@ class TestHandleAdminOpponents:
         import_svc.import_tournament(active_tournament.id, data)
         result = handler.handle_fill_opponents(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
         assert not result.is_alert
-        from bot.keyboards import CB_ADMIN_PICK_ARCH
-
         cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
         assert any(cb.startswith(CB_ADMIN_PICK_ARCH) for cb in cbs)
 
     def test_all_filled_returns_alert(self, db, handler, svc, user_svc, arch_svc, admin_user, active_tournament):
-        from services.aetherhub_import_service import AetherhubImportService
-        from services.aetherhub_service import AetherhubPairing, AetherhubRound, AetherhubTournamentData
-
         opp = user_svc.get_or_create(tg_id=8800, username=None, first_name="Bob", last_name="Smith")
         import_svc = AetherhubImportService(db)
         data = AetherhubTournamentData(

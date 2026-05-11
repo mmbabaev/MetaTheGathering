@@ -6,7 +6,9 @@ from unittest.mock import MagicMock
 
 import openpyxl
 import pytest
+from sqlalchemy import select
 
+from core.models import Participant, User
 from core.schemas import TournamentCreate
 from services.aetherhub_import_service import AetherhubImportService
 from services.aetherhub_service import AetherhubService
@@ -72,10 +74,6 @@ def test_import_aetherhub(db, tournament, aetherhub_data):
 
     participants = TournamentService(db).list_participants_for_tournament(tournament.id)
     assert len(participants) == 4
-
-    from sqlalchemy import select
-
-    from core.models import Participant, User
 
     rows = db.execute(
         select(Participant, User)

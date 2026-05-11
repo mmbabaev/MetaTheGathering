@@ -24,8 +24,6 @@ def handler(db):
 
 @pytest.fixture
 def user_alice(db):
-    from services.user import UserService
-
     svc = UserService(db)
     return svc.get_or_create(tg_id=TG_ID, username="alice", first_name="Alice", last_name="Smith")
 
