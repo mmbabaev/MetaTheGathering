@@ -8,7 +8,11 @@ from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from bot.handlers.admin import parse_add_player_command, parse_bulk_player_line
-from bot.keyboards import admin_more_keyboard, export_menu_keyboard, reveal_decks_confirm_keyboard
+from bot.keyboards import (
+    admin_more_keyboard,
+    export_menu_keyboard,
+    reveal_decks_confirm_keyboard,
+)
 from bot.messages import ADD_PLAYERS_USAGE, BULK_ADD_PROMPT, TELEGRAM_USER_LOOKUP_FAILED
 from bot.scheduler import format_schedule_text
 from bot.telegram.common import log_event as _log
@@ -653,3 +657,92 @@ async def cmd_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     finally:
         db.close()
     await msg.reply_text(result.text)
+
+
+async def callback_admin_player_actions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка ⋯ у участника — показывает меню действий."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 2)
+    if ids is None:
+        return
+    participant_id, tournament_id = ids
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_player_actions(user.id, participant_id, tournament_id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+        await query.answer()
+    finally:
+        db.close()
+
+
+async def callback_admin_show_opponents(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка «👥 Показать оппонентов» — список оппонентов по пейрингам."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 2)
+    if ids is None:
+        return
+    participant_id, tournament_id = ids
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_player_opponents(user.id, participant_id, tournament_id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+        await query.answer()
+    finally:
+        db.close()
+
+
+async def callback_admin_remove_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка «🗑 Удалить из турнира» — запрашивает подтверждение."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 2)
+    if ids is None:
+        return
+    participant_id, tournament_id = ids
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_remove_participant_confirm(user.id, participant_id, tournament_id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+        await query.answer()
+    finally:
+        db.close()
+
+
+async def callback_admin_remove_do(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Подтверждение удаления участника — выполняет удаление."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 2)
+    if ids is None:
+        return
+    participant_id, tournament_id = ids
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_remove_participant(user.id, participant_id, tournament_id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        _log("admin_remove_participant", user, participant_id=participant_id, tournament_id=tournament_id)
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+        await query.answer()
+    finally:
+        db.close()

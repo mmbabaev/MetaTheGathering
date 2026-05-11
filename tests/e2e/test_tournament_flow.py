@@ -11,9 +11,11 @@ from sqlalchemy import select
 from core.models import Participant, User
 from core.schemas import TournamentCreate
 from services.aetherhub_import_service import AetherhubImportService
+from services.aetherhub_models import AetherhubPairing, AetherhubRound, AetherhubTournamentData
 from services.aetherhub_service import AetherhubService
 from services.export import ExportService
 from services.tournament import TournamentService
+from services.user import UserService
 from tests.e2e.conftest import CHAT_ID
 
 _FIXTURES = Path(__file__).resolve().parents[2] / "scripts" / "aetherhub" / "fixtures"
@@ -121,6 +123,58 @@ def test_full_flow(db, svc, aetherhub_data, tmp_path):
     assert last[0].id == t.id
     svc.delete_tournament(last[0].id)
     assert svc.list_tournaments_for_chat(CHAT_ID) == []
+
+
+# ── get_player_opponents: e2e ─────────────────────────────────────────────────
+
+
+def test_get_player_opponents_full_flow(db, svc, aetherhub_data):
+    """Полный флоу: create → import → get_player_opponents для конкретного участника."""
+    t = svc.create_tournament(TournamentCreate(title="Opponents Flow", chat_id=CHAT_ID))
+    AetherhubImportService(db).import_tournament(t.id, aetherhub_data)
+
+    import_svc = AetherhubImportService(db)
+    ivan = import_svc.find_user_by_name("Иван Иванов")
+    assert ivan is not None, "Иван Иванов not found after import"
+
+    ivan_p = import_svc._get_participant(t.id, ivan.id)
+    assert ivan_p is not None
+
+    opps, err = import_svc.get_player_opponents(t.id, ivan_p.id)
+    assert err is None
+    assert len(opps) == 2
+
+    round_to_opponent = {o.round_number: o.opponent_name for o in opps}
+    assert round_to_opponent[1] == "Пётр Петров"
+    assert round_to_opponent[2] == "Сидор Сидоров"
+
+    assert all(o.opponent_user is not None for o in opps)
+    assert all(o.opponent_participant is not None for o in opps)
+
+    opp_names_in_db = {o.opponent_user.first_name for o in opps}
+    assert "Пётр" in opp_names_in_db
+    assert "Сидор" in opp_names_in_db
+
+
+def test_get_player_opponents_bye(db, svc):
+    """Bye отображается как opponent_name=None."""
+    t = svc.create_tournament(TournamentCreate(title="Bye Test", chat_id=CHAT_ID))
+    data = AetherhubTournamentData(
+        url="http://x",
+        players=["Иван Иванов"],
+        rounds=[AetherhubRound(number=1, pairings=[AetherhubPairing(player="Иван Иванов", opponent=None)])],
+        standings=["Иван Иванов"],
+    )
+    import_svc = AetherhubImportService(db)
+    import_svc.import_tournament(t.id, data)
+    ivan = import_svc.find_user_by_name("Иван Иванов")
+    ivan_p = import_svc._get_participant(t.id, ivan.id)
+
+    opps, err = import_svc.get_player_opponents(t.id, ivan_p.id)
+    assert err is None
+    assert len(opps) == 1
+    assert opps[0].opponent_name is None
+    assert opps[0].opponent_user is None
 
 
 # ── CLI-style integration: реальные HTML fixtures, полный pipeline ────────────

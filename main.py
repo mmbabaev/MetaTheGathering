@@ -22,8 +22,12 @@ from bot.keyboards import (
     CB_ADMIN_MORE,
     CB_ADMIN_OPPONENTS,
     CB_ADMIN_PICK_ARCH,
+    CB_ADMIN_PLAYER_ACTIONS,
+    CB_ADMIN_REMOVE_CONFIRM,
+    CB_ADMIN_REMOVE_DO,
     CB_ADMIN_SET_ARCH,
     CB_ADMIN_SHOW_FILLED,
+    CB_ADMIN_SHOW_OPPONENTS,
     CB_AETHERHUB_CANCEL,
     CB_AETHERHUB_CONFIRM,
     CB_AETHERHUB_IMPORT,
@@ -226,6 +230,10 @@ def main() -> None:
         CallbackQueryHandler(admin.callback_delete_tournament_cancel, pattern=f"^{CB_DELETE_TOURNAMENT_CANCEL}:")
     )
     app.add_handler(CallbackQueryHandler(admin.callback_admin_show_filled, pattern=f"^{CB_ADMIN_SHOW_FILLED}:"))
+    app.add_handler(CallbackQueryHandler(admin.callback_admin_player_actions, pattern=f"^{CB_ADMIN_PLAYER_ACTIONS}:"))
+    app.add_handler(CallbackQueryHandler(admin.callback_admin_show_opponents, pattern=f"^{CB_ADMIN_SHOW_OPPONENTS}:"))
+    app.add_handler(CallbackQueryHandler(admin.callback_admin_remove_confirm, pattern=f"^{CB_ADMIN_REMOVE_CONFIRM}:"))
+    app.add_handler(CallbackQueryHandler(admin.callback_admin_remove_do, pattern=f"^{CB_ADMIN_REMOVE_DO}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_reveal_decks, pattern=f"^{CB_REVEAL_DECKS}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_reveal_decks_confirm, pattern=f"^{CB_REVEAL_DECKS_CONFIRM}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_reveal_decks_cancel, pattern=f"^{CB_REVEAL_DECKS_CANCEL}:"))

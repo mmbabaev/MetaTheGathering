@@ -22,6 +22,7 @@ from bot.messages import (
     TOURNAMENT_ALREADY_EXISTS_MSG,
     TOURNAMENT_CLOSED_MSG,
     TOURNAMENT_NOT_FOUND,
+    format_participant_name,
     format_tournament_status,
     sort_participants,
 )
@@ -353,15 +354,30 @@ class AdminHandler:
         return self._tournament_status_result(tournament_id, prefix="🙈 Колоды скрыты.")
 
     def _archetype_keyboard_for_participant(
-        self, participant_id: int, player_tg_id: int | None, expanded: bool = False, caller_tg_id: int | None = None
+        self,
+        participant_id: int,
+        player_tg_id: int | None,
+        expanded: bool = False,
+        caller_tg_id: int | None = None,
+        tournament_id: int | None = None,
     ) -> HandlerResult:
         """Строит HandlerResult с клавиатурой архетипов для участника."""
         arch_list, has_more = build_archetype_menu(self.arch_svc, player_tg_id, expanded)
         caller = self.user_svc.get_by_tg_id(caller_tg_id) if caller_tg_id else None
         show_emoji = not (caller and caller.hide_deck_emoji)
+        is_admin = self.user_svc.is_admin(caller_tg_id) if caller_tg_id else False
+        has_pairings = AetherhubImportService(self.svc.db).has_pairings(tournament_id) if tournament_id else False
         return HandlerResult(
             CHOOSE_ARCHETYPE,
-            keyboard=self.keyboards.admin_archetype_select_keyboard(participant_id, arch_list, has_more, show_emoji),
+            keyboard=self.keyboards.admin_archetype_select_keyboard(
+                participant_id,
+                arch_list,
+                has_more,
+                show_emoji,
+                tournament_id=tournament_id,
+                is_admin=is_admin,
+                has_pairings=has_pairings,
+            ),
         )
 
     def handle_pick_participant_arch(self, tg_id: int, participant_id: int, expanded: bool = False) -> HandlerResult:
@@ -373,7 +389,9 @@ class AdminHandler:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
         user = self.user_svc.get_by_id(p.user_id)
         player_tg_id = user.tg_id if user else None
-        return self._archetype_keyboard_for_participant(participant_id, player_tg_id, expanded, caller_tg_id=tg_id)
+        return self._archetype_keyboard_for_participant(
+            participant_id, player_tg_id, expanded, caller_tg_id=tg_id, tournament_id=p.tournament_id
+        )
 
     def handle_pick_participant_arch_more(self, tg_id: int, participant_id: int) -> HandlerResult:
         """Разворачивает полный список архетипов для участника (история + топ)."""
@@ -407,6 +425,100 @@ class AdminHandler:
         except errors.ParticipantNotFound:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
         return self._tournament_status_result(p.tournament_id, prefix=ADMIN_ARCH_SAVED.format(archetype_name=arch.name))
+
+    def handle_player_actions(self, tg_id: int, participant_id: int, tournament_id: int) -> HandlerResult:
+        """Меню действий с игроком (⋯). Доступно всем; удаление — только для админов."""
+        is_admin = self.user_svc.is_admin(tg_id)
+        p = self.svc.get_participant_by_id(participant_id)
+        if p is None:
+            return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
+        user = self.user_svc.get_by_id(p.user_id)
+        has_pairings = AetherhubImportService(self.svc.db).has_pairings(tournament_id)
+        name = (
+            format_participant_name(user.first_name if user else None, user.last_name if user else None) or f"id{p.id}"
+        )
+        arch_name = p.archetype.name if p.archetype else "колода не указана"
+        username_str = f"\n@{user.username}" if user and user.username else ""
+        text = f"Игрок: {name}{username_str}\nКолода: {arch_name}"
+        return HandlerResult(
+            text,
+            keyboard=self.keyboards.admin_player_actions_keyboard(
+                participant_id, tournament_id, is_admin=is_admin, has_pairings=has_pairings
+            ),
+        )
+
+    def handle_player_opponents(self, tg_id: int, participant_id: int, tournament_id: int) -> HandlerResult:
+        """Список оппонентов игрока из AetherHub-пейрингов."""
+        p = self.svc.get_participant_by_id(participant_id)
+        if p is None:
+            return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
+        user = self.user_svc.get_by_id(p.user_id)
+        player_name = (
+            format_participant_name(user.first_name if user else None, user.last_name if user else None) or f"id{p.id}"
+        )
+        opponents, err = AetherhubImportService(self.svc.db).get_player_opponents(tournament_id, participant_id)
+        _errors = {
+            "no_pairings": "Пейринги не импортированы для этого турнира.",
+            "not_in_pairings": "Игрок не найден в пейрингах.",
+            "not_found": PARTICIPANT_NOT_FOUND,
+        }
+        if err:
+            return HandlerResult(_errors.get(err, err), is_alert=True)
+        lines = [f"Оппоненты {player_name}:\n"]
+        for opp in opponents:
+            if opp.opponent_name is None:
+                lines.append(f"Раунд {opp.round_number}: bye")
+            else:
+                opp_user = opp.opponent_user
+                opp_display = (
+                    format_participant_name(
+                        opp_user.first_name if opp_user else None,
+                        opp_user.last_name if opp_user else None,
+                    )
+                    or opp.opponent_name
+                )
+                username_part = f" (@{opp_user.username})" if opp_user and opp_user.username else ""
+                opp_part = opp.opponent_participant
+                deck_part = opp_part.archetype.name if opp_part and opp_part.archetype else "колода не указана"
+                lines.append(f"Раунд {opp.round_number}: {opp_display}{username_part} — {deck_part}")
+        return HandlerResult(
+            "\n".join(lines),
+            keyboard=self.keyboards.admin_opponents_keyboard(participant_id, tournament_id),
+        )
+
+    def handle_remove_participant_confirm(self, tg_id: int, participant_id: int, tournament_id: int) -> HandlerResult:
+        """Запрос подтверждения перед удалением участника."""
+        if not self.user_svc.is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN, is_alert=True)
+        p = self.svc.get_participant_by_id(participant_id)
+        if p is None:
+            return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
+        user = self.user_svc.get_by_id(p.user_id)
+        name = (
+            format_participant_name(user.first_name if user else None, user.last_name if user else None) or f"id{p.id}"
+        )
+        username_str = f" (@{user.username})" if user and user.username else ""
+        return HandlerResult(
+            f"Удалить {name}{username_str} из турнира?",
+            keyboard=self.keyboards.admin_remove_confirm_keyboard(participant_id, tournament_id),
+        )
+
+    def handle_remove_participant(self, tg_id: int, participant_id: int, tournament_id: int) -> HandlerResult:
+        """Удаляет участника из турнира и возвращает обновлённый статус."""
+        if not self.user_svc.is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN, is_alert=True)
+        p = self.svc.get_participant_by_id(participant_id)
+        if p is None:
+            return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
+        user = self.user_svc.get_by_id(p.user_id)
+        name = (
+            format_participant_name(user.first_name if user else None, user.last_name if user else None) or f"id{p.id}"
+        )
+        try:
+            self.svc.unregister_participant(tournament_id, p.user_id)
+        except errors.ParticipantNotFound:
+            return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
+        return self._tournament_status_result(tournament_id, prefix=f"🗑 {name} удалён из турнира.")
 
     def handle_fill_opponents(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Показывает незаполненных оппонентов пользователя из AetherHub-пейрингов."""

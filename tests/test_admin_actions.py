@@ -15,8 +15,13 @@ from bot.handlers.admin import (
 from bot.keyboards import (
     CB_ADMIN_ARCH_MORE,
     CB_ADMIN_PICK_ARCH,
+    CB_ADMIN_PLAYER_ACTIONS,
+    CB_ADMIN_REMOVE_CONFIRM,
+    CB_ADMIN_REMOVE_DO,
     CB_ADMIN_SET_ARCH,
     CB_ADMIN_SHOW_FILLED,
+    CB_ADMIN_SHOW_OPPONENTS,
+    CB_TSTATUS,
 )
 from bot.messages import (
     ADMIN_ARCH_SAVED,
@@ -36,7 +41,7 @@ from core import models as m
 from core.models import TournamentStatus
 from core.schemas import TournamentCreate
 from services.aetherhub_import_service import AetherhubImportService
-from services.aetherhub_service import AetherhubPairing, AetherhubRound, AetherhubTournamentData
+from services.aetherhub_models import AetherhubPairing, AetherhubRound, AetherhubTournamentData
 from services.feature_flags import FeatureFlags
 
 ADMIN_TG_ID = 9999
@@ -621,6 +626,7 @@ class TestHandleAdminStatus:
         svc.bulk_add_participants(active_tournament.id, [(user.id, "Тест")])
         result = handler.handle_admin_status(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
         buttons = [b for row in result.keyboard.inline_keyboard for b in row]
+
         assert any(b.callback_data.startswith(CB_ADMIN_PICK_ARCH) for b in buttons)
 
     def test_keyboard_filled_participant_hidden_by_default(
@@ -631,6 +637,7 @@ class TestHandleAdminStatus:
         svc.register_participant(tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
         result = handler.handle_admin_status(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
         buttons = [b for row in result.keyboard.inline_keyboard for b in row]
+
         assert not any(b.callback_data.startswith(CB_ADMIN_PICK_ARCH) for b in buttons)
         assert any(b.callback_data.startswith(CB_ADMIN_SHOW_FILLED) for b in buttons)
 
@@ -642,6 +649,7 @@ class TestHandleAdminStatus:
         svc.register_participant(tournament_id=active_tournament.id, user_id=user.id, archetype_id=archetype_burn.id)
         result = handler.handle_admin_show_filled(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
         buttons = [b for row in result.keyboard.inline_keyboard for b in row]
+
         assert any(b.callback_data.startswith(CB_ADMIN_PICK_ARCH) for b in buttons)
 
     def test_button_label_shows_familiya_imya_order(self, handler, svc, user_svc, admin_user, active_tournament):
@@ -699,6 +707,35 @@ class TestHandleAdminPickArch:
         result = handler.handle_pick_participant_arch(tg_id=ADMIN_TG_ID, participant_id=participant.id)
         buttons = [b for row in result.keyboard.inline_keyboard for b in row]
         assert any(b.callback_data.startswith(CB_ADMIN_SET_ARCH) for b in buttons)
+
+    def test_admin_sees_delete_button(self, handler, admin_user, active_tournament, participant):
+        result = handler.handle_pick_participant_arch(tg_id=ADMIN_TG_ID, participant_id=participant.id)
+        cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
+        assert any(cb.startswith(CB_ADMIN_REMOVE_CONFIRM) for cb in cbs)
+
+    def test_non_admin_no_delete_button(self, handler, svc, user_svc, active_tournament, participant):
+        non_admin = user_svc.get_or_create(tg_id=5555, username=None, first_name="Regular")
+        result = handler.handle_pick_participant_arch(tg_id=non_admin.tg_id, participant_id=participant.id)
+        cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
+        assert not any(cb.startswith(CB_ADMIN_REMOVE_CONFIRM) for cb in cbs)
+
+    def test_opponents_button_shown_when_pairings_exist(
+        self, db, handler, admin_user, active_tournament, participant, user_alice, arch_svc
+    ):
+        _import_pairings(db, active_tournament.id, admin_user, user_alice, arch_svc)
+        result = handler.handle_pick_participant_arch(tg_id=ADMIN_TG_ID, participant_id=participant.id)
+        cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
+        assert any(cb.startswith(CB_ADMIN_SHOW_OPPONENTS) for cb in cbs)
+
+    def test_opponents_button_hidden_when_no_pairings(self, handler, admin_user, active_tournament, participant):
+        result = handler.handle_pick_participant_arch(tg_id=ADMIN_TG_ID, participant_id=participant.id)
+        cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
+        assert not any(cb.startswith(CB_ADMIN_SHOW_OPPONENTS) for cb in cbs)
+
+    def test_back_button_points_to_tournament_status(self, handler, admin_user, active_tournament, participant):
+        result = handler.handle_pick_participant_arch(tg_id=ADMIN_TG_ID, participant_id=participant.id)
+        cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
+        assert any(cb == f"{CB_TSTATUS}:{active_tournament.id}" for cb in cbs)
 
 
 # --- handle_set_participant_arch ---
@@ -879,6 +916,7 @@ class TestStatusReturnedAfterBulkAdd:
 
     def test_result_has_participants_keyboard(self, handler, admin_user, active_tournament):
         """После добавления клавиатура содержит кнопки участников."""
+
         result = handler.handle_bulk_add_by_name(
             tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["Иванов Иван"]
         )
@@ -903,6 +941,7 @@ class TestStatusReturnedAfterBulkAdd:
         )
         assert "✅ Первая Анна" in result.text
         assert "✅ Второй Борис" in result.text
+
         cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
         assert sum(1 for cb in cbs if cb.startswith(CB_ADMIN_PICK_ARCH)) == 2
 
@@ -1106,6 +1145,7 @@ class TestHandleAdminOpponents:
         import_svc.import_tournament(active_tournament.id, data)
         result = handler.handle_fill_opponents(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
         assert not result.is_alert
+
         cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
         assert any(cb.startswith(CB_ADMIN_PICK_ARCH) for cb in cbs)
 
@@ -1132,3 +1172,194 @@ class TestHandleAdminOpponents:
         result = handler.handle_fill_opponents(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
         assert result.is_alert
         assert "заполнены" in result.text
+
+
+# ── Helpers for player actions tests ─────────────────────────────────────────
+
+
+def _import_pairings(db, tournament_id, admin_user, user_alice, arch_svc):
+    """Import a 2-player tournament with pairings. Admin vs Alice."""
+    admin_name = "Admin Test"
+    alice_name = "Alice Smith"
+    data = AetherhubTournamentData(
+        url="http://x",
+        players=[admin_name, alice_name],
+        rounds=[
+            AetherhubRound(
+                number=1,
+                pairings=[
+                    AetherhubPairing(player=admin_name, opponent=alice_name),
+                    AetherhubPairing(player=alice_name, opponent=admin_name),
+                ],
+            )
+        ],
+        standings=[admin_name, alice_name],
+    )
+    AetherhubImportService(db).import_tournament(tournament_id, data)
+
+
+# ── TestHandlePlayerActions ───────────────────────────────────────────────────
+
+
+class TestHandlePlayerActions:
+    def test_participant_not_found_returns_alert(self, handler, admin_user, active_tournament):
+        result = handler.handle_player_actions(ADMIN_TG_ID, participant_id=99999, tournament_id=active_tournament.id)
+        assert result.is_alert
+        assert PARTICIPANT_NOT_FOUND in result.text
+
+    def test_shows_player_name_and_deck(self, handler, svc, admin_user, active_tournament, user_alice, arch_svc):
+        burn = arch_svc.get_or_create_by_name("Burn")
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id, archetype_id=burn.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_player_actions(ADMIN_TG_ID, p.id, active_tournament.id)
+        assert not result.is_alert
+        assert "Alice" in result.text
+        assert "Burn" in result.text
+
+    def test_admin_sees_delete_button(self, handler, svc, admin_user, active_tournament, user_alice):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_player_actions(ADMIN_TG_ID, p.id, active_tournament.id)
+        cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
+        assert any(cb.startswith(CB_ADMIN_REMOVE_DO[:6]) for cb in cbs)
+
+    def test_non_admin_no_delete_button(self, handler, svc, user_svc, active_tournament, user_alice, user_bob):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_player_actions(user_bob.tg_id, p.id, active_tournament.id)
+        cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
+        assert not any(cb.startswith("adm_rm") for cb in cbs)
+
+    def test_opponents_button_shown_when_pairings_exist(
+        self, db, handler, svc, admin_user, active_tournament, user_alice, arch_svc
+    ):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        _import_pairings(db, active_tournament.id, admin_user, user_alice, arch_svc)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_player_actions(ADMIN_TG_ID, p.id, active_tournament.id)
+        cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
+        assert any(cb.startswith(CB_ADMIN_SHOW_OPPONENTS) for cb in cbs)
+
+    def test_opponents_button_hidden_when_no_pairings(self, handler, svc, admin_user, active_tournament, user_alice):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_player_actions(ADMIN_TG_ID, p.id, active_tournament.id)
+        cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
+        assert not any(cb.startswith(CB_ADMIN_SHOW_OPPONENTS) for cb in cbs)
+
+
+# ── TestHandlePlayerOpponents ─────────────────────────────────────────────────
+
+
+class TestHandlePlayerOpponents:
+    def test_participant_not_found_returns_alert(self, handler, admin_user, active_tournament):
+        result = handler.handle_player_opponents(ADMIN_TG_ID, participant_id=99999, tournament_id=active_tournament.id)
+        assert result.is_alert
+
+    def test_no_pairings_returns_alert(self, handler, svc, admin_user, active_tournament, user_alice):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_player_opponents(ADMIN_TG_ID, p.id, active_tournament.id)
+        assert result.is_alert
+        assert "Пейринги" in result.text
+
+    def test_shows_opponents_list(
+        self, db, handler, svc, user_svc, admin_user, active_tournament, user_alice, arch_svc
+    ):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        _import_pairings(db, active_tournament.id, admin_user, user_alice, arch_svc)
+        # find Alice's participant (she was matched/created by import)
+        alice_user = user_svc.find_by_name("Alice Smith") or user_svc.find_by_name("Smith Alice")
+        if alice_user is None:
+            alice_user = user_alice
+        p = svc.get_participant(active_tournament.id, alice_user.id)
+        result = handler.handle_player_opponents(ADMIN_TG_ID, p.id, active_tournament.id)
+        assert not result.is_alert
+        assert "Раунд 1" in result.text
+
+    def test_result_has_back_keyboard(
+        self, db, handler, svc, user_svc, admin_user, active_tournament, user_alice, arch_svc
+    ):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        _import_pairings(db, active_tournament.id, admin_user, user_alice, arch_svc)
+        alice_user = user_svc.find_by_name("Alice Smith") or user_svc.find_by_name("Smith Alice") or user_alice
+        p = svc.get_participant(active_tournament.id, alice_user.id)
+        result = handler.handle_player_opponents(ADMIN_TG_ID, p.id, active_tournament.id)
+        if not result.is_alert:
+            assert result.keyboard is not None
+            cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
+            assert any(cb.startswith(CB_ADMIN_PICK_ARCH) for cb in cbs)
+
+
+# ── TestHandleRemoveParticipantConfirm ────────────────────────────────────────
+
+
+class TestHandleRemoveParticipantConfirm:
+    def test_non_admin_returns_alert(self, handler, active_tournament, user_alice, svc):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_remove_participant_confirm(user_alice.tg_id, p.id, active_tournament.id)
+        assert result.is_alert
+        assert NOT_ADMIN in result.text
+
+    def test_participant_not_found_returns_alert(self, handler, admin_user, active_tournament):
+        result = handler.handle_remove_participant_confirm(ADMIN_TG_ID, 99999, active_tournament.id)
+        assert result.is_alert
+        assert PARTICIPANT_NOT_FOUND in result.text
+
+    def test_shows_player_name_in_confirmation(self, handler, svc, admin_user, active_tournament, user_alice):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_remove_participant_confirm(ADMIN_TG_ID, p.id, active_tournament.id)
+        assert not result.is_alert
+        assert "Alice" in result.text
+        assert result.keyboard is not None
+
+    def test_confirm_keyboard_has_delete_and_cancel(self, handler, svc, admin_user, active_tournament, user_alice):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_remove_participant_confirm(ADMIN_TG_ID, p.id, active_tournament.id)
+        cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
+        assert any(cb.startswith(CB_ADMIN_REMOVE_DO) for cb in cbs)
+        assert any(cb.startswith(CB_ADMIN_PICK_ARCH) for cb in cbs)
+
+
+# ── TestHandleRemoveParticipant ───────────────────────────────────────────────
+
+
+class TestHandleRemoveParticipant:
+    def test_non_admin_returns_alert(self, handler, active_tournament, user_alice, svc):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_remove_participant(user_alice.tg_id, p.id, active_tournament.id)
+        assert result.is_alert
+        assert NOT_ADMIN in result.text
+
+    def test_participant_not_found_returns_alert(self, handler, admin_user, active_tournament):
+        result = handler.handle_remove_participant(ADMIN_TG_ID, 99999, active_tournament.id)
+        assert result.is_alert
+        assert PARTICIPANT_NOT_FOUND in result.text
+
+    def test_removes_participant(self, handler, svc, admin_user, active_tournament, user_alice):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        handler.handle_remove_participant(ADMIN_TG_ID, p.id, active_tournament.id)
+        assert svc.get_participant(active_tournament.id, user_alice.id) is None
+
+    def test_returns_tournament_status_after_removal(self, handler, svc, admin_user, active_tournament, user_alice):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_remove_participant(ADMIN_TG_ID, p.id, active_tournament.id)
+        assert not result.is_alert
+        assert "удалён" in result.text
+        assert "Weekly" in result.text
+
+    def test_remove_works_at_any_tournament_status(self, db, handler, svc, admin_user, active_tournament, user_alice):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        obj = db.execute(select(m.Tournament).where(m.Tournament.id == active_tournament.id)).scalar_one()
+        obj.status = m.TournamentStatus.ONGOING
+        db.commit()
+        result = handler.handle_remove_participant(ADMIN_TG_ID, p.id, active_tournament.id)
+        assert not result.is_alert
+        assert svc.get_participant(active_tournament.id, user_alice.id) is None
