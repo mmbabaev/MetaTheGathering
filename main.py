@@ -72,6 +72,7 @@ from bot.telegram import aetherhub as aetherhub_handler
 from bot.telegram import features as features_handler
 from bot.telegram import payment as payment_handler
 from bot.telegram import poll as poll_handler
+from bot.telegram import rating as rating_handler
 from bot.telegram import settings as settings_handler
 from core import models
 from core.config import settings
@@ -104,6 +105,7 @@ if settings.DEBUG:
 
 _USER_COMMANDS = [
     BotCommand("tournaments", "Активные турниры и запись"),
+    BotCommand("social_rating", "Социальный рейтинг"),
     BotCommand("settings", "Настройки профиля"),
     BotCommand("help", "Справка по командам"),
 ]
@@ -189,6 +191,7 @@ def main() -> None:
     app.add_handler(CommandHandler("start", common.cmd_start, filters=private))
     app.add_handler(CommandHandler("help", common.cmd_help, filters=private))
     app.add_handler(CommandHandler("tournaments", player.cmd_tournaments, filters=private))
+    app.add_handler(CommandHandler("social_rating", rating_handler.cmd_social_rating, filters=private))
     app.add_handler(CommandHandler("settings", settings_handler.cmd_settings, filters=private))
 
     app.add_handler(CommandHandler("add_me", admin.cmd_add_me, filters=private))

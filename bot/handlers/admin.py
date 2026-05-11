@@ -154,6 +154,7 @@ class AdminHandler:
                 user_id=db_user.id,
                 archetype_id=archetype.id,
                 added_by_admin=True,
+                deck_added_by_tg_id=tg_id,
             )
             user_label = f"@{username}" if username else (first_name or f"id{tg_id}")
             return HandlerResult(
@@ -195,6 +196,7 @@ class AdminHandler:
                 user_id=target_user.id,
                 archetype_id=archetype.id,
                 added_by_admin=True,
+                deck_added_by_tg_id=tg_id,
             )
             user_label = _player_display_label(target_username, target_first_name, target_tg_id)
             return HandlerResult(
@@ -237,6 +239,7 @@ class AdminHandler:
                     user_id=target_user.id,
                     archetype_id=archetype.id,
                     added_by_admin=True,
+                    deck_added_by_tg_id=tg_id,
                 )
                 results.append(f"✅ {user_label} — {archetype.name}")
             except errors.ParticipantAlreadyRegistered:
@@ -407,7 +410,11 @@ class AdminHandler:
         archetypes = {a.id: a.name for a in self.arch_svc.list_archetypes()}
         arch_name = archetypes.get(archetype_id, "?")
         try:
-            self.svc.set_participant_archetype(participant_id=participant_id, archetype_id=archetype_id)
+            self.svc.set_participant_archetype(
+                participant_id=participant_id,
+                archetype_id=archetype_id,
+                deck_added_by_tg_id=tg_id,
+            )
         except errors.ParticipantNotFound:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
         return self._tournament_status_result(p.tournament_id, prefix=ADMIN_ARCH_SAVED.format(archetype_name=arch_name))
@@ -421,7 +428,11 @@ class AdminHandler:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
         try:
             arch = self.arch_svc.get_or_create_by_name(arch_name, is_custom=True)
-            self.svc.set_participant_archetype(participant_id=participant_id, archetype_id=arch.id)
+            self.svc.set_participant_archetype(
+                participant_id=participant_id,
+                archetype_id=arch.id,
+                deck_added_by_tg_id=tg_id,
+            )
         except errors.ParticipantNotFound:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
         return self._tournament_status_result(p.tournament_id, prefix=ADMIN_ARCH_SAVED.format(archetype_name=arch.name))

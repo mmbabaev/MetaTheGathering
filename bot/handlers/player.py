@@ -215,6 +215,7 @@ class PlayerHandler:
                     tournament_id=tournament_id,
                     user_id=db_user.id,
                     archetype_id=archetype_id,
+                    deck_added_by_tg_id=tg_id,
                 )
             except errors.ParticipantAlreadyRegistered:
                 participant = self.svc.get_participant(tournament_id, db_user.id)
@@ -223,6 +224,7 @@ class PlayerHandler:
                 self.svc.set_participant_archetype(
                     participant_id=participant.id,
                     archetype_id=archetype_id,
+                    deck_added_by_tg_id=tg_id,
                 )
             archetypes = {a.id: a.name for a in self.arch_svc.list_archetypes()}
             name = archetypes.get(archetype_id, "?")
@@ -252,6 +254,7 @@ class PlayerHandler:
                     tournament_id=tournament_id,
                     user_id=db_user.id,
                     archetype_id=archetype.id,
+                    deck_added_by_tg_id=tg_id,
                 )
             except errors.ParticipantAlreadyRegistered:
                 participant = self.svc.get_participant(tournament_id, db_user.id)
@@ -260,6 +263,7 @@ class PlayerHandler:
                 self.svc.set_participant_archetype(
                     participant_id=participant.id,
                     archetype_id=archetype.id,
+                    deck_added_by_tg_id=tg_id,
                 )
             return HandlerResult(REGISTERED)
         except errors.TournamentInvalidState:
