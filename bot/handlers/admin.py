@@ -134,7 +134,7 @@ class AdminHandler:
         last_name: str | None,
         deck_name: str,
     ) -> HandlerResult:
-        if not self.user_svc.is_admin(tg_id):
+        if not self.user_svc.is_privileged(tg_id):
             return HandlerResult(NOT_ADMIN)
         if not deck_name:
             return HandlerResult(NO_DECK_NAME)
@@ -178,7 +178,7 @@ class AdminHandler:
         target_first_name: str | None = None,
         target_last_name: str | None = None,
     ) -> HandlerResult:
-        if not self.user_svc.is_admin(tg_id):
+        if not self.user_svc.is_privileged(tg_id):
             return HandlerResult(NOT_ADMIN)
         active, err = self._resolve_tournament()
         if err:
@@ -217,7 +217,7 @@ class AdminHandler:
         entries: list[tuple[int, str | None, str | None, str]],
     ) -> HandlerResult:
         """entries: (target_tg_id, username, first_name, deck_name) — после резолва в Telegram."""
-        if not self.user_svc.is_admin(tg_id):
+        if not self.user_svc.is_privileged(tg_id):
             return HandlerResult(NOT_ADMIN)
         if not entries:
             return HandlerResult("Нет данных для обработки.")
@@ -260,7 +260,7 @@ class AdminHandler:
         Игроки ищутся в БД по имени; если не найдены — создаются с placeholder tg_id.
         Уже зарегистрированные пропускаются.
         """
-        if not self.user_svc.is_admin(tg_id):
+        if not self.user_svc.is_privileged(tg_id):
             return HandlerResult(NOT_ADMIN)
 
         parsed: list[tuple[str, str | None]] = []
@@ -326,13 +326,13 @@ class AdminHandler:
 
     def handle_admin_status(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Список участников с кнопками для редактирования колоды (admin view)."""
-        if not self.user_svc.is_admin(tg_id):
+        if not self.user_svc.is_privileged(tg_id):
             return HandlerResult(NOT_ADMIN)
         return self._tournament_status_result(tournament_id)
 
     def handle_admin_show_filled(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Показывает кнопки заполненных участников (разворачивает скрытый список)."""
-        if not self.user_svc.is_admin(tg_id):
+        if not self.user_svc.is_privileged(tg_id):
             return HandlerResult(NOT_ADMIN)
         return self._tournament_status_result(tournament_id, show_filled=True)
 
@@ -385,7 +385,7 @@ class AdminHandler:
 
     def handle_pick_participant_arch(self, tg_id: int, participant_id: int, expanded: bool = False) -> HandlerResult:
         """Показывает выбор архетипа для конкретного участника."""
-        if not self.user_svc.is_admin(tg_id) and not self._features.can_fill_opponent_decks():
+        if not self.user_svc.is_privileged(tg_id) and not self._features.can_fill_opponent_decks():
             return HandlerResult(NOT_ADMIN)
         p = self.svc.get_participant_by_id(participant_id)
         if p is None:
@@ -402,7 +402,7 @@ class AdminHandler:
 
     def handle_set_participant_arch(self, tg_id: int, participant_id: int, archetype_id: int) -> HandlerResult:
         """Устанавливает архетип участнику, затем возвращает обновлённый статус турнира."""
-        if not self.user_svc.is_admin(tg_id) and not self._features.can_fill_opponent_decks():
+        if not self.user_svc.is_privileged(tg_id) and not self._features.can_fill_opponent_decks():
             return HandlerResult(NOT_ADMIN)
         p = self.svc.get_participant_by_id(participant_id)
         if p is None:
@@ -421,7 +421,7 @@ class AdminHandler:
 
     def handle_set_participant_custom_arch(self, tg_id: int, participant_id: int, arch_name: str) -> HandlerResult:
         """Создаёт архетип по введённому названию и присваивает участнику."""
-        if not self.user_svc.is_admin(tg_id) and not self._features.can_fill_opponent_decks():
+        if not self.user_svc.is_privileged(tg_id) and not self._features.can_fill_opponent_decks():
             return HandlerResult(NOT_ADMIN)
         p = self.svc.get_participant_by_id(participant_id)
         if p is None:
@@ -569,7 +569,7 @@ class AdminHandler:
         return HandlerResult("📁 Архив турниров:", keyboard=self.keyboards.tournament_list_keyboard(tour_list))
 
     def handle_tournament_status(self, tg_id: int) -> HandlerResult:
-        if not self.user_svc.is_admin(tg_id):
+        if not self.user_svc.is_privileged(tg_id):
             return HandlerResult(NOT_ADMIN)
         tournaments = self.svc.list_all_active_tournaments()
         if not tournaments:
@@ -634,7 +634,7 @@ class AdminHandler:
 
     def handle_export_players(self, tg_id: int, tournament_id: int) -> str | None:
         """Возвращает plain-text список «Имя Фамилия» или None если нет прав."""
-        if not self.user_svc.is_admin(tg_id):
+        if not self.user_svc.is_privileged(tg_id):
             return None
         try:
             return ExportService(self.svc.db).export_players_list(tournament_id)
@@ -643,7 +643,7 @@ class AdminHandler:
 
     def handle_export_excel(self, tg_id: int, tournament_id: int) -> tuple[bytes, str] | None:
         """Возвращает (bytes, filename) или None если нет прав."""
-        if not self.user_svc.is_admin(tg_id):
+        if not self.user_svc.is_privileged(tg_id):
             return None
         try:
             return ExportService(self.svc.db).export_participants_excel(tournament_id)

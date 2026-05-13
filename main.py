@@ -110,12 +110,15 @@ _USER_COMMANDS = [
     BotCommand("help", "Справка по командам"),
 ]
 
-_ADMIN_COMMANDS = _USER_COMMANDS + [
+_SCOREKEEPER_COMMANDS = _USER_COMMANDS + [
     BotCommand("tournament_status", "Участники турниров"),
-    BotCommand("archive", "Архив закрытых турниров"),
     BotCommand("add_me", "Записать себя"),
     BotCommand("add_player", "Записать игрока"),
     BotCommand("add_players", "Массовая запись"),
+]
+
+_ADMIN_COMMANDS = _SCOREKEEPER_COMMANDS + [
+    BotCommand("archive", "Архив закрытых турниров"),
     BotCommand("create_tournament", "Создать турнир"),
     BotCommand("delete_tournament", "Удалить турнир"),
     BotCommand("schedule", "Расписание автозаданий"),
@@ -136,7 +139,6 @@ async def _set_commands(app: Application) -> None:
     # Обычным пользователям — только пользовательские команды
     await app.bot.set_my_commands(_USER_COMMANDS, scope=BotCommandScopeDefault())
 
-    # Каждому известному админу — полный список в личном чате с ботом
     db = SessionLocal()
     try:
         db_admins = (
@@ -149,17 +151,35 @@ async def _set_commands(app: Application) -> None:
             .scalars()
             .all()
         )
+        db_scorekeepers = (
+            db.execute(
+                select(models.User.tg_id).where(
+                    models.User.tg_id > 0,
+                    models.User.is_scorekeeper == True,  # noqa: E712
+                )
+            )
+            .scalars()
+            .all()
+        )
     finally:
         db.close()
 
     admin_ids = set(settings.admin_ids) | set(db_admins)
+    scorekeeper_ids = set(db_scorekeepers) - admin_ids
+
     for admin_id in admin_ids:
         try:
             await app.bot.set_my_commands(_ADMIN_COMMANDS, scope=BotCommandScopeChat(chat_id=admin_id))
         except Exception:
-            pass  # пользователь ещё не открывал чат с ботом
+            pass
 
-    logger.info(f"Bot commands registered. Admins with full menu: {admin_ids}")
+    for sk_id in scorekeeper_ids:
+        try:
+            await app.bot.set_my_commands(_SCOREKEEPER_COMMANDS, scope=BotCommandScopeChat(chat_id=sk_id))
+        except Exception:
+            pass
+
+    logger.info(f"Bot commands registered. Admins: {admin_ids}, Scorekeepers: {scorekeeper_ids}")
 
 
 def _debug_create_tournament() -> None:

@@ -1420,3 +1420,74 @@ class TestDeckAddedByTgId:
         handler.handle_set_participant_arch(tg_id=filler.tg_id, participant_id=opp_p.id, archetype_id=burn.id)
         updated = svc.get_participant(active_tournament.id, opponent.id)
         assert updated.deck_added_by_tg_id == filler.tg_id
+
+
+# ── Scorekeeper role ──────────────────────────────────────────────────────────
+
+SCOREKEEPER_TG_ID = 7777
+
+
+@pytest.fixture
+def scorekeeper_user(user_svc, db):
+    u = user_svc.get_or_create(tg_id=SCOREKEEPER_TG_ID, username="sk", first_name="Scorekeeper")
+    obj = db.execute(select(m.User).where(m.User.tg_id == SCOREKEEPER_TG_ID)).scalar_one()
+    obj.is_scorekeeper = True
+    db.commit()
+    return u
+
+
+class TestScorekeeperPermissions:
+    def test_is_scorekeeper_returns_true(self, handler, scorekeeper_user):
+        assert handler.user_svc.is_scorekeeper(SCOREKEEPER_TG_ID) is True
+
+    def test_is_privileged_true_for_scorekeeper(self, handler, scorekeeper_user):
+        assert handler.user_svc.is_privileged(SCOREKEEPER_TG_ID) is True
+
+    def test_is_privileged_true_for_admin(self, handler, admin_user):
+        assert handler.user_svc.is_privileged(ADMIN_TG_ID) is True
+
+    def test_is_privileged_false_for_regular(self, handler, user_alice):
+        assert handler.user_svc.is_privileged(user_alice.tg_id) is False
+
+    def test_scorekeeper_can_add_me(self, handler, scorekeeper_user, active_tournament):
+        result = handler.handle_add_me(
+            tg_id=SCOREKEEPER_TG_ID, username="sk", first_name="Scorekeeper", last_name=None, deck_name="Burn"
+        )
+        assert "Burn" in result.text
+
+    def test_scorekeeper_can_add_player(self, handler, scorekeeper_user, active_tournament, user_alice):
+        result = handler.handle_add_player(
+            tg_id=SCOREKEEPER_TG_ID,
+            target_tg_id=user_alice.tg_id,
+            target_username="alice",
+            deck_name="Elves",
+            target_first_name="Alice",
+        )
+        assert "Elves" in result.text
+
+    def test_scorekeeper_can_export_excel(
+        self, handler, svc, scorekeeper_user, active_tournament, user_alice, archetype_burn
+    ):
+        svc.register_participant(
+            tournament_id=active_tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id
+        )
+        result = handler.handle_export_excel(tg_id=SCOREKEEPER_TG_ID, tournament_id=active_tournament.id)
+        assert result is not None
+
+    def test_scorekeeper_can_view_tournament_status(self, handler, scorekeeper_user, active_tournament):
+        result = handler.handle_tournament_status(tg_id=SCOREKEEPER_TG_ID)
+        assert result.text != NOT_ADMIN
+
+    def test_scorekeeper_cannot_close_tournament(self, handler, scorekeeper_user, active_tournament):
+        result = handler.handle_close_tournament(tg_id=SCOREKEEPER_TG_ID)
+        assert NOT_ADMIN in result.text
+
+    def test_scorekeeper_cannot_create_tournament(self, handler, scorekeeper_user):
+        result = handler.handle_create_tournament(tg_id=SCOREKEEPER_TG_ID, chat_id=CHAT_ID, title="Test")
+        assert NOT_ADMIN in result.text
+
+    def test_scorekeeper_cannot_delete_participant(self, handler, svc, scorekeeper_user, active_tournament, user_alice):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_remove_participant(SCOREKEEPER_TG_ID, p.id, active_tournament.id)
+        assert NOT_ADMIN in result.text

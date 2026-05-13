@@ -21,8 +21,9 @@ class RatingHandler:
             prefix = medals[i] if i < 3 else f"{i + 1}."
             name = format_participant_name(user.first_name, user.last_name) or f"id{user.tg_id}"
             username_part = f" (@{user.username})" if user.username else ""
+            scorekeeper_badge = " 🧙" if user.is_scorekeeper else ""
             noun = _deck_noun(cnt)
-            lines.append(f"{prefix} {name}{username_part} — {cnt} {noun}")
+            lines.append(f"{prefix} {name}{username_part}{scorekeeper_badge} — {cnt} {noun}")
         return HandlerResult("\n".join(lines))
 
 

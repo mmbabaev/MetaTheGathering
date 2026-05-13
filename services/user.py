@@ -273,6 +273,14 @@ class UserService:
         user = self.get_by_tg_id(tg_id)
         return user is not None and (user.is_admin or user.is_superadmin)
 
+    def is_scorekeeper(self, tg_id: int) -> bool:
+        user = self.get_by_tg_id(tg_id)
+        return user is not None and bool(user.is_scorekeeper)
+
+    def is_privileged(self, tg_id: int) -> bool:
+        """Admin or scorekeeper — can add/edit decks and export."""
+        return self.is_admin(tg_id) or self.is_scorekeeper(tg_id)
+
     def update_name(
         self,
         tg_id: int,
