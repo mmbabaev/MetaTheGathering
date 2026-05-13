@@ -112,8 +112,6 @@ _USER_COMMANDS = [
 
 _SCOREKEEPER_COMMANDS = _USER_COMMANDS + [
     BotCommand("tournament_status", "Участники турниров"),
-    BotCommand("add_me", "Записать себя"),
-    BotCommand("add_player", "Записать игрока"),
     BotCommand("add_players", "Массовая запись"),
 ]
 
@@ -214,8 +212,6 @@ def main() -> None:
     app.add_handler(CommandHandler("social_rating", rating_handler.cmd_social_rating, filters=private))
     app.add_handler(CommandHandler("settings", settings_handler.cmd_settings, filters=private))
 
-    app.add_handler(CommandHandler("add_me", admin.cmd_add_me, filters=private))
-    app.add_handler(CommandHandler("add_player", admin.cmd_add_player, filters=private))
     app.add_handler(CommandHandler("add_players", admin.cmd_add_players, filters=private))
     app.add_handler(CommandHandler("tournament_status", admin.cmd_tournament_status, filters=private))
     app.add_handler(CommandHandler("archive", admin.cmd_archive, filters=private))

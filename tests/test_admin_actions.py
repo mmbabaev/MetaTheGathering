@@ -9,7 +9,6 @@ from bot.features import FeatureService
 from bot.handlers.admin import (
     AdminHandler,
     _player_display_label,
-    parse_add_player_command,
     parse_bulk_player_line,
 )
 from bot.keyboards import (
@@ -29,7 +28,6 @@ from bot.messages import (
     CHOOSE_ARCHETYPE,
     MULTIPLE_TOURNAMENTS_MSG,
     NO_ACTIVE_TOURNAMENT,
-    NO_DECK_NAME,
     NOT_ADMIN,
     PARTICIPANT_NOT_FOUND,
     PLAYER_ADDED,
@@ -46,48 +44,6 @@ from services.feature_flags import FeatureFlags
 
 ADMIN_TG_ID = 9999
 CHAT_ID = 100
-
-
-class TestParseAddPlayerCommand:
-    """Поведение как у Telegram: /add_player@X может означать бота X или игрока X."""
-
-    def test_standard_form(self):
-        assert parse_add_player_command("/add_player @testuser Elves", "metabot") == (
-            "testuser",
-            "Elves",
-        )
-
-    def test_player_mistaken_for_command_suffix(self):
-        """Частая ошибка: /add_player@testuser Elves — testuser это игрок, не бот."""
-        assert parse_add_player_command("/add_player@testuser Elves", "metabot") == (
-            "testuser",
-            "Elves",
-        )
-
-    def test_with_real_bot_suffix(self):
-        assert parse_add_player_command("/add_player@metabot @alice Burn", "metabot") == ("alice", "Burn")
-
-    def test_bot_suffix_case_insensitive(self):
-        assert parse_add_player_command("/add_player@MetaBot @alice Burn", "metabot") == ("alice", "Burn")
-
-    def test_multiword_deck(self):
-        assert parse_add_player_command("/add_player @bob Izzet Faeries", "bot") == ("bob", "Izzet Faeries")
-
-    def test_mistaken_suffix_multiword_deck(self):
-        assert parse_add_player_command("/add_player@bob Izzet Faeries", "metabot") == ("bob", "Izzet Faeries")
-
-    def test_narrow_no_break_space_between_username_and_deck(self):
-        """Клиенты Telegram иногда ставят U+202F между @user и колодой — как пробел, но split() его не режет."""
-        assert parse_add_player_command("/add_player @testuser\u202fElves", "metabot") == ("testuser", "Elves")
-
-    def test_missing_deck_returns_none(self):
-        assert parse_add_player_command("/add_player @alice", "bot") is None
-
-    def test_missing_everything_returns_none(self):
-        assert parse_add_player_command("/add_player", "bot") is None
-
-    def test_wrong_suffix_no_deck_returns_none(self):
-        assert parse_add_player_command("/add_player@testuser", "metabot") is None
 
 
 class TestParseBulkPlayerLine:
@@ -119,121 +75,6 @@ def active_tournament(svc):
 @pytest.fixture
 def handler(svc, user_svc, arch_svc, keyboards, features):
     return AdminHandler(svc, user_svc, arch_svc, keyboards, features)
-
-
-# --- handle_add_me ---
-
-
-class TestHandleAddMe:
-    def test_non_admin_returns_not_admin(self, handler):
-        result = handler.handle_add_me(tg_id=42, username="x", first_name="X", last_name=None, deck_name="Burn")
-        assert result.text == NOT_ADMIN
-
-    def test_empty_deck_name_returns_usage(self, handler, admin_user):
-        result = handler.handle_add_me(
-            tg_id=ADMIN_TG_ID, username="admin", first_name="Admin", last_name=None, deck_name=""
-        )
-        assert result.text == NO_DECK_NAME
-
-    def test_no_active_tournament(self, handler, admin_user):
-        result = handler.handle_add_me(
-            tg_id=ADMIN_TG_ID, username="admin", first_name="Admin", last_name=None, deck_name="Burn"
-        )
-        assert result.text == NO_ACTIVE_TOURNAMENT
-
-    def test_registers_successfully(self, handler, admin_user, active_tournament):
-        result = handler.handle_add_me(
-            tg_id=ADMIN_TG_ID, username="admin", first_name="Admin", last_name=None, deck_name="Burn"
-        )
-        assert "admin" in result.text
-        assert "Burn" in result.text
-
-    def test_already_registered(self, handler, admin_user, active_tournament):
-        handler.handle_add_me(tg_id=ADMIN_TG_ID, username="admin", first_name="Admin", last_name=None, deck_name="Burn")
-        result = handler.handle_add_me(
-            tg_id=ADMIN_TG_ID, username="admin", first_name="Admin", last_name=None, deck_name="Burn"
-        )
-        assert "уже записаны" in result.text
-
-    def test_multiple_tournaments_returns_clarification(self, handler, svc, admin_user, active_tournament):
-        svc.create_tournament(TournamentCreate(title="Second", chat_id=CHAT_ID + 1))
-        result = handler.handle_add_me(
-            tg_id=ADMIN_TG_ID, username="admin", first_name="Admin", last_name=None, deck_name="Burn"
-        )
-        assert result.text == MULTIPLE_TOURNAMENTS_MSG
-
-
-# --- handle_add_player ---
-
-
-class TestHandleAddPlayer:
-    def test_non_admin_returns_not_admin(self, handler, user_alice):
-        result = handler.handle_add_player(
-            tg_id=42,
-            target_tg_id=user_alice.tg_id,
-            target_username="alice",
-            deck_name="Burn",
-        )
-        assert result.text == NOT_ADMIN
-
-    def test_no_active_tournament(self, handler, admin_user, user_alice):
-        result = handler.handle_add_player(
-            tg_id=ADMIN_TG_ID,
-            target_tg_id=user_alice.tg_id,
-            target_username="alice",
-            deck_name="Burn",
-        )
-        assert result.text == NO_ACTIVE_TOURNAMENT
-
-    def test_creates_user_by_tg_id_without_prior_row(self, handler, admin_user, active_tournament):
-        """Раньше требовали строку в БД после /start; теперь достаточно tg_id (как из getChat)."""
-        result = handler.handle_add_player(
-            tg_id=ADMIN_TG_ID,
-            target_tg_id=77_777,
-            target_username="ghost",
-            deck_name="Burn",
-            target_first_name="Ghost",
-        )
-        assert "ghost" in result.text or "Ghost" in result.text
-        assert "Burn" in result.text
-
-    def test_registers_player_successfully(self, handler, admin_user, active_tournament, user_alice):
-        result = handler.handle_add_player(
-            tg_id=ADMIN_TG_ID,
-            target_tg_id=user_alice.tg_id,
-            target_username="alice",
-            deck_name="Affinity",
-            target_first_name="Alice",
-        )
-        assert "alice" in result.text
-        assert "Affinity" in result.text
-
-    def test_already_registered(self, handler, admin_user, active_tournament, user_alice):
-        handler.handle_add_player(
-            tg_id=ADMIN_TG_ID,
-            target_tg_id=user_alice.tg_id,
-            target_username="alice",
-            deck_name="Burn",
-            target_first_name="Alice",
-        )
-        result = handler.handle_add_player(
-            tg_id=ADMIN_TG_ID,
-            target_tg_id=user_alice.tg_id,
-            target_username="alice",
-            deck_name="Burn",
-            target_first_name="Alice",
-        )
-        assert "уже записан" in result.text
-
-    def test_multiple_tournaments_returns_clarification(self, handler, svc, admin_user, active_tournament, user_alice):
-        svc.create_tournament(TournamentCreate(title="Second", chat_id=CHAT_ID + 1))
-        result = handler.handle_add_player(
-            tg_id=ADMIN_TG_ID,
-            target_tg_id=user_alice.tg_id,
-            target_username="alice",
-            deck_name="Burn",
-        )
-        assert result.text == MULTIPLE_TOURNAMENTS_MSG
 
 
 # --- handle_add_players ---
@@ -273,12 +114,9 @@ class TestHandleAddPlayers:
         assert "уже записан" in result.text
 
     def test_already_registered_line(self, handler, admin_user, active_tournament, user_alice):
-        handler.handle_add_player(
+        handler.handle_add_players(
             tg_id=ADMIN_TG_ID,
-            target_tg_id=user_alice.tg_id,
-            target_username="alice",
-            deck_name="Burn",
-            target_first_name="Alice",
+            entries=[(user_alice.tg_id, "alice", "Alice", "Burn")],
         )
         result = handler.handle_add_players(
             tg_id=ADMIN_TG_ID,
@@ -384,39 +222,6 @@ class TestIsAdminViaSettings:
             assert handler.user_svc.is_admin(tg_id=ADMIN_TG_ID) is True
 
 
-# --- handle_add_me: TournamentInvalidState ---
-
-
-class TestHandleAddMeInvalidState:
-    def test_registration_closed_returns_message(self, db, handler, svc, admin_user, active_tournament):
-        svc.close_tournament(active_tournament.id)
-        # Reopen as ONGOING so it's active but not in REGISTRATION
-        obj = db.execute(select(m.Tournament).where(m.Tournament.id == active_tournament.id)).scalar_one()
-        obj.status = m.TournamentStatus.ONGOING
-        db.commit()
-        result = handler.handle_add_me(
-            tg_id=ADMIN_TG_ID, username="admin", first_name="Admin", last_name=None, deck_name="Burn"
-        )
-        assert "закрыта" in result.text
-
-
-# --- handle_add_player: TournamentInvalidState ---
-
-
-class TestHandleAddPlayerInvalidState:
-    def test_registration_closed_returns_message(self, db, handler, svc, admin_user, active_tournament, user_alice):
-        obj = db.execute(select(m.Tournament).where(m.Tournament.id == active_tournament.id)).scalar_one()
-        obj.status = m.TournamentStatus.ONGOING
-        db.commit()
-        result = handler.handle_add_player(
-            tg_id=ADMIN_TG_ID,
-            target_tg_id=user_alice.tg_id,
-            target_username="alice",
-            deck_name="Burn",
-        )
-        assert "закрыта" in result.text
-
-
 # --- handle_add_players: TournamentInvalidState ---
 
 
@@ -430,24 +235,6 @@ class TestHandleAddPlayersInvalidState:
             entries=[(user_alice.tg_id, "alice", "Alice", "Burn")],
         )
         assert "закрыта" in result.text
-
-
-# --- parse_add_player_command: uncovered branches ---
-
-
-class TestParseAddPlayerCommandEdgeCases:
-    def test_empty_message_returns_none(self):
-        assert parse_add_player_command("", "bot") is None
-
-    def test_whitespace_only_returns_none(self):
-        assert parse_add_player_command("   ", "bot") is None
-
-    def test_non_add_player_command_returns_none(self):
-        assert parse_add_player_command("/start something", "bot") is None
-
-    def test_empty_username_after_at_returns_none(self):
-        # "@ Burn" → username stripped to "" → should return None
-        assert parse_add_player_command("/add_player @ Burn", "bot") is None
 
 
 class TestParseBulkPlayerLineEdgeCases:
@@ -470,42 +257,6 @@ class TestPlayerDisplayLabel:
 
     def test_no_username_no_first_name_uses_id(self):
         assert _player_display_label(None, None, 42) == "игрок 42"
-
-
-# --- handle_add_player: _player_display_label no-username path in result ---
-
-
-class TestHandleAddPlayerNoUsername:
-    def test_already_registered_no_username_shows_first_name(
-        self, handler, svc, user_svc, admin_user, active_tournament
-    ):
-        target = user_svc.get_or_create(tg_id=5001, username=None, first_name="Bob")
-        handler.handle_add_player(
-            tg_id=ADMIN_TG_ID,
-            target_tg_id=target.tg_id,
-            target_username=None,
-            deck_name="Burn",
-            target_first_name="Bob",
-        )
-        result = handler.handle_add_player(
-            tg_id=ADMIN_TG_ID,
-            target_tg_id=target.tg_id,
-            target_username=None,
-            deck_name="Burn",
-            target_first_name="Bob",
-        )
-        assert "Bob" in result.text
-        assert "уже записан" in result.text
-
-    def test_registered_with_no_username_no_first_name(self, handler, svc, admin_user, active_tournament):
-        result = handler.handle_add_player(
-            tg_id=ADMIN_TG_ID,
-            target_tg_id=6001,
-            target_username=None,
-            deck_name="Burn",
-            target_first_name=None,
-        )
-        assert "6001" in result.text or "Burn" in result.text
 
 
 # --- handle_tournament_status: full name display ---
@@ -1369,22 +1120,6 @@ class TestHandleRemoveParticipant:
 
 
 class TestDeckAddedByTgId:
-    def test_add_me_sets_admin_tg_id(self, handler, svc, admin_user, active_tournament):
-        handler.handle_add_me(tg_id=ADMIN_TG_ID, username="admin", first_name="Admin", last_name=None, deck_name="Burn")
-        p = svc.get_participant(active_tournament.id, admin_user.id)
-        assert p.deck_added_by_tg_id == ADMIN_TG_ID
-
-    def test_add_player_sets_admin_tg_id_not_player(self, handler, svc, admin_user, active_tournament, user_alice):
-        handler.handle_add_player(
-            tg_id=ADMIN_TG_ID,
-            target_tg_id=user_alice.tg_id,
-            target_username="alice",
-            deck_name="Burn",
-            target_first_name="Alice",
-        )
-        p = svc.get_participant(active_tournament.id, user_alice.id)
-        assert p.deck_added_by_tg_id == ADMIN_TG_ID
-
     def test_set_participant_arch_sets_caller_tg_id(
         self, handler, svc, user_svc, admin_user, active_tournament, archetype_burn
     ):
@@ -1448,22 +1183,6 @@ class TestScorekeeperPermissions:
 
     def test_is_privileged_false_for_regular(self, handler, user_alice):
         assert handler.user_svc.is_privileged(user_alice.tg_id) is False
-
-    def test_scorekeeper_can_add_me(self, handler, scorekeeper_user, active_tournament):
-        result = handler.handle_add_me(
-            tg_id=SCOREKEEPER_TG_ID, username="sk", first_name="Scorekeeper", last_name=None, deck_name="Burn"
-        )
-        assert "Burn" in result.text
-
-    def test_scorekeeper_can_add_player(self, handler, scorekeeper_user, active_tournament, user_alice):
-        result = handler.handle_add_player(
-            tg_id=SCOREKEEPER_TG_ID,
-            target_tg_id=user_alice.tg_id,
-            target_username="alice",
-            deck_name="Elves",
-            target_first_name="Alice",
-        )
-        assert "Elves" in result.text
 
     def test_scorekeeper_can_export_excel(
         self, handler, svc, scorekeeper_user, active_tournament, user_alice, archetype_burn
