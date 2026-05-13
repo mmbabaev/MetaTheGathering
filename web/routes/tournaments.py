@@ -83,6 +83,7 @@ async def register(
             tournament_id=tournament_id,
             user_id=user.id,
             archetype_id=resolved_archetype_id,
+            deck_added_by_tg_id=user.tg_id,
         )
     return RedirectResponse(f"/t/{tournament_id}", status_code=303)
 
@@ -121,5 +122,6 @@ async def register_opponent(
             tournament_id=tournament_id,
             user_id=opponent.id,
             archetype_id=resolved_archetype_id,
+            deck_added_by_tg_id=user.tg_id,
         )
     return RedirectResponse(f"/t/{tournament_id}", status_code=303)
