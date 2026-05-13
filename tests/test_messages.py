@@ -107,7 +107,6 @@ class TestMessageTemplates:
             msg.REGISTRATION_CLOSED,
             msg.TOURNAMENT_NOT_FOUND,
             msg.NOT_ADMIN,
-            msg.NO_DECK_NAME,
             msg.NO_ACTIVE_TOURNAMENT,
             msg.TOURNAMENT_CLOSED_MSG,
             msg.ADD_PLAYERS_USAGE,
@@ -119,5 +118,5 @@ class TestMessageTemplates:
     def test_help_text_covers_main_commands(self):
         for cmd in ("/tournaments", "/settings"):
             assert cmd in msg.HELP_TEXT
-        for cmd in ("/tournament_status", "/add_me", "/add_player", "/create_tournament"):
+        for cmd in ("/tournament_status", "/add_players", "/create_tournament"):
             assert cmd in msg.HELP_TEXT_ADMIN

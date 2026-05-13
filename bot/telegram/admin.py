@@ -7,13 +7,13 @@ from telegram.constants import ChatType
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
-from bot.handlers.admin import parse_add_player_command, parse_bulk_player_line
+from bot.handlers.admin import parse_bulk_player_line
 from bot.keyboards import (
     admin_more_keyboard,
     export_menu_keyboard,
     reveal_decks_confirm_keyboard,
 )
-from bot.messages import ADD_PLAYERS_USAGE, BULK_ADD_PROMPT, TELEGRAM_USER_LOOKUP_FAILED
+from bot.messages import ADD_PLAYERS_USAGE, BULK_ADD_PROMPT
 from bot.scheduler import format_schedule_text
 from bot.telegram.common import log_event as _log
 from bot.telegram.common import parse_callback_ints
@@ -161,64 +161,6 @@ async def callback_admin_show_filled(update: Update, context: ContextTypes.DEFAU
             return
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
-    finally:
-        db.close()
-
-
-async def cmd_add_me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/add_me <deck_name> — регистрирует администратора в текущем турнире."""
-    user = update.effective_user
-    msg = update.effective_message
-    if not user or not msg:
-        return
-    deck_name = " ".join(context.args or []).strip()
-    db = SessionLocal()
-    try:
-        result = _admin_handler(db).handle_add_me(user.id, user.username, user.first_name, user.last_name, deck_name)
-        await msg.reply_text(result.text)
-    finally:
-        db.close()
-
-
-async def cmd_add_player(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/add_player @username <deck_name> — добавляет игрока по username."""
-    user = update.effective_user
-    msg = update.effective_message
-    if not user or not msg:
-        return
-    bot_name = context.bot.username if context.bot else None
-    parsed = parse_add_player_command(msg.text or "", bot_name)
-    if not parsed:
-        await msg.reply_text("Использование: /add_player @username Название колоды")
-        return
-    username, deck_name = parsed
-    if settings.DEBUG:
-        target_tg_id = 0
-        target_first_name = None
-        target_last_name = None
-    else:
-        try:
-            chat = await context.bot.get_chat(f"@{username}")
-        except TelegramError:
-            await msg.reply_text(TELEGRAM_USER_LOOKUP_FAILED.format(username=username))
-            return
-        if chat.type != ChatType.PRIVATE:
-            await msg.reply_text(f"❌ @{username} — укажите @username человека (не группу или канал).")
-            return
-        target_tg_id = chat.id
-        target_first_name = chat.first_name
-        target_last_name = chat.last_name
-    db = SessionLocal()
-    try:
-        result = _admin_handler(db).handle_add_player(
-            user.id,
-            target_tg_id=target_tg_id,
-            target_username=username,
-            deck_name=deck_name,
-            target_first_name=target_first_name,
-            target_last_name=target_last_name,
-        )
-        await msg.reply_text(result.text)
     finally:
         db.close()
 

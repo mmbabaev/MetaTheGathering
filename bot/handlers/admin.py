@@ -14,10 +14,8 @@ from bot.messages import (
     DECKS_REVEALED,
     MULTIPLE_TOURNAMENTS_MSG,
     NO_ACTIVE_TOURNAMENT,
-    NO_DECK_NAME,
     NOT_ADMIN,
     PARTICIPANT_NOT_FOUND,
-    PLAYER_ADDED,
     REGISTRATION_CLOSED,
     TOURNAMENT_ALREADY_EXISTS_MSG,
     TOURNAMENT_CLOSED_MSG,
@@ -35,52 +33,6 @@ from services.poll import PollService
 from services.tournament import TournamentService
 from services.user import UserService
 from services.utils import get_tournament
-
-
-def parse_add_player_command(message_text: str, bot_username: str | None) -> tuple[str, str] | None:
-    """
-    Разбор текста /add_player … в (username_игрока, название_колоды).
-
-    Поддерживает случай, когда пользователь пишет /add_player@nickname Колода
-    и Telegram воспринимает @nickname как суффикс команды, а не как игрока:
-    тогда nickname — это игрок, остаток строки — колода.
-
-    Все пробельные символы Unicode приводятся к обычному пробелу: после выбора
-    @username клиенты иногда вставляют узкий неразрывный пробел (U+202F) и т.п.,
-    из‑за чего str.split() не отделяет ник от названия колоды.
-    """
-    if not message_text or not message_text.strip():
-        return None
-    text = re.sub(r"\s+", " ", message_text.strip())
-    parts = text.split(None, 1)
-    if not parts:
-        return None
-    cmd_token = parts[0]
-    rest = parts[1].strip() if len(parts) > 1 else ""
-
-    if not cmd_token.lower().startswith("/add_player"):
-        return None
-
-    suffix = ""
-    if "@" in cmd_token:
-        _, _, suffix = cmd_token.partition("@")
-
-    bot_u = (bot_username or "").lower().lstrip("@")
-    if suffix and suffix.lower() != bot_u:
-        if not rest:
-            return None
-        return (suffix, rest)
-
-    if not rest:
-        return None
-    user_and_deck = rest.split(None, 1)
-    if len(user_and_deck) < 2:
-        return None
-    username = user_and_deck[0].lstrip("@")
-    deck_name = user_and_deck[1].strip()
-    if not username or not deck_name:
-        return None
-    return (username, deck_name)
 
 
 def parse_bulk_player_line(line: str) -> tuple[str, str] | None:
@@ -126,98 +78,13 @@ class AdminHandler:
         except errors.MultipleActiveTournaments:
             return None, HandlerResult(MULTIPLE_TOURNAMENTS_MSG)
 
-    def handle_add_me(
-        self,
-        tg_id: int,
-        username: str | None,
-        first_name: str | None,
-        last_name: str | None,
-        deck_name: str,
-    ) -> HandlerResult:
-        if not self.user_svc.is_admin(tg_id):
-            return HandlerResult(NOT_ADMIN)
-        if not deck_name:
-            return HandlerResult(NO_DECK_NAME)
-        active, err = self._resolve_tournament()
-        if err:
-            return err
-        try:
-            db_user = self.user_svc.get_or_create(
-                tg_id=tg_id,
-                username=username,
-                first_name=first_name,
-                last_name=last_name,
-            )
-            archetype = self.arch_svc.get_or_create_by_name(deck_name)
-            self.svc.register_participant(
-                tournament_id=active.id,
-                user_id=db_user.id,
-                archetype_id=archetype.id,
-                added_by_admin=True,
-                deck_added_by_tg_id=tg_id,
-            )
-            user_label = f"@{username}" if username else (first_name or f"id{tg_id}")
-            return HandlerResult(
-                PLAYER_ADDED.format(
-                    user=user_label,
-                    archetype_name=archetype.name,
-                )
-            )
-        except errors.ParticipantAlreadyRegistered:
-            return HandlerResult("Вы уже записаны на этот турнир.")
-        except errors.TournamentInvalidState:
-            return HandlerResult("Регистрация на этот турнир закрыта.")
-
-    def handle_add_player(
-        self,
-        tg_id: int,
-        *,
-        target_tg_id: int,
-        target_username: str | None,
-        deck_name: str,
-        target_first_name: str | None = None,
-        target_last_name: str | None = None,
-    ) -> HandlerResult:
-        if not self.user_svc.is_admin(tg_id):
-            return HandlerResult(NOT_ADMIN)
-        active, err = self._resolve_tournament()
-        if err:
-            return err
-        try:
-            target_user = self.user_svc.get_or_create(
-                tg_id=target_tg_id,
-                username=target_username,
-                first_name=target_first_name,
-                last_name=target_last_name,
-            )
-            archetype = self.arch_svc.get_or_create_by_name(deck_name)
-            self.svc.register_participant(
-                tournament_id=active.id,
-                user_id=target_user.id,
-                archetype_id=archetype.id,
-                added_by_admin=True,
-                deck_added_by_tg_id=tg_id,
-            )
-            user_label = _player_display_label(target_username, target_first_name, target_tg_id)
-            return HandlerResult(
-                PLAYER_ADDED.format(
-                    user=user_label,
-                    archetype_name=archetype.name,
-                )
-            )
-        except errors.ParticipantAlreadyRegistered:
-            user_label = _player_display_label(target_username, target_first_name, target_tg_id)
-            return HandlerResult(f"{user_label} уже записан на этот турнир.")
-        except errors.TournamentInvalidState:
-            return HandlerResult("Регистрация на этот турнир закрыта.")
-
     def handle_add_players(
         self,
         tg_id: int,
         entries: list[tuple[int, str | None, str | None, str]],
     ) -> HandlerResult:
         """entries: (target_tg_id, username, first_name, deck_name) — после резолва в Telegram."""
-        if not self.user_svc.is_admin(tg_id):
+        if not self.user_svc.is_privileged(tg_id):
             return HandlerResult(NOT_ADMIN)
         if not entries:
             return HandlerResult("Нет данных для обработки.")
@@ -260,7 +127,7 @@ class AdminHandler:
         Игроки ищутся в БД по имени; если не найдены — создаются с placeholder tg_id.
         Уже зарегистрированные пропускаются.
         """
-        if not self.user_svc.is_admin(tg_id):
+        if not self.user_svc.is_privileged(tg_id):
             return HandlerResult(NOT_ADMIN)
 
         parsed: list[tuple[str, str | None]] = []
@@ -326,13 +193,13 @@ class AdminHandler:
 
     def handle_admin_status(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Список участников с кнопками для редактирования колоды (admin view)."""
-        if not self.user_svc.is_admin(tg_id):
+        if not self.user_svc.is_privileged(tg_id):
             return HandlerResult(NOT_ADMIN)
         return self._tournament_status_result(tournament_id)
 
     def handle_admin_show_filled(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Показывает кнопки заполненных участников (разворачивает скрытый список)."""
-        if not self.user_svc.is_admin(tg_id):
+        if not self.user_svc.is_privileged(tg_id):
             return HandlerResult(NOT_ADMIN)
         return self._tournament_status_result(tournament_id, show_filled=True)
 
@@ -385,7 +252,7 @@ class AdminHandler:
 
     def handle_pick_participant_arch(self, tg_id: int, participant_id: int, expanded: bool = False) -> HandlerResult:
         """Показывает выбор архетипа для конкретного участника."""
-        if not self.user_svc.is_admin(tg_id) and not self._features.can_fill_opponent_decks():
+        if not self.user_svc.is_privileged(tg_id) and not self._features.can_fill_opponent_decks():
             return HandlerResult(NOT_ADMIN)
         p = self.svc.get_participant_by_id(participant_id)
         if p is None:
@@ -402,7 +269,7 @@ class AdminHandler:
 
     def handle_set_participant_arch(self, tg_id: int, participant_id: int, archetype_id: int) -> HandlerResult:
         """Устанавливает архетип участнику, затем возвращает обновлённый статус турнира."""
-        if not self.user_svc.is_admin(tg_id) and not self._features.can_fill_opponent_decks():
+        if not self.user_svc.is_privileged(tg_id) and not self._features.can_fill_opponent_decks():
             return HandlerResult(NOT_ADMIN)
         p = self.svc.get_participant_by_id(participant_id)
         if p is None:
@@ -421,7 +288,7 @@ class AdminHandler:
 
     def handle_set_participant_custom_arch(self, tg_id: int, participant_id: int, arch_name: str) -> HandlerResult:
         """Создаёт архетип по введённому названию и присваивает участнику."""
-        if not self.user_svc.is_admin(tg_id) and not self._features.can_fill_opponent_decks():
+        if not self.user_svc.is_privileged(tg_id) and not self._features.can_fill_opponent_decks():
             return HandlerResult(NOT_ADMIN)
         p = self.svc.get_participant_by_id(participant_id)
         if p is None:
@@ -569,7 +436,7 @@ class AdminHandler:
         return HandlerResult("📁 Архив турниров:", keyboard=self.keyboards.tournament_list_keyboard(tour_list))
 
     def handle_tournament_status(self, tg_id: int) -> HandlerResult:
-        if not self.user_svc.is_admin(tg_id):
+        if not self.user_svc.is_privileged(tg_id):
             return HandlerResult(NOT_ADMIN)
         tournaments = self.svc.list_all_active_tournaments()
         if not tournaments:
@@ -634,7 +501,7 @@ class AdminHandler:
 
     def handle_export_players(self, tg_id: int, tournament_id: int) -> str | None:
         """Возвращает plain-text список «Имя Фамилия» или None если нет прав."""
-        if not self.user_svc.is_admin(tg_id):
+        if not self.user_svc.is_privileged(tg_id):
             return None
         try:
             return ExportService(self.svc.db).export_players_list(tournament_id)
@@ -643,7 +510,7 @@ class AdminHandler:
 
     def handle_export_excel(self, tg_id: int, tournament_id: int) -> tuple[bytes, str] | None:
         """Возвращает (bytes, filename) или None если нет прав."""
-        if not self.user_svc.is_admin(tg_id):
+        if not self.user_svc.is_privileged(tg_id):
             return None
         try:
             return ExportService(self.svc.db).export_participants_excel(tournament_id)

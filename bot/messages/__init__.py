@@ -26,7 +26,6 @@ SETTINGS_CHANGE_NAME_PROMPT = "Введите фамилию и имя чере�
 
 # Admin messages
 NOT_ADMIN = "У вас нет прав администратора."
-NO_DECK_NAME = "Укажите название колоды. Пример: /add_me Burn"
 NO_ACTIVE_TOURNAMENT = "Нет активного турнира в этом чате."
 PLAYER_ADDED = "✅ {user} добавлен как {archetype_name}."
 TELEGRAM_USER_LOOKUP_FAILED = "Не удалось найти @{username} в Telegram. Проверьте @username."
@@ -60,8 +59,6 @@ HELP_TEXT_ADMIN = """\
 /create_tournament — создать новый турнир вручную
 /delete_tournament — удалить текущий турнир
 
-/add_me <колода> — записать себя на активный турнир
-/add_player @username <колода> — записать конкретного игрока
 /add_players — массовая запись (каждая строка: Имя Фамилия)\
 """
 
