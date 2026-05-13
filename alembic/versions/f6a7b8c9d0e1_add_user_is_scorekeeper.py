@@ -1,7 +1,7 @@
 """add user.is_scorekeeper
 
-Revision ID: a1b2c3d4e5f6
-Revises: f4a5b6c7d8e9
+Revision ID: f6a7b8c9d0e1
+Revises: e0f1a2b3c4d5
 Create Date: 2026-05-13
 
 """
@@ -11,8 +11,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision: str = 'a1b2c3d4e5f6'
-down_revision: Union[str, Sequence[str], None] = 'f4a5b6c7d8e9'
+revision: str = 'f6a7b8c9d0e1'
+down_revision: Union[str, Sequence[str], None] = 'e0f1a2b3c4d5'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
