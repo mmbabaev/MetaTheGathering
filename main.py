@@ -28,6 +28,7 @@ from bot.keyboards import (
     CB_ADMIN_SET_ARCH,
     CB_ADMIN_SHOW_FILLED,
     CB_ADMIN_SHOW_OPPONENTS,
+    CB_ADMIN_TOGGLE_SCOREKEEPER,
     CB_AETHERHUB_CANCEL,
     CB_AETHERHUB_CONFIRM,
     CB_AETHERHUB_IMPORT,
@@ -253,6 +254,9 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(admin.callback_admin_show_opponents, pattern=f"^{CB_ADMIN_SHOW_OPPONENTS}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_admin_remove_confirm, pattern=f"^{CB_ADMIN_REMOVE_CONFIRM}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_admin_remove_do, pattern=f"^{CB_ADMIN_REMOVE_DO}:"))
+    app.add_handler(
+        CallbackQueryHandler(admin.callback_admin_toggle_scorekeeper, pattern=f"^{CB_ADMIN_TOGGLE_SCOREKEEPER}:")
+    )
     app.add_handler(CallbackQueryHandler(admin.callback_reveal_decks, pattern=f"^{CB_REVEAL_DECKS}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_reveal_decks_confirm, pattern=f"^{CB_REVEAL_DECKS_CONFIRM}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_reveal_decks_cancel, pattern=f"^{CB_REVEAL_DECKS_CANCEL}:"))

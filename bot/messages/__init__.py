@@ -38,6 +38,8 @@ BULK_ADD_PROMPT = (
 )
 BULK_ADD_EMPTY = "Список игроков пустой."
 PARTICIPANT_NOT_FOUND = "Участник не найден."
+SCOREKEEPER_GRANTED = "🧙 {name} назначен скорипером."
+SCOREKEEPER_REVOKED = "🧙 {name} снят с роли скорипера."
 ADMIN_ARCH_SAVED = "✅ Колода обновлена: {archetype_name}"
 DECKS_REVEALED = "👁 Колоды участников теперь видны всем."
 
@@ -177,7 +179,8 @@ def format_tournament_status(title: str, status: str, participants: list, decks_
         if p.user:
             full_name = format_participant_name(p.user.first_name, p.user.last_name) or f"id{p.user.tg_id}"
             username_hint = f" (@{p.user.username})" if p.user.username else ""
-            display = f"{full_name}{username_hint}"
+            sk_badge = " 🧙" if getattr(p.user, "is_scorekeeper", False) else ""
+            display = f"{full_name}{username_hint}{sk_badge}"
         else:
             display = "?"
         if p.archetype:

@@ -47,6 +47,7 @@ class UserRead(UserBase):
     id: int
     is_admin: bool
     is_superadmin: bool
+    is_scorekeeper: bool
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

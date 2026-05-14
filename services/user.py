@@ -281,6 +281,15 @@ class UserService:
         """Admin or scorekeeper — can add/edit decks and export."""
         return self.is_admin(tg_id) or self.is_scorekeeper(tg_id)
 
+    def toggle_scorekeeper(self, tg_id: int) -> Optional[bool]:
+        """Toggle is_scorekeeper for user by tg_id. Returns new value, or None if user not found."""
+        user = self.get_by_tg_id(tg_id)
+        if user is None:
+            return None
+        user.is_scorekeeper = not user.is_scorekeeper
+        self.db.commit()
+        return bool(user.is_scorekeeper)
+
     def update_name(
         self,
         tg_id: int,
