@@ -20,6 +20,7 @@ from bot.keyboards import (
     CB_ADMIN_SET_ARCH,
     CB_ADMIN_SHOW_FILLED,
     CB_ADMIN_SHOW_OPPONENTS,
+    CB_ADMIN_TOGGLE_SCOREKEEPER,
     CB_TSTATUS,
 )
 from bot.messages import (
@@ -32,6 +33,8 @@ from bot.messages import (
     PARTICIPANT_NOT_FOUND,
     PLAYER_ADDED,
     REGISTRATION_CLOSED,
+    SCOREKEEPER_GRANTED,
+    SCOREKEEPER_REVOKED,
     TOURNAMENT_CLOSED_MSG,
     TOURNAMENT_NOT_FOUND,
 )
@@ -1197,3 +1200,184 @@ class TestScorekeeperPermissions:
         p = svc.get_participant(active_tournament.id, user_alice.id)
         result = handler.handle_remove_participant(SCOREKEEPER_TG_ID, p.id, active_tournament.id)
         assert NOT_ADMIN in result.text
+
+    def test_scorekeeper_admin_status_has_player_buttons(
+        self, handler, svc, scorekeeper_user, active_tournament, user_alice
+    ):
+        """Метаписец должен видеть список игроков кнопками (как у админа), а не просто текстом."""
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        result = handler.handle_admin_status(tg_id=SCOREKEEPER_TG_ID, tournament_id=active_tournament.id)
+        cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
+        assert any(cb.startswith(CB_ADMIN_PICK_ARCH) for cb in cbs)
+
+    def test_scorekeeper_sees_edit_deck_button_in_player_actions(
+        self, handler, svc, scorekeeper_user, active_tournament, user_alice
+    ):
+        """Метаписец видит кнопку «📝 Изменить колоду» в меню действий."""
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_player_actions(
+            tg_id=SCOREKEEPER_TG_ID, participant_id=p.id, tournament_id=active_tournament.id
+        )
+        cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
+        assert any(cb.startswith(CB_ADMIN_PICK_ARCH) for cb in cbs)
+
+    def test_scorekeeper_no_admin_buttons_in_player_actions(
+        self, handler, svc, scorekeeper_user, active_tournament, user_alice
+    ):
+        """Метаписец НЕ видит кнопки «🧙 Метаписец» и «🗑 Удалить» в меню действий."""
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_player_actions(
+            tg_id=SCOREKEEPER_TG_ID, participant_id=p.id, tournament_id=active_tournament.id
+        )
+        cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
+        assert not any(cb.startswith(CB_ADMIN_TOGGLE_SCOREKEEPER) for cb in cbs)
+        assert not any(cb.startswith(CB_ADMIN_REMOVE_CONFIRM) for cb in cbs)
+
+    def test_scorekeeper_no_actions_menu_on_archetype_screen(
+        self, handler, svc, scorekeeper_user, active_tournament, user_alice, archetype_burn
+    ):
+        """Метаписец НЕ видит кнопку «☰ Меню» на экране выбора архетипа."""
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_pick_participant_arch(tg_id=SCOREKEEPER_TG_ID, participant_id=p.id)
+        cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
+        assert not any(cb.startswith(CB_ADMIN_PLAYER_ACTIONS) for cb in cbs)
+
+
+# ── Toggle метаписец ──────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def participant(svc, active_tournament, user_alice):
+    return svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+
+
+class TestToggleScorekeeper:
+    def test_non_admin_blocked(self, handler, svc, user_alice, active_tournament):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_toggle_scorekeeper(
+            tg_id=user_alice.tg_id, participant_id=p.id, tournament_id=active_tournament.id
+        )
+        assert result.is_alert
+        assert result.text == NOT_ADMIN
+
+    def test_participant_not_found(self, handler, admin_user, active_tournament):
+        result = handler.handle_toggle_scorekeeper(
+            tg_id=ADMIN_TG_ID, participant_id=99999, tournament_id=active_tournament.id
+        )
+        assert result.is_alert
+        assert result.text == PARTICIPANT_NOT_FOUND
+
+    def test_admin_grants_role(self, handler, svc, admin_user, active_tournament, user_alice):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_toggle_scorekeeper(
+            tg_id=ADMIN_TG_ID, participant_id=p.id, tournament_id=active_tournament.id
+        )
+        assert not result.is_alert
+        assert handler.user_svc.is_scorekeeper(user_alice.tg_id) is True
+
+    def test_admin_revokes_role(self, handler, svc, db, admin_user, active_tournament, user_alice):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        obj = db.execute(select(m.User).where(m.User.tg_id == user_alice.tg_id)).scalar_one()
+        obj.is_scorekeeper = True
+        db.commit()
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_toggle_scorekeeper(
+            tg_id=ADMIN_TG_ID, participant_id=p.id, tournament_id=active_tournament.id
+        )
+        assert not result.is_alert
+        assert handler.user_svc.is_scorekeeper(user_alice.tg_id) is False
+
+    def test_result_has_answer_text_on_grant(self, handler, svc, admin_user, active_tournament, user_alice):
+        """answer_text должен быть заполнен — он показывается как popup-алерт в Telegram."""
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_toggle_scorekeeper(
+            tg_id=ADMIN_TG_ID, participant_id=p.id, tournament_id=active_tournament.id
+        )
+        assert result.answer_text is not None
+        assert "метаписц" in result.answer_text.lower()
+
+    def test_result_has_answer_text_on_revoke(self, handler, svc, db, admin_user, active_tournament, user_alice):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        obj = db.execute(select(m.User).where(m.User.tg_id == user_alice.tg_id)).scalar_one()
+        obj.is_scorekeeper = True
+        db.commit()
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_toggle_scorekeeper(
+            tg_id=ADMIN_TG_ID, participant_id=p.id, tournament_id=active_tournament.id
+        )
+        assert result.answer_text is not None
+        assert "снят" in result.answer_text.lower()
+
+
+class TestPlayerActionsKeyboard:
+    def test_back_button_goes_to_archetype_screen(self, handler, svc, admin_user, active_tournament, user_alice):
+        """⬅️ Назад в меню … должен возвращать на экран игрока (adm_pick), а не на статус (tstatus)."""
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_player_actions(
+            tg_id=ADMIN_TG_ID, participant_id=p.id, tournament_id=active_tournament.id
+        )
+        cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
+        assert any(cb == f"{CB_ADMIN_PICK_ARCH}:{p.id}" for cb in cbs)
+        assert not any(cb.startswith(CB_TSTATUS) for cb in cbs)
+
+    def test_target_scorekeeper_label(self, handler, svc, db, admin_user, active_tournament, user_alice):
+        """Когда цель — метаписец, кнопка показывает «Снять метаписца»."""
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        obj = db.execute(select(m.User).where(m.User.tg_id == user_alice.tg_id)).scalar_one()
+        obj.is_scorekeeper = True
+        db.commit()
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_player_actions(
+            tg_id=ADMIN_TG_ID, participant_id=p.id, tournament_id=active_tournament.id
+        )
+        labels = [b.text for row in result.keyboard.inline_keyboard for b in row]
+        assert any("снять" in label.lower() for label in labels)
+
+    def test_edit_deck_button_visible_for_admin(self, handler, svc, admin_user, active_tournament, user_alice):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_player_actions(
+            tg_id=ADMIN_TG_ID, participant_id=p.id, tournament_id=active_tournament.id
+        )
+        cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
+        assert any(cb.startswith(CB_ADMIN_PICK_ARCH) for cb in cbs)
+
+    def test_admin_actions_visible_for_admin(self, handler, svc, admin_user, active_tournament, user_alice):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_player_actions(
+            tg_id=ADMIN_TG_ID, participant_id=p.id, tournament_id=active_tournament.id
+        )
+        cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
+        assert any(cb.startswith(CB_ADMIN_TOGGLE_SCOREKEEPER) for cb in cbs)
+        assert any(cb.startswith(CB_ADMIN_REMOVE_CONFIRM) for cb in cbs)
+
+
+class TestToggleScorekeeperUserService:
+    def test_toggle_grants(self, user_svc, user_alice):
+        result = user_svc.toggle_scorekeeper(user_alice.tg_id)
+        assert result is True
+        assert user_svc.is_scorekeeper(user_alice.tg_id) is True
+
+    def test_toggle_revokes(self, user_svc, db, user_alice):
+        obj = db.execute(select(m.User).where(m.User.tg_id == user_alice.tg_id)).scalar_one()
+        obj.is_scorekeeper = True
+        db.commit()
+        result = user_svc.toggle_scorekeeper(user_alice.tg_id)
+        assert result is False
+        assert user_svc.is_scorekeeper(user_alice.tg_id) is False
+
+    def test_toggle_twice_restores(self, user_svc, user_alice):
+        user_svc.toggle_scorekeeper(user_alice.tg_id)
+        user_svc.toggle_scorekeeper(user_alice.tg_id)
+        assert user_svc.is_scorekeeper(user_alice.tg_id) is False
+
+    def test_unknown_user_returns_none(self, user_svc):
+        assert user_svc.toggle_scorekeeper(99999999) is None
