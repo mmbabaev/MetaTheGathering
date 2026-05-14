@@ -38,8 +38,8 @@ BULK_ADD_PROMPT = (
 )
 BULK_ADD_EMPTY = "Список игроков пустой."
 PARTICIPANT_NOT_FOUND = "Участник не найден."
-SCOREKEEPER_GRANTED = "🧙 {name} назначен скорипером."
-SCOREKEEPER_REVOKED = "🧙 {name} снят с роли скорипера."
+SCOREKEEPER_GRANTED = "🧙 {name} назначен метаписцем."
+SCOREKEEPER_REVOKED = "🧙 {name} снят с роли метаписца."
 ADMIN_ARCH_SAVED = "✅ Колода обновлена: {archetype_name}"
 DECKS_REVEALED = "👁 Колоды участников теперь видны всем."
 

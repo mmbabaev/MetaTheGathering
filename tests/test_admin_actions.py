@@ -459,29 +459,16 @@ class TestHandleAdminPickArch:
         buttons = [b for row in result.keyboard.inline_keyboard for b in row]
         assert any(b.callback_data.startswith(CB_ADMIN_SET_ARCH) for b in buttons)
 
-    def test_admin_sees_delete_button(self, handler, admin_user, active_tournament, participant):
+    def test_admin_sees_actions_menu_button(self, handler, admin_user, active_tournament, participant):
         result = handler.handle_pick_participant_arch(tg_id=ADMIN_TG_ID, participant_id=participant.id)
         cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
-        assert any(cb.startswith(CB_ADMIN_REMOVE_CONFIRM) for cb in cbs)
+        assert any(cb.startswith(CB_ADMIN_PLAYER_ACTIONS) for cb in cbs)
 
-    def test_non_admin_no_delete_button(self, handler, svc, user_svc, active_tournament, participant):
+    def test_non_admin_no_actions_menu_button(self, handler, svc, user_svc, active_tournament, participant):
         non_admin = user_svc.get_or_create(tg_id=5555, username=None, first_name="Regular")
         result = handler.handle_pick_participant_arch(tg_id=non_admin.tg_id, participant_id=participant.id)
         cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
-        assert not any(cb.startswith(CB_ADMIN_REMOVE_CONFIRM) for cb in cbs)
-
-    def test_opponents_button_shown_when_pairings_exist(
-        self, db, handler, admin_user, active_tournament, participant, user_alice, arch_svc
-    ):
-        _import_pairings(db, active_tournament.id, admin_user, user_alice, arch_svc)
-        result = handler.handle_pick_participant_arch(tg_id=ADMIN_TG_ID, participant_id=participant.id)
-        cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
-        assert any(cb.startswith(CB_ADMIN_SHOW_OPPONENTS) for cb in cbs)
-
-    def test_opponents_button_hidden_when_no_pairings(self, handler, admin_user, active_tournament, participant):
-        result = handler.handle_pick_participant_arch(tg_id=ADMIN_TG_ID, participant_id=participant.id)
-        cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
-        assert not any(cb.startswith(CB_ADMIN_SHOW_OPPONENTS) for cb in cbs)
+        assert not any(cb.startswith(CB_ADMIN_PLAYER_ACTIONS) for cb in cbs)
 
     def test_back_button_points_to_tournament_status(self, handler, admin_user, active_tournament, participant):
         result = handler.handle_pick_participant_arch(tg_id=ADMIN_TG_ID, participant_id=participant.id)

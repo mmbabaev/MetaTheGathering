@@ -308,7 +308,7 @@ class Keyboards:
                 ]
             )
         if is_admin:
-            sk_label = "🧙 Снять скорипера" if is_target_scorekeeper else "🧙 Скорипер"
+            sk_label = "🧙 Снять метаписца" if is_target_scorekeeper else "🧙 Метаписец"
             buttons.append(
                 [
                     InlineKeyboardButton(
@@ -349,8 +349,6 @@ class Keyboards:
         show_emoji: bool = True,
         tournament_id: int | None = None,
         is_admin: bool = False,
-        has_pairings: bool = False,
-        is_target_scorekeeper: bool = False,
     ) -> InlineKeyboardMarkup:
         buttons = [
             [
@@ -364,27 +362,13 @@ class Keyboards:
         if has_more:
             buttons.append([InlineKeyboardButton("... ещё", callback_data=f"{CB_ADMIN_ARCH_MORE}:{participant_id}")])
         buttons.append([InlineKeyboardButton("Свой вариант", callback_data=f"{CB_ADMIN_CUSTOM_ARCH}:{participant_id}")])
-        if has_pairings and tournament_id is not None:
-            buttons.append(
-                [
-                    InlineKeyboardButton(
-                        "👥 Показать оппонентов",
-                        callback_data=f"{CB_ADMIN_SHOW_OPPONENTS}:{participant_id}:{tournament_id}",
-                    )
-                ]
-            )
         if is_admin and tournament_id is not None:
-            sk_label = "🧙 Снять скорипера" if is_target_scorekeeper else "🧙 Скорипер"
             buttons.append(
                 [
                     InlineKeyboardButton(
-                        sk_label,
-                        callback_data=f"{CB_ADMIN_TOGGLE_SCOREKEEPER}:{participant_id}:{tournament_id}",
-                    ),
-                    InlineKeyboardButton(
-                        "🗑 Удалить",
-                        callback_data=f"{CB_ADMIN_REMOVE_CONFIRM}:{participant_id}:{tournament_id}",
-                    ),
+                        "…",
+                        callback_data=f"{CB_ADMIN_PLAYER_ACTIONS}:{participant_id}:{tournament_id}",
+                    )
                 ]
             )
         if tournament_id is not None:
@@ -531,8 +515,6 @@ def admin_archetype_select_keyboard(
     has_more: bool = False,
     tournament_id: int | None = None,
     is_admin: bool = False,
-    has_pairings: bool = False,
-    is_target_scorekeeper: bool = False,
 ) -> InlineKeyboardMarkup:
     return _default.admin_archetype_select_keyboard(
         participant_id,
@@ -540,8 +522,6 @@ def admin_archetype_select_keyboard(
         has_more=has_more,
         tournament_id=tournament_id,
         is_admin=is_admin,
-        has_pairings=has_pairings,
-        is_target_scorekeeper=is_target_scorekeeper,
     )
 
 
