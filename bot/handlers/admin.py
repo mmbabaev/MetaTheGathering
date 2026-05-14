@@ -239,6 +239,7 @@ class AdminHandler:
         show_emoji = not (caller and caller.hide_deck_emoji)
         is_admin = self.user_svc.is_admin(caller_tg_id) if caller_tg_id else False
         has_pairings = AetherhubImportService(self.svc.db).has_pairings(tournament_id) if tournament_id else False
+        is_target_scorekeeper = self.user_svc.is_scorekeeper(player_tg_id) if player_tg_id else False
         return HandlerResult(
             CHOOSE_ARCHETYPE,
             keyboard=self.keyboards.admin_archetype_select_keyboard(
@@ -249,6 +250,7 @@ class AdminHandler:
                 tournament_id=tournament_id,
                 is_admin=is_admin,
                 has_pairings=has_pairings,
+                is_target_scorekeeper=is_target_scorekeeper,
             ),
         )
 

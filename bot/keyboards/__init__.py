@@ -350,6 +350,7 @@ class Keyboards:
         tournament_id: int | None = None,
         is_admin: bool = False,
         has_pairings: bool = False,
+        is_target_scorekeeper: bool = False,
     ) -> InlineKeyboardMarkup:
         buttons = [
             [
@@ -373,12 +374,17 @@ class Keyboards:
                 ]
             )
         if is_admin and tournament_id is not None:
+            sk_label = "🧙 Снять скорипера" if is_target_scorekeeper else "🧙 Скорипер"
             buttons.append(
                 [
                     InlineKeyboardButton(
-                        "🗑 Удалить из турнира",
+                        sk_label,
+                        callback_data=f"{CB_ADMIN_TOGGLE_SCOREKEEPER}:{participant_id}:{tournament_id}",
+                    ),
+                    InlineKeyboardButton(
+                        "🗑 Удалить",
                         callback_data=f"{CB_ADMIN_REMOVE_CONFIRM}:{participant_id}:{tournament_id}",
-                    )
+                    ),
                 ]
             )
         if tournament_id is not None:
@@ -526,6 +532,7 @@ def admin_archetype_select_keyboard(
     tournament_id: int | None = None,
     is_admin: bool = False,
     has_pairings: bool = False,
+    is_target_scorekeeper: bool = False,
 ) -> InlineKeyboardMarkup:
     return _default.admin_archetype_select_keyboard(
         participant_id,
@@ -534,6 +541,7 @@ def admin_archetype_select_keyboard(
         tournament_id=tournament_id,
         is_admin=is_admin,
         has_pairings=has_pairings,
+        is_target_scorekeeper=is_target_scorekeeper,
     )
 
 
