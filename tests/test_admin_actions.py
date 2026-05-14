@@ -35,6 +35,7 @@ from bot.messages import (
     REGISTRATION_CLOSED,
     SCOREKEEPER_GRANTED,
     SCOREKEEPER_REVOKED,
+    TOURNAMENT_ALREADY_EXISTS_MSG,
     TOURNAMENT_CLOSED_MSG,
     TOURNAMENT_NOT_FOUND,
 )
@@ -1219,8 +1220,8 @@ class TestScorekeeperPermissions:
         result = handler.handle_player_actions(
             tg_id=SCOREKEEPER_TG_ID, participant_id=p.id, tournament_id=active_tournament.id
         )
-        cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
-        assert any(cb.startswith(CB_ADMIN_PICK_ARCH) for cb in cbs)
+        labels = [b.text for row in result.keyboard.inline_keyboard for b in row]
+        assert any("Изменить колоду" in label for label in labels)
 
     def test_scorekeeper_no_admin_buttons_in_player_actions(
         self, handler, svc, scorekeeper_user, active_tournament, user_alice
@@ -1346,8 +1347,8 @@ class TestPlayerActionsKeyboard:
         result = handler.handle_player_actions(
             tg_id=ADMIN_TG_ID, participant_id=p.id, tournament_id=active_tournament.id
         )
-        cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
-        assert any(cb.startswith(CB_ADMIN_PICK_ARCH) for cb in cbs)
+        labels = [b.text for row in result.keyboard.inline_keyboard for b in row]
+        assert any("Изменить колоду" in label for label in labels)
 
     def test_admin_actions_visible_for_admin(self, handler, svc, admin_user, active_tournament, user_alice):
         svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
@@ -1381,3 +1382,137 @@ class TestToggleScorekeeperUserService:
 
     def test_unknown_user_returns_none(self, user_svc):
         assert user_svc.toggle_scorekeeper(99999999) is None
+
+
+# ── Keyboard: ☰ Меню button on archetype select screen ───────────────────────
+
+
+class TestAdminArchetypeSelectKeyboard:
+    def test_admin_with_tournament_id_sees_menu_button(self, handler, svc, admin_user, active_tournament, user_alice):
+        """☰ Меню должен быть виден, когда вызывающий — админ и известен tournament_id."""
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_pick_participant_arch(tg_id=ADMIN_TG_ID, participant_id=p.id)
+        cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
+        assert any(cb.startswith(CB_ADMIN_PLAYER_ACTIONS) for cb in cbs)
+
+    def test_non_admin_no_menu_button(self, handler, svc, user_alice, active_tournament):
+        """Не-admin (обычный юзер) не должен видеть ☰ Меню."""
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_pick_participant_arch(tg_id=user_alice.tg_id, participant_id=p.id)
+        cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
+        assert not any(cb.startswith(CB_ADMIN_PLAYER_ACTIONS) for cb in cbs)
+
+    def test_back_button_goes_to_tournament_status(self, handler, svc, admin_user, active_tournament, user_alice):
+        """⬅️ Назад на экране архетипа ведёт на статус турнира (tstatus)."""
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_pick_participant_arch(tg_id=ADMIN_TG_ID, participant_id=p.id)
+        cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
+        assert any(cb == f"{CB_TSTATUS}:{active_tournament.id}" for cb in cbs)
+
+
+# ── handle_player_actions: non-privileged user ───────────────────────────────
+
+
+class TestPlayerActionsNonPrivileged:
+    def test_no_edit_deck_button(self, handler, svc, user_alice, active_tournament):
+        """Обычный игрок не видит кнопку 📝 Изменить колоду."""
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_player_actions(
+            tg_id=user_alice.tg_id, participant_id=p.id, tournament_id=active_tournament.id
+        )
+        labels = [b.text for row in result.keyboard.inline_keyboard for b in row]
+        assert not any("Изменить колоду" in label for label in labels)
+
+    def test_no_admin_action_buttons(self, handler, svc, user_alice, active_tournament):
+        """Обычный игрок не видит кнопки 🧙 и 🗑."""
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_player_actions(
+            tg_id=user_alice.tg_id, participant_id=p.id, tournament_id=active_tournament.id
+        )
+        cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
+        assert not any(cb.startswith(CB_ADMIN_TOGGLE_SCOREKEEPER) for cb in cbs)
+        assert not any(cb.startswith(CB_ADMIN_REMOVE_CONFIRM) for cb in cbs)
+
+
+# ── handle_player_opponents edge cases ───────────────────────────────────────
+
+
+class TestHandlePlayerOpponentsEdgeCases:
+    def test_participant_not_found(self, handler, admin_user, active_tournament):
+        result = handler.handle_player_opponents(
+            tg_id=ADMIN_TG_ID, participant_id=99999, tournament_id=active_tournament.id
+        )
+        assert result.is_alert
+        assert result.text == PARTICIPANT_NOT_FOUND
+
+    def test_no_pairings_returns_alert(self, handler, svc, admin_user, active_tournament, user_alice):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_player_opponents(
+            tg_id=ADMIN_TG_ID, participant_id=p.id, tournament_id=active_tournament.id
+        )
+        assert result.is_alert
+        assert "пейринги" in result.text.lower()
+
+
+# ── UserService.get_or_create update paths ───────────────────────────────────
+
+
+class TestUserServiceGetOrCreate:
+    def test_updates_username_on_change(self, user_svc):
+        user_svc.get_or_create(tg_id=5001, username="old_name", first_name="Test")
+        updated = user_svc.get_or_create(tg_id=5001, username="new_name")
+        assert updated.username == "new_name"
+
+    def test_fills_in_first_name_when_empty(self, user_svc):
+        user_svc.get_or_create(tg_id=5002, username="u")
+        updated = user_svc.get_or_create(tg_id=5002, first_name="Alice")
+        assert updated.first_name == "Alice"
+
+    def test_fills_in_last_name_when_empty(self, user_svc):
+        user_svc.get_or_create(tg_id=5003, first_name="Bob")
+        updated = user_svc.get_or_create(tg_id=5003, last_name="Smith")
+        assert updated.last_name == "Smith"
+
+    def test_does_not_overwrite_existing_first_name(self, user_svc):
+        user_svc.get_or_create(tg_id=5004, first_name="Original")
+        updated = user_svc.get_or_create(tg_id=5004, first_name="New")
+        assert updated.first_name == "Original"
+
+
+# ── handle_create_tournament edge cases ──────────────────────────────────────
+
+
+class TestHandleCreateTournament:
+    def test_auto_title_when_none(self, handler, admin_user):
+        result = handler.handle_create_tournament(tg_id=ADMIN_TG_ID, chat_id=CHAT_ID)
+        assert "Pauper" in result.text
+        assert result.tournament_id is not None
+
+    def test_already_exists_returns_alert(self, handler, admin_user, active_tournament):
+        result = handler.handle_create_tournament(tg_id=ADMIN_TG_ID, chat_id=CHAT_ID, title="Duplicate")
+        assert result.is_alert
+        assert result.text == TOURNAMENT_ALREADY_EXISTS_MSG
+
+    def test_non_admin_blocked(self, handler, user_alice):
+        result = handler.handle_create_tournament(tg_id=user_alice.tg_id, chat_id=CHAT_ID, title="T")
+        assert result.text == NOT_ADMIN
+
+
+# ── handle_admin_show_filled ─────────────────────────────────────────────────
+
+
+class TestHandleAdminShowFilled:
+    def test_non_privileged_blocked(self, handler, user_alice, active_tournament):
+        result = handler.handle_admin_show_filled(tg_id=user_alice.tg_id, tournament_id=active_tournament.id)
+        assert result.text == NOT_ADMIN
+
+    def test_admin_can_show_filled(self, handler, admin_user, active_tournament):
+        result = handler.handle_admin_show_filled(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+        assert result.text != NOT_ADMIN
+        assert result.keyboard is not None
