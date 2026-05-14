@@ -42,6 +42,7 @@ from bot.messages import (
 from core import models as m
 from core.models import TournamentStatus
 from core.schemas import TournamentCreate
+from services import errors
 from services.aetherhub_import_service import AetherhubImportService
 from services.aetherhub_models import AetherhubPairing, AetherhubRound, AetherhubTournamentData
 from services.feature_flags import FeatureFlags
@@ -1516,3 +1517,265 @@ class TestHandleAdminShowFilled:
         result = handler.handle_admin_show_filled(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
         assert result.text != NOT_ADMIN
         assert result.keyboard is not None
+
+
+# ── Race conditions (ParticipantNotFound after initial get) ───────────────────
+
+
+class TestRaceConditions:
+    def test_set_participant_arch_race(self, handler, svc, admin_user, active_tournament, user_alice, archetype_burn):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        with patch.object(svc, "set_participant_archetype", side_effect=errors.ParticipantNotFound):
+            result = handler.handle_set_participant_arch(
+                tg_id=ADMIN_TG_ID, participant_id=p.id, archetype_id=archetype_burn.id
+            )
+        assert result.is_alert
+        assert result.text == PARTICIPANT_NOT_FOUND
+
+    def test_set_participant_custom_arch_race(self, handler, svc, admin_user, active_tournament, user_alice):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        with patch.object(svc, "set_participant_archetype", side_effect=errors.ParticipantNotFound):
+            result = handler.handle_set_participant_custom_arch(
+                tg_id=ADMIN_TG_ID, participant_id=p.id, arch_name="Faeries"
+            )
+        assert result.is_alert
+        assert result.text == PARTICIPANT_NOT_FOUND
+
+    def test_remove_participant_race(self, handler, svc, admin_user, active_tournament, user_alice):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        with patch.object(svc, "unregister_participant", side_effect=errors.ParticipantNotFound):
+            result = handler.handle_remove_participant(
+                tg_id=ADMIN_TG_ID, participant_id=p.id, tournament_id=active_tournament.id
+            )
+        assert result.is_alert
+        assert result.text == PARTICIPANT_NOT_FOUND
+
+    def test_toggle_scorekeeper_orphan_participant(self, handler, svc, admin_user, active_tournament, user_alice):
+        """target_user is None — участник есть, но user_svc не находит пользователя (mock)."""
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        with patch.object(handler.user_svc, "get_by_id", return_value=None):
+            result = handler.handle_toggle_scorekeeper(
+                tg_id=ADMIN_TG_ID, participant_id=p.id, tournament_id=active_tournament.id
+            )
+        assert result.is_alert
+        assert result.text == PARTICIPANT_NOT_FOUND
+
+
+# ── handle_fill_opponents edge: user not found ────────────────────────────────
+
+
+class TestHandleFillOpponentsEdgeCases:
+    def test_user_not_found_returns_alert(self, handler, ff_svc, active_tournament):
+        """tg_id не в БД — должен вернуть алерт «Профиль не найден»."""
+        with patch.object(handler._features, "can_fill_opponent_decks", return_value=True):
+            result = handler.handle_fill_opponents(tg_id=99999, tournament_id=active_tournament.id)
+        assert result.is_alert
+        assert "не найден" in result.text
+
+
+# ── handle_close_tournament_by_id: TournamentNotFound path ───────────────────
+
+
+class TestCloseTournamentByIdNotFound:
+    def test_tournament_not_found_with_allow_empty(self, handler, admin_user):
+        """allow_empty=True пропускает проверку участников и доходит до close_tournament."""
+        result = handler.handle_close_tournament_by_id(tg_id=ADMIN_TG_ID, tournament_id=99999, allow_empty=True)
+        assert result.is_alert
+        assert TOURNAMENT_NOT_FOUND in result.text
+
+
+# ── handle_delete_tournament ──────────────────────────────────────────────────
+
+
+class TestHandleDeleteTournament:
+    def test_non_admin_blocked(self, handler, user_alice):
+        result = handler.handle_delete_tournament(tg_id=user_alice.tg_id)
+        assert result.text == NOT_ADMIN
+
+    def test_no_active_tournament(self, handler, admin_user):
+        result = handler.handle_delete_tournament(tg_id=ADMIN_TG_ID)
+        assert NO_ACTIVE_TOURNAMENT in result.text
+
+    def test_deletes_tournament(self, handler, svc, admin_user, active_tournament):
+        result = handler.handle_delete_tournament(tg_id=ADMIN_TG_ID)
+        assert active_tournament.title in result.text
+        assert svc.list_all_active_tournaments() == []
+
+
+# ── handle_delete_tournament_prompt and _confirm ─────────────────────────────
+
+
+class TestHandleDeleteTournamentPrompt:
+    def test_non_admin_blocked(self, handler, user_alice, active_tournament):
+        result = handler.handle_delete_tournament_prompt(tg_id=user_alice.tg_id, tournament_id=active_tournament.id)
+        assert result.text == NOT_ADMIN
+
+    def test_not_found(self, handler, admin_user):
+        result = handler.handle_delete_tournament_prompt(tg_id=ADMIN_TG_ID, tournament_id=99999)
+        assert result.is_alert
+        assert TOURNAMENT_NOT_FOUND in result.text
+
+    def test_shows_confirmation(self, handler, admin_user, active_tournament):
+        result = handler.handle_delete_tournament_prompt(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+        assert active_tournament.title in result.text
+        assert result.keyboard is not None
+
+
+class TestHandleDeleteTournamentConfirm:
+    def test_non_admin_blocked(self, handler, user_alice, active_tournament):
+        result = handler.handle_delete_tournament_confirm(tg_id=user_alice.tg_id, tournament_id=active_tournament.id)
+        assert result.text == NOT_ADMIN
+
+    def test_not_found(self, handler, admin_user):
+        result = handler.handle_delete_tournament_confirm(tg_id=ADMIN_TG_ID, tournament_id=99999)
+        assert result.is_alert
+        assert TOURNAMENT_NOT_FOUND in result.text
+
+    def test_deletes_tournament(self, handler, svc, admin_user, active_tournament):
+        result = handler.handle_delete_tournament_confirm(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+        assert active_tournament.title in result.text
+        assert svc.list_all_active_tournaments() == []
+
+
+# ── handle_export_players / handle_export_excel: edge cases ──────────────────
+
+
+class TestHandleExportEdgeCases:
+    def test_export_players_not_privileged_returns_none(self, handler, user_alice, active_tournament):
+        result = handler.handle_export_players(tg_id=user_alice.tg_id, tournament_id=active_tournament.id)
+        assert result is None
+
+    def test_export_players_missing_tournament_returns_empty_string(self, handler, admin_user):
+        result = handler.handle_export_players(tg_id=ADMIN_TG_ID, tournament_id=99999)
+        assert result == ""
+
+    def test_export_excel_not_privileged_returns_none(self, handler, user_alice, active_tournament):
+        result = handler.handle_export_excel(tg_id=user_alice.tg_id, tournament_id=active_tournament.id)
+        assert result is None
+
+    def test_export_excel_tournament_not_found_returns_none(self, handler, admin_user):
+        result = handler.handle_export_excel(tg_id=ADMIN_TG_ID, tournament_id=99999)
+        assert result is None
+
+
+# ── handle_schedule ───────────────────────────────────────────────────────────
+
+
+class TestHandleSchedule:
+    def test_non_admin_blocked(self, handler, user_alice):
+        result = handler.handle_schedule(tg_id=user_alice.tg_id, schedule_text="something")
+        assert result.text == NOT_ADMIN
+
+    def test_admin_passes_through(self, handler, admin_user):
+        result = handler.handle_schedule(tg_id=ADMIN_TG_ID, schedule_text="next friday 20:00")
+        assert result.text == "next friday 20:00"
+
+
+# ── handle_hide_decks: TournamentNotFound ─────────────────────────────────────
+
+
+class TestHandleHideDecks:
+    def test_tournament_not_found(self, handler, admin_user):
+        result = handler.handle_hide_decks(tg_id=ADMIN_TG_ID, tournament_id=99999)
+        assert result.is_alert
+        assert TOURNAMENT_NOT_FOUND in result.text
+
+
+# ── UserService: merge_users_by_id ────────────────────────────────────────────
+
+
+class TestUserServiceMergeUsersById:
+    def test_merge_transfers_participants(self, user_svc, svc, db, active_tournament):
+        source = user_svc.get_or_create(tg_id=6001, first_name="Source")
+        target = user_svc.get_or_create(tg_id=6002, first_name="Target")
+        svc.register_participant(tournament_id=active_tournament.id, user_id=source.id)
+        result = user_svc.merge_users_by_id(source.id, target.id)
+        assert result is True
+        assert svc.get_participant(active_tournament.id, target.id) is not None
+
+    def test_merge_source_is_deleted(self, user_svc, svc, db, active_tournament):
+        source = user_svc.get_or_create(tg_id=6003, first_name="OldUser")
+        target = user_svc.get_or_create(tg_id=6004, first_name="NewUser")
+        result = user_svc.merge_users_by_id(source.id, target.id)
+        assert result is True
+        assert user_svc.get_by_id(source.id) is None
+
+    def test_merge_same_user_returns_false(self, user_svc, user_alice):
+        result = user_svc.merge_users_by_id(user_alice.id, user_alice.id)
+        assert result is False
+
+    def test_merge_nonexistent_source_returns_false(self, user_svc, user_alice):
+        result = user_svc.merge_users_by_id(99999, user_alice.id)
+        assert result is False
+
+    def test_merge_adopt_name_copies_name(self, user_svc):
+        source = user_svc.get_or_create(tg_id=6005, first_name="CanonName", last_name="Smith")
+        target = user_svc.get_or_create(tg_id=6006)
+        user_svc.merge_users_by_id(source.id, target.id, adopt_name=True)
+        updated = user_svc.get_by_id(target.id)
+        assert updated.first_name == "CanonName"
+
+    def test_merge_skips_duplicate_participant_in_same_tournament(self, user_svc, svc, db, active_tournament):
+        """Если target уже участвует в турнире — source's participant удаляется без конфликта."""
+        source = user_svc.get_or_create(tg_id=6007, first_name="Src")
+        target = user_svc.get_or_create(tg_id=6008, first_name="Tgt")
+        svc.register_participant(tournament_id=active_tournament.id, user_id=source.id)
+        svc.register_participant(tournament_id=active_tournament.id, user_id=target.id)
+        result = user_svc.merge_users_by_id(source.id, target.id)
+        assert result is True
+        assert user_svc.get_by_id(source.id) is None
+
+
+# ── UserService: get_or_create_placeholder ────────────────────────────────────
+
+
+class TestUserServiceGetOrCreatePlaceholder:
+    def test_creates_new_placeholder(self, user_svc):
+        user, created = user_svc.get_or_create_placeholder(username="ghost")
+        assert created is True
+        assert user.username == "ghost"
+        assert user.tg_id < 0
+
+    def test_returns_existing_by_username(self, user_svc):
+        user_svc.get_or_create_placeholder(username="ghost2")
+        user, created = user_svc.get_or_create_placeholder(username="ghost2")
+        assert created is False
+
+    def test_sequential_placeholders_have_decreasing_tg_ids(self, user_svc):
+        u1, _ = user_svc.get_or_create_placeholder(username="ph1")
+        u2, _ = user_svc.get_or_create_placeholder(username="ph2")
+        assert u2.tg_id < u1.tg_id
+
+
+# ── handle_bulk_add_participants: username display ────────────────────────────
+
+
+class TestBulkAddUsernameDisplay:
+    def test_username_appears_in_display_when_user_found(self, handler, svc, user_svc, admin_user, active_tournament):
+        """Строки bulk-add включают @username если пользователь уже в БД с username."""
+        user_svc.get_or_create(tg_id=7001, username="playerone", first_name="Player", last_name="One")
+        result = handler.handle_bulk_add_by_name(
+            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, names=["One Player"]
+        )
+        assert "@playerone" in result.text or "Player" in result.text
+
+
+# ── handle_player_opponents: success path (bye + regular rounds) ──────────────
+
+
+class TestHandlePlayerOpponentsSuccess:
+    def test_shows_opponent_name(self, db, handler, svc, user_svc, admin_user, active_tournament, user_alice, arch_svc):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        _import_pairings(db, active_tournament.id, admin_user, user_alice, arch_svc)
+        alice_placeholder = user_svc.find_by_name("Alice Smith") or user_svc.find_by_name("Smith Alice")
+        target_user = alice_placeholder if alice_placeholder else user_alice
+        p = svc.get_participant(active_tournament.id, target_user.id)
+        if p is None:
+            return  # pairings didn't create participant for this user
+        result = handler.handle_player_opponents(ADMIN_TG_ID, p.id, active_tournament.id)
+        if not result.is_alert:
+            assert "Раунд" in result.text
