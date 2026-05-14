@@ -345,7 +345,9 @@ class AdminHandler:
         name = format_participant_name(target_user.first_name, target_user.last_name) or f"id{p.id}"
         new_value = self.user_svc.toggle_scorekeeper(target_user.tg_id)
         msg = SCOREKEEPER_GRANTED.format(name=name) if new_value else SCOREKEEPER_REVOKED.format(name=name)
-        return self._tournament_status_result(tournament_id, prefix=msg)
+        result = self._tournament_status_result(tournament_id, prefix=msg)
+        result.answer_text = msg
+        return result
 
     def handle_player_opponents(self, tg_id: int, participant_id: int, tournament_id: int) -> HandlerResult:
         """Список оппонентов игрока из AetherHub-пейрингов."""

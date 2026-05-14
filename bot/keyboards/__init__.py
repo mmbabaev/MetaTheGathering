@@ -321,7 +321,7 @@ class Keyboards:
                     ),
                 ]
             )
-        buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_TSTATUS}:{tournament_id}")])
+        buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_ADMIN_PICK_ARCH}:{participant_id}")])
         return InlineKeyboardMarkup(buttons)
 
     def admin_opponents_keyboard(self, participant_id: int, tournament_id: int) -> InlineKeyboardMarkup:
@@ -360,7 +360,9 @@ class Keyboards:
             for aid, name in archetypes
         ]
         if has_more:
-            buttons.append([InlineKeyboardButton("... ещё", callback_data=f"{CB_ADMIN_ARCH_MORE}:{participant_id}")])
+            buttons.append(
+                [InlineKeyboardButton("... ещё колоды", callback_data=f"{CB_ADMIN_ARCH_MORE}:{participant_id}")]
+            )
         buttons.append([InlineKeyboardButton("Свой вариант", callback_data=f"{CB_ADMIN_CUSTOM_ARCH}:{participant_id}")])
         if is_admin and tournament_id is not None:
             buttons.append(
@@ -392,7 +394,9 @@ class Keyboards:
             for aid, name in archetypes
         ]
         if has_more:
-            buttons.append([InlineKeyboardButton("... ещё", callback_data=f"{CB_ARCHETYPE_MORE}:{tournament_id}")])
+            buttons.append(
+                [InlineKeyboardButton("... ещё колоды", callback_data=f"{CB_ARCHETYPE_MORE}:{tournament_id}")]
+            )
         buttons.append([InlineKeyboardButton("Свой вариант", callback_data=f"{CB_CUSTOM_ARCHETYPE}:{tournament_id}")])
         buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_TOURNAMENT}:{tournament_id}")])
         return InlineKeyboardMarkup(buttons)

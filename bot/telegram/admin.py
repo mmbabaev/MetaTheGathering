@@ -685,7 +685,7 @@ async def callback_admin_toggle_scorekeeper(update: Update, context: ContextType
             return
         _log("admin_toggle_scorekeeper", user, participant_id=participant_id, tournament_id=tournament_id)
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
-        await query.answer()
+        await query.answer(result.answer_text or "", show_alert=bool(result.answer_text))
     finally:
         db.close()
 
