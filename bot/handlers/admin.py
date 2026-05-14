@@ -17,6 +17,8 @@ from bot.messages import (
     NOT_ADMIN,
     PARTICIPANT_NOT_FOUND,
     REGISTRATION_CLOSED,
+    SCOREKEEPER_GRANTED,
+    SCOREKEEPER_REVOKED,
     TOURNAMENT_ALREADY_EXISTS_MSG,
     TOURNAMENT_CLOSED_MSG,
     TOURNAMENT_NOT_FOUND,
@@ -236,7 +238,6 @@ class AdminHandler:
         caller = self.user_svc.get_by_tg_id(caller_tg_id) if caller_tg_id else None
         show_emoji = not (caller and caller.hide_deck_emoji)
         is_admin = self.user_svc.is_admin(caller_tg_id) if caller_tg_id else False
-        has_pairings = AetherhubImportService(self.svc.db).has_pairings(tournament_id) if tournament_id else False
         return HandlerResult(
             CHOOSE_ARCHETYPE,
             keyboard=self.keyboards.admin_archetype_select_keyboard(
@@ -246,7 +247,6 @@ class AdminHandler:
                 show_emoji,
                 tournament_id=tournament_id,
                 is_admin=is_admin,
-                has_pairings=has_pairings,
             ),
         )
 
@@ -307,11 +307,13 @@ class AdminHandler:
     def handle_player_actions(self, tg_id: int, participant_id: int, tournament_id: int) -> HandlerResult:
         """Меню действий с игроком (⋯). Доступно всем; удаление — только для админов."""
         is_admin = self.user_svc.is_admin(tg_id)
+        is_privileged = self.user_svc.is_privileged(tg_id)
         p = self.svc.get_participant_by_id(participant_id)
         if p is None:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
         user = self.user_svc.get_by_id(p.user_id)
         has_pairings = AetherhubImportService(self.svc.db).has_pairings(tournament_id)
+        is_target_scorekeeper = bool(user.is_scorekeeper) if user else False
         name = (
             format_participant_name(user.first_name if user else None, user.last_name if user else None) or f"id{p.id}"
         )
@@ -321,9 +323,31 @@ class AdminHandler:
         return HandlerResult(
             text,
             keyboard=self.keyboards.admin_player_actions_keyboard(
-                participant_id, tournament_id, is_admin=is_admin, has_pairings=has_pairings
+                participant_id,
+                tournament_id,
+                is_admin=is_admin,
+                has_pairings=has_pairings,
+                is_target_scorekeeper=is_target_scorekeeper,
+                is_privileged=is_privileged,
             ),
         )
+
+    def handle_toggle_scorekeeper(self, tg_id: int, participant_id: int, tournament_id: int) -> HandlerResult:
+        """Назначить или снять роль скорипера у игрока."""
+        if not self.user_svc.is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN, is_alert=True)
+        p = self.svc.get_participant_by_id(participant_id)
+        if p is None:
+            return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
+        target_user = self.user_svc.get_by_id(p.user_id)
+        if target_user is None:
+            return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
+        name = format_participant_name(target_user.first_name, target_user.last_name) or f"id{p.id}"
+        new_value = self.user_svc.toggle_scorekeeper(target_user.tg_id)
+        msg = SCOREKEEPER_GRANTED.format(name=name) if new_value else SCOREKEEPER_REVOKED.format(name=name)
+        result = self._tournament_status_result(tournament_id, prefix=msg)
+        result.answer_text = msg
+        return result
 
     def handle_player_opponents(self, tg_id: int, participant_id: int, tournament_id: int) -> HandlerResult:
         """Список оппонентов игрока из AetherHub-пейрингов."""
