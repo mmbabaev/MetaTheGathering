@@ -368,7 +368,7 @@ class Keyboards:
             buttons.append(
                 [
                     InlineKeyboardButton(
-                        "…",
+                        "☰ Меню",
                         callback_data=f"{CB_ADMIN_PLAYER_ACTIONS}:{participant_id}:{tournament_id}",
                     )
                 ]
