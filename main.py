@@ -19,6 +19,7 @@ from telegram.ext import (
 from bot.keyboards import (
     CB_ADMIN_ARCH_MORE,
     CB_ADMIN_CUSTOM_ARCH,
+    CB_ADMIN_IMPORT_META,
     CB_ADMIN_MORE,
     CB_ADMIN_OPPONENTS,
     CB_ADMIN_PICK_ARCH,
@@ -235,6 +236,7 @@ def main() -> None:
         CallbackQueryHandler(settings_handler.callback_toggle_emoji, pattern=f"^{CB_SETTINGS_TOGGLE_EMOJI}$")
     )
     app.add_handler(CallbackQueryHandler(admin.callback_bulk_add_start, pattern=f"^{CB_BULK_ADD}:"))
+    app.add_handler(CallbackQueryHandler(admin.callback_meta_import_start, pattern=f"^{CB_ADMIN_IMPORT_META}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_pick_participant_arch, pattern=f"^{CB_ADMIN_PICK_ARCH}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_set_participant_arch, pattern=f"^{CB_ADMIN_SET_ARCH}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_pick_participant_arch_more, pattern=f"^{CB_ADMIN_ARCH_MORE}:"))

@@ -12,6 +12,7 @@ from bot.messages import (
     BULK_ADD_EMPTY,
     CHOOSE_ARCHETYPE,
     DECKS_REVEALED,
+    META_IMPORT_PROMPT,
     MULTIPLE_TOURNAMENTS_MSG,
     NO_ACTIVE_TOURNAMENT,
     NOT_ADMIN,
@@ -31,6 +32,7 @@ from services import errors
 from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeService
 from services.export import ExportService
+from services.meta_table_import import MetaTableImportService
 from services.poll import PollService
 from services.tournament import TournamentService
 from services.user import UserService
@@ -578,3 +580,25 @@ class AdminHandler:
         title = t.title
         self.svc.delete_tournament(tournament_id)
         return HandlerResult(f"🗑 Турнир «{title}» удалён.")
+
+    def handle_meta_import_start(self, tg_id: int, tournament_id: int) -> HandlerResult:
+        """Показывает инструкцию — бот ждёт текст таблицы."""
+        if not self.user_svc.is_privileged(tg_id):
+            return HandlerResult(NOT_ADMIN, is_alert=True)
+        try:
+            get_tournament(self.svc.db, tournament_id)
+        except errors.TournamentNotFound:
+            return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
+        return HandlerResult(META_IMPORT_PROMPT, tournament_id=tournament_id)
+
+    def handle_meta_import_table(self, tg_id: int, tournament_id: int, text: str) -> HandlerResult:
+        """Парсит и импортирует таблицу мета-данных."""
+        if not self.user_svc.is_privileged(tg_id):
+            return HandlerResult(NOT_ADMIN, is_alert=True)
+        try:
+            result = MetaTableImportService(self.svc.db).import_from_table(tournament_id, text, added_by_tg_id=tg_id)
+        except errors.TournamentNotFound:
+            return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
+        summary = result.summary()
+        status_result = self._tournament_status_result(tournament_id, prefix=summary)
+        return status_result
