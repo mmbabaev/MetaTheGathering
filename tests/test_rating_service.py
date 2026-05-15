@@ -129,26 +129,33 @@ class TestTopDeckContributors:
         svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id)
         assert rating_svc.top_deck_contributors() == []
 
-    def test_excludes_admin_users(self, svc, user_svc, rating_svc, arch_svc, tournament):
+    def test_exclude_tg_ids_hides_specified_users(self, svc, user_svc, rating_svc, arch_svc, tournament):
         burn = arch_svc.get_or_create_by_name("Burn")
-        admin = user_svc.get_or_create(tg_id=9550, username="boss", first_name="Boss")
-        admin_model = user_svc.db.query(__import__("core.models", fromlist=["User"]).User).filter_by(tg_id=9550).one()
-        admin_model.is_admin = True
-        user_svc.db.commit()
+        excluded = user_svc.get_or_create(tg_id=9550, username="boss", first_name="Boss")
         regular = user_svc.get_or_create(tg_id=9551, username="regular", first_name="Regular")
         player1 = user_svc.get_or_create(tg_id=9560, username=None, first_name="P1")
         player2 = user_svc.get_or_create(tg_id=9561, username=None, first_name="P2")
-        t2 = svc.create_tournament(TournamentCreate(title="T_adm_excl", chat_id=CHAT_ID + 50))
+        t2 = svc.create_tournament(TournamentCreate(title="T_excl", chat_id=CHAT_ID + 50))
         svc.register_participant(
-            tournament_id=tournament.id, user_id=player1.id, archetype_id=burn.id, deck_added_by_tg_id=admin.tg_id
+            tournament_id=tournament.id, user_id=player1.id, archetype_id=burn.id, deck_added_by_tg_id=excluded.tg_id
         )
         svc.register_participant(
             tournament_id=t2.id, user_id=player2.id, archetype_id=burn.id, deck_added_by_tg_id=regular.tg_id
         )
-        result = rating_svc.top_deck_contributors()
+        result = rating_svc.top_deck_contributors(exclude_tg_ids=[excluded.tg_id])
         tg_ids = [u.tg_id for u, _ in result]
-        assert admin.tg_id not in tg_ids
+        assert excluded.tg_id not in tg_ids
         assert regular.tg_id in tg_ids
+
+    def test_no_exclusion_returns_all(self, svc, user_svc, rating_svc, arch_svc, tournament):
+        burn = arch_svc.get_or_create_by_name("Burn")
+        user = user_svc.get_or_create(tg_id=9552, username="someone", first_name="Someone")
+        player = user_svc.get_or_create(tg_id=9562, username=None, first_name="P")
+        svc.register_participant(
+            tournament_id=tournament.id, user_id=player.id, archetype_id=burn.id, deck_added_by_tg_id=user.tg_id
+        )
+        result = rating_svc.top_deck_contributors()
+        assert any(u.tg_id == user.tg_id for u, _ in result)
 
 
 # ── RatingHandler.handle_social_rating ───────────────────────────────────────

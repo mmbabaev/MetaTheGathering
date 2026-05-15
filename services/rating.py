@@ -12,16 +12,14 @@ class RatingService:
         """Count how many participant decks this user has recorded."""
         return self.db.query(func.count(Participant.id)).filter(Participant.deck_added_by_tg_id == tg_id).scalar() or 0
 
-    def top_deck_contributors(self, limit: int = 10) -> list[tuple[User, int]]:
-        """Return top N non-admin users who recorded the most decks, ordered by count DESC."""
-        rows = (
+    def top_deck_contributors(self, limit: int = 10, exclude_tg_ids: list[int] | None = None) -> list[tuple[User, int]]:
+        """Return top N users who recorded the most decks, ordered by count DESC."""
+        q = (
             self.db.query(User, func.count(Participant.id).label("cnt"))
             .join(Participant, Participant.deck_added_by_tg_id == User.tg_id)
             .filter(Participant.deck_added_by_tg_id.isnot(None))
-            .filter(User.is_admin.is_(False))
-            .group_by(User.id)
-            .order_by(func.count(Participant.id).desc())
-            .limit(limit)
-            .all()
         )
+        if exclude_tg_ids:
+            q = q.filter(User.tg_id.notin_(exclude_tg_ids))
+        rows = q.group_by(User.id).order_by(func.count(Participant.id).desc()).limit(limit).all()
         return [(user, cnt) for user, cnt in rows]

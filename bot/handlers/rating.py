@@ -1,5 +1,6 @@
 from bot.handlers.base import HandlerResult
 from bot.messages import format_participant_name
+from core.config import settings
 from services.rating import RatingService
 from services.tournament import TournamentService
 from services.user import UserService
@@ -12,7 +13,7 @@ class RatingHandler:
 
     def handle_social_rating(self, tg_id: int) -> HandlerResult:
         """Топ-10 игроков по количеству внесённых колод."""
-        contributors = RatingService(self.svc.db).top_deck_contributors(limit=10)
+        contributors = RatingService(self.svc.db).top_deck_contributors(limit=10, exclude_tg_ids=settings.admin_ids)
         if not contributors:
             return HandlerResult("Пока никто не внёс ни одной колоды.")
         lines = ["🏆 Социальный рейтинг — кто больше всех внёс колод:\n"]
