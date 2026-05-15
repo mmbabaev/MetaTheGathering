@@ -55,6 +55,7 @@ CB_FEATURE_TOGGLE = "feat_toggle"  # feat_toggle:{flag_name}
 CB_FEATURE_INFO = "feat_info"  # feat_info:{flag_name}
 CB_PAY = "pay"  # pay:{tournament_id}
 CB_PAY_STATUS = "pay_status"  # pay_status:{tournament_id} — no-op, показывает статус оплаты
+CB_ADMIN_IMPORT_META = "adm_meta"  # adm_meta:{tournament_id}
 
 
 def features_keyboard(flags: list) -> InlineKeyboardMarkup:
@@ -151,6 +152,7 @@ class Keyboards:
     ) -> InlineKeyboardMarkup:
         rows = [
             [InlineKeyboardButton("➕ Добавить участников", callback_data=f"{CB_BULK_ADD}:{tournament_id}")],
+            [InlineKeyboardButton("📋 Импорт по таблице", callback_data=f"{CB_ADMIN_IMPORT_META}:{tournament_id}")],
         ]
         if decks_hidden:
             rows.append([InlineKeyboardButton("👁 Показать колоды", callback_data=f"{CB_REVEAL_DECKS}:{tournament_id}")])

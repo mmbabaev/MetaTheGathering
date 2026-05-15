@@ -25,6 +25,7 @@ USER_DATA_PENDING_SETTINGS_NAME = "pending_settings_name"
 USER_DATA_PENDING_BULK_ADD = "pending_bulk_add_tournament_id"
 USER_DATA_PENDING_ADMIN_CUSTOM_ARCH = "pending_admin_custom_arch_participant_id"
 USER_DATA_OPPONENTS_MODE = "opponents_tournament_id"
+USER_DATA_PENDING_META_IMPORT = "pending_meta_import_tournament_id"
 
 
 def _make_features(db) -> FeatureService:
@@ -360,6 +361,25 @@ from bot.telegram.aetherhub import handle_pending_aetherhub_url as _handle_pendi
 from bot.telegram.aetherhub import handle_pending_import_time as _handle_pending_import_time
 from bot.telegram.poll import handle_pending_link_poll as _handle_pending_link_poll
 
+
+async def _handle_pending_meta_import(msg, user, text, context) -> bool:
+    tournament_id = context.user_data.get(USER_DATA_PENDING_META_IMPORT)
+    if tournament_id is None:
+        return False
+    context.user_data.pop(USER_DATA_PENDING_META_IMPORT)
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_meta_import_table(user.id, tournament_id, text)
+        if result.is_alert:
+            await msg.reply_text(result.text)
+            return True
+        _log("meta_import_table", user, tournament_id=tournament_id)
+        await msg.reply_text(result.text, reply_markup=result.keyboard, parse_mode=result.parse_mode)
+    finally:
+        db.close()
+    return True
+
+
 _TEXT_INPUT_HANDLERS = [
     _handle_pending_name,
     _handle_pending_settings_name,
@@ -369,6 +389,7 @@ _TEXT_INPUT_HANDLERS = [
     _handle_pending_link_poll,
     _handle_pending_aetherhub_url,
     _handle_pending_import_time,
+    _handle_pending_meta_import,
 ]
 
 

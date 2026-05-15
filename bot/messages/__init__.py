@@ -42,6 +42,14 @@ SCOREKEEPER_GRANTED = "🧙 {name} назначен метаписцем."
 SCOREKEEPER_REVOKED = "🧙 {name} снят с роли метаписца."
 ADMIN_ARCH_SAVED = "✅ Колода обновлена: {archetype_name}"
 DECKS_REVEALED = "👁 Колоды участников теперь видны всем."
+META_IMPORT_PROMPT = (
+    "Отправьте таблицу в формате:\n\n"
+    "## Игроки\n"
+    "Фамилия Имя | Колода\n\n"
+    "## Раунд 1\n"
+    "Фамилия Имя 2-1 Фамилия Имя\n\n"
+    "Используйте /recognize-meta в Claude Code для распознавания фото."
+)
 
 
 HELP_TEXT = """\

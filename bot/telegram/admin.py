@@ -21,6 +21,7 @@ from bot.telegram.player import (
     USER_DATA_OPPONENTS_MODE,
     USER_DATA_PENDING_ADMIN_CUSTOM_ARCH,
     USER_DATA_PENDING_BULK_ADD,
+    USER_DATA_PENDING_META_IMPORT,
     _admin_handler,
     _player_handler,
 )
@@ -31,6 +32,32 @@ from services import errors as svc_errors
 from services.tournament import TournamentService
 from services.user import UserService
 from services.utils import get_tournament
+
+
+async def callback_meta_import_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка «📋 Импорт по таблице» — показывает инструкцию и ждёт текст."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_meta_import_start(user.id, tournament_id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        if context.user_data is None:
+            context.user_data = {}
+        context.user_data[USER_DATA_PENDING_META_IMPORT] = tournament_id
+        _log("meta_import_start", user, tournament_id=tournament_id)
+        await query.edit_message_text(result.text)
+        await query.answer()
+    finally:
+        db.close()
 
 
 async def callback_bulk_add_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
