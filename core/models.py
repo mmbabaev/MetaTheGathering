@@ -334,5 +334,6 @@ class RoundPairing(Base):
     round_number = Column(Integer, nullable=False)
     player_name = Column(String(255), nullable=False)
     opponent_name = Column(String(255), nullable=True)  # NULL = bye
+    table_number = Column(Integer, nullable=True)  # номер стола (пары); NULL = неизвестно
 
     __table_args__ = (UniqueConstraint("tournament_id", "round_number", "player_name", name="uq_round_pairing"),)

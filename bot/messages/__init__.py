@@ -197,3 +197,36 @@ def format_tournament_status(title: str, status: str, participants: list, decks_
             archetype = "не указана"
         lines.append(f"{icon} {display} — {archetype}")
     return "\n".join(lines)
+
+
+def format_opponent_notification(
+    round_number: int,
+    table_number: int | None,
+    opponent_name: str | None,
+    opponent_username: str | None,
+    opponent_decks: list[str] | None = None,
+    is_bye: bool = False,
+) -> str:
+    """Личное сообщение игроку о его паре в новом раунде."""
+    if is_bye:
+        return f"🔔 Раунд {round_number}\n\nВ этом раунде у тебя бай — отдыхай! 🎉"
+
+    lines = [f"🔔 Раунд {round_number}"]
+    if table_number is not None:
+        lines.append(f"Стол №{table_number}")
+
+    opponent = opponent_name or "?"
+    if opponent_username:
+        opponent += f" (@{opponent_username})"
+    lines.append(f"Соперник: {opponent}")
+
+    decks = opponent_decks or []
+    if decks:
+        lines.append("")
+        lines.append("Последние колоды соперника:")
+        lines.extend(f"• {name}" for name in decks)
+    else:
+        lines.append("")
+        lines.append("Колоды соперника в прошлых турнирах не найдены.")
+
+    return "\n".join(lines)

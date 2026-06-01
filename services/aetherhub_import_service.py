@@ -18,6 +18,7 @@ class ImportResult:
     already_registered: int
     pairings_saved: int
     created_names: list[str]  # players not found in bot — created as placeholders
+    new_round_numbers: list[int]  # rounds that appeared for the first time in this import
 
 
 @dataclass
@@ -118,11 +119,13 @@ class AetherhubImportService:
                             round_number=rnd.number,
                             player_name=pairing.player,
                             opponent_name=pairing.opponent,
+                            table_number=pairing.table_number,
                         )
                     )
                     saved += 1
-                elif existing.opponent_name != pairing.opponent:
+                elif existing.opponent_name != pairing.opponent or existing.table_number != pairing.table_number:
                     existing.opponent_name = pairing.opponent
+                    existing.table_number = pairing.table_number
                     saved += 1
         self.db.commit()
         return saved
@@ -172,6 +175,9 @@ class AetherhubImportService:
                 created.append(name)
 
         self.db.commit()
+
+        existing_rounds = self._existing_round_numbers(tournament_id)
+        new_round_numbers = sorted(r.number for r in data.rounds if r.pairings and r.number not in existing_rounds)
         pairings_saved = self._save_pairings(tournament_id, data.rounds)
 
         return ImportResult(
@@ -179,7 +185,21 @@ class AetherhubImportService:
             already_registered=already_registered,
             pairings_saved=pairings_saved,
             created_names=created,
+            new_round_numbers=new_round_numbers,
         )
+
+    def _existing_round_numbers(self, tournament_id: int) -> set[int]:
+        """Round numbers that already have at least one stored pairing for the tournament."""
+        rows = self.db.execute(
+            select(models.RoundPairing.round_number)
+            .where(models.RoundPairing.tournament_id == tournament_id)
+            .distinct()
+        ).all()
+        return {r[0] for r in rows}
+
+    def get_round_numbers(self, tournament_id: int) -> list[int]:
+        """All round numbers that have stored pairings for the tournament, ascending."""
+        return sorted(self._existing_round_numbers(tournament_id))
 
     def has_pairings(self, tournament_id: int) -> bool:
         return (

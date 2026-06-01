@@ -1,0 +1,448 @@
+"""Tests for the new-round opponent notification feature (business logic only).
+
+Covers:
+- RoundNotificationService.build_for_round / build_for_rounds — recipient filtering,
+  opponent lookup, deck history, byes, table numbers
+- AetherhubImportService new-round detection + table_number persistence
+- ArchetypeService.list_user_tournament_archetypes
+- bot.messages.format_opponent_notification
+- AetherhubJSFormatParser._extract_table_number
+"""
+
+from datetime import datetime, timedelta
+
+import pytest
+
+from bot.messages import format_opponent_notification
+from core import models
+from core.schemas import TournamentCreate
+from services.aetherhub_import_service import AetherhubImportService
+from services.aetherhub_models import AetherhubPairing, AetherhubRound, AetherhubTournamentData
+from services.aetherhub_parser_js_format import AetherhubJSFormatParser
+from services.archetype import ArchetypeService
+from services.round_notifications import RoundNotificationService
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+
+def _tournament(svc, title="Current", chat_id=100, slug=None):
+    return svc.create_tournament(TournamentCreate(title=title, chat_id=chat_id, slug=slug))
+
+
+def _user(user_svc, tg_id, first_name, username=None):
+    return user_svc.get_or_create(tg_id=tg_id, username=username, first_name=first_name)
+
+
+def _participant(db, tournament_id, user_id, archetype_id=None, added_by_admin=False, created_at=None):
+    p = models.Participant(
+        tournament_id=tournament_id,
+        user_id=user_id,
+        archetype_id=archetype_id,
+        added_by_admin=added_by_admin,
+    )
+    if created_at is not None:
+        p.created_at = created_at
+    db.add(p)
+    db.commit()
+    db.refresh(p)
+    return p
+
+
+def _pairing(db, tournament_id, round_number, player_name, opponent_name, table_number=None):
+    rp = models.RoundPairing(
+        tournament_id=tournament_id,
+        round_number=round_number,
+        player_name=player_name,
+        opponent_name=opponent_name,
+        table_number=table_number,
+    )
+    db.add(rp)
+    db.commit()
+    return rp
+
+
+def _make_data(players, rounds_pairings, standings=None):
+    """rounds_pairings: list of rounds, each a list of (player, opponent, table_number)."""
+    rounds = [
+        AetherhubRound(
+            number=i + 1,
+            pairings=[AetherhubPairing(player=p, opponent=o, table_number=t) for p, o, t in pairs],
+        )
+        for i, pairs in enumerate(rounds_pairings)
+    ]
+    return AetherhubTournamentData(
+        url="https://aetherhub.com/Tourney/RoundTourney/1",
+        players=players,
+        rounds=rounds,
+        standings=standings or [],
+    )
+
+
+@pytest.fixture
+def notif_svc(db):
+    return RoundNotificationService(db)
+
+
+# ── RoundNotificationService: happy path ───────────────────────────────────────
+
+
+class TestBuildForRound:
+    def test_self_registered_real_user_gets_full_notification(self, db, svc, user_svc, arch_svc, notif_svc):
+        t = _tournament(svc)
+        recipient = _user(user_svc, 2001, "Recipient")
+        opponent = _user(user_svc, 2002, "Opponent", username="opp")
+        _participant(db, t.id, recipient.id, added_by_admin=False)
+        _participant(db, t.id, opponent.id, added_by_admin=False)
+
+        # opponent's past tournament deck (different tournament)
+        past = _tournament(svc, title="Past", chat_id=200)
+        burn = arch_svc.get_or_create_by_name("Burn")
+        _participant(db, past.id, opponent.id, archetype_id=burn.id)
+
+        # AetherHub stores both directions of a pairing
+        _pairing(db, t.id, 1, "Recipient", "Opponent", table_number=7)
+        _pairing(db, t.id, 1, "Opponent", "Recipient", table_number=7)
+
+        notifs = notif_svc.build_for_round(t.id, 1)
+
+        assert len(notifs) == 2  # both are self-registered real users paired with each other
+        rec = next(n for n in notifs if n.tg_id == recipient.tg_id)
+        assert rec.round_number == 1
+        assert rec.table_number == 7
+        assert rec.opponent_name == "Opponent"
+        assert rec.opponent_username == "opp"
+        assert rec.opponent_decks == ["Burn"]
+        assert rec.is_bye is False
+
+    def test_opponent_decks_exclude_current_tournament(self, db, svc, user_svc, arch_svc, notif_svc):
+        t = _tournament(svc)
+        recipient = _user(user_svc, 2001, "Recipient")
+        opponent = _user(user_svc, 2002, "Opponent")
+        _participant(db, t.id, recipient.id)
+        # opponent already has a deck in the CURRENT tournament — must be excluded
+        affinity = arch_svc.get_or_create_by_name("Affinity")
+        _participant(db, t.id, opponent.id, archetype_id=affinity.id)
+
+        _pairing(db, t.id, 1, "Recipient", "Opponent")
+
+        rec = notif_svc.build_for_round(t.id, 1)[0]
+        assert rec.opponent_decks == []  # current-tournament deck excluded
+
+    def test_opponent_decks_deduped_and_limited_to_three(self, db, svc, user_svc, arch_svc, notif_svc):
+        t = _tournament(svc)
+        recipient = _user(user_svc, 2001, "Recipient")
+        opponent = _user(user_svc, 2002, "Opponent")
+        _participant(db, t.id, recipient.id)
+
+        names = ["Burn", "Affinity", "Tron", "Elves"]
+        archs = [arch_svc.get_or_create_by_name(n) for n in names]
+        base = datetime(2026, 1, 1, 12, 0, 0)
+        # 5 past tournaments; newest = Elves, then Tron, Affinity, Burn, Burn(dup)
+        for i, arch in enumerate([archs[0], archs[0], archs[1], archs[2], archs[3]]):
+            past = _tournament(svc, title=f"Past{i}", chat_id=300 + i)
+            _participant(db, past.id, opponent.id, archetype_id=arch.id, created_at=base + timedelta(days=i))
+
+        _pairing(db, t.id, 1, "Recipient", "Opponent")
+        rec = notif_svc.build_for_round(t.id, 1)[0]
+        # newest first, deduped, max 3
+        assert rec.opponent_decks == ["Elves", "Tron", "Affinity"]
+
+    def test_bye_produces_bye_notification(self, db, svc, user_svc, notif_svc):
+        t = _tournament(svc)
+        recipient = _user(user_svc, 2001, "Recipient")
+        _participant(db, t.id, recipient.id)
+        _pairing(db, t.id, 1, "Recipient", None, table_number=None)
+
+        notifs = notif_svc.build_for_round(t.id, 1)
+        assert len(notifs) == 1
+        assert notifs[0].is_bye is True
+        assert notifs[0].opponent_name is None
+        assert notifs[0].opponent_decks == []
+
+    def test_opponent_unknown_in_db(self, db, svc, user_svc, notif_svc):
+        t = _tournament(svc)
+        recipient = _user(user_svc, 2001, "Recipient")
+        _participant(db, t.id, recipient.id)
+        _pairing(db, t.id, 1, "Recipient", "Ghost Player", table_number=3)
+
+        rec = notif_svc.build_for_round(t.id, 1)[0]
+        assert rec.opponent_name == "Ghost Player"
+        assert rec.opponent_username is None
+        assert rec.opponent_decks == []
+
+    def test_recipient_name_populated(self, db, svc, user_svc, notif_svc):
+        t = _tournament(svc)
+        recipient = user_svc.get_or_create(tg_id=2001, first_name="Иван", last_name="Иванов")
+        _participant(db, t.id, recipient.id)
+        _pairing(db, t.id, 1, "Иванов Иван", "Someone")
+
+        rec = notif_svc.build_for_round(t.id, 1)[0]
+        assert rec.recipient_name == "Иванов Иван"
+
+
+class TestDisplayName:
+    def test_full_name(self, db, user_svc):
+        u = user_svc.get_or_create(tg_id=1, first_name="Иван", last_name="Иванов")
+        assert RoundNotificationService(db)._display_name(u) == "Иванов Иван"
+
+    def test_username_fallback(self, db, user_svc):
+        u = user_svc.get_or_create(tg_id=1, username="ivan")
+        assert RoundNotificationService(db)._display_name(u) == "ivan"
+
+    def test_id_fallback(self, db, user_svc):
+        u = user_svc.get_or_create(tg_id=42)
+        assert RoundNotificationService(db)._display_name(u) == "id42"
+
+
+class TestGetRoundNumbers:
+    def test_sorted_distinct(self, db, svc):
+        t = _tournament(svc)
+        _pairing(db, t.id, 2, "A", "B")
+        _pairing(db, t.id, 1, "A", "B")
+        _pairing(db, t.id, 1, "B", "A")
+        _pairing(db, t.id, 3, "A", "B")
+        assert AetherhubImportService(db).get_round_numbers(t.id) == [1, 2, 3]
+
+    def test_empty(self, db, svc):
+        t = _tournament(svc)
+        assert AetherhubImportService(db).get_round_numbers(t.id) == []
+
+
+# ── RoundNotificationService: recipient filtering ──────────────────────────────
+
+
+class TestRecipientFiltering:
+    def test_placeholder_recipient_negative_tg_id_skipped(self, db, svc, user_svc, notif_svc):
+        t = _tournament(svc)
+        # placeholder (added by hand) — negative tg_id
+        placeholder, _ = user_svc.get_or_create_by_name("Placeholder", None)
+        assert placeholder.tg_id < 0
+        _participant(db, t.id, placeholder.id, added_by_admin=True)
+        _pairing(db, t.id, 1, "Placeholder", "Someone")
+
+        assert notif_svc.build_for_round(t.id, 1) == []
+
+    def test_admin_added_participant_skipped(self, db, svc, user_svc, notif_svc):
+        t = _tournament(svc)
+        # real tg user, but added by an admin/scorekeeper — must NOT be notified
+        real = _user(user_svc, 2001, "Real")
+        _participant(db, t.id, real.id, added_by_admin=True)
+        _pairing(db, t.id, 1, "Real", "Someone")
+
+        assert notif_svc.build_for_round(t.id, 1) == []
+
+    def test_player_not_a_participant_skipped(self, db, svc, user_svc, notif_svc):
+        t = _tournament(svc)
+        # user exists but never registered as a participant in this tournament
+        _user(user_svc, 2001, "Lurker")
+        _pairing(db, t.id, 1, "Lurker", "Someone")
+
+        assert notif_svc.build_for_round(t.id, 1) == []
+
+    def test_unknown_player_name_skipped(self, db, svc, notif_svc):
+        t = _tournament(svc)
+        _pairing(db, t.id, 1, "Nobody Known", "Someone")
+        assert notif_svc.build_for_round(t.id, 1) == []
+
+    def test_no_pairings_returns_empty(self, svc, notif_svc):
+        t = _tournament(svc)
+        assert notif_svc.build_for_round(t.id, 1) == []
+
+    def test_only_requested_round_considered(self, db, svc, user_svc, notif_svc):
+        t = _tournament(svc)
+        recipient = _user(user_svc, 2001, "Recipient")
+        _participant(db, t.id, recipient.id)
+        _pairing(db, t.id, 1, "Recipient", "OppA")
+        _pairing(db, t.id, 2, "Recipient", "OppB")
+
+        notifs = notif_svc.build_for_round(t.id, 2)
+        assert len(notifs) == 1
+        assert notifs[0].opponent_name == "OppB"
+
+
+# ── RoundNotificationService.build_for_rounds ──────────────────────────────────
+
+
+class TestBuildForRounds:
+    def test_flattens_multiple_rounds(self, db, svc, user_svc, notif_svc):
+        t = _tournament(svc)
+        recipient = _user(user_svc, 2001, "Recipient")
+        _participant(db, t.id, recipient.id)
+        _pairing(db, t.id, 1, "Recipient", "OppA")
+        _pairing(db, t.id, 2, "Recipient", "OppB")
+
+        notifs = notif_svc.build_for_rounds(t.id, [1, 2])
+        assert {n.opponent_name for n in notifs} == {"OppA", "OppB"}
+
+    def test_empty_round_list(self, svc, notif_svc):
+        t = _tournament(svc)
+        assert notif_svc.build_for_rounds(t.id, []) == []
+
+
+# ── AetherhubImportService: new-round detection + table_number ─────────────────
+
+
+class TestImportNewRoundDetection:
+    def test_first_import_reports_all_rounds_new(self, db, svc):
+        t = _tournament(svc)
+        data = _make_data(
+            players=["Alice", "Bob"],
+            rounds_pairings=[
+                [("Alice", "Bob", 1), ("Bob", "Alice", 1)],
+                [("Alice", "Bob", 1), ("Bob", "Alice", 1)],
+            ],
+        )
+        result = AetherhubImportService(db).import_tournament(t.id, data)
+        assert result.new_round_numbers == [1, 2]
+
+    def test_reimport_same_rounds_reports_none_new(self, db, svc):
+        t = _tournament(svc)
+        data = _make_data(["Alice", "Bob"], [[("Alice", "Bob", 1), ("Bob", "Alice", 1)]])
+        svc_imp = AetherhubImportService(db)
+        svc_imp.import_tournament(t.id, data)
+        result = svc_imp.import_tournament(t.id, data)
+        assert result.new_round_numbers == []
+
+    def test_incremental_round_detected_as_new(self, db, svc):
+        t = _tournament(svc)
+        imp = AetherhubImportService(db)
+        imp.import_tournament(t.id, _make_data(["Alice", "Bob"], [[("Alice", "Bob", 1), ("Bob", "Alice", 1)]]))
+        # second import adds round 2
+        data2 = _make_data(
+            ["Alice", "Bob"],
+            [
+                [("Alice", "Bob", 1), ("Bob", "Alice", 1)],
+                [("Alice", "Bob", 2), ("Bob", "Alice", 2)],
+            ],
+        )
+        result = imp.import_tournament(t.id, data2)
+        assert result.new_round_numbers == [2]
+
+    def test_round_with_no_pairings_not_new(self, db, svc):
+        t = _tournament(svc)
+        data = AetherhubTournamentData(
+            url="u",
+            players=["Alice"],
+            rounds=[AetherhubRound(number=1, pairings=[])],
+            standings=[],
+        )
+        result = AetherhubImportService(db).import_tournament(t.id, data)
+        assert result.new_round_numbers == []
+
+    def test_table_number_persisted(self, db, svc):
+        t = _tournament(svc)
+        data = _make_data(["Alice", "Bob"], [[("Alice", "Bob", 12), ("Bob", "Alice", 12)]])
+        imp = AetherhubImportService(db)
+        imp.import_tournament(t.id, data)
+        rows = imp.get_pairings(t.id, 1)
+        assert all(r.table_number == 12 for r in rows)
+
+    def test_table_number_updated_on_change(self, db, svc):
+        t = _tournament(svc)
+        imp = AetherhubImportService(db)
+        imp.import_tournament(t.id, _make_data(["Alice", "Bob"], [[("Alice", "Bob", 1), ("Bob", "Alice", 1)]]))
+        imp.import_tournament(t.id, _make_data(["Alice", "Bob"], [[("Alice", "Bob", 9), ("Bob", "Alice", 9)]]))
+        rows = imp.get_pairings(t.id, 1)
+        assert all(r.table_number == 9 for r in rows)
+
+
+# ── ArchetypeService.list_user_tournament_archetypes ───────────────────────────
+
+
+class TestUserTournamentArchetypes:
+    def test_orders_newest_first_dedup_limit(self, db, svc, user_svc, arch_svc):
+        user = _user(user_svc, 3001, "Player")
+        names = ["Burn", "Affinity", "Tron", "Elves"]
+        archs = {n: arch_svc.get_or_create_by_name(n) for n in names}
+        base = datetime(2026, 1, 1)
+        seq = ["Burn", "Burn", "Affinity", "Tron", "Elves"]
+        for i, n in enumerate(seq):
+            t = _tournament(svc, title=f"T{i}", chat_id=400 + i)
+            _participant(db, t.id, user.id, archetype_id=archs[n].id, created_at=base + timedelta(days=i))
+
+        result = arch_svc.list_user_tournament_archetypes(user.id, limit=3)
+        assert [a.name for a in result] == ["Elves", "Tron", "Affinity"]
+
+    def test_dedup_within_limit(self, db, svc, user_svc, arch_svc):
+        # a repeated archetype before the limit is reached must be skipped, not counted twice
+        user = _user(user_svc, 3001, "Player")
+        burn = arch_svc.get_or_create_by_name("Burn")
+        tron = arch_svc.get_or_create_by_name("Tron")
+        base = datetime(2026, 1, 1)
+        # newest-first: Burn, Burn, Tron
+        for i, arch in enumerate([tron, burn, burn]):
+            t = _tournament(svc, title=f"D{i}", chat_id=700 + i)
+            _participant(db, t.id, user.id, archetype_id=arch.id, created_at=base + timedelta(days=i))
+
+        result = arch_svc.list_user_tournament_archetypes(user.id, limit=3)
+        assert [a.name for a in result] == ["Burn", "Tron"]
+
+    def test_excludes_given_tournament(self, db, svc, user_svc, arch_svc):
+        user = _user(user_svc, 3001, "Player")
+        burn = arch_svc.get_or_create_by_name("Burn")
+        current = _tournament(svc, chat_id=500)
+        _participant(db, current.id, user.id, archetype_id=burn.id)
+
+        result = arch_svc.list_user_tournament_archetypes(user.id, exclude_tournament_id=current.id)
+        assert result == []
+
+    def test_ignores_participants_without_archetype(self, db, svc, user_svc, arch_svc):
+        user = _user(user_svc, 3001, "Player")
+        t = _tournament(svc, chat_id=600)
+        _participant(db, t.id, user.id, archetype_id=None)
+        assert arch_svc.list_user_tournament_archetypes(user.id) == []
+
+    def test_no_user_no_decks(self, arch_svc):
+        assert arch_svc.list_user_tournament_archetypes(999999) == []
+
+
+# ── bot.messages.format_opponent_notification ──────────────────────────────────
+
+
+class TestFormatNotification:
+    def test_full_message(self):
+        text = format_opponent_notification(2, 5, "Иванов Иван", "ivan", ["Burn", "Affinity"])
+        assert "Раунд 2" in text
+        assert "Стол №5" in text
+        assert "Иванов Иван (@ivan)" in text
+        assert "• Burn" in text
+        assert "• Affinity" in text
+
+    def test_no_table_number_omits_table_line(self):
+        text = format_opponent_notification(1, None, "Bob", None, ["Tron"])
+        assert "Стол" not in text
+        assert "Соперник: Bob" in text
+
+    def test_no_username(self):
+        text = format_opponent_notification(1, 1, "Bob", None, ["Tron"])
+        assert "@" not in text
+
+    def test_no_decks_shows_placeholder(self):
+        text = format_opponent_notification(1, 1, "Bob", None, [])
+        assert "не найдены" in text
+
+    def test_bye_message(self):
+        text = format_opponent_notification(3, None, None, None, is_bye=True)
+        assert "бай" in text.lower()
+        assert "Соперник" not in text
+
+
+# ── Parser: _extract_table_number ──────────────────────────────────────────────
+
+
+class TestExtractTableNumber:
+    @pytest.fixture
+    def parser(self):
+        return AetherhubJSFormatParser(scraper=object())
+
+    def test_plain_integer(self, parser):
+        assert parser._extract_table_number("12") == 12
+
+    def test_embedded_digits(self, parser):
+        assert parser._extract_table_number("Table 7") == 7
+
+    def test_no_digits_returns_none(self, parser):
+        assert parser._extract_table_number("—") is None
+
+    def test_empty_returns_none(self, parser):
+        assert parser._extract_table_number("") is None

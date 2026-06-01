@@ -56,6 +56,7 @@ CB_FEATURE_INFO = "feat_info"  # feat_info:{flag_name}
 CB_PAY = "pay"  # pay:{tournament_id}
 CB_PAY_STATUS = "pay_status"  # pay_status:{tournament_id} — no-op, показывает статус оплаты
 CB_ADMIN_IMPORT_META = "adm_meta"  # adm_meta:{tournament_id}
+CB_DEBUG_ROUND_NOTIFY = "dbg_rnotify"  # dbg_rnotify:{tournament_id} — debug: DM all round notifications to presser
 
 
 def features_keyboard(flags: list) -> InlineKeyboardMarkup:
@@ -148,12 +149,20 @@ class Keyboards:
         )
 
     def admin_more_keyboard(
-        self, tournament_id: int, is_closed: bool = False, decks_hidden: bool = True
+        self,
+        tournament_id: int,
+        is_closed: bool = False,
+        decks_hidden: bool = True,
+        show_debug: bool = False,
     ) -> InlineKeyboardMarkup:
         rows = [
             [InlineKeyboardButton("➕ Добавить участников", callback_data=f"{CB_BULK_ADD}:{tournament_id}")],
             [InlineKeyboardButton("📋 Импорт по таблице", callback_data=f"{CB_ADMIN_IMPORT_META}:{tournament_id}")],
         ]
+        if show_debug:
+            rows.append(
+                [InlineKeyboardButton("🐞 Тест оповещений", callback_data=f"{CB_DEBUG_ROUND_NOTIFY}:{tournament_id}")]
+            )
         if decks_hidden:
             rows.append([InlineKeyboardButton("👁 Показать колоды", callback_data=f"{CB_REVEAL_DECKS}:{tournament_id}")])
         else:
@@ -441,8 +450,12 @@ def export_menu_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
     return _default.export_menu_keyboard(tournament_id)
 
 
-def admin_more_keyboard(tournament_id: int, is_closed: bool = False, decks_hidden: bool = True) -> InlineKeyboardMarkup:
-    return _default.admin_more_keyboard(tournament_id, is_closed=is_closed, decks_hidden=decks_hidden)
+def admin_more_keyboard(
+    tournament_id: int, is_closed: bool = False, decks_hidden: bool = True, show_debug: bool = False
+) -> InlineKeyboardMarkup:
+    return _default.admin_more_keyboard(
+        tournament_id, is_closed=is_closed, decks_hidden=decks_hidden, show_debug=show_debug
+    )
 
 
 def reveal_decks_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
