@@ -13,15 +13,17 @@ from datetime import datetime, timedelta
 from unittest.mock import AsyncMock
 
 import pytest
+from sqlalchemy import select
 
 from bot.messages import format_opponent_notification
-from bot.telegram.round_notify import send_debug_round_notifications
+from bot.telegram.round_notify import send_debug_round_notifications, send_round_notifications
 from core import models
 from core.schemas import TournamentCreate
 from services.aetherhub_import_service import AetherhubImportService
 from services.aetherhub_models import AetherhubPairing, AetherhubRound, AetherhubTournamentData
 from services.aetherhub_parser_js_format import AetherhubJSFormatParser
 from services.archetype import ArchetypeService
+from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.round_notifications import RoundNotificationService
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -233,6 +235,50 @@ class TestDebugSenderOnlyMessagesRequester:
         sent = await send_debug_round_notifications(bot, db, t.id, to_tg_id=admin_outsider.tg_id)
 
         assert sent == 0
+        bot.send_message.assert_not_awaited()
+
+
+def _make_admin(db, tg_id):
+    obj = db.execute(select(models.User).where(models.User.tg_id == tg_id)).scalar_one()
+    obj.is_admin = True
+    db.commit()
+
+
+class TestSendRoundNotificationsFlagGating:
+    """roundNotificationsForAll OFF (default) → admins only; ON → everyone."""
+
+    def _setup(self, db, svc, user_svc):
+        t = _tournament(svc)
+        admin = _user(user_svc, 2001, "AdminPlayer")
+        _make_admin(db, admin.tg_id)
+        normal = _user(user_svc, 2002, "NormalPlayer")
+        _participant(db, t.id, admin.id)
+        _participant(db, t.id, normal.id)
+        _pairing(db, t.id, 1, "AdminPlayer", "NormalPlayer")
+        _pairing(db, t.id, 1, "NormalPlayer", "AdminPlayer")
+        return t, admin, normal
+
+    async def test_flag_off_admins_only(self, db, svc, user_svc):
+        t, admin, normal = self._setup(db, svc, user_svc)
+        bot = AsyncMock()
+        sent = await send_round_notifications(bot, db, t.id, [1])
+        assert sent == 1
+        targets = {c.kwargs["chat_id"] for c in bot.send_message.await_args_list}
+        assert targets == {admin.tg_id}  # normal player NOT notified
+
+    async def test_flag_on_everyone(self, db, svc, user_svc):
+        t, admin, normal = self._setup(db, svc, user_svc)
+        FeatureFlagService(db).toggle(FeatureFlags.ROUND_NOTIFICATIONS_FOR_ALL)
+        bot = AsyncMock()
+        sent = await send_round_notifications(bot, db, t.id, [1])
+        assert sent == 2
+        targets = {c.kwargs["chat_id"] for c in bot.send_message.await_args_list}
+        assert targets == {admin.tg_id, normal.tg_id}
+
+    async def test_no_rounds_sends_nothing(self, db, svc, user_svc):
+        t, _, _ = self._setup(db, svc, user_svc)
+        bot = AsyncMock()
+        assert await send_round_notifications(bot, db, t.id, []) == 0
         bot.send_message.assert_not_awaited()
 
 
