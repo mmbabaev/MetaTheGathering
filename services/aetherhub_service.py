@@ -247,11 +247,22 @@ class AetherhubService:
         main_html = self._scraper.get(url, timeout=30).text
         max_round = self._parse_num_rounds(main_html)
 
+        # `max_round` is only an upper bound: during a live event the round navigation
+        # briefly exposes extra ?p=N tabs (standings/results), inflating the count.
+        # AetherHub clamps an out-of-range round to the LAST real round — requesting
+        # ?p=5 on a 4-round event returns round 4's pairings verbatim. Detect that by
+        # comparing each round's pairing set to the previous one and stop on a repeat,
+        # so phantom rounds are never stored. (Swiss never repeats a full pairing set.)
         rounds = []
+        prev_signature: frozenset | None = None
         for rn in range(1, max_round + 1):
             pairings_html = self._scraper.get(self._pairings_url(tourney_id, rn), timeout=30).text
             pairings = self._parse_pairings_page(pairings_html)
+            signature = frozenset((p.player, p.opponent) for p in pairings)
+            if rn > 1 and signature and signature == prev_signature:
+                break  # clamped duplicate of the previous round → phantom, stop here
             rounds.append(AetherhubRound(number=rn, pairings=pairings))
+            prev_signature = signature
 
         players = self._players_from_pairings(rounds[0].pairings) if rounds else []
         standings, _ = self._parse_standings_page(main_html)
