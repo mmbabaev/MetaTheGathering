@@ -149,6 +149,7 @@ class AetherhubJSFormatParser:
                 # Column 1: Player 1
                 # Column 2: Player 2
 
+                table_number = self._extract_table_number(cells[0].get_text(strip=True))
                 player1_text = cells[1].get_text(strip=True)
                 player2_text = cells[2].get_text(strip=True)
 
@@ -159,16 +160,30 @@ class AetherhubJSFormatParser:
 
                 if player1_name:
                     # Add pairing for player1
-                    pairings.append(AetherhubPairing(player=player1_name, opponent=player2_name))
+                    pairings.append(
+                        AetherhubPairing(player=player1_name, opponent=player2_name, table_number=table_number)
+                    )
 
                     # If not a bye, add reverse pairing for player2
                     if player2_name:
-                        pairings.append(AetherhubPairing(player=player2_name, opponent=player1_name))
+                        pairings.append(
+                            AetherhubPairing(player=player2_name, opponent=player1_name, table_number=table_number)
+                        )
 
         return AetherhubRound(
             number=round_num,
             pairings=pairings,
         )
+
+    def _extract_table_number(self, text: str) -> Optional[int]:
+        """Extract the table (pairing) number from the first column.
+
+        The cell usually contains a plain integer; return None if no digits found.
+        """
+        if not text:
+            return None
+        m = re.search(r"\d+", text)
+        return int(m.group()) if m else None
 
     def _extract_player_name(self, text: str) -> Optional[str]:
         """

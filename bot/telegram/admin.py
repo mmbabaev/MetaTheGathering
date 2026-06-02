@@ -25,6 +25,7 @@ from bot.telegram.player import (
     _admin_handler,
     _player_handler,
 )
+from bot.telegram.round_notify import send_debug_round_notifications
 from core.config import app_cfg, settings
 from core.database import SessionLocal
 from core.models import TournamentStatus
@@ -521,9 +522,45 @@ async def callback_admin_more(update: Update, context: ContextTypes.DEFAULT_TYPE
         db.close()
     await query.edit_message_text(
         "Действия с турниром:",
-        reply_markup=admin_more_keyboard(tournament_id, is_closed=is_closed, decks_hidden=decks_hidden),
+        reply_markup=admin_more_keyboard(
+            tournament_id, is_closed=is_closed, decks_hidden=decks_hidden, show_debug=settings.DEBUG
+        ),
     )
     await query.answer()
+
+
+async def callback_debug_round_notify(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """🐞 Debug: DM all round-opponent notifications for the tournament to the presser only.
+
+    Lets an admin verify the whole notification path (build + format + delivery) without
+    the scheduler and without messaging real players.
+    """
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+
+    db = SessionLocal()
+    try:
+        if not UserService(db).is_admin(user.id):
+            await query.answer("Нет прав.", show_alert=True)
+            return
+        _log("debug_round_notify", user, tournament_id=tournament_id)
+        sent = await send_debug_round_notifications(context.bot, db, tournament_id, user.id)
+    finally:
+        db.close()
+
+    if sent:
+        await query.answer(f"Отправил тебе в ЛС {sent} твоих тест-уведомлений.", show_alert=True)
+    else:
+        await query.answer(
+            "Нет твоих парингов в этом турнире (ты не участник или раунды ещё не импортированы).",
+            show_alert=True,
+        )
 
 
 async def callback_reveal_decks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -583,7 +620,9 @@ async def callback_reveal_decks_cancel(update: Update, context: ContextTypes.DEF
         is_closed = t.status == TournamentStatus.CLOSED
         await query.edit_message_text(
             "Действия с турниром:",
-            reply_markup=admin_more_keyboard(tournament_id, is_closed=is_closed, decks_hidden=t.decks_hidden),
+            reply_markup=admin_more_keyboard(
+                tournament_id, is_closed=is_closed, decks_hidden=t.decks_hidden, show_debug=settings.DEBUG
+            ),
         )
     except svc_errors.TournamentNotFound:
         await query.answer("Турнир не найден.", show_alert=True)

@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from telegram.ext import Application, ContextTypes
 
+from bot.telegram.round_notify import send_round_notifications
 from core import models
 from core.config import Club, ClubSchedule, app_cfg, settings
 from core.database import SessionLocal
@@ -207,7 +208,7 @@ class AetherhubImportJob:
         self.schedule = schedule
         self._aetherhub = aetherhub_service or AetherhubService()
 
-    async def run(self, now: datetime, db=None) -> None:
+    async def run(self, now: datetime, db=None, bot=None) -> None:
         logger.info(f"AetherhubImportJob: running for '{self.club.name}', now={now.strftime('%A %H:%M')}")
         if not self.club.aetherhub_url:
             logger.warning(f"AetherhubImportJob: no aetherhub_url for '{self.club.name}', skipping")
@@ -258,11 +259,17 @@ class AetherhubImportJob:
                 logger.info(
                     f"AetherhubImportJob done for '{self.club.name}' #{tournament_id}: "
                     f"registered={result.registered}, already={result.already_registered}, "
-                    f"pairings={result.pairings_saved}"
+                    f"pairings={result.pairings_saved}, new_rounds={result.new_round_numbers}"
                 )
             except Exception:
                 logger.exception(f"AetherhubImportJob: import failed for '{self.club.name}'")
                 return
+
+            if result.new_round_numbers and bot is not None:
+                try:
+                    await send_round_notifications(bot, db, tournament_id, result.new_round_numbers)
+                except Exception:
+                    logger.exception(f"AetherhubImportJob: round notifications failed for #{tournament_id}")
         finally:
             if close_db:
                 db.close()
@@ -288,7 +295,7 @@ class AetherhubTimedImportJob:
     def __init__(self, aetherhub_service: AetherhubService) -> None:
         self._aetherhub = aetherhub_service
 
-    async def run(self, now: datetime, db=None) -> None:
+    async def run(self, now: datetime, db=None, bot=None) -> None:
         current_time = now.strftime("%H:%M")
         close_db = db is None
         if close_db:
@@ -313,7 +320,7 @@ class AetherhubTimedImportJob:
         today = None if settings.DEBUG else now.date()
 
         for t in tournaments:
-            await self._import_tournament(t.id, t.aetherhub_url, t.club, club_url_map, today)
+            await self._import_tournament(t.id, t.aetherhub_url, t.club, club_url_map, today, bot=bot)
 
     async def _import_tournament(
         self,
@@ -322,6 +329,7 @@ class AetherhubTimedImportJob:
         club_name: str | None,
         club_url_map: dict,
         today,
+        bot=None,
     ) -> None:
         url = stored_url
         if not url:
@@ -350,11 +358,18 @@ class AetherhubTimedImportJob:
                 result = AetherhubImportService(db).import_tournament(tournament_id, data)
                 logger.info(
                     f"AetherhubTimedImportJob done #{tournament_id}: "
-                    f"registered={result.registered}, pairings={result.pairings_saved}"
+                    f"registered={result.registered}, pairings={result.pairings_saved}, "
+                    f"new_rounds={result.new_round_numbers}"
                 )
             except Exception:
                 logger.exception(f"AetherhubTimedImportJob: import failed for #{tournament_id}")
                 return
+
+            if result.new_round_numbers and bot is not None:
+                try:
+                    await send_round_notifications(bot, db, tournament_id, result.new_round_numbers)
+                except Exception:
+                    logger.exception(f"AetherhubTimedImportJob: round notifications failed for #{tournament_id}")
         finally:
             db.close()
 
@@ -419,7 +434,7 @@ def setup_scheduler(app: Application) -> None:
 
                 async def _import(context: ContextTypes.DEFAULT_TYPE, _job=import_job) -> None:
                     tz_ = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
-                    await _job.run(now=datetime.now(tz_))
+                    await _job.run(now=datetime.now(tz_), bot=context.bot)
 
                 _import.__name__ = f"aetherhub_import[{club.name}/{schedule.weekday}/{fetch_time_str}]"
                 app.job_queue.run_daily(_import, time=fetch_time, days=(_ptb_day(schedule.weekday),))
@@ -429,7 +444,7 @@ def setup_scheduler(app: Application) -> None:
 
     async def _timed_import(context: ContextTypes.DEFAULT_TYPE) -> None:
         tz_ = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
-        await timed_job.run(now=datetime.now(tz_))
+        await timed_job.run(now=datetime.now(tz_), bot=context.bot)
 
     app.job_queue.run_repeating(_timed_import, interval=60, first=10)
     logger.info("Scheduler: AetherhubTimedImportJob registered (every 60s)")

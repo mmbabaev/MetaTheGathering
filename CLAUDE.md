@@ -6,6 +6,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **MetaGatherer** is a Telegram bot for collecting Magic: The Gathering Pauper tournament metagame data. Players self-register with deck archetypes; the community validates archetypes via voting. Admins export aggregated meta in CSV/Markdown.
 
+## ⚠️ Notification safety (hard rules)
+
+> **NEVER send mass / broadcast DMs.** Real users receive every message the bot sends them — a wrong fan-out spams real people and is not reversible.
+>
+> - **Debug / test tooling must message ONLY the user who triggered it** — filter to `tg_id == requester` and send exclusively to that chat_id. Never deliver other players' notifications to the requester, and never DM other players from a debug action.
+> - Any new code path that calls `bot.send_message` in a loop over multiple users requires explicit confirmation from the user before it ships.
+> - Production notifications must respect the `notify_allowed_ids` gate and only target their genuine intended recipient.
+
+## Alembic migrations
+
+> **NEVER reuse a placeholder revision id** like `a1b2c3d4e5f6` — many already exist and collisions cause "multiple/zero heads" failures (the bot won't start; CI breaks). Generate a fresh id: `python3 -c "import uuid; print(uuid.uuid4().hex[:12])"`, set `down_revision` to the current head, and verify with `DATABASE_URL="sqlite:///:memory:" python3 -m alembic heads` (must be exactly one). `tests/test_migrations.py` enforces this.
+
 ## Running
 
 > **WARNING:** Never run `python main.py` or `./server.sh` locally with the production token (`TELEGRAM_BOT_TOKEN` from `.env`). A local instance polling the same token causes continuous `Conflict: terminated by other getUpdates request` errors on the production server, making the bot intermittently unresponsive. This is hard to diagnose. Use a separate test bot token for local development.

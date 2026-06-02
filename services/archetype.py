@@ -117,6 +117,37 @@ class ArchetypeService:
 
         return [all_arch[aid] for aid in recent_ids if aid in all_arch]
 
+    def list_user_tournament_archetypes(
+        self, user_id: int, exclude_tournament_id: int | None = None, limit: int = 3
+    ) -> List[ArchetypeItem]:
+        """Колоды, которыми пользователь играл в ТУРНИРАХ (самые свежие первыми, без дублей).
+
+        Только реальное участие в турнирах — без UserDeckHistory. Опционально исключает
+        один турнир (например, текущий). Возвращает не более `limit` уникальных архетипов.
+        """
+        stmt = (
+            select(models.Participant.archetype_id, models.Archetype.name)
+            .join(models.Archetype, models.Participant.archetype_id == models.Archetype.id)
+            .where(
+                models.Participant.user_id == user_id,
+                models.Participant.archetype_id.isnot(None),
+            )
+            .order_by(models.Participant.created_at.desc())
+        )
+        if exclude_tournament_id is not None:
+            stmt = stmt.where(models.Participant.tournament_id != exclude_tournament_id)
+
+        seen: set[int] = set()
+        items: List[ArchetypeItem] = []
+        for aid, name in self.db.execute(stmt).all():
+            if aid in seen:
+                continue
+            seen.add(aid)
+            items.append(ArchetypeItem(id=aid, name=name))
+            if len(items) >= limit:
+                break
+        return items
+
     def list_archetypes_for_user(self, tg_id: int, total: int = 10) -> List[ArchetypeItem]:
         """Устаревший метод для обратной совместимости тестов."""
         recent = self.list_user_recent_archetypes(tg_id)

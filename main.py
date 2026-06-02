@@ -39,6 +39,7 @@ from bot.keyboards import (
     CB_CLOSE_TOURNAMENT,
     CB_CREATE_POLL,
     CB_CUSTOM_ARCHETYPE,
+    CB_DEBUG_ROUND_NOTIFY,
     CB_DELETE_TOURNAMENT,
     CB_DELETE_TOURNAMENT_CANCEL,
     CB_DELETE_TOURNAMENT_CONFIRM,
@@ -280,6 +281,7 @@ def main() -> None:
     )
     app.add_handler(CallbackQueryHandler(aetherhub_handler.callback_set_import_time, pattern=f"^{CB_SET_IMPORT_TIME}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_admin_more, pattern=f"^{CB_ADMIN_MORE}:"))
+    app.add_handler(CallbackQueryHandler(admin.callback_debug_round_notify, pattern=f"^{CB_DEBUG_ROUND_NOTIFY}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_close_tournament, pattern=f"^{CB_CLOSE_TOURNAMENT}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_fill_opponents, pattern=f"^{CB_ADMIN_OPPONENTS}:"))
     app.add_handler(CallbackQueryHandler(features_handler.callback_feature_info, pattern=f"^{CB_FEATURE_INFO}:"))

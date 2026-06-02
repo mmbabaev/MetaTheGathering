@@ -11,6 +11,7 @@ from bot.keyboards import aetherhub_confirm_keyboard
 from bot.scheduler import get_clubs
 from bot.telegram.common import parse_callback_ints
 from bot.telegram.player import _player_handler
+from bot.telegram.round_notify import send_round_notifications
 from core.database import SessionLocal
 from services.aetherhub_import_service import AetherhubImportService
 from services.aetherhub_models import AetherhubTournamentData
@@ -187,6 +188,13 @@ async def callback_aetherhub_confirm(update: Update, context: ContextTypes.DEFAU
 
     await query.edit_message_text(result.text)
     await query.answer()
+
+    if result.new_round_numbers:
+        db_notify = SessionLocal()
+        try:
+            await send_round_notifications(context.bot, db_notify, tournament_id, result.new_round_numbers)
+        finally:
+            db_notify.close()
 
     db2 = SessionLocal()
     try:

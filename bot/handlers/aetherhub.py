@@ -55,7 +55,7 @@ class AetherhubHandler:
             names_str = ", ".join(result.created_names[:5])
             suffix = "…" if len(result.created_names) > 5 else ""
             lines.append(f"Созданы как новые игроки ({len(result.created_names)}): {names_str}{suffix}")
-        return HandlerResult(text="\n".join(lines))
+        return HandlerResult(text="\n".join(lines), new_round_numbers=result.new_round_numbers)
 
     def _build_preview(self, data: AetherhubTournamentData, header: str) -> str:
         rounds_summary = ", ".join(f"R{r.number}: {len(r.pairings) // 2} столов" for r in data.rounds)

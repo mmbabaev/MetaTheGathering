@@ -10,6 +10,7 @@ from datetime import date
 class AetherhubPairing:
     player: str
     opponent: str | None  # None = bye
+    table_number: int | None = None  # номер стола (пары); None = неизвестно
 
 
 @dataclass
