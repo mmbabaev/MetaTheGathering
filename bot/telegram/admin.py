@@ -555,9 +555,12 @@ async def callback_debug_round_notify(update: Update, context: ContextTypes.DEFA
         db.close()
 
     if sent:
-        await query.answer(f"Отправил тебе в ЛС {sent} тест-уведомлений.", show_alert=True)
+        await query.answer(f"Отправил тебе в ЛС {sent} твоих тест-уведомлений.", show_alert=True)
     else:
-        await query.answer("Нечего отправлять — паринги не импортированы или нет получателей.", show_alert=True)
+        await query.answer(
+            "Нет твоих парингов в этом турнире (ты не участник или раунды ещё не импортированы).",
+            show_alert=True,
+        )
 
 
 async def callback_reveal_decks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

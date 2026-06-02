@@ -59,19 +59,22 @@ async def send_round_notifications(bot, db, tournament_id: int, round_numbers: l
 
 
 async def send_debug_round_notifications(bot, db, tournament_id: int, to_tg_id: int) -> int:
-    """Debug helper: build notifications for ALL rounds and DM them all to one user.
+    """Debug helper: DM the requester THEIR OWN round notifications, across all rounds.
 
-    Bypasses the scheduler and the new-round trigger — lets an admin preview every
-    notification (for all players, all rounds) delivered only to themselves.
+    Bypasses the scheduler and the new-round trigger so an admin can preview exactly
+    what *they* would receive. Only ever messages `to_tg_id` — never any other player.
     Returns the number of messages successfully sent.
     """
     import_service = AetherhubImportService(db)
     rounds = import_service.get_round_numbers(tournament_id)
     notifications = RoundNotificationService(db, import_service=import_service).build_for_rounds(tournament_id, rounds)
 
+    # Only the requester's own notifications — never broadcast other players' messages.
+    own = [n for n in notifications if n.tg_id == to_tg_id]
+
     sent = 0
-    for n in notifications:
-        body = format_opponent_notification(
+    for n in own:
+        text = format_opponent_notification(
             round_number=n.round_number,
             table_number=n.table_number,
             opponent_name=n.opponent_name,
@@ -79,7 +82,6 @@ async def send_debug_round_notifications(bot, db, tournament_id: int, to_tg_id: 
             opponent_decks=n.opponent_decks,
             is_bye=n.is_bye,
         )
-        text = f"🐞 Тест · кому: {n.recipient_name}\n\n{body}"
         try:
             await bot.send_message(chat_id=to_tg_id, text=text)
             sent += 1
@@ -87,7 +89,7 @@ async def send_debug_round_notifications(bot, db, tournament_id: int, to_tg_id: 
             logger.warning("[round_notify] debug DM to %s failed: %s", to_tg_id, e)
 
     logger.info(
-        "[round_notify] debug: sent %d/%d notifications for tournament #%s to %s",
+        "[round_notify] debug: sent %d own notifications (of %d total) for tournament #%s to %s",
         sent,
         len(notifications),
         tournament_id,

@@ -10,10 +10,12 @@ Covers:
 """
 
 from datetime import datetime, timedelta
+from unittest.mock import AsyncMock
 
 import pytest
 
 from bot.messages import format_opponent_notification
+from bot.telegram.round_notify import send_debug_round_notifications
 from core import models
 from core.schemas import TournamentCreate
 from services.aetherhub_import_service import AetherhubImportService
@@ -192,6 +194,46 @@ class TestDisplayName:
     def test_id_fallback(self, db, user_svc):
         u = user_svc.get_or_create(tg_id=42)
         assert RoundNotificationService(db)._display_name(u) == "id42"
+
+
+class TestDebugSenderOnlyMessagesRequester:
+    """The debug button must DM the requester ONLY their own notifications — never broadcast."""
+
+    async def test_sends_only_own_notifications_to_requester(self, db, svc, user_svc):
+        t = _tournament(svc)
+        alice = _user(user_svc, 2001, "Alice")
+        bob = _user(user_svc, 2002, "Bob")
+        _participant(db, t.id, alice.id)
+        _participant(db, t.id, bob.id)
+        # 2 rounds, both directions stored (as AetherHub does)
+        for rnd in (1, 2):
+            _pairing(db, t.id, rnd, "Alice", "Bob", table_number=rnd)
+            _pairing(db, t.id, rnd, "Bob", "Alice", table_number=rnd)
+
+        bot = AsyncMock()
+        sent = await send_debug_round_notifications(bot, db, t.id, to_tg_id=alice.tg_id)
+
+        # Alice has 2 rounds → exactly 2 messages, all to Alice, none about/for Bob's delivery
+        assert sent == 2
+        assert bot.send_message.await_count == 2
+        for call in bot.send_message.await_args_list:
+            assert call.kwargs["chat_id"] == alice.tg_id
+
+    async def test_non_participant_requester_gets_nothing(self, db, svc, user_svc):
+        t = _tournament(svc)
+        alice = _user(user_svc, 2001, "Alice")
+        bob = _user(user_svc, 2002, "Bob")
+        _participant(db, t.id, alice.id)
+        _participant(db, t.id, bob.id)
+        _pairing(db, t.id, 1, "Alice", "Bob")
+        _pairing(db, t.id, 1, "Bob", "Alice")
+
+        admin_outsider = _user(user_svc, 9999, "Admin")
+        bot = AsyncMock()
+        sent = await send_debug_round_notifications(bot, db, t.id, to_tg_id=admin_outsider.tg_id)
+
+        assert sent == 0
+        bot.send_message.assert_not_awaited()
 
 
 class TestGetRoundNumbers:
