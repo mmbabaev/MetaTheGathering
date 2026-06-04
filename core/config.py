@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str = "TEST_TOKEN" if _is_pytest_running() else ...
     DATABASE_URL: AnyUrl = "sqlite+pysqlite:///:memory:" if _is_pytest_running() else ...
 
+    # Прокси для запросов к Telegram API. Пусто = напрямую.
+    # Пример: socks5://127.0.0.1:1080
+    TELEGRAM_PROXY_URL: str = ""
+
     # Через запятую в .env: ADMIN_IDS=123,456
     ADMIN_IDS: str = ""
 
