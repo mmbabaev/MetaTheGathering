@@ -180,6 +180,13 @@ class AetherhubImportService:
         new_round_numbers = sorted(r.number for r in data.rounds if r.pairings and r.number not in existing_rounds)
         pairings_saved = self._save_pairings(tournament_id, data.rounds)
 
+        # Self-heal phantom rounds: drop any stored round beyond the real maximum.
+        # Older imports could persist clamped duplicate rounds (see AetherhubService);
+        # once the parser reports the true round count, remove the stale leftovers.
+        real_rounds = [r.number for r in data.rounds if r.pairings]
+        if real_rounds:
+            self._delete_rounds_above(tournament_id, max(real_rounds))
+
         return ImportResult(
             registered=registered,
             already_registered=already_registered,
@@ -187,6 +194,20 @@ class AetherhubImportService:
             created_names=created,
             new_round_numbers=new_round_numbers,
         )
+
+    def _delete_rounds_above(self, tournament_id: int, max_round: int) -> int:
+        """Delete stored pairings for rounds greater than ``max_round`` (phantom rounds)."""
+        deleted = (
+            self.db.query(models.RoundPairing)
+            .filter(
+                models.RoundPairing.tournament_id == tournament_id,
+                models.RoundPairing.round_number > max_round,
+            )
+            .delete(synchronize_session=False)
+        )
+        if deleted:
+            self.db.commit()
+        return deleted
 
     def _existing_round_numbers(self, tournament_id: int) -> set[int]:
         """Round numbers that already have at least one stored pairing for the tournament."""

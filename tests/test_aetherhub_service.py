@@ -336,6 +336,45 @@ def import_svc(db):
     return AetherhubImportService(db)
 
 
+class TestPhantomRoundCleanup:
+    """import_tournament self-heals stale phantom rounds (round_number > real max)."""
+
+    def _stale_round(self, db, tournament_id, round_number):
+        db.add(
+            models.RoundPairing(
+                tournament_id=tournament_id,
+                round_number=round_number,
+                player_name="Alice",
+                opponent_name="Bob",
+            )
+        )
+
+    def test_deletes_rounds_above_real_max(self, import_svc, tournament, db):
+        # leftovers from an earlier buggy import: rounds 5 and 6 duplicate round 4
+        for rn in (1, 2, 3, 4, 5, 6):
+            self._stale_round(db, tournament.id, rn)
+        db.commit()
+
+        data = _make_data(players=[], rounds_pairings=[[("Alice", "Bob")] for _ in range(4)])
+        import_svc.import_tournament(tournament.id, data)
+
+        assert import_svc.get_round_numbers(tournament.id) == [1, 2, 3, 4]
+
+    def test_keeps_all_rounds_when_no_phantoms(self, import_svc, tournament, db):
+        data = _make_data(players=[], rounds_pairings=[[("Alice", "Bob")] for _ in range(4)])
+        import_svc.import_tournament(tournament.id, data)
+        assert import_svc.get_round_numbers(tournament.id) == [1, 2, 3, 4]
+
+    def test_no_deletion_when_data_has_no_rounds(self, import_svc, tournament, db):
+        # stale rounds must NOT be wiped if the fresh import returned nothing
+        for rn in (1, 2):
+            self._stale_round(db, tournament.id, rn)
+        db.commit()
+        data = _make_data(players=[], rounds_pairings=[])
+        import_svc.import_tournament(tournament.id, data)
+        assert import_svc.get_round_numbers(tournament.id) == [1, 2]
+
+
 class TestFindUserByName:
     def test_finds_user_by_first_name(self, import_svc, user_alice):
         result = import_svc.find_user_by_name("Alice")
