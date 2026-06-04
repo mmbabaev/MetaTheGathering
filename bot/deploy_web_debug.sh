@@ -77,10 +77,15 @@ tar -xzf "/tmp/$ARCHIVE_NAME" -C "$REMOTE_DIR" --warning=no-unknown-keyword --ex
 
 echo "→ Устанавливаем зависимости..."
 cd "$REMOTE_DIR"
-sudo apt-get install -y python3-venv python3-pip -qq 2>/dev/null || true
-rm -rf venv
-python3 -m venv --without-pip venv
-./venv/bin/python -m ensurepip
+sudo apt-get install -y python3-venv -qq 2>/dev/null || true
+# Пересоздаём venv, только если он отсутствует или повреждён — не сносим
+# рабочий venv (его делит bot-деплой в той же папке).
+if ! ./venv/bin/python -m pip --version >/dev/null 2>&1; then
+    echo "  venv отсутствует или повреждён — пересоздаём"
+    rm -rf venv 2>/dev/null || true
+    python3 -m venv venv
+fi
+./venv/bin/python -m pip install --upgrade pip -q
 ./venv/bin/python -m pip install -r requirements.txt -q
 
 sudo cp "$SYSTEMD_SERVICE_FILE" /etc/systemd/system/

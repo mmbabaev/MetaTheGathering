@@ -1,4 +1,4 @@
-python-telegram-bot[job-queue]>=21.0,<22.0
+python-telegram-bot[job-queue,socks]>=21.0,<22.0
 sqlalchemy>=2.0,<3.0
 alembic>=1.13,<2.0
 pydantic>=2.0,<3.0

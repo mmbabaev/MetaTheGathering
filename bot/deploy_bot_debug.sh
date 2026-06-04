@@ -98,12 +98,14 @@ mv /tmp/.env.deploy "$ENV_DEST"
 
 echo "→ Создаём venv..."
 cd "$REMOTE_DIR"
-sudo apt-get install -y python3-venv python3-pip -qq 2>/dev/null || true
-if [ ! -f venv/bin/python ]; then
+sudo apt-get install -y python3-venv -qq 2>/dev/null || true
+# Пересоздаём venv, если он отсутствует или повреждён (pip не вызывается).
+if ! ./venv/bin/python -m pip --version >/dev/null 2>&1; then
+    echo "  venv отсутствует или повреждён — пересоздаём"
     rm -rf venv 2>/dev/null || true
-    python3 -m venv --without-pip venv
-    ./venv/bin/python -m ensurepip
+    python3 -m venv venv
 fi
+./venv/bin/python -m pip install --upgrade pip -q
 ./venv/bin/python -m pip install -r requirements.txt -q
 
 echo "→ Проверяем миграции..."

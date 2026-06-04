@@ -206,7 +206,10 @@ def _debug_create_tournament() -> None:
 
 
 def main() -> None:
-    app = Application.builder().token(settings.TELEGRAM_BOT_TOKEN).post_init(_post_init).build()
+    builder = Application.builder().token(settings.TELEGRAM_BOT_TOKEN).post_init(_post_init)
+    if settings.TELEGRAM_PROXY_URL:
+        builder = builder.proxy(settings.TELEGRAM_PROXY_URL).get_updates_proxy(settings.TELEGRAM_PROXY_URL)
+    app = builder.build()
 
     private = filters.ChatType.PRIVATE
     app.add_handler(CommandHandler("start", common.cmd_start, filters=private))
