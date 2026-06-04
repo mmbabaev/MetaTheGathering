@@ -66,7 +66,7 @@ jobs:
 
   deploy-debug-web:
     name: Deploy DEBUG Web
-    needs: test
+    needs: [test, deploy-debug]
     runs-on: ubuntu-latest
     if: github.event.pull_request.head.repo.full_name == github.repository
     steps:
