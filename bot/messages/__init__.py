@@ -199,6 +199,17 @@ def format_tournament_status(title: str, status: str, participants: list, decks_
     return "\n".join(lines)
 
 
+def _match_noun(n: int) -> str:
+    if 11 <= n % 100 <= 14:
+        return "матчей"
+    rem = n % 10
+    if rem == 1:
+        return "матч"
+    if 2 <= rem <= 4:
+        return "матча"
+    return "матчей"
+
+
 def format_opponent_notification(
     round_number: int,
     table_number: int | None,
@@ -214,8 +225,8 @@ def format_opponent_notification(
 
     ``datalens_decks`` / ``head_to_head`` — обогащение из DataLens (объекты с
     атрибутами ``name``/``matches``/``winrate``). Если переданы — показываем
-    статистику соперника с винрейтом и личные встречи; иначе откатываемся на
-    список колод из БД бота (``opponent_decks``).
+    колоды оппонента с ЕГО винрейтом на них и число личных матчей с твоим
+    винрейтом; иначе откатываемся на список колод из БД бота (``opponent_decks``).
     """
     if is_bye:
         return f"🔔 Раунд {round_number}\n\nВ этом раунде у тебя бай — отдыхай! 🎉"
@@ -227,22 +238,23 @@ def format_opponent_notification(
     opponent = opponent_name or "?"
     if opponent_username:
         opponent += f" (@{opponent_username})"
-    lines.append(f"Соперник: {opponent}")
+    lines.append("Оппонент:")
+    lines.append(opponent)
 
     if datalens_decks:
         lines.append("")
-        lines.append("Колоды соперника (3 мес):")
-        lines.extend(f"• {d.name} — {round(d.winrate)}% ({d.matches})" for d in datalens_decks)
+        lines.append("Колоды оппонента и общий винрейт (3 мес):")
+        lines.extend(f"• {d.name} — {round(d.winrate)}% ({d.matches} {_match_noun(d.matches)})" for d in datalens_decks)
     elif opponent_decks:
         lines.append("")
-        lines.append("Последние колоды соперника:")
+        lines.append("Последние колоды оппонента:")
         lines.extend(f"• {name}" for name in opponent_decks)
     else:
         lines.append("")
-        lines.append("Колоды соперника в прошлых турнирах не найдены.")
+        lines.append("Колоды оппонента в прошлых турнирах не найдены.")
 
     if head_to_head is not None:
         lines.append("")
-        lines.append(f"Личные встречи: {head_to_head.matches}, твой винрейт {round(head_to_head.winrate)}%")
+        lines.append(f"Матчей против оппонента: {head_to_head.matches}, твой винрейт {round(head_to_head.winrate)}%")
 
     return "\n".join(lines)

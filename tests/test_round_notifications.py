@@ -560,7 +560,8 @@ class TestFormatNotification:
     def test_no_table_number_omits_table_line(self):
         text = format_opponent_notification(1, None, "Bob", None, ["Tron"])
         assert "Стол" not in text
-        assert "Соперник: Bob" in text
+        assert "Оппонент:" in text
+        assert "Bob" in text
 
     def test_no_username(self):
         text = format_opponent_notification(1, 1, "Bob", None, ["Tron"])
@@ -573,21 +574,21 @@ class TestFormatNotification:
     def test_bye_message(self):
         text = format_opponent_notification(3, None, None, None, is_bye=True)
         assert "бай" in text.lower()
-        assert "Соперник" not in text
+        assert "Оппонент" not in text
 
     def test_datalens_decks_override_db_decks_with_winrate(self):
         decks = [StatRow(name="Flicker Tron", matches=49, winrate=67.3)]
         text = format_opponent_notification(1, 3, "Вадим", None, ["OldDeck"], datalens_decks=decks)
         assert "Flicker Tron" in text
         assert "67%" in text
-        assert "(49)" in text
+        assert "(49 матчей)" in text
         assert "OldDeck" not in text  # DataLens заменяет список из БД бота
         assert "3 мес" in text
 
     def test_head_to_head_line(self):
         h2h = StatRow(name="Вадим", matches=8, winrate=33.3)
         text = format_opponent_notification(1, 3, "Вадим", None, [], head_to_head=h2h)
-        assert "Личные встречи: 8" in text
+        assert "Матчей против оппонента: 8" in text
         assert "33%" in text
 
     def test_no_datalens_falls_back_to_db_decks(self):
@@ -692,7 +693,7 @@ class TestRoundNotifyHandler:
         messages = self._handler(db, dl).build_for_new_rounds(t.id, [1])
         assert "Flicker Tron" in messages[0].text
         assert "67%" in messages[0].text
-        assert "Личные встречи: 8" in messages[0].text
+        assert "Матчей против оппонента: 8" in messages[0].text
 
     def test_datalens_not_queried_for_non_opted_in(self, db, svc, user_svc):
         t, _, _ = self._setup(db, svc, user_svc)  # nobody opts in
@@ -734,7 +735,7 @@ class TestSendRoundNotificationsDataLens:
         assert sent == 1
         text = bot.send_message.await_args.kwargs["text"]
         assert "Flicker Tron" in text
-        assert "Личные встречи: 8" in text
+        assert "Матчей против оппонента: 8" in text
 
     async def test_without_datalens_still_sends_base_message(self, db, svc, user_svc):
         t, alice, _ = self._setup(db, svc, user_svc)
