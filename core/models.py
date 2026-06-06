@@ -56,6 +56,7 @@ class User(Base):
     is_superadmin = Column(Boolean, default=False, nullable=False)
     is_scorekeeper = Column(Boolean, default=False, nullable=False)
     hide_deck_emoji = Column(Boolean, default=False, nullable=False)
+    notify_opponent_rounds = Column(Boolean, default=False, nullable=False)
 
     created_at = Column(DateTime, default=utc_now, nullable=False)
 

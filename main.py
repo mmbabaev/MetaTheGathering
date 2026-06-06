@@ -66,6 +66,7 @@ from bot.keyboards import (
     CB_SET_IMPORT_TIME,
     CB_SETTINGS_NAME,
     CB_SETTINGS_TOGGLE_EMOJI,
+    CB_SETTINGS_TOGGLE_OPPONENT_NOTIFY,
     CB_TOURNAMENT,
     CB_TSTATUS,
 )
@@ -238,6 +239,11 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(settings_handler.callback_settings_name, pattern=f"^{CB_SETTINGS_NAME}$"))
     app.add_handler(
         CallbackQueryHandler(settings_handler.callback_toggle_emoji, pattern=f"^{CB_SETTINGS_TOGGLE_EMOJI}$")
+    )
+    app.add_handler(
+        CallbackQueryHandler(
+            settings_handler.callback_toggle_opponent_notify, pattern=f"^{CB_SETTINGS_TOGGLE_OPPONENT_NOTIFY}$"
+        )
     )
     app.add_handler(CallbackQueryHandler(admin.callback_bulk_add_start, pattern=f"^{CB_BULK_ADD}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_meta_import_start, pattern=f"^{CB_ADMIN_IMPORT_META}:"))

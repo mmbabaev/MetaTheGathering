@@ -154,6 +154,64 @@ class TestHandleToggleEmoji:
         assert any("вкл" in t for t in buttons_text)
 
 
+# --- UserService.toggle_notify_opponent_rounds ---
+
+
+class TestToggleNotifyOpponentRounds:
+    def test_default_is_false(self, user_svc):
+        user_svc.get_or_create(tg_id=9200, username="u", first_name="X")
+        user = user_svc.get_by_tg_id(9200)
+        assert user.notify_opponent_rounds is False
+
+    def test_toggle_enables(self, user_svc):
+        user_svc.get_or_create(tg_id=9201, username="u", first_name="X")
+        new_val = user_svc.toggle_notify_opponent_rounds(9201)
+        assert new_val is True
+        assert user_svc.get_by_tg_id(9201).notify_opponent_rounds is True
+
+    def test_toggle_disables(self, user_svc):
+        user_svc.get_or_create(tg_id=9202, username="u", first_name="X")
+        user_svc.toggle_notify_opponent_rounds(9202)
+        new_val = user_svc.toggle_notify_opponent_rounds(9202)
+        assert new_val is False
+
+    def test_toggle_unknown_user_returns_false(self, user_svc):
+        assert user_svc.toggle_notify_opponent_rounds(99999) is False
+
+    def test_wants_notifications_reflects_flag(self, user_svc):
+        user_svc.get_or_create(tg_id=9203, username="u", first_name="X")
+        assert user_svc.wants_opponent_notifications(9203) is False
+        user_svc.toggle_notify_opponent_rounds(9203)
+        assert user_svc.wants_opponent_notifications(9203) is True
+
+    def test_wants_notifications_unknown_user_false(self, user_svc):
+        assert user_svc.wants_opponent_notifications(99999) is False
+
+
+# --- handle_toggle_opponent_notify ---
+
+
+class TestHandleToggleOpponentNotify:
+    def test_toggles_flag_and_returns_settings(self, handler, user_svc):
+        user_svc.get_or_create(tg_id=9210, username="u", first_name="X")
+        result = handler.handle_toggle_opponent_notify(tg_id=9210)
+        assert SETTINGS_MENU in result.text
+        assert user_svc.get_by_tg_id(9210).notify_opponent_rounds is True
+
+    def test_keyboard_reflects_enabled_state(self, handler, user_svc):
+        user_svc.get_or_create(tg_id=9211, username="u", first_name="X")
+        handler.handle_toggle_opponent_notify(tg_id=9211)  # now enabled
+        result = handler.handle_settings(tg_id=9211)
+        buttons_text = [b.text for row in result.keyboard.inline_keyboard for b in row]
+        assert any("Уведомления об оппоненте: вкл" in t for t in buttons_text)
+
+    def test_keyboard_reflects_disabled_state_by_default(self, handler, user_svc):
+        user_svc.get_or_create(tg_id=9212, username="u", first_name="X")
+        result = handler.handle_settings(tg_id=9212)
+        buttons_text = [b.text for row in result.keyboard.inline_keyboard for b in row]
+        assert any("Уведомления об оппоненте: выкл" in t for t in buttons_text)
+
+
 # --- emoji in archetype keyboards ---
 
 

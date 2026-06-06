@@ -13,6 +13,7 @@ CB_ARCHETYPE_MORE = "arch_more"  # arch_more:{tournament_id}
 CB_TOURNAMENT = "t"
 CB_SETTINGS_NAME = "settings_name"
 CB_SETTINGS_TOGGLE_EMOJI = "settings_toggle_emoji"
+CB_SETTINGS_TOGGLE_OPPONENT_NOTIFY = "settings_toggle_opp_notify"
 CB_TSTATUS = "tstatus"
 CB_LEAVE = "leave"
 CB_LEAVE_CONFIRM = "leave_confirm"
@@ -248,11 +249,20 @@ class Keyboards:
             ]
         )
 
-    def settings_keyboard(self, is_admin: bool = False, hide_deck_emoji: bool = False) -> InlineKeyboardMarkup:
+    def settings_keyboard(
+        self,
+        is_admin: bool = False,
+        hide_deck_emoji: bool = False,
+        notify_opponent_rounds: bool = False,
+    ) -> InlineKeyboardMarkup:
         emoji_label = "🚫 Эмоджи колод: выкл" if hide_deck_emoji else "🎨 Эмоджи колод: вкл"
+        notify_label = (
+            "🔔 Уведомления об оппоненте: вкл" if notify_opponent_rounds else "🔕 Уведомления об оппоненте: выкл"
+        )
         rows = [
             [InlineKeyboardButton("✏️ Изменить имя", callback_data=CB_SETTINGS_NAME)],
             [InlineKeyboardButton(emoji_label, callback_data=CB_SETTINGS_TOGGLE_EMOJI)],
+            [InlineKeyboardButton(notify_label, callback_data=CB_SETTINGS_TOGGLE_OPPONENT_NOTIFY)],
         ]
         return InlineKeyboardMarkup(rows)
 
@@ -490,8 +500,16 @@ def leave_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
     return _default.leave_confirm_keyboard(tournament_id)
 
 
-def settings_keyboard(is_admin: bool = False, hide_deck_emoji: bool = False) -> InlineKeyboardMarkup:
-    return _default.settings_keyboard(is_admin=is_admin, hide_deck_emoji=hide_deck_emoji)
+def settings_keyboard(
+    is_admin: bool = False,
+    hide_deck_emoji: bool = False,
+    notify_opponent_rounds: bool = False,
+) -> InlineKeyboardMarkup:
+    return _default.settings_keyboard(
+        is_admin=is_admin,
+        hide_deck_emoji=hide_deck_emoji,
+        notify_opponent_rounds=notify_opponent_rounds,
+    )
 
 
 def admin_participants_keyboard(

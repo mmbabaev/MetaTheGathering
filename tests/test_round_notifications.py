@@ -23,7 +23,6 @@ from services.aetherhub_import_service import AetherhubImportService
 from services.aetherhub_models import AetherhubPairing, AetherhubRound, AetherhubTournamentData
 from services.aetherhub_parser_js_format import AetherhubJSFormatParser
 from services.archetype import ArchetypeService
-from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.round_notifications import RoundNotificationService
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -238,45 +237,54 @@ class TestDebugSenderOnlyMessagesRequester:
         bot.send_message.assert_not_awaited()
 
 
-def _make_admin(db, tg_id):
+def _opt_in(db, tg_id):
     obj = db.execute(select(models.User).where(models.User.tg_id == tg_id)).scalar_one()
-    obj.is_admin = True
+    obj.notify_opponent_rounds = True
     db.commit()
 
 
-class TestSendRoundNotificationsFlagGating:
-    """roundNotificationsForAll OFF (default) → admins only; ON → everyone."""
+class TestSendRoundNotificationsOptIn:
+    """Per-user opt-in: only players with notify_opponent_rounds=True get notified."""
 
     def _setup(self, db, svc, user_svc):
         t = _tournament(svc)
-        admin = _user(user_svc, 2001, "AdminPlayer")
-        _make_admin(db, admin.tg_id)
-        normal = _user(user_svc, 2002, "NormalPlayer")
-        _participant(db, t.id, admin.id)
-        _participant(db, t.id, normal.id)
-        _pairing(db, t.id, 1, "AdminPlayer", "NormalPlayer")
-        _pairing(db, t.id, 1, "NormalPlayer", "AdminPlayer")
-        return t, admin, normal
+        alice = _user(user_svc, 2001, "Alice")
+        bob = _user(user_svc, 2002, "Bob")
+        _participant(db, t.id, alice.id)
+        _participant(db, t.id, bob.id)
+        _pairing(db, t.id, 1, "Alice", "Bob")
+        _pairing(db, t.id, 1, "Bob", "Alice")
+        return t, alice, bob
 
-    async def test_flag_off_admins_only(self, db, svc, user_svc):
-        t, admin, normal = self._setup(db, svc, user_svc)
+    async def test_default_off_no_one_notified(self, db, svc, user_svc):
+        t, _, _ = self._setup(db, svc, user_svc)
+        bot = AsyncMock()
+        sent = await send_round_notifications(bot, db, t.id, [1])
+        assert sent == 0
+        bot.send_message.assert_not_awaited()
+
+    async def test_only_opted_in_user_notified(self, db, svc, user_svc):
+        t, alice, bob = self._setup(db, svc, user_svc)
+        _opt_in(db, alice.tg_id)
         bot = AsyncMock()
         sent = await send_round_notifications(bot, db, t.id, [1])
         assert sent == 1
         targets = {c.kwargs["chat_id"] for c in bot.send_message.await_args_list}
-        assert targets == {admin.tg_id}  # normal player NOT notified
+        assert targets == {alice.tg_id}  # bob did NOT opt in
 
-    async def test_flag_on_everyone(self, db, svc, user_svc):
-        t, admin, normal = self._setup(db, svc, user_svc)
-        FeatureFlagService(db).toggle(FeatureFlags.ROUND_NOTIFICATIONS_FOR_ALL)
+    async def test_all_opted_in_everyone_notified(self, db, svc, user_svc):
+        t, alice, bob = self._setup(db, svc, user_svc)
+        _opt_in(db, alice.tg_id)
+        _opt_in(db, bob.tg_id)
         bot = AsyncMock()
         sent = await send_round_notifications(bot, db, t.id, [1])
         assert sent == 2
         targets = {c.kwargs["chat_id"] for c in bot.send_message.await_args_list}
-        assert targets == {admin.tg_id, normal.tg_id}
+        assert targets == {alice.tg_id, bob.tg_id}
 
     async def test_no_rounds_sends_nothing(self, db, svc, user_svc):
-        t, _, _ = self._setup(db, svc, user_svc)
+        t, alice, _ = self._setup(db, svc, user_svc)
+        _opt_in(db, alice.tg_id)
         bot = AsyncMock()
         assert await send_round_notifications(bot, db, t.id, []) == 0
         bot.send_message.assert_not_awaited()
