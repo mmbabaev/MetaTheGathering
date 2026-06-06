@@ -534,12 +534,17 @@ class AdminHandler:
         except errors.TournamentNotFound:
             return None
 
-    def handle_export_excel(self, tg_id: int, tournament_id: int) -> tuple[bytes, str] | None:
-        """Возвращает (bytes, filename) или None если нет прав."""
+    def handle_export_excel(self, tg_id: int, tournament_id: int) -> list[tuple[bytes, str]] | None:
+        """Файлы Excel-выгрузки: участники + паринги (если известны). None если нет прав."""
         if not self.user_svc.is_privileged(tg_id):
             return None
         try:
-            return ExportService(self.svc.db).export_participants_excel(tournament_id)
+            export = ExportService(self.svc.db)
+            files = [export.export_participants_excel(tournament_id)]
+            pairings = export.export_pairings_excel(tournament_id)
+            if pairings is not None:
+                files.append(pairings)
+            return files
         except errors.TournamentNotFound:
             return None
 
