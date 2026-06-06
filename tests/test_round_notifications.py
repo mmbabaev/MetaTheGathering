@@ -10,7 +10,7 @@ Covers:
 """
 
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy import select
@@ -236,6 +236,21 @@ class TestDebugSenderOnlyMessagesRequester:
         assert sent == 0
         bot.send_message.assert_not_awaited()
 
+    async def test_debug_send_failure_is_swallowed(self, db, svc, user_svc):
+        t = _tournament(svc)
+        alice = _user(user_svc, 2001, "Alice")
+        bob = _user(user_svc, 2002, "Bob")
+        _participant(db, t.id, alice.id)
+        _participant(db, t.id, bob.id)
+        _pairing(db, t.id, 1, "Alice", "Bob")
+        _pairing(db, t.id, 1, "Bob", "Alice")
+
+        bot = AsyncMock()
+        bot.send_message.side_effect = RuntimeError("network down")
+        sent = await send_debug_round_notifications(bot, db, t.id, to_tg_id=alice.tg_id)
+        assert sent == 0  # error swallowed, no crash
+        bot.send_message.assert_awaited()
+
 
 def _opt_in(db, tg_id):
     obj = db.execute(select(models.User).where(models.User.tg_id == tg_id)).scalar_one()
@@ -288,6 +303,32 @@ class TestSendRoundNotificationsOptIn:
         bot = AsyncMock()
         assert await send_round_notifications(bot, db, t.id, []) == 0
         bot.send_message.assert_not_awaited()
+
+    async def test_none_bot_sends_nothing(self, db, svc, user_svc):
+        t, alice, _ = self._setup(db, svc, user_svc)
+        _opt_in(db, alice.tg_id)
+        assert await send_round_notifications(None, db, t.id, [1]) == 0
+
+    async def test_allow_list_filters_recipient(self, db, svc, user_svc):
+        t, alice, bob = self._setup(db, svc, user_svc)
+        _opt_in(db, alice.tg_id)
+        _opt_in(db, bob.tg_id)
+        # Debug allow-list excludes Bob → only Alice is delivered.
+        with patch("bot.telegram.round_notify._is_notify_allowed", side_effect=lambda tg: tg == alice.tg_id):
+            bot = AsyncMock()
+            sent = await send_round_notifications(bot, db, t.id, [1])
+        assert sent == 1
+        targets = {c.kwargs["chat_id"] for c in bot.send_message.await_args_list}
+        assert targets == {alice.tg_id}
+
+    async def test_send_failure_is_swallowed(self, db, svc, user_svc):
+        t, alice, _ = self._setup(db, svc, user_svc)
+        _opt_in(db, alice.tg_id)
+        bot = AsyncMock()
+        bot.send_message.side_effect = RuntimeError("network down")
+        sent = await send_round_notifications(bot, db, t.id, [1])
+        assert sent == 0  # error swallowed, no crash
+        bot.send_message.assert_awaited()
 
 
 class TestGetRoundNumbers:
