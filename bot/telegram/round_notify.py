@@ -11,7 +11,6 @@ import logging
 from bot.messages import format_opponent_notification
 from core.config import settings
 from services.aetherhub_import_service import AetherhubImportService
-from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.round_notifications import RoundNotificationService
 from services.user import UserService
 
@@ -26,15 +25,14 @@ def _is_notify_allowed(tg_user_id: int) -> bool:
 async def send_round_notifications(bot, db, tournament_id: int, round_numbers: list[int]) -> int:
     """DM each self-registered player about their opponent in the given new rounds.
 
-    Gated by the ``roundNotificationsForAll`` feature flag: while it is OFF (default),
-    only admins receive these notifications; turning it ON delivers them to all players.
+    Opt-in per user: only players who enabled "Уведомления об оппоненте" in /settings
+    (``notify_opponent_rounds``, OFF by default) receive these notifications.
 
     Returns the number of messages successfully sent.
     """
     if not round_numbers or bot is None:
         return 0
 
-    notify_all = FeatureFlagService(db).is_enabled(FeatureFlags.ROUND_NOTIFICATIONS_FOR_ALL)
     user_svc = UserService(db)
 
     notifications = RoundNotificationService(db).build_for_rounds(tournament_id, round_numbers)
@@ -42,8 +40,8 @@ async def send_round_notifications(bot, db, tournament_id: int, round_numbers: l
     for n in notifications:
         if not _is_notify_allowed(n.tg_id):
             continue
-        if not notify_all and not user_svc.is_admin(n.tg_id):
-            continue  # flag OFF → admins only
+        if not user_svc.wants_opponent_notifications(n.tg_id):
+            continue  # user has not opted in
         text = format_opponent_notification(
             round_number=n.round_number,
             table_number=n.table_number,

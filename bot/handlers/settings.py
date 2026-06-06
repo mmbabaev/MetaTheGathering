@@ -17,14 +17,23 @@ class SettingsHandler:
             format_participant_name(user.first_name if user else None, user.last_name if user else None) or "не указано"
         )
         hide_emoji = user.hide_deck_emoji if user else False
+        notify_rounds = user.notify_opponent_rounds if user else False
         text = f"{SETTINGS_MENU}\n\nВаше имя: {current}\n\nВерсия: {app_settings.VERSION}"
         return HandlerResult(
             text,
-            keyboard=settings_keyboard(is_admin=self.user_svc.is_admin(tg_id), hide_deck_emoji=hide_emoji),
+            keyboard=settings_keyboard(
+                is_admin=self.user_svc.is_admin(tg_id),
+                hide_deck_emoji=hide_emoji,
+                notify_opponent_rounds=notify_rounds,
+            ),
         )
 
     def handle_toggle_emoji(self, tg_id: int) -> HandlerResult:
         self.user_svc.toggle_hide_deck_emoji(tg_id)
+        return self.handle_settings(tg_id)
+
+    def handle_toggle_opponent_notify(self, tg_id: int) -> HandlerResult:
+        self.user_svc.toggle_notify_opponent_rounds(tg_id)
         return self.handle_settings(tg_id)
 
     def handle_settings_name_text(self, tg_id: int, name_text: str) -> HandlerResult:

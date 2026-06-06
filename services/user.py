@@ -315,3 +315,17 @@ class UserService:
         user.hide_deck_emoji = not user.hide_deck_emoji
         self.db.commit()
         return user.hide_deck_emoji
+
+    def toggle_notify_opponent_rounds(self, tg_id: int) -> bool:
+        """Инвертирует notify_opponent_rounds. Возвращает новое значение флага."""
+        user = self.get_by_tg_id(tg_id)
+        if not user:
+            return False
+        user.notify_opponent_rounds = not user.notify_opponent_rounds
+        self.db.commit()
+        return user.notify_opponent_rounds
+
+    def wants_opponent_notifications(self, tg_id: int) -> bool:
+        """True, если пользователь включил уведомления об оппоненте в настройках."""
+        user = self.get_by_tg_id(tg_id)
+        return bool(user and user.notify_opponent_rounds)

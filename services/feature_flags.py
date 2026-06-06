@@ -24,7 +24,6 @@ class FeatureFlagInfo:
 class FeatureFlags:
     RECORD_OPPONENTS = "recordOpponents"
     PAYMENT = "payment"
-    ROUND_NOTIFICATIONS_FOR_ALL = "roundNotificationsForAll"
 
 
 KNOWN_FLAGS: dict[str, FeatureFlagMeta] = {
@@ -35,11 +34,6 @@ KNOWN_FLAGS: dict[str, FeatureFlagMeta] = {
     ),
     FeatureFlags.PAYMENT: FeatureFlagMeta(
         description="Оплата взноса через бота (ЮKassa)",
-        value_type="bool",
-        default_value="false",
-    ),
-    FeatureFlags.ROUND_NOTIFICATIONS_FOR_ALL: FeatureFlagMeta(
-        description="Оповещения об оппоненте при новом раунде — всем игрокам (OFF = только админам)",
         value_type="bool",
         default_value="false",
     ),
