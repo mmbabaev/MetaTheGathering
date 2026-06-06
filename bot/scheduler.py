@@ -14,6 +14,7 @@ from core.database import SessionLocal
 from core.schemas import TournamentCreate
 from services.aetherhub_import_service import AetherhubImportService
 from services.aetherhub_service import AetherhubService
+from services.datalens import DataLensService
 from services.tournament import TournamentService
 
 logger = logging.getLogger(__name__)
@@ -267,7 +268,9 @@ class AetherhubImportJob:
 
             if result.new_round_numbers and bot is not None:
                 try:
-                    await send_round_notifications(bot, db, tournament_id, result.new_round_numbers)
+                    await send_round_notifications(
+                        bot, db, tournament_id, result.new_round_numbers, datalens_service=DataLensService()
+                    )
                 except Exception:
                     logger.exception(f"AetherhubImportJob: round notifications failed for #{tournament_id}")
         finally:
@@ -367,7 +370,9 @@ class AetherhubTimedImportJob:
 
             if result.new_round_numbers and bot is not None:
                 try:
-                    await send_round_notifications(bot, db, tournament_id, result.new_round_numbers)
+                    await send_round_notifications(
+                        bot, db, tournament_id, result.new_round_numbers, datalens_service=DataLensService()
+                    )
                 except Exception:
                     logger.exception(f"AetherhubTimedImportJob: round notifications failed for #{tournament_id}")
         finally:

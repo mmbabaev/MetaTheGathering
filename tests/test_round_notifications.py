@@ -10,11 +10,13 @@ Covers:
 """
 
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy import select
 
+from bot.handlers.round_notify import RoundNotifyHandler
 from bot.messages import format_opponent_notification
 from bot.telegram.round_notify import send_debug_round_notifications, send_round_notifications
 from core import models
@@ -23,7 +25,17 @@ from services.aetherhub_import_service import AetherhubImportService
 from services.aetherhub_models import AetherhubPairing, AetherhubRound, AetherhubTournamentData
 from services.aetherhub_parser_js_format import AetherhubJSFormatParser
 from services.archetype import ArchetypeService
+from services.datalens import DataLensService, StatRow
 from services.round_notifications import RoundNotificationService
+from services.user import UserService
+
+
+def _fake_datalens(opponent_decks, head_to_head):
+    """DataLensService-заглушка: scout_opponent отдаёт заданные данные."""
+    dl = MagicMock(spec=DataLensService)
+    dl.scout_opponent.return_value = SimpleNamespace(opponent_decks=opponent_decks, head_to_head=head_to_head)
+    return dl
+
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -548,7 +560,8 @@ class TestFormatNotification:
     def test_no_table_number_omits_table_line(self):
         text = format_opponent_notification(1, None, "Bob", None, ["Tron"])
         assert "Стол" not in text
-        assert "Соперник: Bob" in text
+        assert "Оппонент:" in text
+        assert "Bob" in text
 
     def test_no_username(self):
         text = format_opponent_notification(1, 1, "Bob", None, ["Tron"])
@@ -561,7 +574,27 @@ class TestFormatNotification:
     def test_bye_message(self):
         text = format_opponent_notification(3, None, None, None, is_bye=True)
         assert "бай" in text.lower()
-        assert "Соперник" not in text
+        assert "Оппонент" not in text
+
+    def test_datalens_decks_override_db_decks_with_winrate(self):
+        decks = [StatRow(name="Flicker Tron", matches=49, winrate=67.3)]
+        text = format_opponent_notification(1, 3, "Вадим", None, ["OldDeck"], datalens_decks=decks)
+        assert "Flicker Tron" in text
+        assert "67%" in text
+        assert "(49 матчей)" in text
+        assert "OldDeck" not in text  # DataLens заменяет список из БД бота
+        assert "3 мес" in text
+
+    def test_head_to_head_line(self):
+        h2h = StatRow(name="Вадим", matches=8, winrate=33.3)
+        text = format_opponent_notification(1, 3, "Вадим", None, [], head_to_head=h2h)
+        assert "Матчей против оппонента: 8" in text
+        assert "33%" in text
+
+    def test_no_datalens_falls_back_to_db_decks(self):
+        text = format_opponent_notification(1, 3, "Вадим", None, ["Tron"])
+        assert "• Tron" in text
+        assert "Последние колоды" in text
 
 
 # ── Parser: _extract_table_number ──────────────────────────────────────────────
@@ -583,3 +616,131 @@ class TestExtractTableNumber:
 
     def test_empty_returns_none(self, parser):
         assert parser._extract_table_number("") is None
+
+
+# ── RoundNotificationService.scout (DataLens enrichment) ───────────────────────
+
+
+class TestScout:
+    def test_returns_decks_and_head_to_head(self, db):
+        decks = [StatRow(name="Flicker Tron", matches=49, winrate=67.3)]
+        h2h = StatRow(name="Ашаров Вадим", matches=8, winrate=33.3)
+        svc = RoundNotificationService(db, datalens_service=_fake_datalens(decks, h2h))
+        got_decks, got_h2h = svc.scout("Бабаев Михаил", "Ашаров Вадим")
+        assert got_decks == decks
+        assert got_h2h == h2h
+
+    def test_limits_decks_to_three(self, db):
+        decks = [StatRow(name=f"D{i}", matches=10 - i, winrate=50.0) for i in range(5)]
+        svc = RoundNotificationService(db, datalens_service=_fake_datalens(decks, None))
+        got_decks, _ = svc.scout("P", "O")
+        assert len(got_decks) == 3
+
+    def test_no_datalens_returns_empty(self, db):
+        svc = RoundNotificationService(db)  # datalens not injected
+        assert svc.scout("P", "O") == ([], None)
+
+    def test_bye_opponent_none_returns_empty_without_calling_api(self, db):
+        dl = _fake_datalens([StatRow(name="x", matches=1, winrate=1)], None)
+        svc = RoundNotificationService(db, datalens_service=dl)
+        assert svc.scout("P", None) == ([], None)
+        dl.scout_opponent.assert_not_called()
+
+    def test_exception_is_swallowed(self, db):
+        dl = MagicMock(spec=DataLensService)
+        dl.scout_opponent.side_effect = RuntimeError("network down")
+        svc = RoundNotificationService(db, datalens_service=dl)
+        assert svc.scout("P", "O") == ([], None)
+
+
+# ── RoundNotifyHandler (pure logic) ────────────────────────────────────────────
+
+
+class TestRoundNotifyHandler:
+    def _handler(self, db, datalens=None):
+        return RoundNotifyHandler(RoundNotificationService(db, datalens_service=datalens), UserService(db))
+
+    def _setup(self, db, svc, user_svc):
+        t = _tournament(svc)
+        alice = _user(user_svc, 3001, "Alice")
+        bob = _user(user_svc, 3002, "Bob")
+        _participant(db, t.id, alice.id)
+        _participant(db, t.id, bob.id)
+        _pairing(db, t.id, 1, "Alice", "Bob")
+        _pairing(db, t.id, 1, "Bob", "Alice")
+        return t, alice, bob
+
+    def test_only_opted_in_recipients(self, db, svc, user_svc):
+        t, alice, _ = self._setup(db, svc, user_svc)
+        _opt_in(db, alice.tg_id)
+        messages = self._handler(db).build_for_new_rounds(t.id, [1])
+        assert [m.tg_id for m in messages] == [alice.tg_id]
+
+    def test_allow_list_predicate_applied(self, db, svc, user_svc):
+        t, alice, bob = self._setup(db, svc, user_svc)
+        _opt_in(db, alice.tg_id)
+        _opt_in(db, bob.tg_id)
+        messages = self._handler(db).build_for_new_rounds(t.id, [1], is_allowed=lambda tg: tg == alice.tg_id)
+        assert [m.tg_id for m in messages] == [alice.tg_id]
+
+    def test_message_enriched_with_datalens(self, db, svc, user_svc):
+        t, alice, _ = self._setup(db, svc, user_svc)
+        _opt_in(db, alice.tg_id)
+        dl = _fake_datalens(
+            [StatRow(name="Flicker Tron", matches=49, winrate=67.3)],
+            StatRow(name="Bob", matches=8, winrate=33.3),
+        )
+        messages = self._handler(db, dl).build_for_new_rounds(t.id, [1])
+        assert "Flicker Tron" in messages[0].text
+        assert "67%" in messages[0].text
+        assert "Матчей против оппонента: 8" in messages[0].text
+
+    def test_datalens_not_queried_for_non_opted_in(self, db, svc, user_svc):
+        t, _, _ = self._setup(db, svc, user_svc)  # nobody opts in
+        dl = MagicMock(spec=DataLensService)
+        messages = self._handler(db, dl).build_for_new_rounds(t.id, [1])
+        assert messages == []
+        dl.scout_opponent.assert_not_called()
+
+    def test_build_for_requester_only_own(self, db, svc, user_svc):
+        t, alice, _ = self._setup(db, svc, user_svc)
+        # opt-in is irrelevant for the debug/requester path
+        messages = self._handler(db).build_for_requester(t.id, alice.tg_id)
+        assert messages and all(m.tg_id == alice.tg_id for m in messages)
+
+
+# ── send_round_notifications: DataLens enrichment end-to-end ────────────────────
+
+
+class TestSendRoundNotificationsDataLens:
+    def _setup(self, db, svc, user_svc):
+        t = _tournament(svc)
+        alice = _user(user_svc, 4001, "Alice")
+        bob = _user(user_svc, 4002, "Bob")
+        _participant(db, t.id, alice.id)
+        _participant(db, t.id, bob.id)
+        _pairing(db, t.id, 1, "Alice", "Bob")
+        _pairing(db, t.id, 1, "Bob", "Alice")
+        return t, alice, bob
+
+    async def test_message_enriched(self, db, svc, user_svc):
+        t, alice, _ = self._setup(db, svc, user_svc)
+        _opt_in(db, alice.tg_id)
+        dl = _fake_datalens(
+            [StatRow(name="Flicker Tron", matches=49, winrate=67.3)],
+            StatRow(name="Bob", matches=8, winrate=33.3),
+        )
+        bot = AsyncMock()
+        sent = await send_round_notifications(bot, db, t.id, [1], datalens_service=dl)
+        assert sent == 1
+        text = bot.send_message.await_args.kwargs["text"]
+        assert "Flicker Tron" in text
+        assert "Матчей против оппонента: 8" in text
+
+    async def test_without_datalens_still_sends_base_message(self, db, svc, user_svc):
+        t, alice, _ = self._setup(db, svc, user_svc)
+        _opt_in(db, alice.tg_id)
+        bot = AsyncMock()
+        sent = await send_round_notifications(bot, db, t.id, [1])  # no datalens_service
+        assert sent == 1
+        assert "Раунд 1" in bot.send_message.await_args.kwargs["text"]
