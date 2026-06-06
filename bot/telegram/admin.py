@@ -30,6 +30,7 @@ from core.config import app_cfg, settings
 from core.database import SessionLocal
 from core.models import TournamentStatus
 from services import errors as svc_errors
+from services.datalens import DataLensService
 from services.tournament import TournamentService
 from services.user import UserService
 from services.utils import get_tournament
@@ -550,7 +551,9 @@ async def callback_debug_round_notify(update: Update, context: ContextTypes.DEFA
             await query.answer("Нет прав.", show_alert=True)
             return
         _log("debug_round_notify", user, tournament_id=tournament_id)
-        sent = await send_debug_round_notifications(context.bot, db, tournament_id, user.id)
+        sent = await send_debug_round_notifications(
+            context.bot, db, tournament_id, user.id, datalens_service=DataLensService()
+        )
     finally:
         db.close()
 

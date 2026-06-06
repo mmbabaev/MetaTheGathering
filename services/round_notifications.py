@@ -6,6 +6,7 @@ layer is responsible for actually delivering the messages.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 
 from sqlalchemy import select
@@ -14,8 +15,12 @@ from sqlalchemy.orm import Session
 from core import models
 from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeService
+from services.datalens import DataLensService, StatRow
+
+logger = logging.getLogger(__name__)
 
 OPPONENT_DECKS_LIMIT = 3
+DATALENS_DECKS_LIMIT = 3  # колод соперника из DataLens в сообщении (сортировка по матчам)
 
 
 @dataclass
@@ -36,10 +41,13 @@ class RoundNotificationService:
         db: Session,
         import_service: AetherhubImportService | None = None,
         archetype_service: ArchetypeService | None = None,
+        datalens_service: DataLensService | None = None,
     ) -> None:
         self.db = db
         self._import = import_service or AetherhubImportService(db)
         self._archetypes = archetype_service or ArchetypeService(db)
+        # None → обогащение из DataLens отключено (например, в юнит-тестах).
+        self._datalens = datalens_service
 
     def build_for_rounds(self, tournament_id: int, round_numbers: list[int]) -> list[RoundNotification]:
         """Build notifications for every given round, flattened into one list."""
@@ -47,6 +55,10 @@ class RoundNotificationService:
         for round_number in round_numbers:
             result.extend(self.build_for_round(tournament_id, round_number))
         return result
+
+    def build_for_tournament(self, tournament_id: int) -> list[RoundNotification]:
+        """Build notifications across all known rounds of the tournament."""
+        return self.build_for_rounds(tournament_id, self._import.get_round_numbers(tournament_id))
 
     def build_for_round(self, tournament_id: int, round_number: int) -> list[RoundNotification]:
         """One notification per self-registered, real-Telegram player paired in this round."""
@@ -115,6 +127,23 @@ class RoundNotificationService:
             opponent_decks=decks,
             recipient_name=recipient_name,
         )
+
+    def scout(self, recipient_name: str, opponent_name: str | None) -> tuple[list[StatRow], StatRow | None]:
+        """Обогащение сообщения статистикой соперника из DataLens.
+
+        Возвращает ``(колоды соперника за период, личные встречи)``. Делается
+        best-effort: если DataLens не инжектирован, это бай, или сеть недоступна —
+        возвращаем пустые данные, не роняя рассылку. Вызывать только для тех, кто
+        реально получит уведомление (после фильтра opt-in), чтобы не дёргать API зря.
+        """
+        if self._datalens is None or not opponent_name:
+            return [], None
+        try:
+            scouting = self._datalens.scout_opponent(recipient_name, opponent_name)
+            return scouting.opponent_decks[:DATALENS_DECKS_LIMIT], scouting.head_to_head
+        except Exception as e:  # noqa: BLE001 — обогащение не должно ронять рассылку
+            logger.warning("[round_notify] datalens scout failed for %r vs %r: %s", recipient_name, opponent_name, e)
+            return [], None
 
     @staticmethod
     def _display_name(user: models.User) -> str:
