@@ -145,7 +145,10 @@ class AetherhubImportService:
         if tournament is None:
             raise errors.TournamentNotFound(f"Tournament {tournament_id} not found")
         if tournament.status == models.TournamentStatus.CLOSED:
-            raise errors.TournamentInvalidState(f"Tournament {tournament_id} is closed, cannot import")
+            # Закрытый турнир: только освежаем паринги/счёт (финальные результаты
+            # часто появляются к закрытию). Без перерегистрации участников и без
+            # уведомлений (new_round_numbers=[]).
+            return self._refresh_pairings_only(tournament_id, data)
 
         registered = 0
         already_registered = 0
@@ -203,6 +206,20 @@ class AetherhubImportService:
             pairings_saved=pairings_saved,
             created_names=created,
             new_round_numbers=new_round_numbers,
+        )
+
+    def _refresh_pairings_only(self, tournament_id: int, data: AetherhubTournamentData) -> ImportResult:
+        """Обновить только паринги/счёт (для закрытого турнира). Без перерегистрации."""
+        pairings_saved = self._save_pairings(tournament_id, data.rounds)
+        real_rounds = [r.number for r in data.rounds if r.pairings]
+        if real_rounds:
+            self._delete_rounds_above(tournament_id, max(real_rounds))
+        return ImportResult(
+            registered=0,
+            already_registered=0,
+            pairings_saved=pairings_saved,
+            created_names=[],
+            new_round_numbers=[],
         )
 
     def _delete_rounds_above(self, tournament_id: int, max_round: int) -> int:

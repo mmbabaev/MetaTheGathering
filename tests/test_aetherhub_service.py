@@ -493,6 +493,35 @@ class TestImportTournament:
         assert r2.already_registered == 1
         assert r2.pairings_saved == 0
 
+    def test_closed_tournament_refreshes_scores_without_raising(self, import_svc, db, tournament):
+        # импортируем пары пока турнир открыт (счёта ещё нет)
+        import_svc.import_tournament(
+            tournament.id,
+            _make_data(players=[], rounds_pairings=[[("Alice", "Bob"), ("Bob", "Alice")]]),
+        )
+        db.get(models.Tournament, tournament.id).status = models.TournamentStatus.CLOSED
+        db.commit()
+
+        # реимпорт закрытого со счётом — не падает, обновляет счёт, без перерегистрации/уведомлений
+        scored = AetherhubTournamentData(
+            url="x",
+            players=[],
+            rounds=[
+                AetherhubRound(
+                    number=1,
+                    pairings=[
+                        AetherhubPairing(player="Alice", opponent="Bob", player_wins=2, opponent_wins=1),
+                        AetherhubPairing(player="Bob", opponent="Alice", player_wins=1, opponent_wins=2),
+                    ],
+                )
+            ],
+        )
+        result = import_svc.import_tournament(tournament.id, scored)
+        assert result.registered == 0
+        assert result.new_round_numbers == []
+        p = db.query(models.RoundPairing).filter_by(tournament_id=tournament.id, player_name="Alice").first()
+        assert (p.player_wins, p.opponent_wins) == (2, 1)
+
 
 # ── TestGetPairings ──────────────────────────────────────────────────────────
 
@@ -633,11 +662,15 @@ class TestImportTournamentValidation:
         with pytest.raises(TournamentNotFound):
             import_svc.import_tournament(99999, data)
 
-    def test_raises_on_closed_tournament(self, import_svc, svc, tournament):
+    def test_closed_tournament_refreshes_pairings_no_register(self, import_svc, svc, tournament):
+        # закрытый турнир не реджектится: обновляет паринги/счёт, но не регистрирует
         svc.close_tournament(tournament.id)
-        data = _make_data(players=[], rounds_pairings=[])
-        with pytest.raises(TournamentInvalidState):
-            import_svc.import_tournament(tournament.id, data)
+        data = _make_data(players=["Alice"], rounds_pairings=[[("Alice", "Bob"), ("Bob", "Alice")]])
+        result = import_svc.import_tournament(tournament.id, data)
+        assert result.registered == 0
+        assert result.already_registered == 0
+        assert result.new_round_numbers == []
+        assert result.pairings_saved == 2
 
     def test_allows_import_into_open_tournament(self, import_svc, tournament):
         data = _make_data(players=[], rounds_pairings=[])
