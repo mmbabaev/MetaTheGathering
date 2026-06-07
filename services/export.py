@@ -181,54 +181,52 @@ class ExportService:
         filename = f"{t.title.replace(' ', '_')}.xlsx"
         return buf.getvalue(), filename
 
-    def get_pairings_rows(self, tournament_id: int) -> list[tuple[str, str, object, object, str]]:
-        """Паринги турнира в «формате Серёжи»: одна строка на матч.
+    def get_pairings_by_round(self, tournament_id: int) -> list[tuple[int, list[tuple[str, str, object, object, str]]]]:
+        """Паринги, сгруппированные по раундам.
 
-        Возвращает кортежи ``(date, player1, result1, result2, player2)``. ``date`` —
-        дата турнира (dd.mm.yyyy) или "". ``result1``/``result2`` — победы в партиях
-        каждого игрока, если известны (в БД пока не хранятся → ""). Баи пропускаются.
+        ``[(round_number, [(date, player1, result1, result2, player2), …]), …]``.
+        ``date`` — дата турнира (dd.mm.yyyy) или "". ``result1``/``result2`` — победы
+        в партиях каждого игрока, если известны (иначе ""). Баи пропускаются.
         """
         t = get_tournament(self.db, tournament_id)
         date_str = t.started_at.strftime("%d.%m.%Y") if t.started_at else ""
 
-        pairings = self.db.query(models.RoundPairing).filter_by(tournament_id=tournament_id).all()
-        pairings.sort(
-            key=lambda p: (
-                p.round_number,
-                p.table_number if p.table_number is not None else 10**9,
-                p.player_name,
-            )
-        )
-
         def _score(value) -> object:
             return value if value is not None else ""
 
-        rows: list[tuple[str, str, object, object, str]] = []
-        seen: set[tuple[int, frozenset[str]]] = set()
-        for p in pairings:
-            if not p.opponent_name:  # bye — в таблицу матчей не идёт
-                continue
-            key = (p.round_number, frozenset((p.player_name, p.opponent_name)))
-            if key in seen:
-                continue
-            seen.add(key)
-            # счёт пока не хранится в RoundPairing; getattr — на будущее (mtgarena)
-            rows.append(
-                (
-                    date_str,
-                    p.player_name,
-                    _score(getattr(p, "player_wins", None)),
-                    _score(getattr(p, "opponent_wins", None)),
-                    p.opponent_name,
-                )
+        by_round: dict[int, list[models.RoundPairing]] = {}
+        for p in self.db.query(models.RoundPairing).filter_by(tournament_id=tournament_id).all():
+            by_round.setdefault(p.round_number, []).append(p)
+
+        groups: list[tuple[int, list[tuple[str, str, object, object, str]]]] = []
+        for rnd in sorted(by_round):
+            pairings = sorted(
+                by_round[rnd],
+                key=lambda p: (p.table_number if p.table_number is not None else 10**9, p.player_name),
             )
-        return rows
+            rows: list[tuple[str, str, object, object, str]] = []
+            seen: set[frozenset[str]] = set()
+            for p in pairings:
+                if not p.opponent_name:  # bye — в таблицу матчей не идёт
+                    continue
+                key = frozenset((p.player_name, p.opponent_name))
+                if key in seen:
+                    continue
+                seen.add(key)
+                rows.append((date_str, p.player_name, _score(p.player_wins), _score(p.opponent_wins), p.opponent_name))
+            if rows:
+                groups.append((rnd, rows))
+        return groups
+
+    def get_pairings_rows(self, tournament_id: int) -> list[tuple[str, str, object, object, str]]:
+        """Плоский список матчей в «формате Серёжи» (одна строка на матч)."""
+        return [row for _, rows in self.get_pairings_by_round(tournament_id) for row in rows]
 
     def export_pairings_excel(self, tournament_id: int) -> tuple[bytes, str] | None:
-        """Excel с парингами в «формате Серёжи». None, если парингов нет."""
+        """Excel с парингами в «формате Серёжи», с секциями по раундам. None, если парингов нет."""
         t = get_tournament(self.db, tournament_id)
-        rows = self.get_pairings_rows(tournament_id)
-        if not rows:
+        groups = self.get_pairings_by_round(tournament_id)
+        if not groups:
             return None
 
         wb = openpyxl.Workbook()
@@ -237,6 +235,8 @@ class ExportService:
 
         header_fill = PatternFill(start_color="2E7D32", end_color="2E7D32", fill_type="solid")
         header_font = Font(color="FFFFFF", bold=True)
+        section_fill = PatternFill(start_color="C8E6C9", end_color="C8E6C9", fill_type="solid")
+        section_font = Font(bold=True)
         headers = ["date", "player1", "result1", "result2", "player2"]
         for col, h in enumerate(headers, 1):
             cell = ws.cell(row=1, column=col, value=h)
@@ -244,12 +244,22 @@ class ExportService:
             cell.font = header_font
             cell.alignment = Alignment(horizontal="center")
 
-        for row, (date_str, player1, result1, result2, player2) in enumerate(rows, 2):
-            ws.cell(row=row, column=1, value=date_str)
-            ws.cell(row=row, column=2, value=player1)
-            ws.cell(row=row, column=3, value=result1)
-            ws.cell(row=row, column=4, value=result2)
-            ws.cell(row=row, column=5, value=player2)
+        row = 2
+        for round_number, rows in groups:
+            # секция раунда: заголовок на всю ширину
+            for col in range(1, 6):
+                ws.cell(row=row, column=col).fill = section_fill
+            head = ws.cell(row=row, column=1, value=f"Раунд {round_number}")
+            head.font = section_font
+            ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=5)
+            row += 1
+            for date_str, player1, result1, result2, player2 in rows:
+                ws.cell(row=row, column=1, value=date_str)
+                ws.cell(row=row, column=2, value=player1)
+                ws.cell(row=row, column=3, value=result1)
+                ws.cell(row=row, column=4, value=result2)
+                ws.cell(row=row, column=5, value=player2)
+                row += 1
 
         ws.column_dimensions["A"].width = 12
         ws.column_dimensions["B"].width = 26
