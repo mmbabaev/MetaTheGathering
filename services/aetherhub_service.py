@@ -15,6 +15,17 @@ from services.aetherhub_models import (
 
 PAUPER_RE = re.compile(r"pauper|паупер|пупер", re.IGNORECASE)
 
+_RESULT_RE = re.compile(r"(\d+)\s*[-–]\s*(\d+)")
+
+
+def _parse_match_result(text: str) -> tuple[int | None, int | None]:
+    """Счёт матча «2 - 0» → (2, 0). Пусто/нет счёта → (None, None)."""
+    m = _RESULT_RE.search(text or "")
+    if not m:
+        return None, None
+    return int(m.group(1)), int(m.group(2))
+
+
 _DATE_FORMATS = [
     (re.compile(r"\d{4}-\d{2}-\d{2}"), "%Y-%m-%d"),
     (re.compile(r"\d{2}\.\d{2}\.\d{4}"), "%d.%m.%Y"),
@@ -123,23 +134,32 @@ class AetherhubService:
         return players, max_round
 
     def _parse_pairings_page(self, html: str) -> list[AetherhubPairing]:
-        """Parse pairings from /Tourney/RoundTourneyPublicPairings response."""
+        """Parse the matchList table (pairings + optional «Match Results» score column).
+
+        Works for both the main tournament page (``?p=N`` — has the score column)
+        and the public pairings endpoint (score column empty).
+        """
         soup = BeautifulSoup(html, "html.parser")
-        tables = soup.find_all("table")
+        table = soup.find("table", {"id": "matchList"})
+        if table is None:
+            tables = soup.find_all("table")
+            table = tables[0] if tables else None
         pairings: list[AetherhubPairing] = []
-        if not tables:
+        if table is None:
             return pairings
-        for row in tables[0].find_all("tr")[1:]:
+        for row in table.find_all("tr")[1:]:
             cells = [td.get_text(strip=True) for td in row.find_all("td")]
             if len(cells) < 3:
                 continue
             p1 = self._strip_points(cells[1])
             p2_raw = self._strip_points(cells[2]) if cells[2] else None
             p2 = None if (p2_raw and self._is_bye(p2_raw)) else p2_raw
+            # 4-я колонка «Match Results»: "2 - 0" (на главной странице; иначе пусто)
+            w1, w2 = _parse_match_result(cells[3] if len(cells) > 3 else "")
             if p1 and not self._is_bye(p1):
-                pairings.append(AetherhubPairing(player=p1, opponent=p2 or None))
+                pairings.append(AetherhubPairing(player=p1, opponent=p2 or None, player_wins=w1, opponent_wins=w2))
             if p2:
-                pairings.append(AetherhubPairing(player=p2, opponent=p1 or None))
+                pairings.append(AetherhubPairing(player=p2, opponent=p1 or None, player_wins=w2, opponent_wins=w1))
         return pairings
 
     def _extract_date(self, text: str) -> date | None:
@@ -256,8 +276,14 @@ class AetherhubService:
         rounds = []
         prev_signature: frozenset | None = None
         for rn in range(1, max_round + 1):
-            pairings_html = self._scraper.get(self._pairings_url(tourney_id, rn), timeout=30).text
-            pairings = self._parse_pairings_page(pairings_html)
+            # Главная страница ?p=N содержит matchList СО счётом («Match Results»).
+            # Если там пусто (js-формат с динамической подгрузкой) — фолбэк на
+            # публичный pairings-эндпоинт (паринги без счёта).
+            pairings = self._parse_pairings_page(self._scraper.get(f"{url}?p={rn}", timeout=30).text)
+            if not pairings:
+                pairings = self._parse_pairings_page(
+                    self._scraper.get(self._pairings_url(tourney_id, rn), timeout=30).text
+                )
             signature = frozenset((p.player, p.opponent) for p in pairings)
             if rn > 1 and signature and signature == prev_signature:
                 break  # clamped duplicate of the previous round → phantom, stop here

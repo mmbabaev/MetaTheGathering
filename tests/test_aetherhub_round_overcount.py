@@ -46,6 +46,10 @@ def _build_html_map() -> dict[str, str]:
     main = f"<html><body><div>{nav}</div><div id='tab_results'><table></table></div></body></html>"
 
     html = {URL: main}
+    # Main page ?p=N has no matchList here → fetch_tournament falls back to the
+    # public pairings endpoint (this regression is about phantom-round clamping).
+    for p in range(1, 7):
+        html[f"{URL}?p={p}"] = "<html><body></body></html>"
     for p in range(1, 5):
         html[_pairings_url(p)] = _pairings_table(_ROUND_PAIRS[p])
     # AetherHub clamps out-of-range rounds to the last real round (round 4)
