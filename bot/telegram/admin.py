@@ -358,7 +358,7 @@ async def callback_export_players(update: Update, context: ContextTypes.DEFAULT_
 
 
 async def callback_export_excel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Кнопка «📊 Выгрузка Excel» — отправляет файл участников."""
+    """Кнопка «📊 Выгрузка Excel» — отправляет файл участников (+ паринги, если есть)."""
     query = update.callback_query
     user = update.effective_user
     if not user:
@@ -370,16 +370,16 @@ async def callback_export_excel(update: Update, context: ContextTypes.DEFAULT_TY
     await query.answer("Генерирую файл…")
     db = SessionLocal()
     try:
-        result = _admin_handler(db).handle_export_excel(user.id, tournament_id)
-        if result is None:
+        files = _admin_handler(db).handle_export_excel(user.id, tournament_id)
+        if files is None:
             await query.answer("Нет прав или турнир не найден.", show_alert=True)
             return
-        data, filename = result
-        await context.bot.send_document(
-            chat_id=query.message.chat_id,
-            document=io.BytesIO(data),
-            filename=filename,
-        )
+        for data, filename in files:
+            await context.bot.send_document(
+                chat_id=query.message.chat_id,
+                document=io.BytesIO(data),
+                filename=filename,
+            )
         _log("export_excel", user, tournament_id=tournament_id)
     finally:
         db.close()

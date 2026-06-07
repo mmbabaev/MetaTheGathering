@@ -160,7 +160,16 @@ def export_excel(
             tournament_id = tournaments[0].id
             typer.echo(f"Турнир #{tournament_id}: {tournaments[0].title}")
 
-        data, filename = ExportService(db).export_participants_excel(tournament_id)
+        export = ExportService(db)
+        data, filename = export.export_participants_excel(tournament_id)
         out_path = (output or Path(filename)).resolve()
         out_path.write_bytes(data)
         typer.echo(f"✓ Сохранено: {out_path}  ({len(data):,} байт)")
+
+        pairings = export.export_pairings_excel(tournament_id)
+        if pairings is not None:
+            p_data, p_filename = pairings
+            # рядом с основным файлом, имя из сервиса (…_pairings.xlsx)
+            p_path = (out_path.parent / p_filename).resolve()
+            p_path.write_bytes(p_data)
+            typer.echo(f"✓ Паринги: {p_path}  ({len(p_data):,} байт)")

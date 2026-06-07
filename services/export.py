@@ -181,6 +181,87 @@ class ExportService:
         filename = f"{t.title.replace(' ', '_')}.xlsx"
         return buf.getvalue(), filename
 
+    def get_pairings_rows(self, tournament_id: int) -> list[tuple[str, str, object, object, str]]:
+        """Паринги турнира в «формате Серёжи»: одна строка на матч.
+
+        Возвращает кортежи ``(date, player1, result1, result2, player2)``. ``date`` —
+        дата турнира (dd.mm.yyyy) или "". ``result1``/``result2`` — победы в партиях
+        каждого игрока, если известны (в БД пока не хранятся → ""). Баи пропускаются.
+        """
+        t = get_tournament(self.db, tournament_id)
+        date_str = t.started_at.strftime("%d.%m.%Y") if t.started_at else ""
+
+        pairings = self.db.query(models.RoundPairing).filter_by(tournament_id=tournament_id).all()
+        pairings.sort(
+            key=lambda p: (
+                p.round_number,
+                p.table_number if p.table_number is not None else 10**9,
+                p.player_name,
+            )
+        )
+
+        def _score(value) -> object:
+            return value if value is not None else ""
+
+        rows: list[tuple[str, str, object, object, str]] = []
+        seen: set[tuple[int, frozenset[str]]] = set()
+        for p in pairings:
+            if not p.opponent_name:  # bye — в таблицу матчей не идёт
+                continue
+            key = (p.round_number, frozenset((p.player_name, p.opponent_name)))
+            if key in seen:
+                continue
+            seen.add(key)
+            # счёт пока не хранится в RoundPairing; getattr — на будущее (mtgarena)
+            rows.append(
+                (
+                    date_str,
+                    p.player_name,
+                    _score(getattr(p, "player_wins", None)),
+                    _score(getattr(p, "opponent_wins", None)),
+                    p.opponent_name,
+                )
+            )
+        return rows
+
+    def export_pairings_excel(self, tournament_id: int) -> tuple[bytes, str] | None:
+        """Excel с парингами в «формате Серёжи». None, если парингов нет."""
+        t = get_tournament(self.db, tournament_id)
+        rows = self.get_pairings_rows(tournament_id)
+        if not rows:
+            return None
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Pairings"
+
+        header_fill = PatternFill(start_color="2E7D32", end_color="2E7D32", fill_type="solid")
+        header_font = Font(color="FFFFFF", bold=True)
+        headers = ["date", "player1", "result1", "result2", "player2"]
+        for col, h in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=h)
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center")
+
+        for row, (date_str, player1, result1, result2, player2) in enumerate(rows, 2):
+            ws.cell(row=row, column=1, value=date_str)
+            ws.cell(row=row, column=2, value=player1)
+            ws.cell(row=row, column=3, value=result1)
+            ws.cell(row=row, column=4, value=result2)
+            ws.cell(row=row, column=5, value=player2)
+
+        ws.column_dimensions["A"].width = 12
+        ws.column_dimensions["B"].width = 26
+        ws.column_dimensions["C"].width = 9
+        ws.column_dimensions["D"].width = 9
+        ws.column_dimensions["E"].width = 26
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        filename = f"{t.title.replace(' ', '_')}_pairings.xlsx"
+        return buf.getvalue(), filename
+
     def export_meta_markdown(self, tournament_id: int) -> str:
         """
         Markdown‑таблица метагейма: архетип, количество игроков, суммарные голоса.
