@@ -1,6 +1,7 @@
 # Telegram-обёртки для admin-хендлеров
 
 import io
+import logging
 
 from telegram import Update
 from telegram.constants import ChatType
@@ -374,6 +375,12 @@ async def callback_export_excel(update: Update, context: ContextTypes.DEFAULT_TY
         if files is None:
             await query.answer("Нет прав или турнир не найден.", show_alert=True)
             return
+        logging.getLogger(__name__).info(
+            "[export_excel] t=%s → %d files: %s",
+            tournament_id,
+            len(files),
+            [(fn, len(data)) for data, fn in files],
+        )
         for data, filename in files:
             await context.bot.send_document(
                 chat_id=query.message.chat_id,

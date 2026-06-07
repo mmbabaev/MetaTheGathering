@@ -11,6 +11,7 @@ from services.aetherhub_models import (
     AetherhubRound,
     AetherhubTournamentData,
 )
+from services.aetherhub_parser_edinorog import _parse_match_result
 
 
 class AetherhubJSFormatParser:
@@ -152,6 +153,8 @@ class AetherhubJSFormatParser:
                 table_number = self._extract_table_number(cells[0].get_text(strip=True))
                 player1_text = cells[1].get_text(strip=True)
                 player2_text = cells[2].get_text(strip=True)
+                # 4-я колонка «Match Results» (если присутствует и раунд сыгран)
+                w1, w2 = _parse_match_result(cells[3].get_text(strip=True) if len(cells) > 3 else "")
 
                 # Extract name (remove points in parentheses)
                 # Format: "Старостин Владислав (9 Points)"
@@ -161,13 +164,25 @@ class AetherhubJSFormatParser:
                 if player1_name:
                     # Add pairing for player1
                     pairings.append(
-                        AetherhubPairing(player=player1_name, opponent=player2_name, table_number=table_number)
+                        AetherhubPairing(
+                            player=player1_name,
+                            opponent=player2_name,
+                            table_number=table_number,
+                            player_wins=w1,
+                            opponent_wins=w2,
+                        )
                     )
 
                     # If not a bye, add reverse pairing for player2
                     if player2_name:
                         pairings.append(
-                            AetherhubPairing(player=player2_name, opponent=player1_name, table_number=table_number)
+                            AetherhubPairing(
+                                player=player2_name,
+                                opponent=player1_name,
+                                table_number=table_number,
+                                player_wins=w2,
+                                opponent_wins=w1,
+                            )
                         )
 
         return AetherhubRound(

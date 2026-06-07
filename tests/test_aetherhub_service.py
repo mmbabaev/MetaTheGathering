@@ -493,6 +493,35 @@ class TestImportTournament:
         assert r2.already_registered == 1
         assert r2.pairings_saved == 0
 
+    def test_closed_tournament_refreshes_scores_without_raising(self, import_svc, db, tournament):
+        # импортируем пары пока турнир открыт (счёта ещё нет)
+        import_svc.import_tournament(
+            tournament.id,
+            _make_data(players=[], rounds_pairings=[[("Alice", "Bob"), ("Bob", "Alice")]]),
+        )
+        db.get(models.Tournament, tournament.id).status = models.TournamentStatus.CLOSED
+        db.commit()
+
+        # реимпорт закрытого со счётом — не падает, обновляет счёт, без перерегистрации/уведомлений
+        scored = AetherhubTournamentData(
+            url="x",
+            players=[],
+            rounds=[
+                AetherhubRound(
+                    number=1,
+                    pairings=[
+                        AetherhubPairing(player="Alice", opponent="Bob", player_wins=2, opponent_wins=1),
+                        AetherhubPairing(player="Bob", opponent="Alice", player_wins=1, opponent_wins=2),
+                    ],
+                )
+            ],
+        )
+        result = import_svc.import_tournament(tournament.id, scored)
+        assert result.registered == 0
+        assert result.new_round_numbers == []
+        p = db.query(models.RoundPairing).filter_by(tournament_id=tournament.id, player_name="Alice").first()
+        assert (p.player_wins, p.opponent_wins) == (2, 1)
+
 
 # ── TestGetPairings ──────────────────────────────────────────────────────────
 
@@ -633,11 +662,15 @@ class TestImportTournamentValidation:
         with pytest.raises(TournamentNotFound):
             import_svc.import_tournament(99999, data)
 
-    def test_raises_on_closed_tournament(self, import_svc, svc, tournament):
+    def test_closed_tournament_refreshes_pairings_no_register(self, import_svc, svc, tournament):
+        # закрытый турнир не реджектится: обновляет паринги/счёт, но не регистрирует
         svc.close_tournament(tournament.id)
-        data = _make_data(players=[], rounds_pairings=[])
-        with pytest.raises(TournamentInvalidState):
-            import_svc.import_tournament(tournament.id, data)
+        data = _make_data(players=["Alice"], rounds_pairings=[[("Alice", "Bob"), ("Bob", "Alice")]])
+        result = import_svc.import_tournament(tournament.id, data)
+        assert result.registered == 0
+        assert result.already_registered == 0
+        assert result.new_round_numbers == []
+        assert result.pairings_saved == 2
 
     def test_allows_import_into_open_tournament(self, import_svc, tournament):
         data = _make_data(players=[], rounds_pairings=[])
@@ -1121,3 +1154,53 @@ class TestGetPlayerOpponents:
         opps, err = import_svc.get_player_opponents(tournament.id, stranger_p.id)
         assert err == "not_in_pairings"
         assert opps == []
+
+
+# ── TestFetchScoresFromMainPage ──────────────────────────────────────────────
+
+
+class TestFetchScoresFromMainPage:
+    """The bot service reads match scores from the main page ?p=N matchList."""
+
+    BASE = "https://aetherhub.com/Tourney/RoundTourney/5"
+
+    def _main(self):
+        return (
+            '<html><body><span id="numberOfRounds">Rounds 1</span>'
+            '<table id="matchList"><tr><th>Rank</th><th>Name</th></tr>'
+            "<tr><td>1</td><td>Alice</td></tr><tr><td>2</td><td>Bob</td></tr></table>"
+            '<a href="?p=1">1</a></body></html>'
+        )
+
+    def _round_with_results(self):
+        return (
+            '<html><body><table id="matchList">'
+            "<tr><th>Table</th><th>Player 1</th><th>Player 2</th><th>Match Results</th></tr>"
+            "<tr><td>1</td><td>Alice (0 Points)</td><td>Bob (0 Points)</td><td>2 - 1</td></tr>"
+            "</table></body></html>"
+        )
+
+    def test_scores_captured(self):
+        html = {self.BASE: self._main(), f"{self.BASE}?p=1": self._round_with_results()}
+        data = _svc(html).fetch_tournament(self.BASE)
+        alice = next(p for p in data.rounds[0].pairings if p.player == "Alice")
+        bob = next(p for p in data.rounds[0].pairings if p.player == "Bob")
+        assert (alice.player_wins, alice.opponent_wins) == (2, 1)
+        assert (bob.player_wins, bob.opponent_wins) == (1, 2)
+
+    def test_falls_back_when_main_page_has_no_pairings(self):
+        # main ?p=1 empty → fall back to public pairings endpoint (no scores)
+        public = "https://aetherhub.com/Tourney/RoundTourneyPublicPairings?id=5&p=1"
+        html = {
+            self.BASE: self._main(),
+            f"{self.BASE}?p=1": "<html><body></body></html>",
+            public: (
+                '<html><body><table id="matchList">'
+                "<tr><th>Table</th><th>P1</th><th>P2</th><th></th></tr>"
+                "<tr><td>1</td><td>Alice</td><td>Bob</td><td></td></tr></table></body></html>"
+            ),
+        }
+        data = _svc(html).fetch_tournament(self.BASE)
+        alice = next(p for p in data.rounds[0].pairings if p.player == "Alice")
+        assert alice.player_wins is None and alice.opponent_wins is None
+        assert alice.opponent == "Bob"

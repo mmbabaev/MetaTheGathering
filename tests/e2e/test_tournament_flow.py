@@ -35,7 +35,9 @@ def _scraper_99291():
         },
     }
     scraper = MagicMock()
-    scraper.get.side_effect = lambda url, **_: MagicMock(text=url_map[url])
+    # main page ?p=N not in the saved fixtures → empty → fetch_tournament falls
+    # back to the public pairings endpoint (the saved fixtures).
+    scraper.get.side_effect = lambda url, **_: MagicMock(text=url_map.get(url, "<html><body></body></html>"))
     return scraper
 
 

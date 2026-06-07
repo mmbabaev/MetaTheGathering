@@ -12,6 +12,16 @@ from services.aetherhub_models import (
     AetherhubTournamentData,
 )
 
+_RESULT_RE = re.compile(r"(\d+)\s*[-–]\s*(\d+)")
+
+
+def _parse_match_result(text: str) -> tuple[int | None, int | None]:
+    """Разобрать счёт матча «2 - 0» → (2, 0). Пусто/нет счёта → (None, None)."""
+    m = _RESULT_RE.search(text or "")
+    if not m:
+        return None, None
+    return int(m.group(1)), int(m.group(2))
+
 
 class AetherhubEdinorogParser:
     """
@@ -73,10 +83,12 @@ class AetherhubEdinorogParser:
                 p1 = self._strip_points(cells[1])
                 p2_raw = self._strip_points(cells[2]) if cells[2] else None
                 p2 = None if (p2_raw and self._is_bye(p2_raw)) else p2_raw
+                # 4-я колонка «Match Results»: "2 - 0" (если раунд сыгран)
+                w1, w2 = _parse_match_result(cells[3] if len(cells) > 3 else "")
                 if p1 and not self._is_bye(p1):
-                    pairings.append(AetherhubPairing(player=p1, opponent=p2 or None))
+                    pairings.append(AetherhubPairing(player=p1, opponent=p2 or None, player_wins=w1, opponent_wins=w2))
                 if p2:
-                    pairings.append(AetherhubPairing(player=p2, opponent=p1 or None))
+                    pairings.append(AetherhubPairing(player=p2, opponent=p1 or None, player_wins=w2, opponent_wins=w1))
 
         players: list[str] = []
         if len(tables) >= 2:

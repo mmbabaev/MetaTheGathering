@@ -66,6 +66,37 @@ def test_results_blank_when_unknown(db):
     assert result1 == "" and result2 == ""
 
 
+def test_results_filled_when_known(db):
+    t = _tournament(db, started_at=datetime(2024, 11, 25))
+    db.add(
+        models.RoundPairing(
+            tournament_id=t.id,
+            round_number=1,
+            player_name="A",
+            opponent_name="B",
+            table_number=1,
+            player_wins=2,
+            opponent_wins=1,
+        )
+    )
+    db.add(
+        models.RoundPairing(
+            tournament_id=t.id,
+            round_number=1,
+            player_name="B",
+            opponent_name="A",
+            table_number=1,
+            player_wins=1,
+            opponent_wins=2,
+        )
+    )
+    db.commit()
+    rows = ExportService(db).get_pairings_rows(t.id)
+    assert len(rows) == 1
+    _, p1, r1, r2, p2 = rows[0]
+    assert (p1, r1, r2, p2) == ("A", 2, 1, "B")
+
+
 def test_no_started_at_blank_date(db):
     t = _tournament(db)  # no started_at
     _both(db, t.id, 1, "A", "B", 1)
@@ -82,9 +113,32 @@ def test_excel_headers_and_content(db):
 
     ws = openpyxl.load_workbook(io.BytesIO(data)).active
     assert [c.value for c in ws[1]] == ["date", "player1", "result1", "result2", "player2"]
-    row2 = [c.value for c in ws[2]]
-    assert row2[0] == "25.11.2024"
-    assert {row2[1], row2[4]} == {"Харитонов Алексей", "Давыдов Олег"}
+    assert ws.cell(row=2, column=1).value == "Раунд 1"  # секция раунда
+    row3 = [c.value for c in ws[3]]
+    assert row3[0] == "25.11.2024"
+    assert {row3[1], row3[4]} == {"Харитонов Алексей", "Давыдов Олег"}
+
+
+def test_excel_round_sections(db):
+    t = _tournament(db, started_at=datetime(2024, 11, 25))
+    _both(db, t.id, 1, "A", "B", 1)
+    _both(db, t.id, 2, "A", "B", 1)
+    ws = openpyxl.load_workbook(io.BytesIO(ExportService(db).export_pairings_excel(t.id)[0])).active
+    section_headers = [
+        ws.cell(row=r, column=1).value
+        for r in range(1, ws.max_row + 1)
+        if str(ws.cell(row=r, column=1).value or "").startswith("Раунд")
+    ]
+    assert section_headers == ["Раунд 1", "Раунд 2"]
+
+
+def test_get_pairings_by_round(db):
+    t = _tournament(db, started_at=datetime(2024, 11, 25))
+    _both(db, t.id, 2, "E", "F", 1)
+    _both(db, t.id, 1, "A", "B", 1)
+    groups = ExportService(db).get_pairings_by_round(t.id)
+    assert [rnd for rnd, _ in groups] == [1, 2]
+    assert [(r[1], r[4]) for r in groups[0][1]] == [("A", "B")]
 
 
 def test_ordered_by_round_then_table(db):

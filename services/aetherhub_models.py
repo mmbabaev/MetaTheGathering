@@ -11,6 +11,8 @@ class AetherhubPairing:
     player: str
     opponent: str | None  # None = bye
     table_number: int | None = None  # номер стола (пары); None = неизвестно
+    player_wins: int | None = None  # победы игрока в матче; None = счёт неизвестен
+    opponent_wins: int | None = None  # победы соперника в матче; None = счёт неизвестен
 
 
 @dataclass
