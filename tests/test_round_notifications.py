@@ -6,7 +6,6 @@ Covers:
 - AetherhubImportService new-round detection + table_number persistence
 - ArchetypeService.list_user_tournament_archetypes
 - bot.messages.format_opponent_notification
-- AetherhubJSFormatParser._extract_table_number
 """
 
 from datetime import datetime, timedelta
@@ -23,7 +22,6 @@ from core import models
 from core.schemas import TournamentCreate
 from services.aetherhub_import_service import AetherhubImportService
 from services.aetherhub_models import AetherhubPairing, AetherhubRound, AetherhubTournamentData
-from services.aetherhub_parser_js_format import AetherhubJSFormatParser
 from services.archetype import ArchetypeService
 from services.datalens import DataLensService, StatRow
 from services.round_notifications import RoundNotificationService
@@ -595,27 +593,6 @@ class TestFormatNotification:
         text = format_opponent_notification(1, 3, "Вадим", None, ["Tron"])
         assert "• Tron" in text
         assert "Последние колоды" in text
-
-
-# ── Parser: _extract_table_number ──────────────────────────────────────────────
-
-
-class TestExtractTableNumber:
-    @pytest.fixture
-    def parser(self):
-        return AetherhubJSFormatParser(scraper=object())
-
-    def test_plain_integer(self, parser):
-        assert parser._extract_table_number("12") == 12
-
-    def test_embedded_digits(self, parser):
-        assert parser._extract_table_number("Table 7") == 7
-
-    def test_no_digits_returns_none(self, parser):
-        assert parser._extract_table_number("—") is None
-
-    def test_empty_returns_none(self, parser):
-        assert parser._extract_table_number("") is None
 
 
 # ── RoundNotificationService.scout (DataLens enrichment) ───────────────────────
