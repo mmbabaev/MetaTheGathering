@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+import logging
 from datetime import datetime
 from typing import List, Literal
 
@@ -14,6 +15,8 @@ from bot.messages import format_participant_name
 from core import models
 from services.stats import StatsService
 from services.utils import get_tournament
+
+logger = logging.getLogger(__name__)
 
 ExportFormat = Literal["csv", "markdown"]
 
@@ -194,9 +197,18 @@ class ExportService:
         def _score(value) -> object:
             return value if value is not None else ""
 
+        all_pairings = self.db.query(models.RoundPairing).filter_by(tournament_id=tournament_id).all()
+        scored = sum(1 for p in all_pairings if p.player_wins is not None)
         by_round: dict[int, list[models.RoundPairing]] = {}
-        for p in self.db.query(models.RoundPairing).filter_by(tournament_id=tournament_id).all():
+        for p in all_pairings:
             by_round.setdefault(p.round_number, []).append(p)
+        logger.info(
+            "[export] pairings t=%s: %d RoundPairing rows, %d with score, rounds=%s",
+            tournament_id,
+            len(all_pairings),
+            scored,
+            sorted(by_round),
+        )
 
         groups: list[tuple[int, list[tuple[str, str, object, object, str]]]] = []
         for rnd in sorted(by_round):
@@ -227,7 +239,14 @@ class ExportService:
         t = get_tournament(self.db, tournament_id)
         groups = self.get_pairings_by_round(tournament_id)
         if not groups:
+            logger.info("[export] no pairings for t=%s → pairings file skipped", tournament_id)
             return None
+        logger.info(
+            "[export] pairings file for t=%s: %d rounds, %d matches",
+            tournament_id,
+            len(groups),
+            sum(len(rows) for _, rows in groups),
+        )
 
         wb = openpyxl.Workbook()
         ws = wb.active
