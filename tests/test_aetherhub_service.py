@@ -1204,3 +1204,29 @@ class TestFetchScoresFromMainPage:
         alice = next(p for p in data.rounds[0].pairings if p.player == "Alice")
         assert alice.player_wins is None and alice.opponent_wins is None
         assert alice.opponent == "Bob"
+
+
+# ── TestTableNumber ──────────────────────────────────────────────────────────
+
+
+class TestTableNumber:
+    svc = AetherhubService()
+
+    def test_extract_plain_integer(self):
+        assert self.svc._extract_table_number("12") == 12
+
+    def test_extract_embedded_digits(self):
+        assert self.svc._extract_table_number("Table 7") == 7
+
+    def test_extract_no_digits(self):
+        assert self.svc._extract_table_number("—") is None
+
+    def test_extract_empty(self):
+        assert self.svc._extract_table_number("") is None
+
+    def test_pairings_carry_table_number(self):
+        pairings = self.svc._parse_pairings_page(PAIRINGS_R1_HTML)
+        alice = next(p for p in pairings if p.player == "Alice")
+        carol = next(p for p in pairings if p.player == "Carol")
+        assert alice.table_number == 1  # row 1: Table 1
+        assert carol.table_number == 2  # row 2: Table 2 (bye)

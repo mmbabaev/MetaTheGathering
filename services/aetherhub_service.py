@@ -151,16 +151,31 @@ class AetherhubService:
             cells = [td.get_text(strip=True) for td in row.find_all("td")]
             if len(cells) < 3:
                 continue
+            table_number = self._extract_table_number(cells[0])  # 1-я колонка «Table»
             p1 = self._strip_points(cells[1])
             p2_raw = self._strip_points(cells[2]) if cells[2] else None
             p2 = None if (p2_raw and self._is_bye(p2_raw)) else p2_raw
             # 4-я колонка «Match Results»: "2 - 0" (на главной странице; иначе пусто)
             w1, w2 = _parse_match_result(cells[3] if len(cells) > 3 else "")
             if p1 and not self._is_bye(p1):
-                pairings.append(AetherhubPairing(player=p1, opponent=p2 or None, player_wins=w1, opponent_wins=w2))
+                pairings.append(
+                    AetherhubPairing(
+                        player=p1, opponent=p2 or None, table_number=table_number, player_wins=w1, opponent_wins=w2
+                    )
+                )
             if p2:
-                pairings.append(AetherhubPairing(player=p2, opponent=p1 or None, player_wins=w2, opponent_wins=w1))
+                pairings.append(
+                    AetherhubPairing(
+                        player=p2, opponent=p1 or None, table_number=table_number, player_wins=w2, opponent_wins=w1
+                    )
+                )
         return pairings
+
+    @staticmethod
+    def _extract_table_number(text: str) -> int | None:
+        """Номер стола из ячейки «Table» («1», «Table 7») — первое целое, иначе None."""
+        m = re.search(r"\d+", text or "")
+        return int(m.group()) if m else None
 
     def _extract_date(self, text: str) -> date | None:
         for pattern, fmt in _DATE_FORMATS:
