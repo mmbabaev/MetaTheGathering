@@ -120,12 +120,22 @@ class AetherhubImportService:
                             player_name=pairing.player,
                             opponent_name=pairing.opponent,
                             table_number=pairing.table_number,
+                            player_wins=pairing.player_wins,
+                            opponent_wins=pairing.opponent_wins,
                         )
                     )
                     saved += 1
-                elif existing.opponent_name != pairing.opponent or existing.table_number != pairing.table_number:
+                elif (
+                    existing.opponent_name != pairing.opponent
+                    or existing.table_number != pairing.table_number
+                    or existing.player_wins != pairing.player_wins
+                    or existing.opponent_wins != pairing.opponent_wins
+                ):
+                    # счёт обычно появляется при повторном импорте после сыгранного раунда
                     existing.opponent_name = pairing.opponent
                     existing.table_number = pairing.table_number
+                    existing.player_wins = pairing.player_wins
+                    existing.opponent_wins = pairing.opponent_wins
                     saved += 1
         self.db.commit()
         return saved

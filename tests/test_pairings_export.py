@@ -66,6 +66,37 @@ def test_results_blank_when_unknown(db):
     assert result1 == "" and result2 == ""
 
 
+def test_results_filled_when_known(db):
+    t = _tournament(db, started_at=datetime(2024, 11, 25))
+    db.add(
+        models.RoundPairing(
+            tournament_id=t.id,
+            round_number=1,
+            player_name="A",
+            opponent_name="B",
+            table_number=1,
+            player_wins=2,
+            opponent_wins=1,
+        )
+    )
+    db.add(
+        models.RoundPairing(
+            tournament_id=t.id,
+            round_number=1,
+            player_name="B",
+            opponent_name="A",
+            table_number=1,
+            player_wins=1,
+            opponent_wins=2,
+        )
+    )
+    db.commit()
+    rows = ExportService(db).get_pairings_rows(t.id)
+    assert len(rows) == 1
+    _, p1, r1, r2, p2 = rows[0]
+    assert (p1, r1, r2, p2) == ("A", 2, 1, "B")
+
+
 def test_no_started_at_blank_date(db):
     t = _tournament(db)  # no started_at
     _both(db, t.id, 1, "A", "B", 1)
