@@ -78,7 +78,7 @@ STANDINGS_EMPTY_HTML = """
 # AJAX pairings endpoint responses (one table: Table, Player 1, Player 2)
 PAIRINGS_R1_HTML = """
 <html><body>
-<table>
+<table id='matchList'>
   <tr><th>Table</th><th>Player 1</th><th>Player 2</th><th></th></tr>
   <tr><td>1</td><td>Alice (3 Points)</td><td>Bob (3 Points)</td><td>2-1</td></tr>
   <tr><td>2</td><td>Carol (0 Points)</td><td></td><td></td></tr>
@@ -88,7 +88,7 @@ PAIRINGS_R1_HTML = """
 
 PAIRINGS_R2_HTML = """
 <html><body>
-<table>
+<table id='matchList'>
   <tr><th>Table</th><th>Player 1</th><th>Player 2</th><th></th></tr>
   <tr><td>1</td><td>Bob (3 Points)</td><td>Carol (3 Points)</td><td>2-0</td></tr>
 </table>
@@ -179,14 +179,14 @@ class TestParsePairingsPage:
                 assert "Points" not in p.opponent
 
     def test_empty_table_returns_empty(self):
-        html = "<html><body><table><tr><th>Table</th><th>Player 1</th><th>Player 2</th></tr></table></body></html>"
+        html = "<html><body><table id='matchList'><tr><th>Table</th><th>Player 1</th><th>Player 2</th></tr></table></body></html>"
         assert self.svc._parse_pairings_page(html) == []
 
     def test_no_tables_returns_empty(self):
         assert self.svc._parse_pairings_page("<html><body></body></html>") == []
 
     def test_bye_as_p2_not_added_as_player(self):
-        html = """<html><body><table>
+        html = """<html><body><table id='matchList'>
           <tr><th>Table</th><th>Player 1</th><th>Player 2</th></tr>
           <tr><td>1</td><td>Alice</td><td>BYE</td></tr>
         </table></body></html>"""
@@ -198,7 +198,7 @@ class TestParsePairingsPage:
         assert pairings[0].opponent is None
 
     def test_bye_case_insensitive(self):
-        html = """<html><body><table>
+        html = """<html><body><table id='matchList'>
           <tr><th>Table</th><th>Player 1</th><th>Player 2</th></tr>
           <tr><td>1</td><td>Alice</td><td>Bye</td></tr>
         </table></body></html>"""
@@ -271,7 +271,7 @@ class TestFetchTournament:
         # Pairings contain Carol too; also points are injected in labels.
         pairings_html = """
         <html><body>
-        <table>
+        <table id='matchList'>
           <tr><th>Table</th><th>Player 1</th><th>Player 2</th><th></th></tr>
           <tr><td>1</td><td>Alice (3 Points)</td><td>Bob (3 Points)</td><td>2-1</td></tr>
           <tr><td>2</td><td>Carol (0 Points)</td><td></td><td></td></tr>
@@ -836,7 +836,7 @@ class TestImportFinalPlace:
 COMPLETED_TOURNAMENT_HTML = """
 <html><body>
 <div id="tab_pairings">
-  <table>
+  <table id='matchList'>
     <tr><th>Table</th><th>Player 1</th><th>Player 2</th><th>Result</th></tr>
     <tr><td>1</td><td>Рябинин Андрей (9 Points)</td><td>Хрипков Сергей (9 Points)</td><td>2-0</td></tr>
     <tr><td>2</td><td>Федулов Ринат (9 Points)</td><td>Кузнецов Ярослав (9 Points)</td><td>2-0</td></tr>
@@ -1230,3 +1230,53 @@ class TestTableNumber:
         carol = next(p for p in pairings if p.player == "Carol")
         assert alice.table_number == 1  # row 1: Table 1
         assert carol.table_number == 2  # row 2: Table 2 (bye)
+
+
+# ── Regression: standings table must NOT be parsed as pairings ────────────────
+#
+# Bug: switching to the main page ?p=N for scores. On js-format tournaments the
+# main page has a STANDINGS table ([Rank, Name, Points, Results, …]) and NO
+# matchList. The old tables[0] fallback read it as pairings — the Points column
+# ("3") became the opponent name, producing a phantom player "3"/"0" paired with
+# everyone → UniqueViolation on import. Why tests missed it: every pairings
+# fixture had ONLY a matchList (or a single pairings table); none reproduced a
+# main page that is standings-only.
+
+
+class TestStandingsNotParsedAsPairings:
+    svc = AetherhubService()
+
+    _STANDINGS_ONLY = (
+        "<html><body><table>"
+        "<tr><th>Rank</th><th>Name</th><th>Points</th><th>Results</th></tr>"
+        "<tr><td>1</td><td>Князев Иван</td><td>3</td><td>1 - 0</td></tr>"
+        "<tr><td>2</td><td>Рябинин Андрей</td><td>3</td><td>1 - 0</td></tr>"
+        "</table></body></html>"
+    )
+
+    def test_parse_pairings_ignores_standings_table(self):
+        # no matchList → not a pairings page → empty (no phantom "3" opponent)
+        assert self.svc._parse_pairings_page(self._STANDINGS_ONLY) == []
+
+    def test_fetch_falls_back_to_public_when_main_is_standings_only(self):
+        base = "https://aetherhub.com/Tourney/RoundTourney/9"
+        main = (
+            '<html><body><span id="numberOfRounds">Rounds 1</span>'
+            "<table><tr><th>Rank</th><th>Name</th></tr>"
+            "<tr><td>1</td><td>Князев Иван</td></tr></table>"
+            '<a href="?p=1">1</a></body></html>'
+        )
+        public = "https://aetherhub.com/Tourney/RoundTourneyPublicPairings?id=9&p=1"
+        public_html = (
+            "<html><body><table id='matchList'>"
+            "<tr><th>Table</th><th>Player 1</th><th>Player 2</th></tr>"
+            "<tr><td>1</td><td>Князев Иван</td><td>Березин Дмитрий</td></tr>"
+            "</table></body></html>"
+        )
+        html = {base: main, f"{base}?p=1": self._STANDINGS_ONLY, public: public_html}
+        data = _svc(html).fetch_tournament(base)
+        names = {p.player for p in data.rounds[0].pairings} | {
+            p.opponent for p in data.rounds[0].pairings if p.opponent
+        }
+        assert names == {"Князев Иван", "Березин Дмитрий"}
+        assert "3" not in names  # the bug: Points column became a phantom opponent
