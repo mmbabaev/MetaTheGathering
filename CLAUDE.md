@@ -14,6 +14,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > - Any new code path that calls `bot.send_message` in a loop over multiple users requires explicit confirmation from the user before it ships.
 > - Production notifications must respect the `notify_allowed_ids` gate and only target their genuine intended recipient.
 
+## ⚠️ Git / PR workflow (hard rules)
+
+> **One task = one fresh branch off the latest `main`.** Starting any new task, fix, or follow-up:
+> `git fetch origin main && git checkout -b <name> origin/main`. Never start work on the
+> currently-checked-out branch by default.
+>
+> - **Never add commits to a branch whose PR is already merged or closed.** Those commits do NOT
+>   reach `main` — they orphan on the dead branch (this exact mistake shipped a broken parser to prod:
+>   the fix was pushed to an already-merged branch and never landed). If a merged feature needs more
+>   work, branch anew from updated `main`.
+> - **Before pushing more commits to an existing branch, verify its PR is still open:**
+>   `gh pr view <branch> --json state` → must be `OPEN`. If `MERGED`/`CLOSED`, make a new branch + PR.
+> - **After a push that should land a fix, confirm it actually reached the target.** For an urgent
+>   fix, after merge check `git show origin/main:<file>` (or `gh pr checks`) to confirm the change is
+>   in `main`, not just on the branch.
+> - Keep unrelated changes in separate PRs/branches so a partial merge can't strand a dependent fix.
+
 ## Alembic migrations
 
 > **NEVER reuse a placeholder revision id** like `a1b2c3d4e5f6` — many already exist and collisions cause "multiple/zero heads" failures (the bot won't start; CI breaks). Generate a fresh id: `python3 -c "import uuid; print(uuid.uuid4().hex[:12])"`, set `down_revision` to the current head, and verify with `DATABASE_URL="sqlite:///:memory:" python3 -m alembic heads` (must be exactly one). `tests/test_migrations.py` enforces this.
