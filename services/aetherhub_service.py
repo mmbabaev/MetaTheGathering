@@ -292,11 +292,14 @@ class AetherhubService:
         rounds = []
         prev_signature: frozenset | None = None
         for rn in range(1, max_round + 1):
-            # Главная страница ?p=N содержит matchList СО счётом («Match Results»).
-            # Если там пусто (js-формат с динамической подгрузкой) — фолбэк на
-            # публичный pairings-эндпоинт (паринги без счёта).
+            # edinorog-формат: главная ?p=N отдаёт matchList СО счётом («Match Results»).
             pairings = self._parse_pairings_page(self._scraper.get(f"{url}?p={rn}", timeout=30).text)
             if not pairings:
+                # js-формат: на главной паринги подгружаются JS-ом, в серверном HTML
+                # только standings. Берём пары с публичного pairings-эндпоинта.
+                # ВАЖНО: у js-формата СЧЁТА НЕТ — у RoundTourneyPublicPairings колонка
+                # «Match Results» пустая во всех раундах (проверено), поэтому
+                # player_wins/opponent_wins останутся None. Только пары и столы.
                 pairings = self._parse_pairings_page(
                     self._scraper.get(self._pairings_url(tourney_id, rn), timeout=30).text
                 )
