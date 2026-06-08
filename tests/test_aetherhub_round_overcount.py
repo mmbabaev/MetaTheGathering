@@ -23,7 +23,7 @@ TID = "99847"
 
 def _pairings_table(pairs: list[tuple[str, str]]) -> str:
     rows = "".join(f"<tr><td>1</td><td>{p1}</td><td>{p2}</td></tr>" for p1, p2 in pairs)
-    return f"<html><body><table><tr><th>#</th><th>P1</th><th>P2</th></tr>{rows}</table></body></html>"
+    return f"<html><body><table id='matchList'><tr><th>#</th><th>P1</th><th>P2</th></tr>{rows}</table></body></html>"
 
 
 # 4 real rounds, each with a distinct pairing set

@@ -140,10 +140,11 @@ class AetherhubService:
         and the public pairings endpoint (score column empty).
         """
         soup = BeautifulSoup(html, "html.parser")
+        # ТОЛЬКО matchList. Без фолбэка на tables[0]: на js-формате главная ?p=N
+        # отдаёт таблицу standings ([Rank, Name, Points, …]) — если её распарсить
+        # как паринги, Points попадает в имя оппонента («3», «0»). Нет matchList →
+        # это не страница парингов, возвращаем пусто (вызвавший уйдёт в фолбэк).
         table = soup.find("table", {"id": "matchList"})
-        if table is None:
-            tables = soup.find_all("table")
-            table = tables[0] if tables else None
         pairings: list[AetherhubPairing] = []
         if table is None:
             return pairings
