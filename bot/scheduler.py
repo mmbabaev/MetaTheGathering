@@ -1,7 +1,7 @@
 """Планировщик автоматического создания турниров и импорта AetherHub по расписанию клубов."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -387,6 +387,61 @@ class AetherhubTimedImportJob:
             db2.close()
 
 
+FINAL_REIMPORT_TIME = "06:00"  # утро следующего дня — добрать финальный счёт
+FINAL_REIMPORT_WINDOW_DAYS = 2  # окно «недавних» турниров для повторного импорта
+
+
+class AetherhubFinalReimportJob:
+    """Раз в сутки утром перезатягивает недавние турниры, чтобы добрать финальный счёт.
+
+    Счёт матчей на AetherHub публично появляется только ПОСЛЕ завершения турнира
+    (формат страницы меняется js → edinorog, см. docs/aetherhub_formats.md). Импорт
+    во время игры счёта не видит, поэтому утром следующего дня перезатягиваем
+    паринги уже завершившихся турниров. Без уведомлений — это только добор счёта.
+    """
+
+    def __init__(self, aetherhub_service: AetherhubService) -> None:
+        self._aetherhub = aetherhub_service
+
+    async def run(self, now: datetime, db=None) -> None:
+        now_utc = now.astimezone(timezone.utc).replace(tzinfo=None) if now.tzinfo else now
+        cutoff = now_utc - timedelta(days=FINAL_REIMPORT_WINDOW_DAYS)
+        close_db = db is None
+        if close_db:
+            db = SessionLocal()
+        try:
+            stmt = select(models.Tournament).where(
+                models.Tournament.aetherhub_url.isnot(None),
+                models.Tournament.created_at >= cutoff,
+            )
+            tournaments = db.execute(stmt).scalars().all()
+        finally:
+            if close_db:
+                db.close()
+
+        if not tournaments:
+            logger.info("AetherhubFinalReimportJob: no recent tournaments to re-import")
+            return
+        logger.info("AetherhubFinalReimportJob: re-importing %d tournament(s) for final scores", len(tournaments))
+        for t in tournaments:
+            self._reimport(t.id, t.aetherhub_url)
+
+    def _reimport(self, tournament_id: int, url: str) -> None:
+        try:
+            data = self._aetherhub.fetch_tournament(url)
+        except Exception:
+            logger.exception("AetherhubFinalReimportJob: fetch failed for #%s (%s)", tournament_id, url)
+            return
+        db = SessionLocal()
+        try:
+            result = AetherhubImportService(db).import_tournament(tournament_id, data)
+            logger.info("AetherhubFinalReimportJob done #%s: pairings_saved=%s", tournament_id, result.pairings_saved)
+        except Exception:
+            logger.exception("AetherhubFinalReimportJob: import failed for #%s", tournament_id)
+        finally:
+            db.close()
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -453,6 +508,17 @@ def setup_scheduler(app: Application) -> None:
 
     app.job_queue.run_repeating(_timed_import, interval=60, first=10)
     logger.info("Scheduler: AetherhubTimedImportJob registered (every 60s)")
+
+    final_job = AetherhubFinalReimportJob(AetherhubService())
+    final_time = datetime.strptime(FINAL_REIMPORT_TIME, "%H:%M").time().replace(tzinfo=tz)
+
+    async def _final_reimport(context: ContextTypes.DEFAULT_TYPE) -> None:
+        tz_ = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
+        await final_job.run(now=datetime.now(tz_))
+
+    _final_reimport.__name__ = "aetherhub_final_reimport"
+    app.job_queue.run_daily(_final_reimport, time=final_time)
+    logger.info(f"Scheduler: AetherhubFinalReimportJob registered (daily {FINAL_REIMPORT_TIME})")
 
 
 _DAY_RU = {
