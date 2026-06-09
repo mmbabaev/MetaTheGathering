@@ -24,7 +24,7 @@ from services.aetherhub_import_service import AetherhubImportService
 from services.aetherhub_models import AetherhubPairing, AetherhubRound, AetherhubTournamentData
 from services.archetype import ArchetypeService
 from services.datalens import DataLensService, StatRow
-from services.round_notifications import RoundNotificationService
+from services.round_notifications import RoundNotification, RoundNotificationService
 from services.user import UserService
 
 
@@ -684,6 +684,53 @@ class TestRoundNotifyHandler:
         # opt-in is irrelevant for the debug/requester path
         messages = self._handler(db).build_for_requester(t.id, alice.tg_id)
         assert messages and all(m.tg_id == alice.tg_id for m in messages)
+
+    def test_debug_and_prod_render_identical_text(self, db, svc, user_svc):
+        # the core guarantee: debug preview == production message (same data, same
+        # enrichment, same formatting) — only recipient selection/delivery differ.
+        t, alice, _ = self._setup(db, svc, user_svc)
+        _opt_in(db, alice.tg_id)
+        dl = _fake_datalens(
+            [StatRow(name="Flicker Tron", matches=49, winrate=67.3)],
+            StatRow(name="Bob", matches=8, winrate=33.3),
+        )
+        handler = self._handler(db, dl)
+        prod_text = next(m.text for m in handler.build_for_new_rounds(t.id, [1]) if m.tg_id == alice.tg_id)
+        debug_text = next(m.text for m in handler.build_for_requester(t.id, alice.tg_id) if m.tg_id == alice.tg_id)
+        assert prod_text == debug_text
+        assert "Flicker Tron" in prod_text  # both went through DataLens enrichment
+
+
+class TestEnrich:
+    def test_enrich_populates_datalens_fields(self, db):
+        decks = [StatRow(name="Elves", matches=24, winrate=60.0)]
+        h2h = StatRow(name="Иванов", matches=3, winrate=22.0)
+        svc = RoundNotificationService(db, datalens_service=_fake_datalens(decks, h2h))
+        n = RoundNotification(
+            tg_id=1,
+            round_number=4,
+            table_number=7,
+            opponent_name="Иванов",
+            opponent_username=None,
+            recipient_name="Бабаев Михаил",
+        )
+        out = svc.enrich(n)
+        assert out is n  # in-place
+        assert n.datalens_decks == decks
+        assert n.head_to_head == h2h
+
+    def test_enrich_no_datalens_leaves_empty(self, db):
+        svc = RoundNotificationService(db)  # no DataLens injected
+        n = RoundNotification(
+            tg_id=1,
+            round_number=1,
+            table_number=1,
+            opponent_name="X",
+            opponent_username=None,
+            recipient_name="Me",
+        )
+        svc.enrich(n)
+        assert n.datalens_decks == [] and n.head_to_head is None
 
 
 # ── send_round_notifications: DataLens enrichment end-to-end ────────────────────

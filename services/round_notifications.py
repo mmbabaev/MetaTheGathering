@@ -25,14 +25,23 @@ DATALENS_DECKS_LIMIT = 3  # колод соперника из DataLens в со�
 
 @dataclass
 class RoundNotification:
+    """Полные данные одного уведомления об оппоненте — всё, что нужно для текста.
+
+    Поля заполняются в два шага: базовые (паринг + колоды из БД) в ``build_for_round``,
+    статистика DataLens (``datalens_decks``/``head_to_head``) — в ``enrich`` (после
+    фильтра получателей, чтобы не дёргать API зря). Форматтер читает только эти поля.
+    """
+
     tg_id: int  # recipient (always a real Telegram account, tg_id > 0)
     round_number: int
     table_number: int | None
     opponent_name: str | None  # None when it's a bye
     opponent_username: str | None
-    opponent_decks: list[str] = field(default_factory=list)  # opponent's recent tournament decks
+    opponent_decks: list[str] = field(default_factory=list)  # opponent's recent tournament decks (DB)
     is_bye: bool = False
-    recipient_name: str = ""  # intended recipient's display name (for debug/logging)
+    recipient_name: str = ""  # intended recipient's display name (for DataLens / debug / logging)
+    datalens_decks: list[StatRow] = field(default_factory=list)  # колоды оппонента + винрейт (DataLens)
+    head_to_head: StatRow | None = None  # личные встречи получателя с оппонентом (DataLens)
 
 
 class RoundNotificationService:
@@ -127,6 +136,17 @@ class RoundNotificationService:
             opponent_decks=decks,
             recipient_name=recipient_name,
         )
+
+    def enrich(self, notification: RoundNotification) -> RoundNotification:
+        """Дополнить уведомление статистикой из DataLens (in-place) и вернуть его.
+
+        Шаг «сбор данных» №2 (после фильтра получателей). Best-effort: при отсутствии
+        DataLens / бае / сетевой ошибке поля остаются пустыми, рассылка не падает.
+        """
+        notification.datalens_decks, notification.head_to_head = self.scout(
+            notification.recipient_name, notification.opponent_name
+        )
+        return notification
 
     def scout(self, recipient_name: str, opponent_name: str | None) -> tuple[list[StatRow], StatRow | None]:
         """Обогащение сообщения статистикой соперника из DataLens.
