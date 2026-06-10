@@ -57,6 +57,7 @@ class User(Base):
     is_scorekeeper = Column(Boolean, default=False, nullable=False)
     hide_deck_emoji = Column(Boolean, default=False, nullable=False)
     notify_opponent_rounds = Column(Boolean, default=False, nullable=False)
+    status_by_pairings = Column(Boolean, default=False, nullable=False)  # статус турнира попарно по парингам
 
     created_at = Column(DateTime, default=utc_now, nullable=False)
 

@@ -6,6 +6,7 @@ from datetime import datetime
 from bot.features import FeatureService
 from bot.handlers.base import HandlerResult
 from bot.handlers.player import build_archetype_menu
+from bot.handlers.tournament_status import status_text
 from bot.keyboards import Keyboards
 from bot.messages import (
     ADMIN_ARCH_SAVED,
@@ -170,24 +171,31 @@ class AdminHandler:
                 lines.append(f"✅ {display_name}")
             else:
                 lines.append(f"⚠️ {display_name} — уже записан")
-        return self._tournament_status_result(tournament_id, prefix="\n".join(lines))
+        return self._tournament_status_result(tournament_id, prefix="\n".join(lines), tg_id=tg_id)
 
     def _tournament_status_result(
-        self, tournament_id: int, prefix: str = "", show_filled: bool = False
+        self, tournament_id: int, prefix: str = "", show_filled: bool = False, tg_id: int = 0
     ) -> HandlerResult:
         """Строит HandlerResult со статусом турнира и клавиатурой участников.
 
         prefix — необязательный текст (например, итог операции), который добавляется
         перед статусом через пустую строку.
         show_filled — показывать кнопки заполненных участников.
+        tg_id — кто смотрит (для режима статуса: плоский / попарно по парингам).
         """
         try:
             t = get_tournament(self.svc.db, tournament_id)
         except errors.TournamentNotFound:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
         participants = sort_participants(self.svc.list_participants_for_tournament(tournament_id))
-        status_text = format_tournament_status(t.title, t.status.label_ru, participants, decks_hidden=t.decks_hidden)
-        text = f"{prefix}\n\n{status_text}" if prefix else status_text
+        body = status_text(
+            self.svc.db,
+            t,
+            participants,
+            by_pairings=self.user_svc.wants_status_by_pairings(tg_id),
+            decks_hidden=t.decks_hidden,
+        )
+        text = f"{prefix}\n\n{body}" if prefix else body
         return HandlerResult(
             text,
             keyboard=self.keyboards.admin_participants_keyboard(
@@ -199,13 +207,13 @@ class AdminHandler:
         """Список участников с кнопками для редактирования колоды (admin view)."""
         if not self.user_svc.is_privileged(tg_id):
             return HandlerResult(NOT_ADMIN)
-        return self._tournament_status_result(tournament_id)
+        return self._tournament_status_result(tournament_id, tg_id=tg_id)
 
     def handle_admin_show_filled(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Показывает кнопки заполненных участников (разворачивает скрытый список)."""
         if not self.user_svc.is_privileged(tg_id):
             return HandlerResult(NOT_ADMIN)
-        return self._tournament_status_result(tournament_id, show_filled=True)
+        return self._tournament_status_result(tournament_id, show_filled=True, tg_id=tg_id)
 
     def handle_reveal_decks(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Снимает скрытие колод — делает их видимыми для всех."""
@@ -215,7 +223,7 @@ class AdminHandler:
             self.svc.set_decks_hidden(tournament_id, hidden=False)
         except errors.TournamentNotFound:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
-        return self._tournament_status_result(tournament_id, prefix=DECKS_REVEALED)
+        return self._tournament_status_result(tournament_id, prefix=DECKS_REVEALED, tg_id=tg_id)
 
     def handle_hide_decks(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Скрывает колоды участников."""
@@ -225,7 +233,7 @@ class AdminHandler:
             self.svc.set_decks_hidden(tournament_id, hidden=True)
         except errors.TournamentNotFound:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
-        return self._tournament_status_result(tournament_id, prefix="🙈 Колоды скрыты.")
+        return self._tournament_status_result(tournament_id, prefix="🙈 Колоды скрыты.", tg_id=tg_id)
 
     def _archetype_keyboard_for_participant(
         self,
@@ -286,7 +294,9 @@ class AdminHandler:
             )
         except errors.ParticipantNotFound:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
-        return self._tournament_status_result(p.tournament_id, prefix=ADMIN_ARCH_SAVED.format(archetype_name=arch_name))
+        return self._tournament_status_result(
+            p.tournament_id, prefix=ADMIN_ARCH_SAVED.format(archetype_name=arch_name), tg_id=tg_id
+        )
 
     def handle_set_participant_custom_arch(self, tg_id: int, participant_id: int, arch_name: str) -> HandlerResult:
         """Создаёт архетип по введённому названию и присваивает участнику."""
@@ -304,7 +314,9 @@ class AdminHandler:
             )
         except errors.ParticipantNotFound:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
-        return self._tournament_status_result(p.tournament_id, prefix=ADMIN_ARCH_SAVED.format(archetype_name=arch.name))
+        return self._tournament_status_result(
+            p.tournament_id, prefix=ADMIN_ARCH_SAVED.format(archetype_name=arch.name), tg_id=tg_id
+        )
 
     def handle_player_actions(self, tg_id: int, participant_id: int, tournament_id: int) -> HandlerResult:
         """Меню действий с игроком (⋯). Доступно всем; удаление — только для админов."""
@@ -347,7 +359,7 @@ class AdminHandler:
         name = format_participant_name(target_user.first_name, target_user.last_name) or f"id{p.id}"
         new_value = self.user_svc.toggle_scorekeeper(target_user.tg_id)
         msg = SCOREKEEPER_GRANTED.format(name=name) if new_value else SCOREKEEPER_REVOKED.format(name=name)
-        result = self._tournament_status_result(tournament_id, prefix=msg)
+        result = self._tournament_status_result(tournament_id, prefix=msg, tg_id=tg_id)
         result.answer_text = msg
         return result
 
@@ -422,7 +434,7 @@ class AdminHandler:
             self.svc.unregister_participant(tournament_id, p.user_id)
         except errors.ParticipantNotFound:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
-        return self._tournament_status_result(tournament_id, prefix=f"🗑 {name} удалён из турнира.")
+        return self._tournament_status_result(tournament_id, prefix=f"🗑 {name} удалён из турнира.", tg_id=tg_id)
 
     def handle_fill_opponents(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Показывает незаполненных оппонентов пользователя из AetherHub-пейрингов."""
@@ -605,5 +617,5 @@ class AdminHandler:
         except errors.TournamentNotFound:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
         summary = result.summary()
-        status_result = self._tournament_status_result(tournament_id, prefix=summary)
+        status_result = self._tournament_status_result(tournament_id, prefix=summary, tg_id=tg_id)
         return status_result

@@ -171,32 +171,73 @@ def format_tournament_card(
     return header
 
 
-def format_tournament_status(title: str, status: str, participants: list, decks_hidden: bool = False) -> str:
-    """Структурированный список участников турнира."""
+def _status_header(title: str, status: str, participants: list) -> str:
     total = len(participants)
     with_deck = sum(1 for p in participants if p.archetype)
-    without = total - with_deck
-
     header = f"🏆 {title} · {status} · {total} чел."
     if total:
-        header += f"\n✅ {with_deck} с колодой  ⬜ {without} без"
+        header += f"\n✅ {with_deck} с колодой  ⬜ {total - with_deck} без"
+    return header
 
-    lines = [header, ""]
-    for p in participants:
-        icon = _participant_icon(p)
-        if p.user:
-            full_name = format_participant_name(p.user.first_name, p.user.last_name) or f"id{p.user.tg_id}"
-            username_hint = f" (@{p.user.username})" if p.user.username else ""
-            sk_badge = " 🧙" if getattr(p.user, "is_scorekeeper", False) else ""
-            display = f"{full_name}{username_hint}{sk_badge}"
-        else:
-            display = "?"
-        if p.archetype:
-            archetype = "▓▓▓" if decks_hidden else p.archetype.name
-        else:
-            archetype = "не указана"
-        lines.append(f"{icon} {display} — {archetype}")
+
+def format_participant_line(p, decks_hidden: bool = False) -> str:
+    """Одна строка участника: «<иконка> Фамилия Имя (@ник) 🧙 — Колода». Общий для обоих режимов."""
+    icon = _participant_icon(p)
+    if p.user:
+        full_name = format_participant_name(p.user.first_name, p.user.last_name) or f"id{p.user.tg_id}"
+        username_hint = f" (@{p.user.username})" if p.user.username else ""
+        sk_badge = " 🧙" if getattr(p.user, "is_scorekeeper", False) else ""
+        display = f"{full_name}{username_hint}{sk_badge}"
+    else:
+        display = "?"
+    if p.archetype:
+        archetype = "▓▓▓" if decks_hidden else p.archetype.name
+    else:
+        archetype = "не указана"
+    return f"{icon} {display} — {archetype}"
+
+
+def format_tournament_status(title: str, status: str, participants: list, decks_hidden: bool = False) -> str:
+    """Структурированный список участников турнира (плоский, по умолчанию)."""
+    lines = [_status_header(title, status, participants), ""]
+    lines.extend(format_participant_line(p, decks_hidden) for p in participants)
     return "\n".join(lines)
+
+
+def format_tournament_status_by_pairings(
+    title: str,
+    status: str,
+    participants: list,
+    pairs: list,
+    unpaired: list,
+    decks_hidden: bool = False,
+) -> str:
+    """Статус турнира попарно по парингам последнего раунда.
+
+    ``participants`` — полный список (для шапки со счётчиками). ``pairs`` — список
+    ``(table_number, p1, name1, p2, name2)``: ``p1``/``p2`` — участники (или None,
+    если игрок паринга не зарегистрирован), ``name1``/``name2`` — имена из паринга
+    (``name2`` == None для бая). ``unpaired`` — участники без пары. Так незаполненную
+    колоду (⬜) видно рядом со знакомым соперником.
+    """
+    lines = [_status_header(title, status, participants), ""]
+
+    def side(p, name: str | None) -> str:
+        if name is None:
+            return "      — BYE"
+        if p is not None:
+            return format_participant_line(p, decks_hidden)
+        return f"❓ {name} — не участвует"
+
+    for table, p1, name1, p2, name2 in pairs:
+        lines.append(f"— Стол {table} —" if table is not None else "—")
+        lines.append(side(p1, name1))
+        lines.append(side(p2, name2))
+        lines.append("")
+    if unpaired:
+        lines.append("Без пары:")
+        lines.extend(format_participant_line(p, decks_hidden) for p in unpaired)
+    return "\n".join(lines).rstrip()
 
 
 def _match_noun(n: int) -> str:

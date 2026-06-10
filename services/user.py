@@ -329,3 +329,17 @@ class UserService:
         """True, если пользователь включил уведомления об оппоненте в настройках."""
         user = self.get_by_tg_id(tg_id)
         return bool(user and user.notify_opponent_rounds)
+
+    def toggle_status_by_pairings(self, tg_id: int) -> bool:
+        """Инвертирует status_by_pairings. Возвращает новое значение флага."""
+        user = self.get_by_tg_id(tg_id)
+        if not user:
+            return False
+        user.status_by_pairings = not user.status_by_pairings
+        self.db.commit()
+        return user.status_by_pairings
+
+    def wants_status_by_pairings(self, tg_id: int) -> bool:
+        """True, если пользователь выбрал отображение статуса попарно по парингам."""
+        user = self.get_by_tg_id(tg_id)
+        return bool(user and user.status_by_pairings)

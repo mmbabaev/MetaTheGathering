@@ -14,6 +14,7 @@ CB_TOURNAMENT = "t"
 CB_SETTINGS_NAME = "settings_name"
 CB_SETTINGS_TOGGLE_EMOJI = "settings_toggle_emoji"
 CB_SETTINGS_TOGGLE_OPPONENT_NOTIFY = "settings_toggle_opp_notify"
+CB_SETTINGS_TOGGLE_STATUS_PAIRINGS = "settings_toggle_status_pairings"
 CB_TSTATUS = "tstatus"
 CB_LEAVE = "leave"
 CB_LEAVE_CONFIRM = "leave_confirm"
@@ -254,15 +255,18 @@ class Keyboards:
         is_admin: bool = False,
         hide_deck_emoji: bool = False,
         notify_opponent_rounds: bool = False,
+        status_by_pairings: bool = False,
     ) -> InlineKeyboardMarkup:
         emoji_label = "🚫 Эмоджи колод: выкл" if hide_deck_emoji else "🎨 Эмоджи колод: вкл"
         notify_label = (
             "🔔 Уведомления об оппоненте: вкл" if notify_opponent_rounds else "🔕 Уведомления об оппоненте: выкл"
         )
+        pairings_label = "👥 Статус по парингам: вкл" if status_by_pairings else "📋 Статус по парингам: выкл"
         rows = [
             [InlineKeyboardButton("✏️ Изменить имя", callback_data=CB_SETTINGS_NAME)],
             [InlineKeyboardButton(emoji_label, callback_data=CB_SETTINGS_TOGGLE_EMOJI)],
             [InlineKeyboardButton(notify_label, callback_data=CB_SETTINGS_TOGGLE_OPPONENT_NOTIFY)],
+            [InlineKeyboardButton(pairings_label, callback_data=CB_SETTINGS_TOGGLE_STATUS_PAIRINGS)],
         ]
         return InlineKeyboardMarkup(rows)
 
@@ -504,11 +508,13 @@ def settings_keyboard(
     is_admin: bool = False,
     hide_deck_emoji: bool = False,
     notify_opponent_rounds: bool = False,
+    status_by_pairings: bool = False,
 ) -> InlineKeyboardMarkup:
     return _default.settings_keyboard(
         is_admin=is_admin,
         hide_deck_emoji=hide_deck_emoji,
         notify_opponent_rounds=notify_opponent_rounds,
+        status_by_pairings=status_by_pairings,
     )
 
 
