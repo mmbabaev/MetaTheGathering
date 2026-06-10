@@ -6,7 +6,7 @@ from datetime import datetime
 from bot.features import FeatureService
 from bot.handlers.base import HandlerResult
 from bot.handlers.player import build_archetype_menu
-from bot.handlers.tournament_status import status_text
+from bot.handlers.tournament_status import pairing_rows
 from bot.keyboards import Keyboards
 from bot.messages import (
     ADMIN_ARCH_SAVED,
@@ -181,25 +181,26 @@ class AdminHandler:
         prefix — необязательный текст (например, итог операции), который добавляется
         перед статусом через пустую строку.
         show_filled — показывать кнопки заполненных участников.
-        tg_id — кто смотрит (для режима статуса: плоский / попарно по парингам).
+        tg_id — кто смотрит: если включена настройка «статус по парингам» и паринги
+        есть, кнопки участников раскладываются по столам (две кнопки в ряд).
         """
         try:
             t = get_tournament(self.svc.db, tournament_id)
         except errors.TournamentNotFound:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
         participants = sort_participants(self.svc.list_participants_for_tournament(tournament_id))
-        body = status_text(
-            self.svc.db,
-            t,
-            participants,
-            by_pairings=self.user_svc.wants_status_by_pairings(tg_id),
-            decks_hidden=t.decks_hidden,
-        )
+        body = format_tournament_status(t.title, t.status.label_ru, participants, decks_hidden=t.decks_hidden)
         text = f"{prefix}\n\n{body}" if prefix else body
+
+        pairs = unpaired = None
+        if self.user_svc.wants_status_by_pairings(tg_id):
+            resolved = pairing_rows(self.svc.db, tournament_id, participants)
+            if resolved is not None:
+                pairs, unpaired = resolved
         return HandlerResult(
             text,
             keyboard=self.keyboards.admin_participants_keyboard(
-                participants, tournament_id=tournament_id, show_filled=show_filled
+                participants, tournament_id=tournament_id, show_filled=show_filled, pairs=pairs, unpaired=unpaired
             ),
         )
 

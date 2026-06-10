@@ -270,24 +270,30 @@ class Keyboards:
         ]
         return InlineKeyboardMarkup(rows)
 
+    def _participant_button(self, p) -> InlineKeyboardButton:
+        if p.user:
+            name = format_participant_name(p.user.first_name, p.user.last_name) or f"id{p.user.tg_id}"
+        else:
+            name = f"id{p.id}"
+        prefix = "📝 " if p.archetype is None else "✏️ "
+        return InlineKeyboardButton(f"{prefix}{name}", callback_data=f"{CB_ADMIN_PICK_ARCH}:{p.id}")
+
     def admin_participants_keyboard(
         self,
         participants: list,
         tournament_id: int | None = None,
         show_filled: bool = False,
+        pairs: list | None = None,
+        unpaired: list | None = None,
     ) -> InlineKeyboardMarkup:
+        if pairs is not None:
+            return self._participants_keyboard_by_pairings(pairs, unpaired or [], tournament_id)
+
         unfilled = [p for p in participants if p.archetype is None]
         filled = [p for p in participants if p.archetype is not None]
 
         to_show = participants if show_filled else unfilled
-        buttons = []
-        for p in to_show:
-            if p.user:
-                name = format_participant_name(p.user.first_name, p.user.last_name) or f"id{p.user.tg_id}"
-            else:
-                name = f"id{p.id}"
-            prefix = "📝 " if p.archetype is None else "✏️ "
-            buttons.append([InlineKeyboardButton(f"{prefix}{name}", callback_data=f"{CB_ADMIN_PICK_ARCH}:{p.id}")])
+        buttons = [[self._participant_button(p)] for p in to_show]
 
         if not show_filled and filled and tournament_id is not None:
             buttons.append(
@@ -303,6 +309,24 @@ class Keyboards:
             buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_TOURNAMENT}:{tournament_id}")])
 
         return InlineKeyboardMarkup(buttons)
+
+    def _participants_keyboard_by_pairings(self, pairs: list, unpaired: list, tournament_id: int | None):
+        """Кнопки игроков по столам: один ряд — один стол (две кнопки-игрока рядом).
+
+        ``pairs`` — ``(table, p1, name1, p2, name2)`` из резолвера. Игрок без участника
+        в БД (``p`` is None) или бай (``name`` is None) кнопкой не показывается.
+        """
+        rows = []
+        for _table, p1, _n1, p2, _n2 in pairs:
+            row = [self._participant_button(p) for p in (p1, p2) if p is not None]
+            if row:
+                rows.append(row)
+        # участники без пары — по двое в ряд
+        for i in range(0, len(unpaired), 2):
+            rows.append([self._participant_button(p) for p in unpaired[i : i + 2]])
+        if tournament_id is not None:
+            rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_TOURNAMENT}:{tournament_id}")])
+        return InlineKeyboardMarkup(rows)
 
     def admin_player_actions_keyboard(
         self,
@@ -522,8 +546,12 @@ def admin_participants_keyboard(
     participants: list,
     tournament_id: int | None = None,
     show_filled: bool = False,
+    pairs: list | None = None,
+    unpaired: list | None = None,
 ) -> InlineKeyboardMarkup:
-    return _default.admin_participants_keyboard(participants, tournament_id=tournament_id, show_filled=show_filled)
+    return _default.admin_participants_keyboard(
+        participants, tournament_id=tournament_id, show_filled=show_filled, pairs=pairs, unpaired=unpaired
+    )
 
 
 def admin_player_actions_keyboard(

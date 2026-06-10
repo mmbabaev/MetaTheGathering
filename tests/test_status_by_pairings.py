@@ -1,46 +1,72 @@
-"""Tests for the per-user 'tournament status grouped by pairings' setting (#88)."""
+"""Tests for the per-user 'status by pairings' setting (#88).
+
+The setting lays out the admin participant KEYBOARD by table — two player buttons
+per row (one row = one pairing) — instead of a single column. The status text stays
+flat. Covered: pairings→participants resolver, keyboard layout, the toggle.
+"""
 
 from types import SimpleNamespace
 
 from bot.handlers.settings import SettingsHandler
-from bot.handlers.tournament_status import _pairing_rows, status_text
-from bot.messages import format_tournament_status_by_pairings
+from bot.handlers.tournament_status import pairing_rows
+from bot.keyboards import admin_participants_keyboard
 from core import models
 from core.schemas import TournamentCreate
 
-# ── pure formatter ─────────────────────────────────────────────────────────────
 
-
-def _participant(last, first, archetype=None, uid=1, username=None):
-    user = SimpleNamespace(first_name=first, last_name=last, username=username, tg_id=uid, is_scorekeeper=False)
+def _participant(last, first, archetype=None, pid=1, uid=1):
+    user = SimpleNamespace(first_name=first, last_name=last, username=None, tg_id=uid, is_scorekeeper=False)
     arch = SimpleNamespace(name=archetype) if archetype else None
-    return SimpleNamespace(user=user, archetype=arch, user_id=uid)
+    return SimpleNamespace(user=user, archetype=arch, user_id=uid, id=pid)
 
 
-class TestFormatter:
-    def test_pairs_bye_and_unpaired(self):
-        a = _participant("Иванов", "Иван", "Burn", 1)
-        b = _participant("Петров", "Пётр", None, 2)
-        c = _participant("Сидоров", "Сидор", "Affinity", 3)
-        u = _participant("Новый", "Ник", None, 9)
-        pairs = [(1, a, "Иванов Иван", b, "Петров Пётр"), (2, c, "Сидоров Сидор", None, None)]
-        text = format_tournament_status_by_pairings("T", "Регистрация", [a, b, c, u], pairs, [u])
-        assert "🏆 T · Регистрация · 4 чел." in text
-        assert "✅ 2 с колодой  ⬜ 2 без" in text  # a, c filled; b, u empty
-        assert "— Стол 1 —" in text
-        assert "✅ Иванов Иван — Burn" in text
-        assert "⬜ Петров Пётр — не указана" in text
-        assert "BYE" in text  # Сидоров's bye
-        assert "Без пары:" in text and "Новый Ник" in text
-
-    def test_unregistered_opponent_name(self):
-        a = _participant("Иванов", "Иван", "Burn", 1)
-        pairs = [(1, a, "Иванов Иван", None, "Гость Гостев")]  # name set, no participant
-        text = format_tournament_status_by_pairings("T", "Рег", [a], pairs, [])
-        assert "❓ Гость Гостев — не участвует" in text
+# ── keyboard layout by pairings ────────────────────────────────────────────────
 
 
-# ── DB: resolver + status_text branching ───────────────────────────────────────
+class TestKeyboardByPairings:
+    def test_two_buttons_per_table_row(self):
+        a = _participant("Иванов", "Иван", None, pid=1, uid=1)
+        b = _participant("Петров", "Пётр", "Burn", pid=2, uid=2)
+        c = _participant("Сидоров", "Сидор", None, pid=3, uid=3)
+        d = _participant("Кузнецов", "Кузьма", "Elves", pid=4, uid=4)
+        pairs = [(1, a, "A", b, "B"), (2, c, "C", d, "D")]
+        kb = admin_participants_keyboard([a, b, c, d], tournament_id=10, pairs=pairs, unpaired=[])
+        rows = kb.inline_keyboard
+        assert len(rows[0]) == 2 and len(rows[1]) == 2  # one row per table, two buttons
+        assert rows[0][0].text.endswith("Иванов Иван") and rows[0][0].callback_data == "adm_pick:1"
+        assert rows[-1][0].text == "⬅️ Назад"
+
+    def test_bye_row_has_single_button(self):
+        a = _participant("Иванов", "Иван", None, pid=1, uid=1)
+        kb = admin_participants_keyboard([a], tournament_id=10, pairs=[(1, a, "A", None, None)], unpaired=[])
+        assert len(kb.inline_keyboard[0]) == 1  # bye → lone button
+
+    def test_unresolved_opponent_dropped(self):
+        a = _participant("Иванов", "Иван", None, pid=1, uid=1)
+        # opponent name present but not a registered participant (p2 is None)
+        kb = admin_participants_keyboard([a], tournament_id=10, pairs=[(1, a, "A", None, "Гость")], unpaired=[])
+        assert len(kb.inline_keyboard[0]) == 1
+
+    def test_unpaired_appended_two_per_row(self):
+        a = _participant("Иванов", "Иван", None, pid=1, uid=1)
+        u1 = _participant("Новый", "Ник", None, pid=8, uid=8)
+        u2 = _participant("Гость", "Гена", None, pid=9, uid=9)
+        kb = admin_participants_keyboard(
+            [a, u1, u2], tournament_id=10, pairs=[(1, a, "A", None, None)], unpaired=[u1, u2]
+        )
+        rows = kb.inline_keyboard
+        assert len(rows[0]) == 1  # bye
+        assert len(rows[1]) == 2  # the two unpaired, side by side
+
+    def test_flat_layout_when_no_pairs(self):
+        a = _participant("Иванов", "Иван", None, pid=1, uid=1)
+        b = _participant("Петров", "Пётр", None, pid=2, uid=2)
+        kb = admin_participants_keyboard([a, b], tournament_id=10)  # pairs=None → current flat column
+        # every non-back row holds exactly one button
+        assert all(len(r) == 1 for r in kb.inline_keyboard)
+
+
+# ── DB resolver ────────────────────────────────────────────────────────────────
 
 
 def _two_player_tournament(db, svc, user_svc, arch_svc, *, with_pairings: bool):
@@ -58,45 +84,23 @@ def _two_player_tournament(db, svc, user_svc, arch_svc, *, with_pairings: bool):
                 )
             )
         db.commit()
-    return db.get(models.Tournament, t.id)
+    return t.id
 
 
 def test_pairing_rows_resolves_participants(db, svc, user_svc, arch_svc):
-    t = _two_player_tournament(db, svc, user_svc, arch_svc, with_pairings=True)
-    participants = svc.list_participants_for_tournament(t.id)
-    pairs, unpaired = _pairing_rows(db, t.id, participants)
-    assert len(pairs) == 1  # both directions collapsed
-    table, p1, n1, p2, n2 = pairs[0]
+    tid = _two_player_tournament(db, svc, user_svc, arch_svc, with_pairings=True)
+    participants = svc.list_participants_for_tournament(tid)
+    pairs, unpaired = pairing_rows(db, tid, participants)
+    assert len(pairs) == 1  # both directions collapsed into one table
+    _table, p1, n1, p2, n2 = pairs[0]
     assert {n1, n2} == {"Иванов Иван", "Петров Пётр"}
-    assert p1 is not None and p2 is not None  # both resolved to participants
+    assert p1 is not None and p2 is not None
     assert unpaired == []
 
 
 def test_pairing_rows_none_without_pairings(db, svc, user_svc, arch_svc):
-    t = _two_player_tournament(db, svc, user_svc, arch_svc, with_pairings=False)
-    assert _pairing_rows(db, t.id, svc.list_participants_for_tournament(t.id)) is None
-
-
-def test_status_text_by_pairings(db, svc, user_svc, arch_svc):
-    t = _two_player_tournament(db, svc, user_svc, arch_svc, with_pairings=True)
-    parts = svc.list_participants_for_tournament(t.id)
-    text = status_text(db, t, parts, by_pairings=True, decks_hidden=False)
-    assert "— Стол 1 —" in text
-    assert "Иванов Иван" in text and "Петров Пётр" in text
-
-
-def test_status_text_flat_when_setting_off(db, svc, user_svc, arch_svc):
-    t = _two_player_tournament(db, svc, user_svc, arch_svc, with_pairings=True)
-    parts = svc.list_participants_for_tournament(t.id)
-    text = status_text(db, t, parts, by_pairings=False, decks_hidden=False)
-    assert "Стол" not in text  # flat list, current behavior unchanged
-
-
-def test_status_text_falls_back_to_flat_without_pairings(db, svc, user_svc, arch_svc):
-    t = _two_player_tournament(db, svc, user_svc, arch_svc, with_pairings=False)
-    parts = svc.list_participants_for_tournament(t.id)
-    text = status_text(db, t, parts, by_pairings=True, decks_hidden=False)
-    assert "Стол" not in text  # no pairings → flat fallback
+    tid = _two_player_tournament(db, svc, user_svc, arch_svc, with_pairings=False)
+    assert pairing_rows(db, tid, svc.list_participants_for_tournament(tid)) is None
 
 
 # ── setting toggle ─────────────────────────────────────────────────────────────

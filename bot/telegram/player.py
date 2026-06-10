@@ -182,7 +182,7 @@ async def callback_tournament_status(update: Update, context: ContextTypes.DEFAU
         if user and admin_h.user_svc.is_privileged(user.id):
             result = admin_h.handle_admin_status(user.id, tournament_id)
         else:
-            result = _player_handler(db).handle_tournament_public_status(tournament_id, user.id if user else 0)
+            result = _player_handler(db).handle_tournament_public_status(tournament_id)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
