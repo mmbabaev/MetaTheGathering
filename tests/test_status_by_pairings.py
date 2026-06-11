@@ -103,6 +103,60 @@ def test_pairing_rows_none_without_pairings(db, svc, user_svc, arch_svc):
     assert pairing_rows(db, tid, svc.list_participants_for_tournament(tid)) is None
 
 
+def _name(i):
+    return f"Фам{i} Имя{i}"
+
+
+def _tournament_with_scrambled_tables(db, svc, user_svc, rows):
+    """Create a tournament + participants for P1.. and insert ``rows`` of
+    ``(table, player_name, opponent_name)`` in the given (scrambled) DB order."""
+    t = svc.create_tournament(TournamentCreate(title="T", chat_id=1))
+    players = {n for _, p, o in rows for n in (p, o) if n}
+    for n in players:
+        i = int(n.split()[0].removeprefix("Фам"))
+        u = user_svc.get_or_create(tg_id=i, first_name=f"Имя{i}", last_name=f"Фам{i}")
+        svc.register_participant(tournament_id=t.id, user_id=u.id)
+    for tbl, p, o in rows:
+        db.add(
+            models.RoundPairing(tournament_id=t.id, round_number=1, player_name=p, opponent_name=o, table_number=tbl)
+        )
+    db.commit()
+    return t.id
+
+
+def test_pairing_rows_ordered_by_table_number(db, svc, user_svc):
+    # insert tables OUT OF ORDER (3, 1, 2) — resolver must return them 1, 2, 3
+    rows = [
+        (3, _name(5), _name(6)),
+        (3, _name(6), _name(5)),
+        (1, _name(1), _name(2)),
+        (1, _name(2), _name(1)),
+        (2, _name(3), _name(4)),
+        (2, _name(4), _name(3)),
+    ]
+    tid = _tournament_with_scrambled_tables(db, svc, user_svc, rows)
+    pairs, unpaired = pairing_rows(db, tid, svc.list_participants_for_tournament(tid))
+    assert [tbl for tbl, *_ in pairs] == [1, 2, 3]  # by table number, not DB insert order
+    assert unpaired == []
+    # each pairing keeps both registered players
+    assert all(p1 is not None and p2 is not None for _, p1, _, p2, _ in pairs)
+
+
+def test_pairing_rows_table_order_with_bye(db, svc, user_svc):
+    # odd player count: table 3 is a bye (opponent None); tables inserted scrambled
+    rows = [
+        (2, _name(3), _name(4)),
+        (2, _name(4), _name(3)),
+        (3, _name(5), None),  # bye
+        (1, _name(1), _name(2)),
+        (1, _name(2), _name(1)),
+    ]
+    tid = _tournament_with_scrambled_tables(db, svc, user_svc, rows)
+    pairs, _unpaired = pairing_rows(db, tid, svc.list_participants_for_tournament(tid))
+    assert [tbl for tbl, *_ in pairs] == [1, 2, 3]
+    assert pairs[-1][4] is None  # table 3: bye → opponent name is None
+
+
 # ── setting toggle ─────────────────────────────────────────────────────────────
 
 
