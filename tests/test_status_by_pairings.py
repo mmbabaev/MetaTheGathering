@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 from bot.handlers.settings import SettingsHandler
 from bot.handlers.tournament_status import pairing_rows
-from bot.keyboards import admin_participants_keyboard
+from bot.keyboards import StatusButton, admin_participants_keyboard, participant_button_rows
 from core import models
 from core.schemas import TournamentCreate
 
@@ -20,50 +20,91 @@ def _participant(last, first, archetype=None, pid=1, uid=1):
     return SimpleNamespace(user=user, archetype=arch, user_id=uid, id=pid)
 
 
-# ── keyboard layout by pairings ────────────────────────────────────────────────
+# ── pure button model: FLAT mode (feature OFF) — must keep old behaviour ────────
 
 
-class TestKeyboardByPairings:
-    def test_two_buttons_per_table_row(self):
+class TestFlatButtonModel:
+    def test_shows_only_unfilled_one_per_row(self):
+        a = _participant("Иванов", "Иван", None, pid=1, uid=1)
+        b = _participant("Петров", "Пётр", "Burn", pid=2, uid=2)  # filled → hidden by default
+        rows = participant_button_rows([a, b], tournament_id=10)
+        assert rows[0] == [StatusButton("📝 Иванов Иван", "adm_pick:1")]
+        assert rows[1][0].label == "Показать заполненных (1)"
+        assert rows[-1] == [StatusButton("⬅️ Назад", "t:10")]
+        assert all(len(r) == 1 for r in rows)  # plain column, one button per row
+
+    def test_show_filled_includes_filled_and_no_toggle(self):
+        a = _participant("Иванов", "Иван", None, pid=1, uid=1)
+        b = _participant("Петров", "Пётр", "Burn", pid=2, uid=2)
+        rows = participant_button_rows([a, b], tournament_id=10, show_filled=True)
+        labels = [btn.label for row in rows for btn in row]
+        assert "📝 Иванов Иван" in labels and "✏️ Петров Пётр" in labels
+        assert not any("Показать заполненных" in x for x in labels)
+
+    def test_preserves_input_order(self):
+        # the handler pre-sorts participants; the model must keep that exact order
+        a = _participant("Яковлев", "Яков", None, pid=1, uid=1)
+        b = _participant("Аакёров", "Аак", None, pid=2, uid=2)
+        rows = participant_button_rows([a, b], tournament_id=10)
+        assert rows[0][0].callback_data == "adm_pick:1" and rows[1][0].callback_data == "adm_pick:2"
+
+
+# ── pure button model: BY-PAIRINGS mode (feature ON) — order by table ───────────
+
+
+class TestPairingButtonModel:
+    def test_two_buttons_per_table_in_table_order(self):
         a = _participant("Иванов", "Иван", None, pid=1, uid=1)
         b = _participant("Петров", "Пётр", "Burn", pid=2, uid=2)
         c = _participant("Сидоров", "Сидор", None, pid=3, uid=3)
         d = _participant("Кузнецов", "Кузьма", "Elves", pid=4, uid=4)
-        pairs = [(1, a, "A", b, "B"), (2, c, "C", d, "D")]
-        kb = admin_participants_keyboard([a, b, c, d], tournament_id=10, pairs=pairs, unpaired=[])
-        rows = kb.inline_keyboard
-        assert len(rows[0]) == 2 and len(rows[1]) == 2  # one row per table, two buttons
-        assert rows[0][0].text.endswith("Иванов Иван") and rows[0][0].callback_data == "adm_pick:1"
-        assert rows[-1][0].text == "⬅️ Назад"
+        pairs = [(1, a, "A", b, "B"), (2, c, "C", d, "D")]  # resolver gives table order
+        rows = participant_button_rows([a, b, c, d], tournament_id=10, pairs=pairs, unpaired=[])
+        assert len(rows[0]) == 2 and len(rows[1]) == 2
+        assert [b.callback_data for b in rows[0]] == ["adm_pick:1", "adm_pick:2"]  # table 1
+        assert [b.callback_data for b in rows[1]] == ["adm_pick:3", "adm_pick:4"]  # table 2 after
+        assert rows[-1] == [StatusButton("⬅️ Назад", "t:10")]
 
-    def test_bye_row_has_single_button(self):
+    def test_row_order_follows_pairs(self):
+        parts = [_participant(f"Ф{i}", f"И{i}", None, pid=i, uid=i) for i in range(1, 5)]
+        a, b, c, d = parts
+        pairs = [(5, a, "A", b, "B"), (6, c, "C", d, "D")]  # already table-ordered by resolver
+        rows = participant_button_rows(parts, tournament_id=10, pairs=pairs, unpaired=[])
+        assert [row[0].callback_data for row in rows[:-1]] == ["adm_pick:1", "adm_pick:3"]
+
+    def test_bye_is_single_button(self):
         a = _participant("Иванов", "Иван", None, pid=1, uid=1)
-        kb = admin_participants_keyboard([a], tournament_id=10, pairs=[(1, a, "A", None, None)], unpaired=[])
-        assert len(kb.inline_keyboard[0]) == 1  # bye → lone button
+        rows = participant_button_rows([a], tournament_id=10, pairs=[(1, a, "A", None, None)], unpaired=[])
+        assert len(rows[0]) == 1
 
-    def test_unresolved_opponent_dropped(self):
+    def test_unresolved_opponent_is_single_button(self):
         a = _participant("Иванов", "Иван", None, pid=1, uid=1)
-        # opponent name present but not a registered participant (p2 is None)
-        kb = admin_participants_keyboard([a], tournament_id=10, pairs=[(1, a, "A", None, "Гость")], unpaired=[])
-        assert len(kb.inline_keyboard[0]) == 1
+        rows = participant_button_rows([a], tournament_id=10, pairs=[(1, a, "A", None, "Гость")], unpaired=[])
+        assert len(rows[0]) == 1  # opponent not a participant → no button for it
 
-    def test_unpaired_appended_two_per_row(self):
+    def test_unpaired_two_per_row(self):
         a = _participant("Иванов", "Иван", None, pid=1, uid=1)
         u1 = _participant("Новый", "Ник", None, pid=8, uid=8)
         u2 = _participant("Гость", "Гена", None, pid=9, uid=9)
-        kb = admin_participants_keyboard(
+        rows = participant_button_rows(
             [a, u1, u2], tournament_id=10, pairs=[(1, a, "A", None, None)], unpaired=[u1, u2]
         )
-        rows = kb.inline_keyboard
         assert len(rows[0]) == 1  # bye
-        assert len(rows[1]) == 2  # the two unpaired, side by side
+        assert [b.callback_data for b in rows[1]] == ["adm_pick:8", "adm_pick:9"]
 
-    def test_flat_layout_when_no_pairs(self):
+
+# ── thin Telegram adapter faithfully mirrors the model ─────────────────────────
+
+
+class TestKeyboardAdapter:
+    def test_markup_mirrors_model(self):
         a = _participant("Иванов", "Иван", None, pid=1, uid=1)
         b = _participant("Петров", "Пётр", None, pid=2, uid=2)
-        kb = admin_participants_keyboard([a, b], tournament_id=10)  # pairs=None → current flat column
-        # every non-back row holds exactly one button
-        assert all(len(r) == 1 for r in kb.inline_keyboard)
+        pairs = [(1, a, "A", b, "B")]
+        model = participant_button_rows([a, b], tournament_id=10, pairs=pairs, unpaired=[])
+        kb = admin_participants_keyboard([a, b], tournament_id=10, pairs=pairs, unpaired=[])
+        assert [[btn.text for btn in row] for row in kb.inline_keyboard] == [[b.label for b in r] for r in model]
+        assert kb.inline_keyboard[0][0].callback_data == model[0][0].callback_data
 
 
 # ── DB resolver ────────────────────────────────────────────────────────────────
