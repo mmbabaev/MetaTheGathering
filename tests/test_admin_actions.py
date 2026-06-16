@@ -1729,6 +1729,53 @@ class TestUserServiceMergeUsersById:
         assert result is True
         assert user_svc.get_by_id(source.id) is None
 
+    def test_merge_fills_missing_participant_fields(self, user_svc, svc, db, active_tournament, arch_svc):
+        """Конфликт в одном турнире: target держит колоду, source — место. После merge у target есть оба."""
+        source = user_svc.get_or_create(tg_id=6101, first_name="Src")
+        target = user_svc.get_or_create(tg_id=6102, first_name="Tgt")
+        burn = arch_svc.get_or_create_by_name("Burn")
+        svc.register_participant(tournament_id=active_tournament.id, user_id=target.id, archetype_id=burn.id)
+        svc.register_participant(tournament_id=active_tournament.id, user_id=source.id)
+        sp = svc.get_participant(active_tournament.id, source.id)
+        sp.final_place = 9
+        db.commit()
+
+        assert user_svc.merge_users_by_id(source.id, target.id, adopt_name=False) is True
+        tp = svc.get_participant(active_tournament.id, target.id)
+        assert tp.archetype_id == burn.id  # колода target сохранена
+        assert tp.final_place == 9  # место добрано из source
+        assert user_svc.get_by_id(source.id) is None
+
+    def test_merge_does_not_override_existing_target_fields(self, user_svc, svc, db, active_tournament, arch_svc):
+        source = user_svc.get_or_create(tg_id=6103, first_name="Src")
+        target = user_svc.get_or_create(tg_id=6104, first_name="Tgt")
+        burn = arch_svc.get_or_create_by_name("Burn")
+        elves = arch_svc.get_or_create_by_name("Elves")
+        svc.register_participant(tournament_id=active_tournament.id, user_id=target.id, archetype_id=burn.id)
+        tp0 = svc.get_participant(active_tournament.id, target.id)
+        tp0.final_place = 1
+        svc.register_participant(tournament_id=active_tournament.id, user_id=source.id, archetype_id=elves.id)
+        sp = svc.get_participant(active_tournament.id, source.id)
+        sp.final_place = 9
+        db.commit()
+
+        user_svc.merge_users_by_id(source.id, target.id, adopt_name=False)
+        tp = svc.get_participant(active_tournament.id, target.id)
+        assert tp.archetype_id == burn.id and tp.final_place == 1  # поля target не перезаписаны
+
+    def test_merge_does_not_lose_nonconflicting_participations(self, user_svc, svc, db, active_tournament):
+        """Регрессия: участие source в ДРУГОМ турнире должно перенестись, а не исчезнуть."""
+        source = user_svc.get_or_create(tg_id=6105, first_name="Src")
+        target = user_svc.get_or_create(tg_id=6106, first_name="Tgt")
+        other = svc.create_tournament(TournamentCreate(title="Other", chat_id=987654))
+        svc.register_participant(tournament_id=active_tournament.id, user_id=target.id)
+        svc.register_participant(tournament_id=other.id, user_id=source.id)
+
+        user_svc.merge_users_by_id(source.id, target.id, adopt_name=False)
+        assert svc.get_participant(other.id, target.id) is not None  # перенесено, не потеряно
+        assert svc.get_participant(active_tournament.id, target.id) is not None
+        assert user_svc.get_by_id(source.id) is None
+
 
 # ── UserService: get_or_create_placeholder ────────────────────────────────────
 

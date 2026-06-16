@@ -227,8 +227,19 @@ class UserService:
     def merge_users_by_id(self, source_id: int, target_id: int, adopt_name: bool = True) -> bool:
         """Перенести Participant и UserDeckHistory от source к target, затем удалить source.
 
+        Если в одном турнире участвуют оба — поля участия СЛИВАЮТСЯ: недостающие у
+        target (``final_place``, ``archetype_id``) добираются из участия source, и
+        только потом строка source удаляется. Так не теряются разные половины данных
+        (у одного дубля колода, у другого место).
+
         adopt_name=True — скопировать имя source в target (полезно когда source
         содержит каноничную форму имени, например из AetherHub).
+
+        Перенос делается core-level запросами (``UPDATE ... SET user_id``), строки
+        source НЕ загружаются как ORM-сущности — иначе каскад связи ``User.participants``
+        при ``delete(source)`` затёр бы уже перенесённые участия. Голоса source
+        (placeholder'ы не голосуют) каскадно удаляются вместе с ним.
+
         Возвращает True если слияние выполнено.
         """
         source = self.get_by_id(source_id)
@@ -236,25 +247,55 @@ class UserService:
         if not source or not target or source.id == target.id:
             return False
 
+        # UserDeckHistory: убрать строки source, конфликтующие с target по unique
+        # (user_id, archetype_id), затем перенести остальные.
+        target_archetypes = {
+            row[0]
+            for row in self.db.execute(
+                select(models.UserDeckHistory.archetype_id).where(models.UserDeckHistory.user_id == target.id)
+            ).all()
+        }
+        if target_archetypes:
+            self.db.execute(
+                sa_delete(models.UserDeckHistory).where(
+                    models.UserDeckHistory.user_id == source.id,
+                    models.UserDeckHistory.archetype_id.in_(target_archetypes),
+                )
+            )
         self.db.execute(
             sa_update(models.UserDeckHistory)
             .where(models.UserDeckHistory.user_id == source.id)
             .values(user_id=target.id)
         )
 
-        already_in = {
-            row[0]
-            for row in self.db.execute(
-                select(models.Participant.tournament_id).where(models.Participant.user_id == target.id)
-            ).all()
+        # Participants: для общих турниров слить недостающие поля в участие target,
+        # затем удалить участие source. Source читаем как КОЛОНКИ (не сущности).
+        target_parts = {
+            p.tournament_id: p
+            for p in self.db.execute(
+                select(models.Participant).where(models.Participant.user_id == target.id)
+            ).scalars()
         }
-        if already_in:
-            self.db.execute(
-                sa_delete(models.Participant).where(
-                    models.Participant.user_id == source.id,
-                    models.Participant.tournament_id.in_(already_in),
-                )
-            )
+        source_rows = self.db.execute(
+            select(
+                models.Participant.id,
+                models.Participant.tournament_id,
+                models.Participant.final_place,
+                models.Participant.archetype_id,
+            ).where(models.Participant.user_id == source.id)
+        ).all()
+        drop_ids = []
+        for part_id, tournament_id, final_place, archetype_id in source_rows:
+            tp = target_parts.get(tournament_id)
+            if tp is None:
+                continue  # перенесётся UPDATE'ом ниже
+            if tp.final_place is None and final_place is not None:
+                tp.final_place = final_place
+            if tp.archetype_id is None and archetype_id is not None:
+                tp.archetype_id = archetype_id
+            drop_ids.append(part_id)
+        if drop_ids:
+            self.db.execute(sa_delete(models.Participant).where(models.Participant.id.in_(drop_ids)))
         self.db.execute(
             sa_update(models.Participant).where(models.Participant.user_id == source.id).values(user_id=target.id)
         )
