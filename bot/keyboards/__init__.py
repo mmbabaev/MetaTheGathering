@@ -1,5 +1,7 @@
 # Inline клавиатуры
 
+from dataclasses import dataclass
+
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from bot.deck_emoji import deck_emoji
@@ -14,6 +16,7 @@ CB_TOURNAMENT = "t"
 CB_SETTINGS_NAME = "settings_name"
 CB_SETTINGS_TOGGLE_EMOJI = "settings_toggle_emoji"
 CB_SETTINGS_TOGGLE_OPPONENT_NOTIFY = "settings_toggle_opp_notify"
+CB_SETTINGS_TOGGLE_STATUS_PAIRINGS = "settings_toggle_status_pairings"
 CB_TSTATUS = "tstatus"
 CB_LEAVE = "leave"
 CB_LEAVE_CONFIRM = "leave_confirm"
@@ -72,6 +75,70 @@ def features_keyboard(flags: list) -> InlineKeyboardMarkup:
             ]
         )
     return InlineKeyboardMarkup(buttons)
+
+
+@dataclass(frozen=True)
+class StatusButton:
+    """Чистая модель кнопки статуса (без зависимости от Telegram): подпись + callback."""
+
+    label: str
+    callback_data: str
+
+
+def _status_participant_button(p) -> StatusButton:
+    if p.user:
+        name = format_participant_name(p.user.first_name, p.user.last_name) or f"id{p.user.tg_id}"
+    else:
+        name = f"id{p.id}"
+    prefix = "📝 " if p.archetype is None else "✏️ "
+    return StatusButton(f"{prefix}{name}", f"{CB_ADMIN_PICK_ARCH}:{p.id}")
+
+
+def participant_button_rows(
+    participants: list,
+    tournament_id: int | None = None,
+    show_filled: bool = False,
+    pairs: list | None = None,
+    unpaired: list | None = None,
+) -> list[list[StatusButton]]:
+    """Чистая модель клавиатуры участников статуса — ряды кнопок, без Telegram.
+
+    С ``pairs`` (из ``pairing_rows``) — раскладка по столам: один ряд = один стол,
+    две кнопки-игрока (бай/незарегистрированный игрок → одиночная кнопка), участники
+    без пары — по двое в ряд; порядок строго по столам (как в ``pairs``). Без
+    ``pairs`` — прежний плоский режим: только незаполненные, по одной кнопке в ряд,
+    + «Показать заполненных». Telegram-слой лишь маппит это в InlineKeyboardMarkup.
+    """
+    back = [StatusButton("⬅️ Назад", f"{CB_TOURNAMENT}:{tournament_id}")] if tournament_id is not None else None
+
+    if pairs is not None:
+        rows: list[list[StatusButton]] = []
+        for _table, p1, _n1, p2, _n2 in pairs:
+            row = [_status_participant_button(p) for p in (p1, p2) if p is not None]
+            if row:
+                rows.append(row)
+        for i in range(0, len(unpaired or []), 2):
+            rows.append([_status_participant_button(p) for p in (unpaired or [])[i : i + 2]])
+        if back:
+            rows.append(back)
+        return rows
+
+    unfilled = [p for p in participants if p.archetype is None]
+    filled = [p for p in participants if p.archetype is not None]
+    to_show = participants if show_filled else unfilled
+    rows = [[_status_participant_button(p)] for p in to_show]
+    if not show_filled and filled and tournament_id is not None:
+        rows.append([StatusButton(f"Показать заполненных ({len(filled)})", f"{CB_ADMIN_SHOW_FILLED}:{tournament_id}")])
+    if back:
+        rows.append(back)
+    return rows
+
+
+def _status_rows_to_markup(rows: list[list[StatusButton]]) -> InlineKeyboardMarkup:
+    """Telegram-адаптер: чистая модель рядов → InlineKeyboardMarkup."""
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton(b.label, callback_data=b.callback_data) for b in row] for row in rows]
+    )
 
 
 class Keyboards:
@@ -254,15 +321,18 @@ class Keyboards:
         is_admin: bool = False,
         hide_deck_emoji: bool = False,
         notify_opponent_rounds: bool = False,
+        status_by_pairings: bool = False,
     ) -> InlineKeyboardMarkup:
         emoji_label = "🚫 Эмоджи колод: выкл" if hide_deck_emoji else "🎨 Эмоджи колод: вкл"
         notify_label = (
             "🔔 Уведомления об оппоненте: вкл" if notify_opponent_rounds else "🔕 Уведомления об оппоненте: выкл"
         )
+        pairings_label = "👥 Статус по парингам: вкл" if status_by_pairings else "📋 Статус по парингам: выкл"
         rows = [
             [InlineKeyboardButton("✏️ Изменить имя", callback_data=CB_SETTINGS_NAME)],
             [InlineKeyboardButton(emoji_label, callback_data=CB_SETTINGS_TOGGLE_EMOJI)],
             [InlineKeyboardButton(notify_label, callback_data=CB_SETTINGS_TOGGLE_OPPONENT_NOTIFY)],
+            [InlineKeyboardButton(pairings_label, callback_data=CB_SETTINGS_TOGGLE_STATUS_PAIRINGS)],
         ]
         return InlineKeyboardMarkup(rows)
 
@@ -271,34 +341,13 @@ class Keyboards:
         participants: list,
         tournament_id: int | None = None,
         show_filled: bool = False,
+        pairs: list | None = None,
+        unpaired: list | None = None,
     ) -> InlineKeyboardMarkup:
-        unfilled = [p for p in participants if p.archetype is None]
-        filled = [p for p in participants if p.archetype is not None]
-
-        to_show = participants if show_filled else unfilled
-        buttons = []
-        for p in to_show:
-            if p.user:
-                name = format_participant_name(p.user.first_name, p.user.last_name) or f"id{p.user.tg_id}"
-            else:
-                name = f"id{p.id}"
-            prefix = "📝 " if p.archetype is None else "✏️ "
-            buttons.append([InlineKeyboardButton(f"{prefix}{name}", callback_data=f"{CB_ADMIN_PICK_ARCH}:{p.id}")])
-
-        if not show_filled and filled and tournament_id is not None:
-            buttons.append(
-                [
-                    InlineKeyboardButton(
-                        f"Показать заполненных ({len(filled)})",
-                        callback_data=f"{CB_ADMIN_SHOW_FILLED}:{tournament_id}",
-                    )
-                ]
-            )
-
-        if tournament_id is not None:
-            buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_TOURNAMENT}:{tournament_id}")])
-
-        return InlineKeyboardMarkup(buttons)
+        """Тонкий адаптер: строит чистую модель и маппит её в Telegram-разметку."""
+        return _status_rows_to_markup(
+            participant_button_rows(participants, tournament_id, show_filled, pairs, unpaired)
+        )
 
     def admin_player_actions_keyboard(
         self,
@@ -504,11 +553,13 @@ def settings_keyboard(
     is_admin: bool = False,
     hide_deck_emoji: bool = False,
     notify_opponent_rounds: bool = False,
+    status_by_pairings: bool = False,
 ) -> InlineKeyboardMarkup:
     return _default.settings_keyboard(
         is_admin=is_admin,
         hide_deck_emoji=hide_deck_emoji,
         notify_opponent_rounds=notify_opponent_rounds,
+        status_by_pairings=status_by_pairings,
     )
 
 
@@ -516,8 +567,12 @@ def admin_participants_keyboard(
     participants: list,
     tournament_id: int | None = None,
     show_filled: bool = False,
+    pairs: list | None = None,
+    unpaired: list | None = None,
 ) -> InlineKeyboardMarkup:
-    return _default.admin_participants_keyboard(participants, tournament_id=tournament_id, show_filled=show_filled)
+    return _default.admin_participants_keyboard(
+        participants, tournament_id=tournament_id, show_filled=show_filled, pairs=pairs, unpaired=unpaired
+    )
 
 
 def admin_player_actions_keyboard(
