@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from telegram.ext import Application, ContextTypes
 
+from bot.messages import format_decks_revealed
 from bot.telegram.round_notify import send_round_notifications
 from core import models
 from core.config import Club, ClubSchedule, app_cfg, settings
@@ -15,6 +16,7 @@ from core.schemas import TournamentCreate
 from services.aetherhub_import_service import AetherhubImportService
 from services.aetherhub_service import AetherhubService
 from services.datalens import DataLensService
+from services.stats import StatsService
 from services.tournament import TournamentService
 
 logger = logging.getLogger(__name__)
@@ -454,7 +456,7 @@ class AutoRevealDecksJob:
     сегодня (по таймзоне турниров), и снимаем флаг.
     """
 
-    async def run(self, now: datetime, db=None) -> None:
+    async def run(self, now: datetime, db=None, bot=None) -> None:
         if now.tzinfo:
             day_start = (
                 now.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc).replace(tzinfo=None)
@@ -483,9 +485,25 @@ class AutoRevealDecksJob:
                 len(tournaments),
                 [t.id for t in tournaments],
             )
+            if bot is not None:
+                for t in tournaments:
+                    await self._announce(bot, db, t)
         finally:
             if close_db:
                 db.close()
+
+    async def _announce(self, bot, db, tournament) -> None:
+        """Один пост в чат турнира: «колоды раскрыты» + короткая мета (топ колод)."""
+        if not tournament.chat_id:
+            return
+        total = len(TournamentService(db).list_participants_for_tournament(tournament.id))
+        meta = StatsService(db).get_tournament_meta(tournament.id)
+        with_deck = sum(row.count for row in meta)
+        text = format_decks_revealed(tournament.title, total, with_deck, meta)
+        try:
+            await bot.send_message(chat_id=tournament.chat_id, text=text)
+        except Exception:  # noqa: BLE001 — сбой одного анонса не должен ронять джобу
+            logger.exception("AutoRevealDecksJob: announce failed for #%s", tournament.id)
 
 
 # ---------------------------------------------------------------------------
@@ -571,7 +589,7 @@ def setup_scheduler(app: Application) -> None:
 
     async def _reveal_decks(context: ContextTypes.DEFAULT_TYPE) -> None:
         tz_ = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
-        await reveal_job.run(now=datetime.now(tz_))
+        await reveal_job.run(now=datetime.now(tz_), bot=context.bot)
 
     _reveal_decks.__name__ = "auto_reveal_decks"
     app.job_queue.run_daily(_reveal_decks, time=reveal_time)
