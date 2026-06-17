@@ -30,7 +30,7 @@ class TestSetupScheduler:
         app = _make_app()
         with patch("bot.scheduler.settings", _mock_settings()), patch("bot.scheduler.get_clubs", return_value=[]):
             setup_scheduler(app)
-        assert app.job_queue.run_daily.call_count == 1  # daily final-reimport only
+        assert app.job_queue.run_daily.call_count == 2  # final-reimport + reveal-decks
 
     def test_one_schedule_no_fetch_times_registers_one_job(self):
         app = _make_app()
@@ -45,7 +45,7 @@ class TestSetupScheduler:
         ]
         with patch("bot.scheduler.settings", _mock_settings()), patch("bot.scheduler.get_clubs", return_value=clubs):
             setup_scheduler(app)
-        assert app.job_queue.run_daily.call_count == 2  # 1 create + final-reimport
+        assert app.job_queue.run_daily.call_count == 3  # 1 create + final-reimport + reveal-decks
 
     def test_fetch_times_register_extra_jobs(self):
         """Each aetherhub_fetch_time creates one extra import job."""
@@ -64,8 +64,8 @@ class TestSetupScheduler:
         ]
         with patch("bot.scheduler.settings", _mock_settings()), patch("bot.scheduler.get_clubs", return_value=clubs):
             setup_scheduler(app)
-        # 1 create + 3 import + final-reimport = 5
-        assert app.job_queue.run_daily.call_count == 5
+        # 1 create + 3 import + final-reimport + reveal-decks = 6
+        assert app.job_queue.run_daily.call_count == 6
 
     def test_two_schedules_register_two_create_jobs(self):
         """Club with two weekly schedules (fri + sat) gets a create job for each."""
@@ -83,8 +83,8 @@ class TestSetupScheduler:
         ]
         with patch("bot.scheduler.settings", _mock_settings()), patch("bot.scheduler.get_clubs", return_value=clubs):
             setup_scheduler(app)
-        # 2 create + final-reimport = 3
-        assert app.job_queue.run_daily.call_count == 3
+        # 2 create + final-reimport + reveal-decks = 4
+        assert app.job_queue.run_daily.call_count == 4
 
     def test_schedule_create_time_overrides_default(self):
         """ClubSchedule.create_time overrides TOURNAMENT_CREATE_TIME."""
@@ -148,7 +148,7 @@ class TestSetupScheduler:
         ]
         with patch("bot.scheduler.settings", _mock_settings()), patch("bot.scheduler.get_clubs", return_value=clubs):
             setup_scheduler(app)
-        assert app.job_queue.run_daily.call_count == 3  # 2 create + final-reimport
+        assert app.job_queue.run_daily.call_count == 4  # 2 create + final-reimport + reveal-decks
 
     def test_create_job_days_matches_weekday(self):
         """run_daily is called with days=(weekday_int,) matching the schedule."""
@@ -184,7 +184,7 @@ class TestSetupScheduler:
             setup_scheduler(app)
         # Both calls (create + import) should use days=(5,) for Friday in PTB (0=Sunday)
         for call in app.job_queue.run_daily.call_args_list:
-            if "days" not in call.kwargs:  # skip daily final-reimport
+            if "days" not in call.kwargs:  # skip daily final-reimport / reveal-decks
                 continue
             assert call.kwargs["days"] == (5,)  # friday = 5 in PTB (0=Sunday)
 
@@ -213,7 +213,7 @@ class TestSetupScheduler:
         ]
         with patch("bot.scheduler.settings", _mock_settings()), patch("bot.scheduler.get_clubs", return_value=clubs):
             setup_scheduler(app)
-        assert app.job_queue.run_daily.call_count == 9  # 8 + final-reimport
+        assert app.job_queue.run_daily.call_count == 10  # 8 + final-reimport + reveal-decks
 
 
 # ---------------------------------------------------------------------------

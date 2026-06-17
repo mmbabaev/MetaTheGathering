@@ -442,6 +442,52 @@ class AetherhubFinalReimportJob:
             db.close()
 
 
+REVEAL_DECKS_TIME = "22:00"  # авто-раскрытие колод турниров текущего дня
+
+
+class AutoRevealDecksJob:
+    """Раз в сутки в REVEAL_DECKS_TIME раскрывает колоды активных турниров этого дня.
+
+    Во время регистрации колоды скрыты (``decks_hidden=True``), чтобы их не копировали.
+    Раньше админ раскрывал их кнопкой «Показать колоды»; теперь это происходит
+    автоматически вечером. Берём незакрытые турниры со скрытыми колодами, созданные
+    сегодня (по таймзоне турниров), и снимаем флаг.
+    """
+
+    async def run(self, now: datetime, db=None) -> None:
+        if now.tzinfo:
+            day_start = (
+                now.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc).replace(tzinfo=None)
+            )
+        else:
+            day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+        close_db = db is None
+        if close_db:
+            db = SessionLocal()
+        try:
+            stmt = select(models.Tournament).where(
+                models.Tournament.status != models.TournamentStatus.CLOSED,
+                models.Tournament.decks_hidden.is_(True),
+                models.Tournament.created_at >= day_start,
+            )
+            tournaments = db.execute(stmt).scalars().all()
+            if not tournaments:
+                logger.info("AutoRevealDecksJob: no tournaments with hidden decks to reveal")
+                return
+            svc = TournamentService(db)
+            for t in tournaments:
+                svc.set_decks_hidden(t.id, hidden=False)
+            logger.info(
+                "AutoRevealDecksJob: revealed decks for %d tournament(s): %s",
+                len(tournaments),
+                [t.id for t in tournaments],
+            )
+        finally:
+            if close_db:
+                db.close()
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -519,6 +565,17 @@ def setup_scheduler(app: Application) -> None:
     _final_reimport.__name__ = "aetherhub_final_reimport"
     app.job_queue.run_daily(_final_reimport, time=final_time)
     logger.info(f"Scheduler: AetherhubFinalReimportJob registered (daily {FINAL_REIMPORT_TIME})")
+
+    reveal_job = AutoRevealDecksJob()
+    reveal_time = datetime.strptime(REVEAL_DECKS_TIME, "%H:%M").time().replace(tzinfo=tz)
+
+    async def _reveal_decks(context: ContextTypes.DEFAULT_TYPE) -> None:
+        tz_ = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
+        await reveal_job.run(now=datetime.now(tz_))
+
+    _reveal_decks.__name__ = "auto_reveal_decks"
+    app.job_queue.run_daily(_reveal_decks, time=reveal_time)
+    logger.info(f"Scheduler: AutoRevealDecksJob registered (daily {REVEAL_DECKS_TIME})")
 
 
 _DAY_RU = {
