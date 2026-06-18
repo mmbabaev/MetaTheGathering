@@ -204,6 +204,20 @@ def format_tournament_status(title: str, status: str, participants: list, decks_
     return "\n".join(lines)
 
 
+def format_decks_revealed(title: str, total: int, with_deck: int, meta_rows: list, top_n: int = 8) -> str:
+    """Анонс в чат при авто-раскрытии колод: турнир, счётчики, топ колод.
+
+    ``meta_rows`` — список с атрибутами ``archetype_name``/``count`` (StatsService.MetaRow),
+    отсортированный по убыванию count.
+    """
+    lines = [f"👁 Колоды раскрыты — {title}", f"Участников: {total} ({with_deck} с колодой)"]
+    if meta_rows:
+        lines.append("")
+        lines.append("Топ колод:")
+        lines.extend(f"{i}. {row.archetype_name} — {row.count}" for i, row in enumerate(meta_rows[:top_n], 1))
+    return "\n".join(lines)
+
+
 def _match_noun(n: int) -> str:
     if 11 <= n % 100 <= 14:
         return "матчей"
