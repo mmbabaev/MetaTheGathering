@@ -59,11 +59,26 @@ class RoundNotificationService:
         self._datalens = datalens_service
 
     def build_for_rounds(self, tournament_id: int, round_numbers: list[int]) -> list[RoundNotification]:
-        """Build notifications for every given round, flattened into one list."""
+        """Build notifications for every given round, flattened into one list.
+
+        Завершённые турниры пропускаем целиком (issue #114): после CLOSED уведомление
+        об оппоненте бессмысленно. Это единственная общая точка — через неё идут все
+        пути (авто-импорт, ручной импорт по кнопке, debug-превью), поэтому гейт здесь
+        закрывает все колл-сайты сразу, а не каждый по отдельности.
+        """
+        if self._is_closed(tournament_id):
+            logger.info("[round_notify] skip notifications for closed tournament #%s", tournament_id)
+            return []
         result: list[RoundNotification] = []
         for round_number in round_numbers:
             result.extend(self.build_for_round(tournament_id, round_number))
         return result
+
+    def _is_closed(self, tournament_id: int) -> bool:
+        status = self.db.execute(
+            select(models.Tournament.status).where(models.Tournament.id == tournament_id)
+        ).scalar_one_or_none()
+        return status == models.TournamentStatus.CLOSED
 
     def build_for_tournament(self, tournament_id: int) -> list[RoundNotification]:
         """Build notifications across all known rounds of the tournament."""
