@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 from bot.messages import format_decks_revealed
 from bot.scheduler import AutoRevealDecksJob
 from core import models
+from core.config import settings
 from core.schemas import TournamentCreate
 from services.tournament import TournamentService
 
@@ -69,7 +70,8 @@ def test_format_decks_revealed():
     assert "2. Izzet Terror — 3" in text
 
 
-async def test_announces_short_stats_to_chat(db, user_svc, arch_svc):
+async def test_announces_short_stats_to_admin_dm(db, user_svc, arch_svc, monkeypatch):
+    monkeypatch.setattr(settings, "ANNOUNCE_CHAT_ID", 777)
     t = _tournament(db, chat_id=555, hidden=True)
     burn = arch_svc.get_or_create_by_name("Burn")
     svc = TournamentService(db)
@@ -84,9 +86,20 @@ async def test_announces_short_stats_to_chat(db, user_svc, arch_svc):
     assert t.decks_hidden is False
     bot.send_message.assert_awaited_once()
     kwargs = bot.send_message.call_args.kwargs
-    assert kwargs["chat_id"] == 555
+    assert kwargs["chat_id"] == 777  # личка админа, не чат турнира
     assert "Burn — 3" in kwargs["text"]
     assert "Колоды раскрыты" in kwargs["text"]
+
+
+async def test_no_announce_without_announce_chat_id(db, user_svc, arch_svc, monkeypatch):
+    monkeypatch.setattr(settings, "ANNOUNCE_CHAT_ID", None)
+    t = _tournament(db, chat_id=555, hidden=True)
+    bot = AsyncMock()
+    await AutoRevealDecksJob().run(now=NOW, db=db, bot=bot)
+
+    db.refresh(t)
+    assert t.decks_hidden is False  # флаг сняли...
+    bot.send_message.assert_not_awaited()  # ...но в чат ничего не ушло
 
 
 async def test_no_announce_without_bot(db):
