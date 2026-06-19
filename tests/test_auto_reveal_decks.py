@@ -18,8 +18,9 @@ def _tournament(db, chat_id, *, hidden=True, status=models.TournamentStatus.REGI
     obj = db.get(models.Tournament, t.id)
     obj.decks_hidden = hidden
     obj.status = status
-    if created_days_ago:
-        obj.created_at = datetime.utcnow() - timedelta(days=created_days_ago)
+    # Anchor created_at to the simulated NOW, not the wall clock — otherwise at certain
+    # date boundaries "N days ago" collides with NOW's day and the test flakes (it did).
+    obj.created_at = NOW.replace(tzinfo=None) - timedelta(days=created_days_ago)
     db.commit()
     return obj
 
