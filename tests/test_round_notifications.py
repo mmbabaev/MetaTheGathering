@@ -193,6 +193,44 @@ class TestBuildForRound:
         assert rec.recipient_name == "Иванов Иван"
 
 
+class TestClosedTournamentSuppressesNotifications:
+    """issue #114 — завершённый турнир не должен порождать уведомления ни на одном пути."""
+
+    def _setup_pairing(self, db, svc, user_svc):
+        t = _tournament(svc)
+        recipient = _user(user_svc, 2001, "Recipient")
+        opponent = _user(user_svc, 2002, "Opponent", username="opp")
+        _participant(db, t.id, recipient.id)
+        _participant(db, t.id, opponent.id)
+        _pairing(db, t.id, 1, "Recipient", "Opponent", table_number=7)
+        _pairing(db, t.id, 1, "Opponent", "Recipient", table_number=7)
+        return t
+
+    def _set_status(self, db, t, status):
+        tournament = db.get(models.Tournament, t.id)
+        tournament.status = status
+        db.commit()
+
+    def test_closed_tournament_yields_no_notifications(self, db, svc, user_svc, notif_svc):
+        t = self._setup_pairing(db, svc, user_svc)
+        self._set_status(db, t, models.TournamentStatus.CLOSED)
+
+        assert notif_svc.build_for_rounds(t.id, [1]) == []
+        assert notif_svc.build_for_tournament(t.id) == []
+
+    def test_ongoing_tournament_still_notifies(self, db, svc, user_svc, notif_svc):
+        t = self._setup_pairing(db, svc, user_svc)
+        self._set_status(db, t, models.TournamentStatus.ONGOING)
+
+        assert len(notif_svc.build_for_rounds(t.id, [1])) == 2
+
+    def test_voting_tournament_still_notifies(self, db, svc, user_svc, notif_svc):
+        t = self._setup_pairing(db, svc, user_svc)
+        self._set_status(db, t, models.TournamentStatus.VOTING)
+
+        assert len(notif_svc.build_for_rounds(t.id, [1])) == 2
+
+
 class TestDisplayName:
     def test_full_name(self, db, user_svc):
         u = user_svc.get_or_create(tg_id=1, first_name="Иван", last_name="Иванов")
