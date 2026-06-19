@@ -497,15 +497,20 @@ class AutoRevealDecksJob:
                 db.close()
 
     async def _announce(self, bot, db, tournament) -> None:
-        """Один пост в чат турнира: «колоды раскрыты» + короткая мета (топ колод)."""
-        if not tournament.chat_id:
+        """Личка админу: «колоды раскрыты» + короткая мета (топ колод).
+
+        Раньше пост уходил в чат турнира; теперь — только в ANNOUNCE_CHAT_ID (личка
+        админа, тот же канал, что и анонс создания турнира). В чат турнира больше не
+        шлём. Если ANNOUNCE_CHAT_ID не задан — анонс пропускаем.
+        """
+        if not settings.ANNOUNCE_CHAT_ID:
             return
         total = len(TournamentService(db).list_participants_for_tournament(tournament.id))
         meta = StatsService(db).get_tournament_meta(tournament.id)
         with_deck = sum(row.count for row in meta)
         text = format_decks_revealed(tournament.title, total, with_deck, meta)
         try:
-            await bot.send_message(chat_id=tournament.chat_id, text=text)
+            await bot.send_message(chat_id=settings.ANNOUNCE_CHAT_ID, text=text)
         except Exception:  # noqa: BLE001 — сбой одного анонса не должен ронять джобу
             logger.exception("AutoRevealDecksJob: announce failed for #%s", tournament.id)
 
