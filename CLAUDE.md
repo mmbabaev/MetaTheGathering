@@ -16,6 +16,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## ⚠️ Git / PR workflow (hard rules)
 
+> **NEVER merge a PR yourself.** Do not run `gh pr merge` (or merge via the GitHub UI/API) under
+> any circumstances. Merging is ALWAYS the user's manual action — even when the user says "делай
+> сам" / "do it yourself" / "go ahead", that authorizes doing the *work* (branch, code, push, open
+> PR, check CI), NOT merging. Open the PR, report it's green, and stop. This is also enforced at the
+> Claude settings level (a global `deny` on `Bash(gh pr merge:*)`).
+>
 > **One task = one fresh branch off the latest `main`.** Starting any new task, fix, or follow-up:
 > `git fetch origin main && git checkout -b <name> origin/main`. Never start work on the
 > currently-checked-out branch by default.
