@@ -1,5 +1,6 @@
 # Telegram-обёртки для admin-хендлеров
 
+import html
 import io
 import logging
 
@@ -345,14 +346,18 @@ async def callback_export_players(update: Update, context: ContextTypes.DEFAULT_
     if ids is None:
         return
     (tournament_id,) = ids
-    await query.answer()
     db = SessionLocal()
     try:
         result = _admin_handler(db).handle_export_players(user.id, tournament_id)
         if result is None:
+            # Отвечаем только здесь алертом — раньше query.answer() звался выше,
+            # из-за чего этот алерт «Нет прав» не показывался (повторный answer игнорится).
             await query.answer("Нет прав или турнир не найден.", show_alert=True)
             return
-        await query.message.reply_text(f"<pre>{result}</pre>", parse_mode="HTML")
+        await query.answer()
+        # html.escape: имена игроков могут содержать <, >, & — без экранирования
+        # parse_mode=HTML падал с ошибкой парсинга и список не отправлялся.
+        await query.message.reply_text(f"<pre>{html.escape(result)}</pre>", parse_mode="HTML")
         _log("export_players", user, tournament_id=tournament_id)
     finally:
         db.close()
