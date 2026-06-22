@@ -54,10 +54,8 @@ class Settings(BaseSettings):
     TELEGRAM_PROXY_URL: str = ""
 
     # Через запятую в .env: ADMIN_IDS=123,456
+    # Кто есть кто: 232778570 = mbabaev (владелец).
     ADMIN_IDS: str = ""
-
-    # Telegram ID для получения уведомлений о создании турниров (личка)
-    ANNOUNCE_CHAT_ID: Optional[int] = None
 
     MONIUM_PROJECT: str = ""
     MONIUM_API_KEY: str = ""
@@ -81,6 +79,8 @@ class Settings(BaseSettings):
     TOURNAMENT_TIMEZONE: str = _app_cfg.tournament_timezone
     TOURNAMENT_CREATE_TIME: str = _app_cfg.tournament_create_time
     VERSION: str = _app_cfg.version
+    # Личка владельца для служебных анонсов (создан турнир, колоды раскрыты). Несекретно — в коде, не в .env.
+    OWNER_CHAT_ID: Optional[int] = _app_cfg.owner_chat_id
 
     model_config = SettingsConfigDict(env_file=_env_file, env_file_encoding="utf-8", extra="ignore")
 

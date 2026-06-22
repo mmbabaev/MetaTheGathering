@@ -635,21 +635,21 @@ class TestCreateTournamentJob:
         old_refreshed = db.get(cm.Tournament, old.id)
         assert old_refreshed.status == TournamentStatus.CLOSED
 
-    def test_sends_message_to_announce_chat_id(self, db):
+    def test_sends_message_to_owner_chat_id(self, db):
         job = _make_create_job(weekday="friday", chat_id=42)
         bot = AsyncMock()
         with patch("bot.scheduler.settings") as mock_settings:
-            mock_settings.ANNOUNCE_CHAT_ID = 999
+            mock_settings.OWNER_CHAT_ID = 999
             asyncio.run(job.run(bot=bot, now=FRIDAY_NOW, db=db))
         bot.send_message.assert_called_once()
         call_kwargs = bot.send_message.call_args
         assert call_kwargs.kwargs.get("chat_id") == 999 or call_kwargs.args[0] == 999
 
-    def test_no_message_when_announce_chat_id_not_set(self, db):
+    def test_no_message_when_owner_chat_id_not_set(self, db):
         job = _make_create_job(weekday="friday", chat_id=42)
         bot = AsyncMock()
         with patch("bot.scheduler.settings") as mock_settings:
-            mock_settings.ANNOUNCE_CHAT_ID = None
+            mock_settings.OWNER_CHAT_ID = None
             asyncio.run(job.run(bot=bot, now=FRIDAY_NOW, db=db))
         bot.send_message.assert_not_called()
 

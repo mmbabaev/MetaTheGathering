@@ -7,4 +7,5 @@ app_config = AppConfig(
     notify_allowed_ids=[232778570, 7776168515, 8749662186],  # mbabaev, mmbabaev, mmbabaev2
     goldfish_chat_id=-1003631429183,
     edinorog_chat_id=-1003631429183,
+    owner_chat_id=232778570,  # mbabaev (владелец) — служебные анонсы в личку
 )
