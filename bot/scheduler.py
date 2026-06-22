@@ -187,9 +187,9 @@ class CreateTournamentJob:
                 )
                 logger.info(f"Created tournament #{new_t.id} '{title}' for '{self.club.name}'")
 
-                if settings.ANNOUNCE_CHAT_ID and bot is not None:
+                if settings.OWNER_CHAT_ID and bot is not None:
                     await bot.send_message(
-                        chat_id=settings.ANNOUNCE_CHAT_ID,
+                        chat_id=settings.OWNER_CHAT_ID,
                         text=(
                             f"🏆 {self.club.name} Pauper — сегодня в {self.schedule.game_time}\n"
                             f"Турнир создан. Регистрация открыта."
@@ -497,20 +497,19 @@ class AutoRevealDecksJob:
                 db.close()
 
     async def _announce(self, bot, db, tournament) -> None:
-        """Личка админу: «колоды раскрыты» + короткая мета (топ колод).
+        """Анонс «колоды раскрыты» + короткая мета (топ колод) в личку владельца.
 
-        Раньше пост уходил в чат турнира; теперь — только в ANNOUNCE_CHAT_ID (личка
-        админа, тот же канал, что и анонс создания турнира). В чат турнира больше не
-        шлём. Если ANNOUNCE_CHAT_ID не задан — анонс пропускаем.
+        Пока шлём владельцу (`settings.OWNER_CHAT_ID`), а не в чат турнира — и в debug,
+        и в prod. Позже можно переключить на чат клуба, поменяв адресата здесь.
         """
-        if not settings.ANNOUNCE_CHAT_ID:
+        if not settings.OWNER_CHAT_ID:
             return
         total = len(TournamentService(db).list_participants_for_tournament(tournament.id))
         meta = StatsService(db).get_tournament_meta(tournament.id)
         with_deck = sum(row.count for row in meta)
         text = format_decks_revealed(tournament.title, total, with_deck, meta)
         try:
-            await bot.send_message(chat_id=settings.ANNOUNCE_CHAT_ID, text=text)
+            await bot.send_message(chat_id=settings.OWNER_CHAT_ID, text=text)
         except Exception:  # noqa: BLE001 — сбой одного анонса не должен ронять джобу
             logger.exception("AutoRevealDecksJob: announce failed for #%s", tournament.id)
 

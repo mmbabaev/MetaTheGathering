@@ -157,7 +157,6 @@ Env files are **never committed** to git (`.gitignored`). They are:
 | `TELEGRAM_BOT_TOKEN` | yes | Bot token from @BotFather |
 | `DATABASE_URL` | yes | PostgreSQL DSN, e.g. `postgresql+psycopg2://user:pass@localhost/dbname` |
 | `ADMIN_IDS` | no | Comma-separated Telegram user IDs with admin access |
-| `ANNOUNCE_CHAT_ID` | no | Telegram chat/user ID for tournament creation notifications |
 | `MONIUM_PROJECT` | no | Monium monitoring project ID |
 | `MONIUM_API_KEY` | no | Monium API key |
 | `YOOKASSA_SHOP_ID` | no | YooKassa shop ID for payments |
