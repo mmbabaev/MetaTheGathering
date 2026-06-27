@@ -118,6 +118,9 @@ class Tournament(Base):
     aetherhub_url = Column(String(512), nullable=True)
     aetherhub_import_time = Column(String(5), nullable=True)  # "HH:MM" — scheduled auto-import time
 
+    # момент отправки анонса «сбор метагейма завершён»; NULL = ещё не анонсировали (идемпотентность)
+    completed_announced_at = Column(DateTime, nullable=True)
+
     created_at = Column(DateTime, default=utc_now, nullable=False)
 
     participants = relationship("Participant", back_populates="tournament", cascade="all, delete-orphan")

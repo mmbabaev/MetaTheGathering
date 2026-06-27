@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from telegram.ext import Application, ContextTypes
 
-from bot.messages import format_decks_revealed
+from bot.messages import format_decks_revealed, format_meta_gather_completed
 from bot.telegram.round_notify import send_round_notifications
 from core import models
 from core.config import Club, ClubSchedule, app_cfg, settings
@@ -279,6 +279,11 @@ class AetherhubImportJob:
                     )
                 except Exception:
                     logger.exception(f"AetherhubImportJob: round notifications failed for #{tournament_id}")
+
+            try:
+                await maybe_announce_meta_gather_completed(bot, db, tournament_id)
+            except Exception:
+                logger.exception(f"AetherhubImportJob: completion announce failed for #{tournament_id}")
         finally:
             if close_db:
                 db.close()
@@ -381,6 +386,11 @@ class AetherhubTimedImportJob:
                     )
                 except Exception:
                     logger.exception(f"AetherhubTimedImportJob: round notifications failed for #{tournament_id}")
+
+            try:
+                await maybe_announce_meta_gather_completed(bot, db, tournament_id)
+            except Exception:
+                logger.exception(f"AetherhubTimedImportJob: completion announce failed for #{tournament_id}")
         finally:
             db.close()
 
@@ -409,7 +419,7 @@ class AetherhubFinalReimportJob:
     def __init__(self, aetherhub_service: AetherhubService) -> None:
         self._aetherhub = aetherhub_service
 
-    async def run(self, now: datetime, db=None) -> None:
+    async def run(self, now: datetime, db=None, bot=None) -> None:
         now_utc = now.astimezone(timezone.utc).replace(tzinfo=None) if now.tzinfo else now
         cutoff = now_utc - timedelta(days=FINAL_REIMPORT_WINDOW_DAYS)
         close_db = db is None
@@ -430,9 +440,9 @@ class AetherhubFinalReimportJob:
             return
         logger.info("AetherhubFinalReimportJob: re-importing %d tournament(s) for final scores", len(tournaments))
         for t in tournaments:
-            self._reimport(t.id, t.aetherhub_url)
+            await self._reimport(t.id, t.aetherhub_url, bot=bot)
 
-    def _reimport(self, tournament_id: int, url: str) -> None:
+    async def _reimport(self, tournament_id: int, url: str, bot=None) -> None:
         try:
             data = self._aetherhub.fetch_tournament(url)
         except Exception:
@@ -442,6 +452,12 @@ class AetherhubFinalReimportJob:
         try:
             result = AetherhubImportService(db).import_tournament(tournament_id, data)
             logger.info("AetherhubFinalReimportJob done #%s: pairings_saved=%s", tournament_id, result.pairings_saved)
+            # Финальный счёт обычно появляется именно здесь (утро после турнира) →
+            # это типичный момент срабатывания анонса о завершении сбора метагейма.
+            try:
+                await maybe_announce_meta_gather_completed(bot, db, tournament_id)
+            except Exception:
+                logger.exception("AetherhubFinalReimportJob: completion announce failed for #%s", tournament_id)
         except Exception:
             logger.exception("AetherhubFinalReimportJob: import failed for #%s", tournament_id)
         finally:
@@ -519,6 +535,39 @@ class AutoRevealDecksJob:
 # ---------------------------------------------------------------------------
 
 
+async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int) -> None:
+    """Один раз анонсирует «сбор метагейма завершён», когда турнир сыгран до конца.
+
+    Срабатывает после импорта, когда у всех матчей появился счёт (признак завершения
+    турнира + получены финальные стендинги). Идемпотентность — флаг
+    ``Tournament.completed_announced_at``: флаг ставим ТОЛЬКО после успешной отправки,
+    поэтому сбой отправки не «съедает» анонс — он повторится при следующем импорте.
+
+    Пока шлём владельцу (``settings.OWNER_CHAT_ID``), а не в чат турнира — и в debug,
+    и в prod. Позже можно переключить на чат клуба, поменяв адресата здесь.
+    """
+    if bot is None or not settings.OWNER_CHAT_ID:
+        return
+    tournament = db.get(models.Tournament, tournament_id)
+    if tournament is None or tournament.completed_announced_at is not None:
+        return
+
+    svc = AetherhubImportService(db)
+    if not svc.is_tournament_complete(tournament_id):
+        return
+
+    total = len(TournamentService(db).list_participants_for_tournament(tournament_id))
+    meta = StatsService(db).get_tournament_meta(tournament_id)
+    with_deck = sum(row.count for row in meta)
+    undefeated = svc.get_undefeated_players(tournament_id)
+    text = format_meta_gather_completed(tournament.title, total, with_deck, undefeated)
+
+    await bot.send_message(chat_id=settings.OWNER_CHAT_ID, text=text)
+    tournament.completed_announced_at = models.utc_now()
+    db.commit()
+    logger.info("maybe_announce_meta_gather_completed: announced completion for #%s", tournament_id)
+
+
 def _find_active_club_tournament(db, club_name: str):
     """Find the current non-CLOSED tournament for a club."""
     stmt = (
@@ -586,7 +635,7 @@ def setup_scheduler(app: Application) -> None:
 
     async def _final_reimport(context: ContextTypes.DEFAULT_TYPE) -> None:
         tz_ = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
-        await final_job.run(now=datetime.now(tz_))
+        await final_job.run(now=datetime.now(tz_), bot=context.bot)
 
     _final_reimport.__name__ = "aetherhub_final_reimport"
     app.job_queue.run_daily(_final_reimport, time=final_time)

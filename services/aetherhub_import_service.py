@@ -29,6 +29,18 @@ class OpponentInfo:
     opponent_participant: models.Participant | None
 
 
+@dataclass
+class UndefeatedPlayer:
+    """Игрок, прошедший турнир без поражений (X-0). Имя/фамилия из User, если найден."""
+
+    player_name: str  # имя как в парингах AetherHub (фолбэк для отображения)
+    first_name: str | None
+    last_name: str | None
+    archetype_name: str | None  # колода участника; None = не записана / игрок не найден
+    final_place: int | None
+    wins: int
+
+
 class AetherhubImportService:
     def __init__(self, db: Session) -> None:
         self.db = db
@@ -256,6 +268,84 @@ class AetherhubImportService:
             ).scalar_one_or_none()
             is not None
         )
+
+    def is_tournament_complete(self, tournament_id: int) -> bool:
+        """True, если турнир сыгран до конца: есть паринги и у всех не-бай матчей проставлен счёт.
+
+        Счёт матчей на AetherHub публикуется только ПОСЛЕ завершения турнира (см.
+        AetherhubFinalReimportJob), поэтому «у всех матчей есть счёт» — надёжный признак,
+        что турнир закончился и финальные стендинги получены.
+        """
+        pairings = self.get_pairings(tournament_id)
+        if not pairings:
+            return False
+        for p in pairings:
+            if p.opponent_name is not None and (p.player_wins is None or p.opponent_wins is None):
+                return False
+        return True
+
+    def _player_records(self, tournament_id: int) -> dict[str, dict[str, int]]:
+        """player_name → {wins, losses, draws, rounds}. Бай (opponent_name=None) считается победой."""
+        records: dict[str, dict[str, int]] = {}
+        for p in self.get_pairings(tournament_id):
+            rec = records.setdefault(p.player_name, {"wins": 0, "losses": 0, "draws": 0, "rounds": 0})
+            rec["rounds"] += 1
+            if p.opponent_name is None:
+                rec["wins"] += 1  # бай — победа
+            elif p.player_wins is None or p.opponent_wins is None:
+                continue  # счёт неизвестен (для завершённого турнира не встречается)
+            elif p.player_wins > p.opponent_wins:
+                rec["wins"] += 1
+            elif p.player_wins < p.opponent_wins:
+                rec["losses"] += 1
+            else:
+                rec["draws"] += 1
+        return records
+
+    def get_undefeated_players(self, tournament_id: int) -> list[UndefeatedPlayer]:
+        """Игроки без поражений (X-0): сыграли все раунды, выиграли все матчи, без поражений/ничьих.
+
+        Сортировка по финальному месту (если известно), затем по имени из парингов.
+        """
+        records = self._player_records(tournament_id)
+        if not records:
+            return []
+        total_rounds = max(self._existing_round_numbers(tournament_id))
+
+        players: list[UndefeatedPlayer] = []
+        for name, rec in records.items():
+            undefeated = (
+                rec["losses"] == 0
+                and rec["draws"] == 0
+                and rec["rounds"] == total_rounds
+                and rec["wins"] == total_rounds
+            )
+            if not undefeated:
+                continue
+            user = self.find_user_by_name(name)
+            archetype_name: str | None = None
+            final_place: int | None = None
+            first_name = last_name = None
+            if user is not None:
+                first_name, last_name = user.first_name, user.last_name
+                participant = self._get_participant(tournament_id, user.id)
+                if participant is not None:
+                    final_place = participant.final_place
+                    if participant.archetype is not None:
+                        archetype_name = participant.archetype.name
+            players.append(
+                UndefeatedPlayer(
+                    player_name=name,
+                    first_name=first_name,
+                    last_name=last_name,
+                    archetype_name=archetype_name,
+                    final_place=final_place,
+                    wins=rec["wins"],
+                )
+            )
+
+        players.sort(key=lambda u: (u.final_place if u.final_place is not None else 10**9, u.player_name.lower()))
+        return players
 
     def get_player_opponents(self, tournament_id: int, participant_id: int) -> tuple[list[OpponentInfo], str | None]:
         """Return (opponents, error_key).

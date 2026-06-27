@@ -218,6 +218,24 @@ def format_decks_revealed(title: str, total: int, with_deck: int, meta_rows: lis
     return "\n".join(lines)
 
 
+def format_meta_gather_completed(title: str, total: int, with_deck: int, undefeated: list) -> str:
+    """Анонс «сбор метагейма завершён»: турнир, счётчики, игроки без поражений и их колоды.
+
+    ``undefeated`` — список с атрибутами ``first_name``/``last_name``/``player_name``/
+    ``archetype_name``/``wins`` (services.aetherhub_import_service.UndefeatedPlayer),
+    отсортированный по финальному месту.
+    """
+    lines = [f"🎉 Сбор метагейма завершён — {title}", f"Участников: {total} ({with_deck} с колодой)"]
+    if undefeated:
+        lines.append("")
+        lines.append(f"Без поражений ({undefeated[0].wins}-0):")
+        for u in undefeated:
+            name = format_participant_name(u.first_name, u.last_name) or u.player_name
+            deck = u.archetype_name or "колода неизвестна"
+            lines.append(f"• {name} — {deck}")
+    return "\n".join(lines)
+
+
 def _match_noun(n: int) -> str:
     if 11 <= n % 100 <= 14:
         return "матчей"
