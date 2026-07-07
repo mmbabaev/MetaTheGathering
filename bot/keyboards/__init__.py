@@ -134,6 +134,23 @@ def participant_button_rows(
     return rows
 
 
+def opponent_button_rows(opponents: list) -> list[list[StatusButton]]:
+    """Чистая модель клавиатуры «Записать оппонентов» — по кнопке в ряд, с номером раунда.
+
+    ``opponents`` — список ``UnfilledOpponent`` (``.participant`` + ``.round_number``),
+    уже отсортированный по раунду. Показываем тур, чтобы игрок опознал оппонента «по порядку».
+    """
+    rows: list[list[StatusButton]] = []
+    for o in opponents:
+        p = o.participant
+        if p.user:
+            name = format_participant_name(p.user.first_name, p.user.last_name) or f"id{p.user.tg_id}"
+        else:
+            name = f"id{p.id}"
+        rows.append([StatusButton(f"Тур {o.round_number}: 📝 {name}", f"{CB_ADMIN_PICK_ARCH}:{p.id}")])
+    return rows
+
+
 def _status_rows_to_markup(rows: list[list[StatusButton]]) -> InlineKeyboardMarkup:
     """Telegram-адаптер: чистая модель рядов → InlineKeyboardMarkup."""
     return InlineKeyboardMarkup(
@@ -348,6 +365,10 @@ class Keyboards:
         return _status_rows_to_markup(
             participant_button_rows(participants, tournament_id, show_filled, pairs, unpaired)
         )
+
+    def opponents_keyboard(self, opponents: list) -> InlineKeyboardMarkup:
+        """Клавиатура «Записать оппонентов»: кнопки с номером раунда, по порядку раундов."""
+        return _status_rows_to_markup(opponent_button_rows(opponents))
 
     def admin_player_actions_keyboard(
         self,

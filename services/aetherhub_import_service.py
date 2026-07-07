@@ -29,6 +29,20 @@ class OpponentInfo:
     opponent_participant: models.Participant | None
 
 
+def _participant_sort_key(p) -> tuple[str, str]:
+    """Стабильный ключ сортировки участника по (фамилия, имя) в нижнем регистре."""
+    u = getattr(p, "user", None)
+    return ((u.last_name or "").lower(), (u.first_name or "").lower()) if u else ("", "")
+
+
+@dataclass
+class UnfilledOpponent:
+    """Оппонент игрока без записанной колоды + раунд, в котором игрок с ним встречался."""
+
+    participant: models.Participant
+    round_number: int
+
+
 @dataclass
 class UndefeatedPlayer:
     """Игрок, прошедший турнир без поражений (X-0). Имя/фамилия из User, если найден."""
@@ -61,8 +75,13 @@ class AetherhubImportService:
             return None
         return self._user_svc.find_by_name(full_name)
 
-    def get_unfilled_opponents(self, tournament_id: int, user_id: int, participants: list) -> tuple[list, str | None]:
-        """Return (unfilled_opponent_participants, error_key).
+    def get_unfilled_opponents(
+        self, tournament_id: int, user_id: int, participants: list
+    ) -> tuple[list[UnfilledOpponent], str | None]:
+        """Return (unfilled_opponents, error_key), sorted by the round they were played in.
+
+        Each item is an ``UnfilledOpponent`` (participant + ``round_number``) so the UI
+        can show «в каком туре» игрок встречался с оппонентом и разложить их по порядку.
 
         error_key is None on success, or one of:
           'no_pairings'     — no pairings imported for tournament
@@ -80,22 +99,33 @@ class AetherhubImportService:
         for name in all_names:
             name_to_user[name] = self.find_user_by_name(name)
 
-        opponent_names: set[str] = set()
+        # раунд, в котором наш игрок встречался с каждым оппонентом (по имени из пейрингов);
+        # при повторной встрече берём самый ранний раунд
+        opp_round_by_name: dict[str, int] = {}
         for p in pairings:
             u = name_to_user.get(p.player_name)
             if u and u.id == user_id and p.opponent_name:
-                opponent_names.add(p.opponent_name)
+                prev = opp_round_by_name.get(p.opponent_name)
+                if prev is None or p.round_number < prev:
+                    opp_round_by_name[p.opponent_name] = p.round_number
 
-        if not opponent_names:
+        if not opp_round_by_name:
             return [], "not_in_pairings"
 
-        opponent_user_ids: set[int] = set()
-        for opp_name in opponent_names:
+        opp_round_by_user: dict[int, int] = {}
+        for opp_name, rnd in opp_round_by_name.items():
             u = name_to_user.get(opp_name)
             if u:
-                opponent_user_ids.add(u.id)
+                prev = opp_round_by_user.get(u.id)
+                if prev is None or rnd < prev:
+                    opp_round_by_user[u.id] = rnd
 
-        result = [p for p in participants if p.archetype is None and p.user_id in opponent_user_ids]
+        result = [
+            UnfilledOpponent(participant=p, round_number=opp_round_by_user[p.user_id])
+            for p in participants
+            if p.archetype is None and p.user_id in opp_round_by_user
+        ]
+        result.sort(key=lambda o: (o.round_number, _participant_sort_key(o.participant)))
         return result, (None if result else "all_filled")
 
     def _get_or_create_user_by_name(self, full_name: str) -> tuple[models.User, bool]:
