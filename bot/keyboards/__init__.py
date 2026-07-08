@@ -147,7 +147,7 @@ def opponent_button_rows(opponents: list) -> list[list[StatusButton]]:
             name = format_participant_name(p.user.first_name, p.user.last_name) or f"id{p.user.tg_id}"
         else:
             name = f"id{p.id}"
-        rows.append([StatusButton(f"Тур {o.round_number}: 📝 {name}", f"{CB_ADMIN_PICK_ARCH}:{p.id}")])
+        rows.append([StatusButton(f"Раунд {o.round_number}: 📝 {name}", f"{CB_ADMIN_PICK_ARCH}:{p.id}")])
     return rows
 
 

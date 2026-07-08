@@ -460,7 +460,7 @@ class AdminHandler:
             return HandlerResult(_errors.get(err, err), is_alert=True)
 
         return HandlerResult(
-            "Выберите оппонента для записи колоды (по турам):",
+            "Выберите оппонента для записи колоды (по раундам):",
             keyboard=self.keyboards.opponents_keyboard(opponents),
         )
 

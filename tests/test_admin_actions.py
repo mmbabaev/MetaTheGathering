@@ -892,7 +892,7 @@ class TestHandleAdminOpponents:
         buttons = [b for row in result.keyboard.inline_keyboard for b in row]
         assert any(b.callback_data.startswith(CB_ADMIN_PICK_ARCH) for b in buttons)
         # opponent buttons now show the round they were played in
-        assert any(b.text.startswith("Тур 1:") and "Smith Bob" in b.text for b in buttons)
+        assert any(b.text.startswith("Раунд 1:") and "Smith Bob" in b.text for b in buttons)
 
     def test_all_filled_returns_alert(self, db, handler, svc, user_svc, arch_svc, admin_user, active_tournament):
         opp = user_svc.get_or_create(tg_id=8800, username=None, first_name="Bob", last_name="Smith")
