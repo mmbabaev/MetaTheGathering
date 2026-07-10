@@ -648,7 +648,30 @@ class TestGetUnfilledOpponents:
         result, err = import_svc.get_unfilled_opponents(tournament.id, player_a.id, participants)
         assert err is None
         assert len(result) == 1
-        assert result[0].user_id == player_b.id
+        assert result[0].participant.user_id == player_b.id
+        assert result[0].round_number == 1
+
+    def test_returns_opponents_sorted_by_round(self, import_svc, svc, tournament, db):
+        # PlayerA faces B in round 1 and C in round 2 → result ordered by round
+        data = _make_data(
+            players=["PlayerA", "PlayerB", "PlayerC"],
+            rounds_pairings=[
+                [("PlayerA", "PlayerB"), ("PlayerB", "PlayerA")],
+                [("PlayerA", "PlayerC"), ("PlayerC", "PlayerA")],
+            ],
+        )
+        import_svc.import_tournament(tournament.id, data)
+        user_svc = UserService(db)
+        player_a = user_svc.find_by_name("PlayerA")
+        player_b = user_svc.find_by_name("PlayerB")
+        player_c = user_svc.find_by_name("PlayerC")
+        participants = svc.list_participants_for_tournament(tournament.id)
+        result, err = import_svc.get_unfilled_opponents(tournament.id, player_a.id, participants)
+        assert err is None
+        assert [(o.round_number, o.participant.user_id) for o in result] == [
+            (1, player_b.id),
+            (2, player_c.id),
+        ]
 
 
 # ── TestImportTournamentValidation ───────────────────────────────────────────

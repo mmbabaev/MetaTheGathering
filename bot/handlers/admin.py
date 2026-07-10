@@ -447,7 +447,7 @@ class AdminHandler:
             return HandlerResult("Профиль не найден.", is_alert=True)
 
         participants = self.svc.list_participants_for_tournament(tournament_id)
-        opponent_participants, err = AetherhubImportService(self.svc.db).get_unfilled_opponents(
+        opponents, err = AetherhubImportService(self.svc.db).get_unfilled_opponents(
             tournament_id, user.id, participants
         )
 
@@ -460,8 +460,8 @@ class AdminHandler:
             return HandlerResult(_errors.get(err, err), is_alert=True)
 
         return HandlerResult(
-            "Выберите оппонента для записи колоды:",
-            keyboard=self.keyboards.admin_participants_keyboard(opponent_participants),
+            "Выберите оппонента для записи колоды (по раундам):",
+            keyboard=self.keyboards.opponents_keyboard(opponents),
         )
 
     def handle_archive(self, tg_id: int) -> HandlerResult:
