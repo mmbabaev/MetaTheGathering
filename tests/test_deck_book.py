@@ -73,13 +73,16 @@ class TestLookupDeck:
         assert lookup_deck(name).display == "Bogles"
         assert lookup_deck(name).colors == "GW"
 
-    def test_caw_gates_variants(self):
-        assert lookup_deck("Caw Gates") == lookup_deck("Caw-Gates")
-        assert lookup_deck("Caw Gates").colors == "WU"
+    @pytest.mark.parametrize("name", ["Gates", "Caw Gates", "Caw-Gates", "caw gates"])
+    def test_caw_gates_shown_as_plain_gates(self, name):
+        """Caw-Gates игрок просил показывать просто как «Gates»."""
+        assert lookup_deck(name).display == "Gates"
+        assert lookup_deck(name).colors == "WUG"
 
-    def test_bare_gates_is_not_caw_gates(self):
-        """«Gates» и «Caw-Gates» — разные колоды и разные цвета."""
-        assert lookup_deck("Gates") != lookup_deck("Caw-Gates")
+    @pytest.mark.parametrize("name", ["Naya gates", "Bant Gates", "Selesnya Gates"])
+    def test_named_gates_variants_keep_their_own_colors(self, name):
+        """У этих цвет написан в названии — их эвристика читает точнее справочника."""
+        assert lookup_deck(name) is None
 
     @pytest.mark.parametrize("name", ["Uzmen", "Blue Terror", "Grixis Affinity", "Совсем незнакомая колода"])
     def test_unknown_decks_are_absent(self, name):

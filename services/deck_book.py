@@ -90,8 +90,8 @@ DECK_BOOK = _book(
     ("Poison Storm", "UG", ()),
     ("Cycle Storm", "RG", ()),
     ("Ruby Storm", "R", ()),
-    ("Caw-Gates", "WU", ("Caw Gates",)),
-    ("Gates", "WUG", ()),
+    # Caw-Gates показываем просто как «Gates» — по просьбе игрока.
+    ("Gates", "WUG", ("Caw Gates", "Caw-Gates")),
     ("Rogue", "UB", ()),
     ("Gardens", "BG", ()),
     ("Turbo Fog", "WUG", ()),
