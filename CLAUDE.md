@@ -23,7 +23,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 >
 > - **Secrets live only in `bot/.env`** (gitignored) and in GitHub Actions secrets (`ENV_FILE`,
 >   `SSH_PRIVATE_KEY`). Code reads them via `core/config.py` (`Settings`), never inline.
-> - **New secret setting = empty default in `core/config.py`** (`YANDEX_API_KEY: str = ""`), plus a
+> - **New secret setting = empty default in `core/config.py`** (`MONIUM_API_KEY: str = ""`), plus a
 >   `<placeholder>` in docs. Never a real value, never a "sample" real-looking value.
 > - **Tests must use obviously fake values** — `"dummy-not-a-real-key"`, not `"key-123"` or anything
 >   that could be mistaken for a real credential on review.

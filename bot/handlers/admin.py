@@ -33,7 +33,6 @@ from services import errors
 from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeService
 from services.export import ExportService
-from services.meta_chart import ChartData, MetaChartService
 from services.meta_table_import import MetaTableImportService
 from services.poll import PollService
 from services.tournament import TournamentService
@@ -68,16 +67,12 @@ class AdminHandler:
         arch_svc: ArchetypeService,
         keyboards: Keyboards,
         features: FeatureService,
-        chart_svc: MetaChartService | None = None,
     ) -> None:
         self.svc = svc
         self.user_svc = user_svc
         self.arch_svc = arch_svc
         self.keyboards = keyboards
         self._features = features
-        # Инжектируемо, чтобы тесты не ходили в сеть: без шва MetaChartService поднимает
-        # реальный YandexLLM из глобального конфига.
-        self.chart_svc = chart_svc if chart_svc is not None else MetaChartService(svc.db)
 
     def _resolve_tournament(self):
         """Возвращает (tournament, error_result). Один из них None."""
@@ -566,19 +561,19 @@ class AdminHandler:
         except errors.TournamentNotFound:
             return None
 
-    def handle_meta_chart(self, tg_id: int, tournament_id: int) -> ChartData | None:
-        """Данные для «Метагейм-среза». None — нет прав, турнир не найден или ни одной колоды.
+    def can_build_meta_chart(self, tg_id: int, tournament_id: int) -> bool:
+        """Можно ли строить «Метагейм-срез»: есть права и турнир существует.
 
-        Возвращаем данные, а не готовый PNG: рисование — 180 мс чистого CPU, его уносят
-        в отдельный поток. Сессию БД туда тащить нельзя, поэтому вся работа с БД здесь.
+        Сам график собирает `bot.chart.build_chart` — там рисование уходит в отдельный
+        поток, и держать эту механику в чистом хендлере незачем.
         """
         if not self.user_svc.is_privileged(tg_id):
-            return None
+            return False
         try:
             get_tournament(self.svc.db, tournament_id)
         except errors.TournamentNotFound:
-            return None
-        return self.chart_svc.prepare(tournament_id)
+            return False
+        return True
 
     def handle_delete_tournament_prompt(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Показывает запрос подтверждения удаления турнира."""
