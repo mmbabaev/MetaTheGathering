@@ -51,21 +51,23 @@ _SHARDS_WEDGES = {
     "temur": "GUR",
 }
 
-_FOUR_COLOR = {
-    "yore-tiller": "WUBR",
-    "glint-eye": "UBRG",
-    "dune-brood": "BRGW",
-    "ink-treader": "RGWU",
-    "witch-maw": "GWUB",
-}
-
 # Однословные маркеры пяти цветов.
 _FIVE_COLOR = {"wubrg": "WUBRG", "5c": "WUBRG", "domain": "WUBRG"}
 
-_NAMED = {**_GUILDS, **_SHARDS_WEDGES, **_FOUR_COLOR, **_FIVE_COLOR}
+_NAMED = {**_GUILDS, **_SHARDS_WEDGES, **_FIVE_COLOR}
 
-# Многословные маркеры — ищем как подстроку в нормализованном имени.
-_NAMED_PHRASES = {"five color": "WUBRG", "5 color": "WUBRG"}
+# Многословные маркеры — ищем как подстроку в имени, разобранном на слова.
+# Четырёхцветные имена пишут через дефис («Yore-Tiller»), но токенизатор дефис срезает,
+# поэтому они живут здесь, а не в _NAMED — как двусловные фразы.
+_NAMED_PHRASES = {
+    "five color": "WUBRG",
+    "5 color": "WUBRG",
+    "yore tiller": "WUBR",
+    "glint eye": "UBRG",
+    "dune brood": "BRGW",
+    "ink treader": "RGWU",
+    "witch maw": "GWUB",
+}
 
 _COLOR_WORDS = {"white": "W", "blue": "U", "black": "B", "red": "R", "green": "G"}
 
@@ -89,7 +91,11 @@ _COLOR_EMOJI = {
     "💚": "G",
 }
 
-_COLORLESS_WORDS = {"affinity", "tron", "artifact", "artifacts", "colorless", "eldrazi"}
+# Слов-маркеров «бесцветности» (affinity/tron/artifact) здесь намеренно нет.
+# Они врут: «Flicker Tron» — синяя колода, «Grixis Affinity» — UBR, а голая «Affinity»
+# в Pauper обычно BR. Раньше такой маркер отдавал COLORLESS, resolve() кэшировал его
+# навсегда и до LLM дело уже не доходило. Теперь такие имена возвращают None и уходят
+# в LLM; без LLM они и так рисуются серыми — но серое не кэшируется и переопределится.
 
 # Цвет сектора по цветовой идентичности. Моно — канонические цвета MTG,
 # многоцветные — смесь в духе своих цветов, бесцветные — серый.
@@ -229,14 +235,7 @@ def parse_color_identity(name: str) -> Optional[str]:
     if from_emoji is not None:
         return from_emoji
 
-    from_words = _from_color_words(lowered)
-    if from_words is not None:
-        return from_words
-
-    if any(word in _COLORLESS_WORDS for word in lowered):
-        return COLORLESS
-
-    return None
+    return _from_color_words(lowered)
 
 
 class DeckColorResolver:
@@ -247,9 +246,27 @@ class DeckColorResolver:
         self.llm = llm if llm is not None else YandexLLM()
 
     def resolve(self, archetype: models.Archetype) -> str:
-        """Цветовая идентичность архетипа. Кэширует определённое значение в БД.
+        """Цветовая идентичность архетипа. Кэширует определённое значение в БД."""
+        colors = self._resolve_uncommitted(archetype)
+        if archetype.color_identity is not None:
+            self.db.commit()
+        return colors
 
-        Дефолт (ничего не определилось) НЕ кэшируем: оставляем NULL, чтобы архетип
+    def resolve_many(self, archetypes: Iterable[models.Archetype]) -> dict[int, str]:
+        """Цвета для набора архетипов: {archetype_id: color_identity}.
+
+        Коммитим один раз в конце, а не на каждый архетип: иначе один график —
+        это N транзакций, каждая из которых заодно фиксирует чужие несохранённые
+        изменения в той же сессии.
+        """
+        result = {a.id: self._resolve_uncommitted(a) for a in archetypes}
+        self.db.commit()
+        return result
+
+    def _resolve_uncommitted(self, archetype: models.Archetype) -> str:
+        """Определяет цвет и пишет его в объект, но не коммитит.
+
+        Дефолт (ничего не определилось) НЕ проставляем: оставляем NULL, чтобы архетип
         переопределился, когда появится LLM или ручной оверрайд.
         """
         if archetype.color_identity is not None:
@@ -266,12 +283,7 @@ class DeckColorResolver:
             return COLORLESS
 
         archetype.color_identity = colors
-        self.db.commit()
         return colors
-
-    def resolve_many(self, archetypes: Iterable[models.Archetype]) -> dict[int, str]:
-        """Цвета для набора архетипов: {archetype_id: color_identity}."""
-        return {a.id: self.resolve(a) for a in archetypes}
 
     def _ask_llm(self, name: str) -> Optional[str]:
         if not self.llm.enabled:
@@ -292,6 +304,15 @@ class DeckColorResolver:
         except (ValueError, AttributeError):
             logger.warning("[deck_colors] LLM вернула битый JSON для %r: %r", name, answer)
             return None
-        if isinstance(colors, str) and colors.strip().upper() == "C":
+        if not isinstance(colors, str):
+            logger.warning("[deck_colors] LLM вернула не-строку в colors для %r: %r", name, answer)
+            return None
+        colors = colors.strip().upper()
+        if colors == "C":
             return COLORLESS
-        return canon(colors) if isinstance(colors, str) else None
+        # Строгая проверка, а не canon(): canon просто выкидывает лишние буквы, поэтому
+        # «Rakdos» превратился бы в «R», а «Grixis» в «RG» — и осел бы в кэше навсегда.
+        if not colors or not all(c in WUBRG for c in colors):
+            logger.warning("[deck_colors] LLM вернула не цвета WUBRG для %r: %r", name, answer)
+            return None
+        return canon(colors)

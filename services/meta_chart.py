@@ -10,6 +10,7 @@ import io
 import math
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, Sequence
 
@@ -40,7 +41,11 @@ DONUT_CENTER = (589, 517)
 R_OUTER = 325
 R_INNER = 208
 SECTOR_GAP_DEG = 1.6
+# Зазор не может съесть больше этой доли сектора — иначе узкие секторы исчезают.
+MAX_GAP_SHARE = 0.5
 SUPERSAMPLE = 3
+
+SUBTITLE_Y = 130
 
 LEGEND_TOP = 940
 ROW_H = 96
@@ -51,6 +56,13 @@ FOOTER_GAP = 46
 
 TITLE = "Метагейм-срез"
 FOOTER = "Цвет сектора — цветовая идентичность колоды"
+
+# Клуб в подзаголовке — текстом: эмодзи (🦄/🐠) в DejaVu нет, вышли бы квадраты-тофу.
+CLUB_NAMES = {"edinorog": "Единорог", "goldfish": "Goldfish"}
+
+# Дату берём из названия турнира («Pauper 13.07.2026») — это дата самого турнира,
+# а created_at может отличаться (турнир заводят заранее или задним числом).
+_DATE_IN_TITLE_RE = re.compile(r"\b(\d{2}\.\d{2}\.\d{4})\b")
 
 
 @dataclass
@@ -86,6 +98,14 @@ def display_name(name: str) -> str:
     """Название колоды для легенды: без эмодзи и лишних пробелов."""
     cleaned = re.sub(r"\s+", " ", _PICTOGRAPHS_RE.sub("", name)).strip()
     return cleaned or name.strip()
+
+
+def build_subtitle(club: Optional[str], title: str, fallback_date: Optional[datetime] = None) -> str:
+    """Подзаголовок графика: «Единорог · 13.07.2026». Пустая строка — если нечего показать."""
+    match = _DATE_IN_TITLE_RE.search(title or "")
+    date = match.group(1) if match else (fallback_date.strftime("%d.%m.%Y") if fallback_date else None)
+    club_name = CLUB_NAMES.get((club or "").strip().lower()) or (club or "").strip() or None
+    return " · ".join(part for part in (club_name, date) if part)
 
 
 def plural_decks(n: int) -> str:
@@ -127,10 +147,11 @@ def _draw_donut(img: Image.Image, sectors: Sequence[ChartSector]) -> None:
     angle = -90.0
     for sector in sectors:
         span = 360.0 * sector.count / total
-        start = angle + SECTOR_GAP_DEG / 2
-        end = angle + span - SECTOR_GAP_DEG / 2
-        if end > start:
-            draw.pieslice(outer_box, start, end, fill=sector.color)
+        # Зазор сужаем под узкий сектор: фиксированные 1.6° съедали сектор целиком,
+        # если его доля меньше зазора (одиночная колода на турнире 225+), — в легенде
+        # строка есть, а в бублике дыра.
+        gap = min(SECTOR_GAP_DEG, span * MAX_GAP_SHARE)
+        draw.pieslice(outer_box, angle + gap / 2, angle + span - gap / 2, fill=sector.color)
         angle += span
 
     # Дырка: прозрачность вместо цвета фона — иначе на градиенте будет видно пятно.
@@ -206,7 +227,7 @@ def _ellipsize(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFon
     return text.rstrip() + "…"
 
 
-def render_sectors(sectors: Sequence[ChartSector]) -> bytes:
+def render_sectors(sectors: Sequence[ChartSector], subtitle: str = "") -> bytes:
     """Собирает PNG из готовых секторов (без БД)."""
     rows_count = math.ceil(len(sectors) / 2)
     height = LEGEND_TOP + rows_count * ROW_H + FOOTER_GAP + 60
@@ -214,6 +235,8 @@ def render_sectors(sectors: Sequence[ChartSector]) -> bytes:
     draw = ImageDraw.Draw(img)
 
     draw.text((WIDTH // 2, 18), TITLE, font=_font("DejaVuSerif-Bold.ttf", 78), fill=CREAM, anchor="ma")
+    if subtitle:
+        _draw_tracked(draw, subtitle, WIDTH // 2, SUBTITLE_Y, _font("DejaVuSans.ttf", 30), GREY, 3)
     _draw_donut(img, sectors)
     _draw_center_text(draw, sum(s.count for s in sectors))
     bottom = _draw_legend(draw, sectors)
@@ -243,19 +266,24 @@ class MetaChartService:
         if not rows:
             return []
         archetypes = self._archetypes_by_id([r.archetype_id for r in rows])
-        sectors = []
-        for row in rows:
-            archetype = archetypes.get(row.archetype_id)
-            identity = self.colors.resolve(archetype) if archetype else None
-            sectors.append(ChartSector(name=row.archetype_name, count=row.count, color=hex_for(identity)))
-        return sectors
+        identities = self.colors.resolve_many(archetypes.values())
+        return [
+            ChartSector(
+                name=row.archetype_name,
+                count=row.count,
+                color=hex_for(identities.get(row.archetype_id)),
+            )
+            for row in rows
+        ]
 
     def render(self, tournament_id: int) -> Optional[tuple[bytes, str]]:
         """PNG со срезом метагейма. None — в турнире ещё нет ни одной колоды."""
         sectors = self.build_sectors(tournament_id)
         if not sectors:
             return None
-        return render_sectors(sectors), f"meta_chart_{tournament_id}.png"
+        tournament = self.db.get(models.Tournament, tournament_id)
+        subtitle = build_subtitle(tournament.club, tournament.title, tournament.created_at) if tournament else ""
+        return render_sectors(sectors, subtitle), f"meta_chart_{tournament_id}.png"
 
     def _archetypes_by_id(self, ids: list[int]) -> dict[int, models.Archetype]:
         found = self.db.query(models.Archetype).filter(models.Archetype.id.in_(ids)).all()

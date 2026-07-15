@@ -1,6 +1,6 @@
 """Tests for admin handler business logic (AdminHandler methods)."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy import select
@@ -45,7 +45,9 @@ from core.schemas import TournamentCreate
 from services import errors
 from services.aetherhub_import_service import AetherhubImportService
 from services.aetherhub_models import AetherhubPairing, AetherhubRound, AetherhubTournamentData
+from services.deck_colors import DeckColorResolver
 from services.feature_flags import FeatureFlags
+from services.meta_chart import MetaChartService
 
 ADMIN_TG_ID = 9999
 CHAT_ID = 100
@@ -78,8 +80,10 @@ def active_tournament(svc):
 
 
 @pytest.fixture
-def handler(svc, user_svc, arch_svc, keyboards, features):
-    return AdminHandler(svc, user_svc, arch_svc, keyboards, features)
+def handler(svc, user_svc, arch_svc, keyboards, features, db):
+    # Явно выключенный LLM: иначе на машине с YANDEX_API_KEY тест графика полез бы в сеть.
+    chart_svc = MetaChartService(db, colors=DeckColorResolver(db, llm=MagicMock(enabled=False)))
+    return AdminHandler(svc, user_svc, arch_svc, keyboards, features, chart_svc=chart_svc)
 
 
 # --- handle_add_players ---

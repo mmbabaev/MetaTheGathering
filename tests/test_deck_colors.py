@@ -66,9 +66,10 @@ class TestParseColorIdentity:
             # пять цветов
             ("5c Domain", "WUBRG"),
             ("Five Color Ramp", "WUBRG"),
-            # бесцветные
-            ("Affinity", COLORLESS),
-            ("Tron", COLORLESS),
+            # четыре цвета — пишутся через дефис, а токенизатор дефис срезает
+            ("Yore-Tiller Aggro", "WUBR"),
+            ("Glint-Eye Control", "UBRG"),
+            ("Witch-Maw", "WUBG"),
         ],
     )
     def test_parses_known_names(self, name, expected):
@@ -76,6 +77,11 @@ class TestParseColorIdentity:
 
     @pytest.mark.parametrize("name", ["Gates", "Spy Combo", "Familiars", ""])
     def test_returns_none_for_unparseable(self, name):
+        assert parse_color_identity(name) is None
+
+    @pytest.mark.parametrize("name", ["Flicker Tron", "Affinity", "Altar Tron"])
+    def test_artifact_names_are_not_forced_colorless(self, name):
+        """«Flicker Tron» — синяя колода. Маркер «tron» врёт, поэтому решает LLM, а не он."""
         assert parse_color_identity(name) is None
 
     @pytest.mark.parametrize("name", ["grub deck", "Grub deck"])
@@ -198,7 +204,27 @@ class TestDeckColorResolver:
 
         assert DeckColorResolver(db, llm=llm).resolve(archetype) == "UG"
 
-    @pytest.mark.parametrize("answer", ["не знаю", "{битый json", '{"colors":123}', ""])
+    def test_artifact_name_reaches_llm(self, db):
+        """Раньше маркер «tron» кэшировал «Flicker Tron» серым навсегда, мимо LLM."""
+        archetype = ArchetypeService(db).get_or_create_by_name("Flicker Tron")
+        llm = MagicMock()
+        llm.enabled = True
+        llm.complete.return_value = '{"colors":"U"}'
+
+        assert DeckColorResolver(db, llm=llm).resolve(archetype) == "U"
+        llm.complete.assert_called_once()
+
+    @pytest.mark.parametrize(
+        "answer",
+        [
+            "не знаю",
+            "{битый json",
+            '{"colors":123}',
+            "",
+            '{"colors":"Rakdos"}',  # не буквы WUBRG — canon() вытащил бы «R» и закэшировал
+            '{"colors":"Grixis"}',  # canon() вытащил бы «RG» вместо верного UBR
+        ],
+    )
     def test_bad_llm_answer_falls_back_to_colorless_without_caching(self, db, answer):
         archetype = ArchetypeService(db).get_or_create_by_name("Gates")
         llm = MagicMock()

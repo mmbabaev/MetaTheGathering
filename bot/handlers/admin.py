@@ -68,12 +68,16 @@ class AdminHandler:
         arch_svc: ArchetypeService,
         keyboards: Keyboards,
         features: FeatureService,
+        chart_svc: MetaChartService | None = None,
     ) -> None:
         self.svc = svc
         self.user_svc = user_svc
         self.arch_svc = arch_svc
         self.keyboards = keyboards
         self._features = features
+        # Инжектируемо, чтобы тесты не ходили в сеть: без шва MetaChartService поднимает
+        # реальный YandexLLM из глобального конфига.
+        self.chart_svc = chart_svc if chart_svc is not None else MetaChartService(svc.db)
 
     def _resolve_tournament(self):
         """Возвращает (tournament, error_result). Один из них None."""
@@ -570,7 +574,7 @@ class AdminHandler:
             get_tournament(self.svc.db, tournament_id)
         except errors.TournamentNotFound:
             return None
-        return MetaChartService(self.svc.db).render(tournament_id)
+        return self.chart_svc.render(tournament_id)
 
     def handle_delete_tournament_prompt(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Показывает запрос подтверждения удаления турнира."""

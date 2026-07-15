@@ -1,14 +1,23 @@
 """Tests for the metagame donut chart (services/meta_chart.py)."""
 
 import io
-from unittest.mock import MagicMock
+from datetime import datetime
+from unittest.mock import MagicMock, patch
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from services.archetype import ArchetypeService
 from services.deck_colors import PALETTE, DeckColorResolver
-from services.meta_chart import WIDTH, ChartSector, MetaChartService, display_name, plural_decks, render_sectors
+from services.meta_chart import (
+    WIDTH,
+    ChartSector,
+    MetaChartService,
+    build_subtitle,
+    display_name,
+    plural_decks,
+    render_sectors,
+)
 
 
 @pytest.fixture
@@ -71,6 +80,30 @@ class TestDisplayName:
         assert display_name("🔴🔵") == "🔴🔵"
 
 
+class TestBuildSubtitle:
+    @pytest.mark.parametrize(
+        "club,title,expected",
+        [
+            ("Edinorog", "🦄 Edinorog Pauper 13.07.2026", "Единорог · 13.07.2026"),
+            ("Goldfish", "🐠 Goldfish Pauper 02.07.2026", "Goldfish · 02.07.2026"),
+            ("edinorog", "Pauper 13.07.2026", "Единорог · 13.07.2026"),  # регистр клуба не важен
+            (None, "Pauper 13.07.2026", "13.07.2026"),  # клуба нет — только дата
+            ("Goldfish", "Pauper", "Goldfish"),  # даты нет — только клуб
+            (None, "Pauper", ""),  # нечего показать
+            ("Kara", "Pauper 01.01.2026", "Kara · 01.01.2026"),  # незнакомый клуб — как есть
+        ],
+    )
+    def test_subtitle(self, club, title, expected):
+        assert build_subtitle(club, title) == expected
+
+    def test_date_from_title_wins_over_created_at(self):
+        """В названии — дата турнира; created_at может отличаться (завели заранее)."""
+        assert build_subtitle(None, "Pauper 13.07.2026", datetime(2026, 1, 1)) == "13.07.2026"
+
+    def test_falls_back_to_created_at(self):
+        assert build_subtitle("Goldfish", "Pauper", datetime(2026, 7, 2)) == "Goldfish · 02.07.2026"
+
+
 class TestBuildSectors:
     def test_groups_by_archetype_sorted_by_count(self, chart_svc, svc, user_svc, arch_svc, tournament):
         for tg_id in (1, 2, 3):
@@ -117,6 +150,22 @@ class TestRender:
 
     def test_single_sector_renders(self):
         assert render_sectors([ChartSector("Solo", 1, "#3B7DD8")])
+
+    def test_tiny_sector_is_still_drawn(self):
+        """Одна колода на 250: сектор уже́ зазора — раньше он молча пропадал из бублика,
+        оставаясь строкой в легенде."""
+        drawn = []
+        original = ImageDraw.ImageDraw.pieslice
+
+        def spy(self, box, start, end, **kwargs):
+            drawn.append((start, end))
+            return original(self, box, start, end, **kwargs)
+
+        with patch.object(ImageDraw.ImageDraw, "pieslice", spy):
+            render_sectors([ChartSector("Big", 249, "#FF0000"), ChartSector("Lonely", 1, "#00FF00")])
+
+        assert len(drawn) == 2
+        assert all(end > start for start, end in drawn)
 
     def test_long_deck_name_does_not_crash(self):
         assert render_sectors([ChartSector("Очень длинное название колоды " * 5, 1, "#3B7DD8")])

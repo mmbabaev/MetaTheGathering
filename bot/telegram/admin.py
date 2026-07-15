@@ -1,5 +1,6 @@
 # Telegram-обёртки для admin-хендлеров
 
+import asyncio
 import html
 import io
 import logging
@@ -407,18 +408,23 @@ async def callback_meta_chart(update: Update, context: ContextTypes.DEFAULT_TYPE
     if ids is None:
         return
     (tournament_id,) = ids
-    await query.answer("Рисую график…")
     db = SessionLocal()
     try:
-        chart = _admin_handler(db).handle_meta_chart(user.id, tournament_id)
+        # to_thread: рендер и (опциональный) поход в LLM — синхронные и небыстрые;
+        # вызов их прямо в колбэке заморозил бы event loop всему боту.
+        chart = await asyncio.to_thread(_admin_handler(db).handle_meta_chart, user.id, tournament_id)
         if chart is None:
+            # Отвечаем только здесь алертом — если ответить выше («Рисую график…»),
+            # этот алерт не покажется: повторный answer игнорится (см. #123).
             await query.answer("Нет прав, турнир не найден или ещё нет колод.", show_alert=True)
             return
+        await query.answer()
         data, filename = chart
-        # Только в чат инициатора — никаких рассылок.
-        await context.bot.send_photo(
+        # send_document, а не send_photo: Telegram ужимает фото до 1280px и пережимает
+        # в JPEG — подписи колод в легенде превращаются в кашу. Только в чат инициатора.
+        await context.bot.send_document(
             chat_id=query.message.chat_id,
-            photo=io.BytesIO(data),
+            document=io.BytesIO(data),
             filename=filename,
         )
         _log("meta_chart", user, tournament_id=tournament_id)
