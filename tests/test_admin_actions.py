@@ -47,7 +47,7 @@ from services.aetherhub_import_service import AetherhubImportService
 from services.aetherhub_models import AetherhubPairing, AetherhubRound, AetherhubTournamentData
 from services.deck_colors import DeckColorResolver
 from services.feature_flags import FeatureFlags
-from services.meta_chart import MetaChartService
+from services.meta_chart import MetaChartService, render_sectors
 
 ADMIN_TG_ID = 9999
 CHAT_ID = 100
@@ -1681,7 +1681,7 @@ class TestHandleMetaChart:
         result = handler.handle_meta_chart(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
         assert result is None
 
-    def test_admin_gets_png(self, handler, admin_user, active_tournament, svc, user_alice, archetype_burn):
+    def test_admin_gets_chart_data(self, handler, admin_user, active_tournament, svc, user_alice, archetype_burn):
         svc.register_participant(
             tournament_id=active_tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id
         )
@@ -1689,9 +1689,10 @@ class TestHandleMetaChart:
         result = handler.handle_meta_chart(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
 
         assert result is not None
-        data, filename = result
-        assert data.startswith(b"\x89PNG")
-        assert filename == f"meta_chart_{active_tournament.id}.png"
+        assert result.filename == f"meta_chart_{active_tournament.id}.png"
+        assert [(s.name, s.count) for s in result.sectors] == [("Burn", 1)]
+        # PNG рисуется уже вне хендлера — в отдельном потоке
+        assert render_sectors(result.sectors, result.subtitle).startswith(b"\x89PNG")
 
 
 # ── handle_schedule ───────────────────────────────────────────────────────────

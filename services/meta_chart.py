@@ -75,6 +75,15 @@ class ChartSector:
     color: str  # hex
 
 
+@dataclass(frozen=True)
+class ChartData:
+    """Данные для рисования — всё уже вынуто из БД."""
+
+    sectors: list[ChartSector]
+    subtitle: str
+    filename: str
+
+
 def _font(filename: str, size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.truetype(str(_FONT_DIR / filename), size)
 
@@ -270,14 +279,26 @@ class MetaChartService:
             return normalize_deck_name(known.display), known.display
         return normalize_deck_name(archetype_name), strip_pictographs(archetype_name)
 
-    def render(self, tournament_id: int) -> Optional[tuple[bytes, str]]:
-        """PNG со срезом метагейма. None — в турнире ещё нет ни одной колоды."""
+    def prepare(self, tournament_id: int) -> Optional[ChartData]:
+        """Всё, что нужно для рисования, одним походом в БД. None — колод ещё нет.
+
+        Отделено от `render_sectors`, чтобы работу с БД можно было оставить в вызывающем
+        потоке, а в `asyncio.to_thread` уносить только рисование: сессия SQLAlchemy не
+        предназначена для переезда между потоками.
+        """
         sectors = self.build_sectors(tournament_id)
         if not sectors:
             return None
         tournament = self.db.get(models.Tournament, tournament_id)
         subtitle = build_subtitle(tournament.club, tournament.title, tournament.created_at) if tournament else ""
-        return render_sectors(sectors, subtitle), f"meta_chart_{tournament_id}.png"
+        return ChartData(sectors=sectors, subtitle=subtitle, filename=f"meta_chart_{tournament_id}.png")
+
+    def render(self, tournament_id: int) -> Optional[tuple[bytes, str]]:
+        """PNG со срезом метагейма. None — в турнире ещё нет ни одной колоды."""
+        data = self.prepare(tournament_id)
+        if data is None:
+            return None
+        return render_sectors(data.sectors, data.subtitle), data.filename
 
     def _archetypes_by_id(self, ids: list[int]) -> dict[int, models.Archetype]:
         found = self.db.query(models.Archetype).filter(models.Archetype.id.in_(ids)).all()
