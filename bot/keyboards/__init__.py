@@ -27,6 +27,7 @@ CB_ADMIN_SET_ARCH = "adm_set"  # adm_set:{participant_id}:{archetype_id}
 CB_ADMIN_CUSTOM_ARCH = "adm_custom"  # adm_custom:{participant_id}
 CB_ADMIN_ARCH_MORE = "adm_arch_more"  # adm_arch_more:{participant_id}
 CB_EXPORT_EXCEL = "export_excel"  # export_excel:{tournament_id}
+CB_META_CHART = "meta_chart"  # meta_chart:{tournament_id}
 CB_EXPORT_MENU = "export_menu"  # export_menu:{tournament_id}
 CB_EXPORT_PLAYERS = "export_players"  # export_players:{tournament_id}
 CB_DELETE_TOURNAMENT = "del_t"  # del_t:{tournament_id}
@@ -218,6 +219,7 @@ class Keyboards:
         return InlineKeyboardMarkup(
             [
                 [InlineKeyboardButton("📊 Meta (Excel)", callback_data=f"{CB_EXPORT_EXCEL}:{tournament_id}")],
+                [InlineKeyboardButton("🍩 График метагейма", callback_data=f"{CB_META_CHART}:{tournament_id}")],
                 [InlineKeyboardButton("👥 Список игроков", callback_data=f"{CB_EXPORT_PLAYERS}:{tournament_id}")],
                 [InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_TOURNAMENT}:{tournament_id}")],
             ]

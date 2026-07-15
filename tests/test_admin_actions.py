@@ -1664,6 +1664,32 @@ class TestHandleExportEdgeCases:
         assert result is None
 
 
+class TestHandleMetaChart:
+    def test_not_privileged_returns_none(self, handler, user_alice, active_tournament):
+        result = handler.handle_meta_chart(tg_id=user_alice.tg_id, tournament_id=active_tournament.id)
+        assert result is None
+
+    def test_tournament_not_found_returns_none(self, handler, admin_user):
+        result = handler.handle_meta_chart(tg_id=ADMIN_TG_ID, tournament_id=99999)
+        assert result is None
+
+    def test_no_decks_returns_none(self, handler, admin_user, active_tournament):
+        result = handler.handle_meta_chart(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+        assert result is None
+
+    def test_admin_gets_png(self, handler, admin_user, active_tournament, svc, user_alice, archetype_burn):
+        svc.register_participant(
+            tournament_id=active_tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id
+        )
+
+        result = handler.handle_meta_chart(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+
+        assert result is not None
+        data, filename = result
+        assert data.startswith(b"\x89PNG")
+        assert filename == f"meta_chart_{active_tournament.id}.png"
+
+
 # ── handle_schedule ───────────────────────────────────────────────────────────
 
 

@@ -53,6 +53,7 @@ from bot.keyboards import (
     CB_LEAVE_CANCEL,
     CB_LEAVE_CONFIRM,
     CB_LINK_POLL_BY_URL,
+    CB_META_CHART,
     CB_NOTIFY_CANCEL,
     CB_NOTIFY_CONFIRM,
     CB_NOTIFY_NO_DECK,
@@ -260,6 +261,7 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(admin.callback_export_menu, pattern=f"^{CB_EXPORT_MENU}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_export_players, pattern=f"^{CB_EXPORT_PLAYERS}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_export_excel, pattern=f"^{CB_EXPORT_EXCEL}:"))
+    app.add_handler(CallbackQueryHandler(admin.callback_meta_chart, pattern=f"^{CB_META_CHART}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_delete_tournament_prompt, pattern=f"^{CB_DELETE_TOURNAMENT}:"))
     app.add_handler(
         CallbackQueryHandler(admin.callback_delete_tournament_confirm, pattern=f"^{CB_DELETE_TOURNAMENT_CONFIRM}:")

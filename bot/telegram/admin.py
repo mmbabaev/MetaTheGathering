@@ -397,6 +397,35 @@ async def callback_export_excel(update: Update, context: ContextTypes.DEFAULT_TY
         db.close()
 
 
+async def callback_meta_chart(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка «🍩 График метагейма» — отправляет PNG со срезом метагейма."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+    await query.answer("Рисую график…")
+    db = SessionLocal()
+    try:
+        chart = _admin_handler(db).handle_meta_chart(user.id, tournament_id)
+        if chart is None:
+            await query.answer("Нет прав, турнир не найден или ещё нет колод.", show_alert=True)
+            return
+        data, filename = chart
+        # Только в чат инициатора — никаких рассылок.
+        await context.bot.send_photo(
+            chat_id=query.message.chat_id,
+            photo=io.BytesIO(data),
+            filename=filename,
+        )
+        _log("meta_chart", user, tournament_id=tournament_id)
+    finally:
+        db.close()
+
+
 async def callback_delete_tournament_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Кнопка «🗑 Удалить турнир» — показывает запрос подтверждения."""
     query = update.callback_query
