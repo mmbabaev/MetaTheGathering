@@ -5,9 +5,11 @@ Completion is detected from imported pairings: when every non-bye match has a sc
 and announce, once, to the owner DM — listing the undefeated (X-0) players and their decks.
 """
 
+import threading
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
+from bot import scheduler
 from bot.messages import format_meta_gather_completed
 from bot.scheduler import maybe_announce_meta_gather_completed
 from core import models
@@ -176,6 +178,38 @@ async def test_announces_to_owner_once(db, user_svc, arch_svc, monkeypatch):
     # idempotent — a second import must not re-announce
     await maybe_announce_meta_gather_completed(bot, db, t.id)
     bot.send_document.assert_awaited_once()
+
+
+async def test_chart_is_rendered_off_the_event_loop_without_db(db, user_svc, arch_svc, monkeypatch):
+    """Регрессия: раньше в поток уезжала вся render() вместе с сессией БД.
+
+    Сессия SQLAlchemy для этого не предназначена — на SQLite поток открывал новую пустую
+    базу. Теперь в потоке крутится только render_sectors(), которому БД не нужна.
+    """
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    t = _complete_tournament(db, user_svc, arch_svc)
+    main_thread = threading.get_ident()
+    seen = {}
+
+    real_prepare = scheduler.MetaChartService.prepare
+    real_render = scheduler.render_sectors
+
+    def spy_prepare(self, tournament_id):
+        seen["prepare_thread"] = threading.get_ident()
+        return real_prepare(self, tournament_id)
+
+    def spy_render(sectors, subtitle=""):
+        seen["render_thread"] = threading.get_ident()
+        return real_render(sectors, subtitle)
+
+    monkeypatch.setattr(scheduler.MetaChartService, "prepare", spy_prepare)
+    monkeypatch.setattr(scheduler, "render_sectors", spy_render)
+    await maybe_announce_meta_gather_completed(AsyncMock(), db, t.id)
+
+    # Работа с БД — в основном потоке: сессию SQLAlchemy в поток отдавать нельзя.
+    assert seen["prepare_thread"] == main_thread
+    # А ~180 мс рисования — в отдельном, иначе event loop встал бы всему боту.
+    assert seen["render_thread"] != main_thread
 
 
 async def test_announce_falls_back_to_text_when_chart_fails(db, user_svc, arch_svc, monkeypatch):
