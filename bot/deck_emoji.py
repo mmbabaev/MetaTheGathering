@@ -1,5 +1,7 @@
 # Эмодзи для архетипов колод.
-# Ключи — точные названия из базы (регистр важен).
+# Поиск не зависит от регистра и лишних пробелов: игроки вводят названия руками, и в базе
+# рядом живут «Jeskai Ephemerate» и «Jeskai ephemerate», «Rakdos Madness» и «Rakdos madness».
+# Ключи ниже пишем в читаемом виде — регистр в них не важен.
 # Для неизвестных колод возвращается пустая строка.
 
 _DECK_EMOJI: dict[str, str] = {
@@ -62,18 +64,33 @@ _DECK_EMOJI: dict[str, str] = {
     "UR Skred": "🔴🔵🐍",
     "Red Skred": "🔴🧊",
     "Skred": "🔴🧊",
+    # ── Jeskai ───────────────────────────────────────────────────────────
+    "Jeskai Ephemerate": "🦁💧🔥",  # лев, вода, огонь — цвета клина (W/U/R)
 }
+
+
+def _key(deck_name: str) -> str:
+    """Ключ поиска: без регистра и обрамляющих пробелов."""
+    return deck_name.strip().lower()
+
+
+# Индекс для поиска. Собирается один раз; ключи, различающиеся только регистром,
+# схлопнулись бы молча, поэтому их запрещает тест.
+_BY_KEY: dict[str, str] = {_key(name): emoji for name, emoji in _DECK_EMOJI.items()}
 
 
 class DeckEmojiService:
     """Возвращает эмодзи для названия архетипа."""
 
     def get(self, deck_name: str) -> str:
-        """Точное совпадение → эмодзи. Иначе пустая строка."""
-        return _DECK_EMOJI.get(deck_name, "")
+        """Совпадение без учёта регистра → эмодзи. Иначе пустая строка."""
+        return _BY_KEY.get(_key(deck_name), "")
 
     def format(self, deck_name: str) -> str:
-        """'Red Kuldotha' → '🔴👺 Red Kuldotha', неизвестная → 'Unknown Deck'."""
+        """'Red Kuldotha' → '🔴👺 Red Kuldotha', неизвестная → 'Unknown Deck'.
+
+        Имя возвращаем как прислали: в кнопке должно стоять то, что ввёл игрок.
+        """
         emoji = self.get(deck_name)
         if emoji:
             return f"{emoji} {deck_name}"
