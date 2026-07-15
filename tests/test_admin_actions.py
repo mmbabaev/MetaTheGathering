@@ -80,10 +80,8 @@ def active_tournament(svc):
 
 
 @pytest.fixture
-def handler(svc, user_svc, arch_svc, keyboards, features, db):
-    # Явно выключенный LLM: иначе на машине с YANDEX_API_KEY тест графика полез бы в сеть.
-    chart_svc = MetaChartService(db, colors=DeckColorResolver(db, llm=MagicMock(enabled=False)))
-    return AdminHandler(svc, user_svc, arch_svc, keyboards, features, chart_svc=chart_svc)
+def handler(svc, user_svc, arch_svc, keyboards, features):
+    return AdminHandler(svc, user_svc, arch_svc, keyboards, features)
 
 
 # --- handle_add_players ---
@@ -1668,31 +1666,15 @@ class TestHandleExportEdgeCases:
         assert result is None
 
 
-class TestHandleMetaChart:
-    def test_not_privileged_returns_none(self, handler, user_alice, active_tournament):
-        result = handler.handle_meta_chart(tg_id=user_alice.tg_id, tournament_id=active_tournament.id)
-        assert result is None
+class TestCanBuildMetaChart:
+    def test_not_privileged(self, handler, user_alice, active_tournament):
+        assert handler.can_build_meta_chart(tg_id=user_alice.tg_id, tournament_id=active_tournament.id) is False
 
-    def test_tournament_not_found_returns_none(self, handler, admin_user):
-        result = handler.handle_meta_chart(tg_id=ADMIN_TG_ID, tournament_id=99999)
-        assert result is None
+    def test_tournament_not_found(self, handler, admin_user):
+        assert handler.can_build_meta_chart(tg_id=ADMIN_TG_ID, tournament_id=99999) is False
 
-    def test_no_decks_returns_none(self, handler, admin_user, active_tournament):
-        result = handler.handle_meta_chart(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
-        assert result is None
-
-    def test_admin_gets_chart_data(self, handler, admin_user, active_tournament, svc, user_alice, archetype_burn):
-        svc.register_participant(
-            tournament_id=active_tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id
-        )
-
-        result = handler.handle_meta_chart(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
-
-        assert result is not None
-        assert result.filename == f"meta_chart_{active_tournament.id}.png"
-        assert [(s.name, s.count) for s in result.sectors] == [("Burn", 1)]
-        # PNG рисуется уже вне хендлера — в отдельном потоке
-        assert render_sectors(result.sectors, result.subtitle).startswith(b"\x89PNG")
+    def test_admin_may(self, handler, admin_user, active_tournament):
+        assert handler.can_build_meta_chart(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id) is True
 
 
 # ── handle_schedule ───────────────────────────────────────────────────────────

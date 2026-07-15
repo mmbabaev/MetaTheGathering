@@ -2,14 +2,15 @@
 
 import io
 from datetime import datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from PIL import Image, ImageDraw
 
+from core import models as m
 from services.archetype import ArchetypeService
 from services.deck_book import strip_pictographs
-from services.deck_colors import PALETTE, DeckColorResolver
+from services.deck_colors import PALETTE
 from services.meta_chart import (
     WIDTH,
     ChartSector,
@@ -21,15 +22,8 @@ from services.meta_chart import (
 
 
 @pytest.fixture
-def disabled_llm():
-    llm = MagicMock()
-    llm.enabled = False
-    return llm
-
-
-@pytest.fixture
-def chart_svc(db, disabled_llm):
-    return MetaChartService(db, colors=DeckColorResolver(db, llm=disabled_llm))
+def chart_svc(db):
+    return MetaChartService(db)
 
 
 def _register(svc, user_svc, arch_svc, tournament, tg_id, deck_name):
@@ -151,6 +145,47 @@ class TestBuildSectors:
 
     def test_empty_tournament_has_no_sectors(self, chart_svc, tournament):
         assert chart_svc.build_sectors(tournament.id) == []
+
+
+class TestPrepare:
+    """`prepare()` отделён от рисования, чтобы в поток уходил только CPU, без сессии БД."""
+
+    def test_returns_sectors_subtitle_and_filename(self, chart_svc, svc, user_svc, arch_svc, db, tournament):
+        db.get(m.Tournament, tournament.id).club = "Edinorog"
+        db.get(m.Tournament, tournament.id).title = "Pauper 13.07.2026"
+        db.commit()
+        _register(svc, user_svc, arch_svc, tournament, 1, "Blue Terror")
+
+        data = chart_svc.prepare(tournament.id)
+
+        assert [(s.name, s.count) for s in data.sectors] == [("Blue Terror", 1)]
+        assert data.subtitle == "Единорог · 13.07.2026"
+        assert data.filename == f"meta_chart_{tournament.id}.png"
+
+    def test_returns_none_without_decks(self, chart_svc, tournament):
+        assert chart_svc.prepare(tournament.id) is None
+
+    def test_data_renders_after_db_is_closed(self, chart_svc, svc, user_svc, arch_svc, db, tournament):
+        """Главный инвариант: рисованию БД не нужна.
+
+        Рисование уходит в asyncio.to_thread, а сессию SQLAlchemy туда передавать нельзя —
+        раньше в поток уезжала вся `render()` вместе с сессией.
+        """
+        _register(svc, user_svc, arch_svc, tournament, 1, "Blue Terror")
+        data = chart_svc.prepare(tournament.id)
+
+        db.close()
+
+        assert render_sectors(data.sectors, data.subtitle).startswith(b"\x89PNG")
+
+    def test_render_equals_prepare_plus_render_sectors(self, chart_svc, svc, user_svc, arch_svc, tournament):
+        _register(svc, user_svc, arch_svc, tournament, 1, "Blue Terror")
+
+        data = chart_svc.prepare(tournament.id)
+        png, filename = chart_svc.render(tournament.id)
+
+        assert filename == data.filename
+        assert png == render_sectors(data.sectors, data.subtitle)
 
 
 class TestRender:
