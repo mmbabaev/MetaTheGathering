@@ -69,6 +69,26 @@ _NAMED_PHRASES = {"five color": "WUBRG", "5 color": "WUBRG"}
 
 _COLOR_WORDS = {"white": "W", "blue": "U", "black": "B", "red": "R", "green": "G"}
 
+# Игроки часто сами помечают цвет колоды эмодзи: «🟢🔵🐸 Bogles», «Bg pestilence ⚫️🟢🌱💀».
+# Только однозначные цвета: 🟤/⚙️ и прочий флейвор игнорируем.
+_COLOR_EMOJI = {
+    "⚪": "W",
+    "⬜": "W",
+    "🤍": "W",
+    "🔵": "U",
+    "🟦": "U",
+    "💙": "U",
+    "⚫": "B",
+    "⬛": "B",
+    "🖤": "B",
+    "🔴": "R",
+    "🟥": "R",
+    "❤": "R",
+    "🟢": "G",
+    "🟩": "G",
+    "💚": "G",
+}
+
 _COLORLESS_WORDS = {"affinity", "tron", "artifact", "artifacts", "colorless", "eldrazi"}
 
 # Цвет сектора по цветовой идентичности. Моно — канонические цвета MTG,
@@ -152,16 +172,36 @@ def _named_combo(lowered: list[str]) -> Optional[str]:
     return None
 
 
-def _initials(words: list[str]) -> Optional[str]:
-    """Токены-инициалы: «UW Familiars», «RG Storm», «WW».
+def _is_initials_token(word: str, has_mono: bool) -> bool:
+    """Похож ли токен на инициалы цветов.
 
-    Требуем верхний регистр — иначе обычные слова из букв WUBRG («grub») ложно
-    распознаются как цвета.
+    Регистр — единственный способ отличить инициалы от обычного слова из тех же букв:
+    - ВЕРХНИЙ регистр, 2–5 букв: «UW», «RG», «BUG», «WW»;
+    - Заглавная, 2–3 буквы: «Ub Faerie», «Bg pestilence» — так пишут в реальных названиях.
+      Ограничение по длине отсекает слова вроде «Grub»;
+    - одна буква — только рядом со словом «mono»: «Mono U faeries».
     """
+    if not all(c in WUBRG for c in word.upper()):
+        return False
+    if len(word) == 1:
+        return has_mono and word.isupper()
+    if word.isupper():
+        return len(word) <= 5
+    return len(word) <= 3 and word[0].isupper()
+
+
+def _initials(words: list[str]) -> Optional[str]:
+    """Токены-инициалы: «UW Familiars», «RG Storm», «Ub Faerie», «Mono U faeries»."""
+    has_mono = any(w.lower() == "mono" for w in words)
     for word in words:
-        if 2 <= len(word) <= 5 and word.isupper() and all(c in WUBRG for c in word):
+        if _is_initials_token(word, has_mono):
             return canon(word)
     return None
+
+
+def _from_color_emoji(name: str) -> Optional[str]:
+    found = "".join(_COLOR_EMOJI[ch] for ch in name if ch in _COLOR_EMOJI)
+    return canon(found) if found else None
 
 
 def _from_color_words(lowered: list[str]) -> Optional[str]:
@@ -184,6 +224,10 @@ def parse_color_identity(name: str) -> Optional[str]:
     initials = _initials(words)
     if initials is not None:
         return initials
+
+    from_emoji = _from_color_emoji(name)
+    if from_emoji is not None:
+        return from_emoji
 
     from_words = _from_color_words(lowered)
     if from_words is not None:
@@ -212,6 +256,10 @@ class DeckColorResolver:
             return canon(archetype.color_identity)
 
         colors = parse_color_identity(archetype.name)
+        if colors is None:
+            # Сигнал слабее имени («Grixis Affinity» помечен ⚙️, хотя это UBR),
+            # поэтому только когда имя не разобралось: «Elves» 🟢, «Spy Combo» 🟢.
+            colors = _from_color_emoji(archetype.color_emoji or "")
         if colors is None:
             colors = self._ask_llm(archetype.name)
         if colors is None:

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import io
 import math
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Sequence
@@ -61,8 +62,30 @@ class ChartSector:
     color: str  # hex
 
 
+# Эмодзи и прочие пиктограммы: в DejaVu для них нет глифов — без чистки легенда
+# заполнится квадратами-тофу. Игроки часто пишут «🟢🔵🐸 Bogles»; сам цвет при этом
+# уже учтён в services/deck_colors.py и продублирован квадратиком в легенде.
+_PICTOGRAPHS_RE = re.compile(
+    "["
+    "\U0001f000-\U0001faff"  # эмодзи, цветные квадраты и круги
+    "←-⇿"  # стрелки
+    "⌀-⏿"  # технические символы
+    "☀-➿"  # прочие символы и дингбаты (⚫ ⚪ ⚙)
+    "⬀-⯿"
+    "️"  # variation selector — «хвост» цветных эмодзи
+    "‍"  # zero-width joiner
+    "]"
+)
+
+
 def _font(filename: str, size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.truetype(str(_FONT_DIR / filename), size)
+
+
+def display_name(name: str) -> str:
+    """Название колоды для легенды: без эмодзи и лишних пробелов."""
+    cleaned = re.sub(r"\s+", " ", _PICTOGRAPHS_RE.sub("", name)).strip()
+    return cleaned or name.strip()
 
 
 def plural_decks(n: int) -> str:
@@ -168,7 +191,7 @@ def _draw_legend_row(
         radius=SWATCH_RADIUS,
         fill=sector.color,
     )
-    name = _ellipsize(draw, sector.name, name_font, COL_W - NAME_DX - 60)
+    name = _ellipsize(draw, display_name(sector.name), name_font, COL_W - NAME_DX - 60)
     draw.text((col_x + NAME_DX, middle), name, font=name_font, fill=CREAM, anchor="lm")
     draw.text((col_x + COL_W, middle), str(sector.count), font=count_font, fill=GOLD, anchor="rm")
     draw.line([(col_x - 14, top + ROW_H), (col_x + COL_W, top + ROW_H)], fill=SEPARATOR, width=1)

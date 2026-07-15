@@ -8,7 +8,7 @@ from PIL import Image
 
 from services.archetype import ArchetypeService
 from services.deck_colors import PALETTE, DeckColorResolver
-from services.meta_chart import WIDTH, ChartSector, MetaChartService, plural_decks, render_sectors
+from services.meta_chart import WIDTH, ChartSector, MetaChartService, display_name, plural_decks, render_sectors
 
 
 @pytest.fixture
@@ -49,6 +49,26 @@ class TestPluralDecks:
     )
     def test_plural(self, n, expected):
         assert plural_decks(n) == expected
+
+
+class TestDisplayName:
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            # в DejaVu нет эмодзи — иначе в легенде были бы квадраты-тофу
+            ("🔴⚫️👹Goblin combo", "Goblin combo"),
+            ("🟢🔵🐸 Bogles", "Bogles"),
+            ("Bg pestilence ⚫️🟢🌱💀", "Bg pestilence"),
+            ("Blue Terror", "Blue Terror"),
+            ("  Red   Madness ", "Red Madness"),
+        ],
+    )
+    def test_strips_pictographs(self, raw, expected):
+        assert display_name(raw) == expected
+
+    def test_name_of_only_emoji_survives(self):
+        """Пустая строка в легенде хуже, чем тофу."""
+        assert display_name("🔴🔵") == "🔴🔵"
 
 
 class TestBuildSectors:

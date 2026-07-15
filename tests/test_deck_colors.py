@@ -50,6 +50,14 @@ class TestParseColorIdentity:
             ("UG Infect", "UG"),
             ("WW", "W"),  # white weenie
             ("BUG Control", "UBG"),
+            # инициалы с заглавной и mono + одна буква — так пишут в реальных названиях
+            ("Ub Faerie", "UB"),
+            ("Bg pestilence", "BG"),
+            ("Mono U faeries", "U"),
+            ("BG GARDENS", "BG"),  # «GARDENS» не сбивает — берётся первый подходящий токен
+            # эмодзи-пометки цвета от игроков
+            ("🔴⚫️👹Goblin combo", "BR"),
+            ("🟢🔵🐸 Bogles", "UG"),
             # цветовые слова
             ("Blue Terror", "U"),
             ("Mono Black Devotion", "B"),
@@ -70,9 +78,19 @@ class TestParseColorIdentity:
     def test_returns_none_for_unparseable(self, name):
         assert parse_color_identity(name) is None
 
-    def test_lowercase_words_are_not_read_as_initials(self):
+    @pytest.mark.parametrize("name", ["grub deck", "Grub deck"])
+    def test_words_of_wubrg_letters_are_not_read_as_initials(self, name):
         """«grub» состоит из букв WUBRG, но это слово, а не инициалы."""
-        assert parse_color_identity("grub deck") is None
+        assert parse_color_identity(name) is None
+
+    def test_single_letter_needs_mono(self):
+        """Одинокая «U» — цвет только рядом с «mono», иначе это инициал имени."""
+        assert parse_color_identity("U faeries") is None
+        assert parse_color_identity("Mono U faeries") == "U"
+
+    def test_name_wins_over_emoji(self):
+        """Имя точнее эмодзи: 🔵 тут флейвор, а Grixis — реальные цвета."""
+        assert parse_color_identity("🔵 Grixis Affinity") == "UBR"
 
 
 class TestPalette:
@@ -126,6 +144,34 @@ class TestDeckColorResolver:
         assert DeckColorResolver(db, llm=llm).resolve(archetype) == "BG"
         assert archetype.color_identity == "BG"
         llm.complete.assert_called_once()
+
+    def test_color_emoji_field_used_when_name_unparseable(self, db):
+        """У засеянных архетипов уже есть color_emoji — используем, прежде чем звать LLM."""
+        archetype = ArchetypeService(db).get_or_create_by_name("Elves")
+        archetype.color_emoji = "🟢"
+        db.commit()
+        llm = MagicMock()
+        llm.enabled = True
+
+        assert DeckColorResolver(db, llm=llm).resolve(archetype) == "G"
+        llm.complete.assert_not_called()
+
+    def test_name_wins_over_color_emoji_field(self, db):
+        """«Grixis Affinity» помечен ⚙️, но по имени это UBR — имя точнее."""
+        archetype = ArchetypeService(db).get_or_create_by_name("Grixis Affinity")
+        archetype.color_emoji = "⚙️"
+        db.commit()
+
+        assert DeckColorResolver(db, llm=MagicMock(enabled=False)).resolve(archetype) == "UBR"
+
+    def test_non_color_emoji_field_is_ignored(self, db, disabled_llm):
+        """🟤 у «Jund Wildfire» — не цвет MTG, не должен давать ложную идентичность."""
+        archetype = ArchetypeService(db).get_or_create_by_name("Rogue")
+        archetype.color_emoji = "🟤"
+        db.commit()
+
+        assert DeckColorResolver(db, llm=disabled_llm).resolve(archetype) == COLORLESS
+        assert archetype.color_identity is None
 
     def test_llm_not_called_when_heuristic_succeeds(self, db):
         archetype = ArchetypeService(db).get_or_create_by_name("Mono Black Devotion")
