@@ -1,6 +1,6 @@
 """Tests for admin handler business logic (AdminHandler methods)."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy import select
@@ -45,7 +45,9 @@ from core.schemas import TournamentCreate
 from services import errors
 from services.aetherhub_import_service import AetherhubImportService
 from services.aetherhub_models import AetherhubPairing, AetherhubRound, AetherhubTournamentData
+from services.deck_colors import DeckColorResolver
 from services.feature_flags import FeatureFlags
+from services.meta_chart import MetaChartService
 
 ADMIN_TG_ID = 9999
 CHAT_ID = 100
@@ -78,8 +80,10 @@ def active_tournament(svc):
 
 
 @pytest.fixture
-def handler(svc, user_svc, arch_svc, keyboards, features):
-    return AdminHandler(svc, user_svc, arch_svc, keyboards, features)
+def handler(svc, user_svc, arch_svc, keyboards, features, db):
+    # Явно выключенный LLM: иначе на машине с YANDEX_API_KEY тест графика полез бы в сеть.
+    chart_svc = MetaChartService(db, colors=DeckColorResolver(db, llm=MagicMock(enabled=False)))
+    return AdminHandler(svc, user_svc, arch_svc, keyboards, features, chart_svc=chart_svc)
 
 
 # --- handle_add_players ---
@@ -1662,6 +1666,32 @@ class TestHandleExportEdgeCases:
     def test_export_excel_tournament_not_found_returns_none(self, handler, admin_user):
         result = handler.handle_export_excel(tg_id=ADMIN_TG_ID, tournament_id=99999)
         assert result is None
+
+
+class TestHandleMetaChart:
+    def test_not_privileged_returns_none(self, handler, user_alice, active_tournament):
+        result = handler.handle_meta_chart(tg_id=user_alice.tg_id, tournament_id=active_tournament.id)
+        assert result is None
+
+    def test_tournament_not_found_returns_none(self, handler, admin_user):
+        result = handler.handle_meta_chart(tg_id=ADMIN_TG_ID, tournament_id=99999)
+        assert result is None
+
+    def test_no_decks_returns_none(self, handler, admin_user, active_tournament):
+        result = handler.handle_meta_chart(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+        assert result is None
+
+    def test_admin_gets_png(self, handler, admin_user, active_tournament, svc, user_alice, archetype_burn):
+        svc.register_participant(
+            tournament_id=active_tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id
+        )
+
+        result = handler.handle_meta_chart(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+
+        assert result is not None
+        data, filename = result
+        assert data.startswith(b"\x89PNG")
+        assert filename == f"meta_chart_{active_tournament.id}.png"
 
 
 # ── handle_schedule ───────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 # Telegram-обёртки для admin-хендлеров
 
+import asyncio
 import html
 import io
 import logging
@@ -393,6 +394,40 @@ async def callback_export_excel(update: Update, context: ContextTypes.DEFAULT_TY
                 filename=filename,
             )
         _log("export_excel", user, tournament_id=tournament_id)
+    finally:
+        db.close()
+
+
+async def callback_meta_chart(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка «🍩 График метагейма» — отправляет PNG со срезом метагейма."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+    db = SessionLocal()
+    try:
+        # to_thread: рендер и (опциональный) поход в LLM — синхронные и небыстрые;
+        # вызов их прямо в колбэке заморозил бы event loop всему боту.
+        chart = await asyncio.to_thread(_admin_handler(db).handle_meta_chart, user.id, tournament_id)
+        if chart is None:
+            # Отвечаем только здесь алертом — если ответить выше («Рисую график…»),
+            # этот алерт не покажется: повторный answer игнорится (см. #123).
+            await query.answer("Нет прав, турнир не найден или ещё нет колод.", show_alert=True)
+            return
+        await query.answer()
+        data, filename = chart
+        # send_document, а не send_photo: Telegram ужимает фото до 1280px и пережимает
+        # в JPEG — подписи колод в легенде превращаются в кашу. Только в чат инициатора.
+        await context.bot.send_document(
+            chat_id=query.message.chat_id,
+            document=io.BytesIO(data),
+            filename=filename,
+        )
+        _log("meta_chart", user, tournament_id=tournament_id)
     finally:
         db.close()
 

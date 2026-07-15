@@ -33,6 +33,7 @@ from services import errors
 from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeService
 from services.export import ExportService
+from services.meta_chart import MetaChartService
 from services.meta_table_import import MetaTableImportService
 from services.poll import PollService
 from services.tournament import TournamentService
@@ -67,12 +68,16 @@ class AdminHandler:
         arch_svc: ArchetypeService,
         keyboards: Keyboards,
         features: FeatureService,
+        chart_svc: MetaChartService | None = None,
     ) -> None:
         self.svc = svc
         self.user_svc = user_svc
         self.arch_svc = arch_svc
         self.keyboards = keyboards
         self._features = features
+        # Инжектируемо, чтобы тесты не ходили в сеть: без шва MetaChartService поднимает
+        # реальный YandexLLM из глобального конфига.
+        self.chart_svc = chart_svc if chart_svc is not None else MetaChartService(svc.db)
 
     def _resolve_tournament(self):
         """Возвращает (tournament, error_result). Один из них None."""
@@ -560,6 +565,16 @@ class AdminHandler:
             return files
         except errors.TournamentNotFound:
             return None
+
+    def handle_meta_chart(self, tg_id: int, tournament_id: int) -> tuple[bytes, str] | None:
+        """PNG «Метагейм-срез». None — нет прав, турнир не найден или ни одной колоды."""
+        if not self.user_svc.is_privileged(tg_id):
+            return None
+        try:
+            get_tournament(self.svc.db, tournament_id)
+        except errors.TournamentNotFound:
+            return None
+        return self.chart_svc.render(tournament_id)
 
     def handle_delete_tournament_prompt(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Показывает запрос подтверждения удаления турнира."""

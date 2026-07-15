@@ -134,6 +134,9 @@ class Archetype(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), unique=True, nullable=False)  # "Burn"
     color_emoji = Column(String(8), nullable=True)  # "🔴"
+    # Цветовая идентичность колоды как подмножество WUBRG: "U", "WU", "UBR"…
+    # "" = бесцветная, NULL = ещё не определяли. Определяется один раз и кэшируется (см. services/deck_colors.py).
+    color_identity = Column(String(8), nullable=True)
     short_name = Column(String(64), nullable=True)  # "RDW"
     meta_rank = Column(Integer, nullable=True, index=True)  # позиция в топ-мета (1=первый); NULL — нет места в списке
     is_custom = Column(
