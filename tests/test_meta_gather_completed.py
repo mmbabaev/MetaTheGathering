@@ -9,7 +9,11 @@ import threading
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
-from bot import scheduler
+from sqlalchemy.exc import OperationalError
+from telegram.error import TelegramError
+
+from bot import chart as chart_mod
+from bot import scheduler  # noqa: F401
 from bot.messages import format_meta_gather_completed
 from bot.scheduler import maybe_announce_meta_gather_completed
 from core import models
@@ -191,8 +195,8 @@ async def test_chart_is_rendered_off_the_event_loop_without_db(db, user_svc, arc
     main_thread = threading.get_ident()
     seen = {}
 
-    real_prepare = scheduler.MetaChartService.prepare
-    real_render = scheduler.render_sectors
+    real_prepare = chart_mod.MetaChartService.prepare
+    real_render = chart_mod.render_sectors
 
     def spy_prepare(self, tournament_id):
         seen["prepare_thread"] = threading.get_ident()
@@ -202,8 +206,8 @@ async def test_chart_is_rendered_off_the_event_loop_without_db(db, user_svc, arc
         seen["render_thread"] = threading.get_ident()
         return real_render(sectors, subtitle)
 
-    monkeypatch.setattr(scheduler.MetaChartService, "prepare", spy_prepare)
-    monkeypatch.setattr(scheduler, "render_sectors", spy_render)
+    monkeypatch.setattr(chart_mod.MetaChartService, "prepare", spy_prepare)
+    monkeypatch.setattr(chart_mod, "render_sectors", spy_render)
     await maybe_announce_meta_gather_completed(AsyncMock(), db, t.id)
 
     # Работа с БД — в основном потоке: сессию SQLAlchemy в поток отдавать нельзя.
@@ -215,7 +219,7 @@ async def test_chart_is_rendered_off_the_event_loop_without_db(db, user_svc, arc
 async def test_announce_falls_back_to_text_when_chart_fails(db, user_svc, arch_svc, monkeypatch):
     """Картинка не должна ломать анонс: рендер упал — текст всё равно уходит."""
     monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
-    monkeypatch.setattr("bot.scheduler.render_sectors", MagicMock(side_effect=RuntimeError("шрифт не найден")))
+    monkeypatch.setattr("bot.chart.render_sectors", MagicMock(side_effect=RuntimeError("шрифт не найден")))
     t = _complete_tournament(db, user_svc, arch_svc)
     bot = AsyncMock()
 
@@ -239,6 +243,61 @@ async def test_long_announce_sends_text_separately(db, user_svc, arch_svc, monke
     bot.send_message.assert_awaited_once()
     bot.send_document.assert_awaited_once()
     assert "caption" not in bot.send_document.call_args.kwargs
+
+
+async def test_caption_limit_counts_utf16_units(db, user_svc, arch_svc, monkeypatch):
+    """Telegram считает подпись в UTF-16: эмодзи весит две единицы, а len() — одну.
+
+    1000 эмодзи — это 1000 символов Python (влезает по len), но 2000 единиц UTF-16:
+    подпись Telegram отвергнет, поэтому текст должен уйти отдельным сообщением.
+    """
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    monkeypatch.setattr("bot.scheduler.format_meta_gather_completed", MagicMock(return_value="🎉" * 1000))
+    t = _complete_tournament(db, user_svc, arch_svc)
+    bot = AsyncMock()
+
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+
+    bot.send_message.assert_awaited_once()
+    assert "caption" not in bot.send_document.call_args.kwargs
+
+
+async def test_chart_upload_failure_does_not_re_announce(db, user_svc, arch_svc, monkeypatch):
+    """Анонс — это текст, график лишь бонус.
+
+    Если текст доставлен, а картинка не загрузилась, флаг всё равно должен встать:
+    иначе следующий импорт пришлёт уже доставленный анонс повторно.
+    """
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    monkeypatch.setattr("bot.scheduler.format_meta_gather_completed", MagicMock(return_value="x" * 1100))
+    t = _complete_tournament(db, user_svc, arch_svc)
+    bot = AsyncMock()
+    bot.send_document.side_effect = TelegramError("upload failed")
+
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+
+    bot.send_message.assert_awaited_once()
+    assert db.get(models.Tournament, t.id).completed_announced_at is not None
+
+
+async def test_db_error_while_building_chart_still_sets_flag(db, user_svc, arch_svc, monkeypatch):
+    """Сбой БД при построении графика не должен отравить сессию.
+
+    Иначе анонс уходит, а коммит флага падает — и он приходит заново на каждый импорт.
+    """
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    monkeypatch.setattr(
+        chart_mod.MetaChartService,
+        "prepare",
+        MagicMock(side_effect=OperationalError("SELECT 1", {}, Exception("connection lost"))),
+    )
+    t = _complete_tournament(db, user_svc, arch_svc)
+    bot = AsyncMock()
+
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+
+    bot.send_message.assert_awaited_once()  # анонс ушёл текстом
+    assert db.get(models.Tournament, t.id).completed_announced_at is not None  # и флаг сохранился
 
 
 async def test_no_announce_when_incomplete(db, user_svc, arch_svc, monkeypatch):

@@ -1,17 +1,18 @@
 """Цветовая идентичность колоды по названию архетипа + палитра для графика.
 
-Списка карт у нас нет — храним только название архетипа, поэтому цвет определяем из имени:
-1. эвристический парсер (гильдии/шарды/клинья, инициалы вроде «UW», цветовые слова, артефактные маркеры);
-2. LLM-фолбэк для флейворных имён («Spy Combo»), если он сконфигурирован;
+Списка карт у нас нет — храним только название архетипа, поэтому цвет определяем так:
+0. справочник `services/deck_book.py` — источник истины, цвета подтверждены игроком;
+1. эвристический парсер (гильдии/шарды/клинья, инициалы вроде «UW», цветовые слова, эмодзи);
+2. поле `Archetype.color_emoji` — сигнал слабее имени;
 3. дефолт — бесцветная.
 
-Результат кэшируется в `Archetype.color_identity` — LLM дёргается максимум раз на архетип.
+Найденное эвристикой кэшируется в `Archetype.color_identity`; дефолт не кэшируется.
+Справочник и эвристика закрывают 513 колод из 514 на реальных данных, поэтому сетевых
+фолбэков здесь нет — резолв чисто локальный и быстрый, его можно звать прямо из event loop.
 """
 
 from __future__ import annotations
 
-import json
-import logging
 import re
 from typing import Iterable, Optional
 
@@ -19,9 +20,6 @@ from sqlalchemy.orm import Session
 
 from core import models
 from services.deck_book import lookup_deck
-from services.llm import YandexLLM
-
-logger = logging.getLogger(__name__)
 
 WUBRG = "WUBRG"
 COLORLESS = ""  # бесцветная колода; NULL в БД означает «ещё не определяли»
@@ -94,9 +92,8 @@ _COLOR_EMOJI = {
 
 # Слов-маркеров «бесцветности» (affinity/tron/artifact) здесь намеренно нет.
 # Они врут: «Flicker Tron» — синяя колода, «Grixis Affinity» — UBR, а голая «Affinity»
-# в Pauper обычно BR. Раньше такой маркер отдавал COLORLESS, resolve() кэшировал его
-# навсегда и до LLM дело уже не доходило. Теперь такие имена возвращают None и уходят
-# в LLM; без LLM они и так рисуются серыми — но серое не кэшируется и переопределится.
+# в Pauper обычно BR. Раньше такой маркер отдавал COLORLESS и оседал в кэше навсегда.
+# Теперь такие имена возвращают None: их место — в справочнике deck_book.
 
 # Цвет сектора по цветовой идентичности. Моно — канонические цвета MTG,
 # многоцветные — смесь в духе своих цветов, бесцветные — серый.
@@ -140,14 +137,6 @@ _PALETTE_RAW = {
     # все пять
     "WUBRG": "#D4AF37",
 }
-
-_LLM_SYSTEM = (
-    "Ты эксперт по формату Magic: The Gathering Pauper. "
-    "По названию архетипа колоды определи её цветовую идентичность. "
-    'Ответь строго JSON вида {"colors":"UB"}, где colors — подмножество букв WUBRG '
-    '(W=белый, U=синий, B=чёрный, R=красный, G=зелёный) или "C" для бесцветной колоды. '
-    "Никакого текста кроме JSON."
-)
 
 
 def canon(colors: str) -> str:
@@ -242,9 +231,8 @@ def parse_color_identity(name: str) -> Optional[str]:
 class DeckColorResolver:
     """Определяет и кэширует цветовую идентичность архетипов."""
 
-    def __init__(self, db: Session, llm: Optional[YandexLLM] = None):
+    def __init__(self, db: Session):
         self.db = db
-        self.llm = llm if llm is not None else YandexLLM()
 
     def resolve(self, archetype: models.Archetype) -> str:
         """Цветовая идентичность архетипа. Кэширует определённое значение в БД."""
@@ -268,7 +256,7 @@ class DeckColorResolver:
         """Определяет цвет и пишет его в объект, но не коммитит.
 
         Дефолт (ничего не определилось) НЕ проставляем: оставляем NULL, чтобы архетип
-        переопределился, когда появится LLM или ручной оверрайд.
+        переопределился, когда его занесут в справочник или поправят руками.
         """
         # Справочник сильнее кэша: он источник истины, и правка в коде должна применяться
         # сразу, а не ждать, пока протухнет color_identity в БД. Кэшировать его незачем.
@@ -285,41 +273,7 @@ class DeckColorResolver:
             # поэтому только когда имя не разобралось: «Elves» 🟢, «Spy Combo» 🟢.
             colors = _from_color_emoji(archetype.color_emoji or "")
         if colors is None:
-            colors = self._ask_llm(archetype.name)
-        if colors is None:
             return COLORLESS
 
         archetype.color_identity = colors
         return colors
-
-    def _ask_llm(self, name: str) -> Optional[str]:
-        if not self.llm.enabled:
-            return None
-        answer = self.llm.complete(_LLM_SYSTEM, name)
-        if not answer:
-            return None
-        return self._parse_llm_answer(answer, name)
-
-    @staticmethod
-    def _parse_llm_answer(answer: str, name: str) -> Optional[str]:
-        match = re.search(r"\{.*\}", answer, re.DOTALL)
-        if not match:
-            logger.warning("[deck_colors] LLM вернула не-JSON для %r: %r", name, answer)
-            return None
-        try:
-            colors = json.loads(match.group(0)).get("colors", "")
-        except (ValueError, AttributeError):
-            logger.warning("[deck_colors] LLM вернула битый JSON для %r: %r", name, answer)
-            return None
-        if not isinstance(colors, str):
-            logger.warning("[deck_colors] LLM вернула не-строку в colors для %r: %r", name, answer)
-            return None
-        colors = colors.strip().upper()
-        if colors == "C":
-            return COLORLESS
-        # Строгая проверка, а не canon(): canon просто выкидывает лишние буквы, поэтому
-        # «Rakdos» превратился бы в «R», а «Grixis» в «RG» — и осел бы в кэше навсегда.
-        if not colors or not all(c in WUBRG for c in colors):
-            logger.warning("[deck_colors] LLM вернула не цвета WUBRG для %r: %r", name, answer)
-            return None
-        return canon(colors)

@@ -2,7 +2,7 @@
 
 import io
 from datetime import datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from PIL import Image, ImageDraw
@@ -10,7 +10,7 @@ from PIL import Image, ImageDraw
 from core import models as m
 from services.archetype import ArchetypeService
 from services.deck_book import strip_pictographs
-from services.deck_colors import PALETTE, DeckColorResolver
+from services.deck_colors import PALETTE
 from services.meta_chart import (
     WIDTH,
     ChartSector,
@@ -22,15 +22,8 @@ from services.meta_chart import (
 
 
 @pytest.fixture
-def disabled_llm():
-    llm = MagicMock()
-    llm.enabled = False
-    return llm
-
-
-@pytest.fixture
-def chart_svc(db, disabled_llm):
-    return MetaChartService(db, colors=DeckColorResolver(db, llm=disabled_llm))
+def chart_svc(db):
+    return MetaChartService(db)
 
 
 def _register(svc, user_svc, arch_svc, tournament, tg_id, deck_name):

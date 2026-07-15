@@ -1,6 +1,5 @@
 # Telegram-обёртки для admin-хендлеров
 
-import asyncio
 import html
 import io
 import logging
@@ -10,6 +9,7 @@ from telegram.constants import ChatType
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
+from bot.chart import build_chart
 from bot.handlers.admin import parse_bulk_player_line
 from bot.keyboards import (
     admin_more_keyboard,
@@ -34,7 +34,6 @@ from core.database import SessionLocal
 from core.models import TournamentStatus
 from services import errors as svc_errors
 from services.datalens import DataLensService
-from services.meta_chart import render_sectors
 from services.tournament import TournamentService
 from services.user import UserService
 from services.utils import get_tournament
@@ -411,21 +410,21 @@ async def callback_meta_chart(update: Update, context: ContextTypes.DEFAULT_TYPE
     (tournament_id,) = ids
     db = SessionLocal()
     try:
-        chart = _admin_handler(db).handle_meta_chart(user.id, tournament_id)
-        if chart is None:
+        if not _admin_handler(db).can_build_meta_chart(user.id, tournament_id):
             # Отвечаем только здесь алертом — если ответить выше («Рисую график…»),
             # этот алерт не покажется: повторный answer игнорится (см. #123).
-            await query.answer("Нет прав, турнир не найден или ещё нет колод.", show_alert=True)
+            await query.answer("Нет прав или турнир не найден.", show_alert=True)
             return
         await query.answer("Рисую график…")
-        # to_thread — только рисование (~180 мс CPU): сессию БД в другой поток уносить нельзя,
-        # поэтому всё общение с базой осталось в handle_meta_chart выше.
-        png = await asyncio.to_thread(render_sectors, chart.sectors, chart.subtitle)
+        chart = await build_chart(db, tournament_id)
+        if chart is None:
+            await query.message.reply_text("В этом турнире ещё нет ни одной колоды.")
+            return
         # send_document, а не send_photo: Telegram ужимает фото до 1280px и пережимает
         # в JPEG — подписи колод в легенде превращаются в кашу. Только в чат инициатора.
         await context.bot.send_document(
             chat_id=query.message.chat_id,
-            document=io.BytesIO(png),
+            document=io.BytesIO(chart.png),
             filename=chart.filename,
         )
         _log("meta_chart", user, tournament_id=tournament_id)

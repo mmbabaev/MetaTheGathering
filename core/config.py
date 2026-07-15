@@ -60,12 +60,6 @@ class Settings(BaseSettings):
     MONIUM_PROJECT: str = ""
     MONIUM_API_KEY: str = ""
 
-    # YandexGPT — фолбэк для определения цвета архетипа по названию.
-    # Пусто = выключен: цвет берётся эвристикой из названия, иначе колода считается бесцветной.
-    YANDEX_API_KEY: str = ""
-    YANDEX_FOLDER_ID: str = ""
-    YANDEX_MODEL: str = "yandexgpt-lite/latest"
-
     YOOKASSA_SHOP_ID: str = ""
     YOOKASSA_SECRET_KEY: str = ""
     PAYMENT_AMOUNT: str = "525.00"
