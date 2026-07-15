@@ -34,6 +34,7 @@ from core.database import SessionLocal
 from core.models import TournamentStatus
 from services import errors as svc_errors
 from services.datalens import DataLensService
+from services.meta_chart import render_sectors
 from services.tournament import TournamentService
 from services.user import UserService
 from services.utils import get_tournament
@@ -410,22 +411,22 @@ async def callback_meta_chart(update: Update, context: ContextTypes.DEFAULT_TYPE
     (tournament_id,) = ids
     db = SessionLocal()
     try:
-        # to_thread: рендер и (опциональный) поход в LLM — синхронные и небыстрые;
-        # вызов их прямо в колбэке заморозил бы event loop всему боту.
-        chart = await asyncio.to_thread(_admin_handler(db).handle_meta_chart, user.id, tournament_id)
+        chart = _admin_handler(db).handle_meta_chart(user.id, tournament_id)
         if chart is None:
             # Отвечаем только здесь алертом — если ответить выше («Рисую график…»),
             # этот алерт не покажется: повторный answer игнорится (см. #123).
             await query.answer("Нет прав, турнир не найден или ещё нет колод.", show_alert=True)
             return
-        await query.answer()
-        data, filename = chart
+        await query.answer("Рисую график…")
+        # to_thread — только рисование (~180 мс CPU): сессию БД в другой поток уносить нельзя,
+        # поэтому всё общение с базой осталось в handle_meta_chart выше.
+        png = await asyncio.to_thread(render_sectors, chart.sectors, chart.subtitle)
         # send_document, а не send_photo: Telegram ужимает фото до 1280px и пережимает
         # в JPEG — подписи колод в легенде превращаются в кашу. Только в чат инициатора.
         await context.bot.send_document(
             chat_id=query.message.chat_id,
-            document=io.BytesIO(data),
-            filename=filename,
+            document=io.BytesIO(png),
+            filename=chart.filename,
         )
         _log("meta_chart", user, tournament_id=tournament_id)
     finally:

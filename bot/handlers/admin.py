@@ -33,7 +33,7 @@ from services import errors
 from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeService
 from services.export import ExportService
-from services.meta_chart import MetaChartService
+from services.meta_chart import ChartData, MetaChartService
 from services.meta_table_import import MetaTableImportService
 from services.poll import PollService
 from services.tournament import TournamentService
@@ -566,15 +566,19 @@ class AdminHandler:
         except errors.TournamentNotFound:
             return None
 
-    def handle_meta_chart(self, tg_id: int, tournament_id: int) -> tuple[bytes, str] | None:
-        """PNG «Метагейм-срез». None — нет прав, турнир не найден или ни одной колоды."""
+    def handle_meta_chart(self, tg_id: int, tournament_id: int) -> ChartData | None:
+        """Данные для «Метагейм-среза». None — нет прав, турнир не найден или ни одной колоды.
+
+        Возвращаем данные, а не готовый PNG: рисование — 180 мс чистого CPU, его уносят
+        в отдельный поток. Сессию БД туда тащить нельзя, поэтому вся работа с БД здесь.
+        """
         if not self.user_svc.is_privileged(tg_id):
             return None
         try:
             get_tournament(self.svc.db, tournament_id)
         except errors.TournamentNotFound:
             return None
-        return self.chart_svc.render(tournament_id)
+        return self.chart_svc.prepare(tournament_id)
 
     def handle_delete_tournament_prompt(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Показывает запрос подтверждения удаления турнира."""

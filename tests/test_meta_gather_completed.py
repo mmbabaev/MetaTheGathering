@@ -6,7 +6,7 @@ and announce, once, to the owner DM — listing the undefeated (X-0) players and
 """
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 from bot.messages import format_meta_gather_completed
 from bot.scheduler import maybe_announce_meta_gather_completed
@@ -162,16 +162,49 @@ async def test_announces_to_owner_once(db, user_svc, arch_svc, monkeypatch):
 
     await maybe_announce_meta_gather_completed(bot, db, t.id)
 
-    bot.send_message.assert_awaited_once()
-    kwargs = bot.send_message.call_args.kwargs
+    # график уходит документом, текст — подписью к нему
+    bot.send_document.assert_awaited_once()
+    kwargs = bot.send_document.call_args.kwargs
     assert kwargs["chat_id"] == 777  # owner DM, not the tournament chat (100)
-    assert "Сбор метагейма завершён" in kwargs["text"]
-    assert "Carol — Elves" in kwargs["text"]
+    assert "Сбор метагейма завершён" in kwargs["caption"]
+    assert "Carol — Elves" in kwargs["caption"]
+    assert kwargs["filename"] == f"meta_chart_{t.id}.png"
+    assert kwargs["document"].getvalue().startswith(b"\x89PNG")
+    bot.send_message.assert_not_awaited()
     assert db.get(models.Tournament, t.id).completed_announced_at is not None
 
     # idempotent — a second import must not re-announce
     await maybe_announce_meta_gather_completed(bot, db, t.id)
+    bot.send_document.assert_awaited_once()
+
+
+async def test_announce_falls_back_to_text_when_chart_fails(db, user_svc, arch_svc, monkeypatch):
+    """Картинка не должна ломать анонс: рендер упал — текст всё равно уходит."""
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    monkeypatch.setattr("bot.scheduler.render_sectors", MagicMock(side_effect=RuntimeError("шрифт не найден")))
+    t = _complete_tournament(db, user_svc, arch_svc)
+    bot = AsyncMock()
+
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+
     bot.send_message.assert_awaited_once()
+    assert "Сбор метагейма завершён" in bot.send_message.call_args.kwargs["text"]
+    bot.send_document.assert_not_awaited()
+    assert db.get(models.Tournament, t.id).completed_announced_at is not None
+
+
+async def test_long_announce_sends_text_separately(db, user_svc, arch_svc, monkeypatch):
+    """Подпись в Telegram ограничена 1024 символами — длинный текст уходит сообщением."""
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    monkeypatch.setattr("bot.scheduler.format_meta_gather_completed", MagicMock(return_value="x" * 1100))
+    t = _complete_tournament(db, user_svc, arch_svc)
+    bot = AsyncMock()
+
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+
+    bot.send_message.assert_awaited_once()
+    bot.send_document.assert_awaited_once()
+    assert "caption" not in bot.send_document.call_args.kwargs
 
 
 async def test_no_announce_when_incomplete(db, user_svc, arch_svc, monkeypatch):

@@ -4,6 +4,8 @@
 `docs/scheduler.md` — это полный перечень автоматических действий по времени и событиям.
 """
 
+import asyncio
+import io
 import logging
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -20,6 +22,7 @@ from core.schemas import TournamentCreate
 from services.aetherhub_import_service import AetherhubImportService
 from services.aetherhub_service import AetherhubService
 from services.datalens import DataLensService
+from services.meta_chart import MetaChartService, render_sectors
 from services.stats import StatsService
 from services.tournament import TournamentService
 
@@ -535,8 +538,12 @@ class AutoRevealDecksJob:
 # ---------------------------------------------------------------------------
 
 
+# Лимит Telegram на подпись к документу/фото.
+CAPTION_LIMIT = 1024
+
+
 async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int) -> None:
-    """Один раз анонсирует «сбор метагейма завершён», когда турнир сыгран до конца.
+    """Один раз анонсирует «сбор метагейма завершён» с графиком, когда турнир сыгран до конца.
 
     Срабатывает после импорта, когда у всех матчей появился счёт (признак завершения
     турнира + получены финальные стендинги). Идемпотентность — флаг
@@ -562,10 +569,46 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int) -> N
     undefeated = svc.get_undefeated_players(tournament_id)
     text = format_meta_gather_completed(tournament.title, total, with_deck, undefeated)
 
-    await bot.send_message(chat_id=settings.OWNER_CHAT_ID, text=text)
+    await _send_completion_announce(bot, db, tournament_id, text)
     tournament.completed_announced_at = models.utc_now()
     db.commit()
     logger.info("maybe_announce_meta_gather_completed: announced completion for #%s", tournament_id)
+
+
+async def _render_meta_chart(db, tournament_id: int):
+    """(PNG, имя файла) со срезом метагейма или None. Никогда не бросает: анонс важнее картинки."""
+    try:
+        # Данные читаем здесь: сессия SQLAlchemy не предназначена для переезда в другой поток.
+        data = MetaChartService(db).prepare(tournament_id)
+        if data is None:
+            return None
+        # А само рисование (~180 мс чистого CPU) уносим в поток, чтобы не морозить event loop.
+        png = await asyncio.to_thread(render_sectors, data.sectors, data.subtitle)
+        return png, data.filename
+    except Exception:
+        logger.exception("maybe_announce_meta_gather_completed: chart render failed for #%s", tournament_id)
+        return None
+
+
+async def _send_completion_announce(bot, db, tournament_id: int, text: str) -> None:
+    """Анонс с бубликом. Графика нет — уходит как раньше, текстом: она не должна ломать анонс."""
+    chat_id = settings.OWNER_CHAT_ID
+    chart = await _render_meta_chart(db, tournament_id)
+    if chart is None:
+        await bot.send_message(chat_id=chat_id, text=text)
+        return
+
+    data, filename = chart
+    # send_document, а не send_photo: Telegram ужимает фото до 1280px и пережимает в JPEG —
+    # подписи колод в легенде становятся кашей.
+    document = io.BytesIO(data)
+    if len(text) > CAPTION_LIMIT:
+        # Много игроков без поражений — подпись не влезла; шлём текст отдельным сообщением.
+        await bot.send_message(chat_id=chat_id, text=text)
+        await bot.send_document(chat_id=chat_id, document=document, filename=filename)
+        return
+
+    await bot.send_document(chat_id=chat_id, document=document, filename=filename, caption=text)
 
 
 def _find_active_club_tournament(db, club_name: str):
