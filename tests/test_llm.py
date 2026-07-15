@@ -7,10 +7,14 @@ import requests
 
 from services.llm import YandexLLM
 
+# Заведомо ненастоящие значения — в тестах не должно быть даже похожего на реальный ключ.
+FAKE_API_KEY = "dummy-not-a-real-key"
+FAKE_FOLDER_ID = "dummy-folder"
+
 
 @pytest.fixture
 def llm():
-    return YandexLLM(api_key="key-123", folder_id="folder-abc", model="yandexgpt-lite/latest")
+    return YandexLLM(api_key=FAKE_API_KEY, folder_id=FAKE_FOLDER_ID, model="yandexgpt-lite/latest")
 
 
 def _response(payload):
@@ -38,7 +42,7 @@ class TestEnabled:
 
 class TestModelUri:
     def test_built_from_folder_and_model(self, llm):
-        assert llm.model_uri == "gpt://folder-abc/yandexgpt-lite/latest"
+        assert llm.model_uri == f"gpt://{FAKE_FOLDER_ID}/yandexgpt-lite/latest"
 
 
 class TestComplete:
@@ -55,9 +59,9 @@ class TestComplete:
             llm.complete("system prompt", "user prompt")
 
         _, kwargs = post.call_args
-        assert kwargs["headers"]["Authorization"] == "Api-Key key-123"
-        assert kwargs["headers"]["x-folder-id"] == "folder-abc"
-        assert kwargs["json"]["modelUri"] == "gpt://folder-abc/yandexgpt-lite/latest"
+        assert kwargs["headers"]["Authorization"] == f"Api-Key {FAKE_API_KEY}"
+        assert kwargs["headers"]["x-folder-id"] == FAKE_FOLDER_ID
+        assert kwargs["json"]["modelUri"] == f"gpt://{FAKE_FOLDER_ID}/yandexgpt-lite/latest"
         assert kwargs["json"]["messages"] == [
             {"role": "system", "text": "system prompt"},
             {"role": "user", "text": "user prompt"},

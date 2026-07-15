@@ -14,6 +14,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > - Any new code path that calls `bot.send_message` in a loop over multiple users requires explicit confirmation from the user before it ships.
 > - Production notifications must respect the `notify_allowed_ids` gate and only target their genuine intended recipient.
 
+## ⚠️ Secrets (hard rules)
+
+> **NEVER put private data, tokens, keys, passwords or connection strings into files that go into
+> the git repo** — `.py`, `.md`, `.yml`, `.json`, tests, fixtures, docs, commit messages, anything
+> tracked. A secret committed once stays in git history forever, even if a later commit removes it,
+> and it must then be treated as compromised and rotated.
+>
+> - **Secrets live only in `bot/.env`** (gitignored) and in GitHub Actions secrets (`ENV_FILE`,
+>   `SSH_PRIVATE_KEY`). Code reads them via `core/config.py` (`Settings`), never inline.
+> - **New secret setting = empty default in `core/config.py`** (`YANDEX_API_KEY: str = ""`), plus a
+>   `<placeholder>` in docs. Never a real value, never a "sample" real-looking value.
+> - **Tests must use obviously fake values** — `"dummy-not-a-real-key"`, not `"key-123"` or anything
+>   that could be mistaken for a real credential on review.
+> - **Never print or echo secrets into logs, terminal output or the chat** — that includes
+>   `cat`/`grep`-ing `.env` or a `DATABASE_URL` off the server, even "masked". To query prod, run the
+>   script on the server so it reads the env itself and returns only the data.
+> - If a secret does reach a tracked file, say so immediately and treat it as compromised — rotating
+>   the key is the fix; deleting the line is not.
+
 ## ⚠️ Git / PR workflow (hard rules)
 
 > **NEVER merge a PR yourself.** Do not run `gh pr merge` (or merge via the GitHub UI/API) under
