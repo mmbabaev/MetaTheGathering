@@ -18,6 +18,7 @@ from typing import Iterable, Optional
 from sqlalchemy.orm import Session
 
 from core import models
+from services.deck_book import lookup_deck
 from services.llm import YandexLLM
 
 logger = logging.getLogger(__name__)
@@ -269,6 +270,12 @@ class DeckColorResolver:
         Дефолт (ничего не определилось) НЕ проставляем: оставляем NULL, чтобы архетип
         переопределился, когда появится LLM или ручной оверрайд.
         """
+        # Справочник сильнее кэша: он источник истины, и правка в коде должна применяться
+        # сразу, а не ждать, пока протухнет color_identity в БД. Кэшировать его незачем.
+        known = lookup_deck(archetype.name)
+        if known is not None:
+            return canon(known.colors)
+
         if archetype.color_identity is not None:
             return canon(archetype.color_identity)
 

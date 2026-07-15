@@ -8,13 +8,13 @@ import pytest
 from PIL import Image, ImageDraw
 
 from services.archetype import ArchetypeService
+from services.deck_book import strip_pictographs
 from services.deck_colors import PALETTE, DeckColorResolver
 from services.meta_chart import (
     WIDTH,
     ChartSector,
     MetaChartService,
     build_subtitle,
-    display_name,
     plural_decks,
     render_sectors,
 )
@@ -60,7 +60,7 @@ class TestPluralDecks:
         assert plural_decks(n) == expected
 
 
-class TestDisplayName:
+class TestStripPictographs:
     @pytest.mark.parametrize(
         "raw,expected",
         [
@@ -73,11 +73,11 @@ class TestDisplayName:
         ],
     )
     def test_strips_pictographs(self, raw, expected):
-        assert display_name(raw) == expected
+        assert strip_pictographs(raw) == expected
 
     def test_name_of_only_emoji_survives(self):
         """Пустая строка в легенде хуже, чем тофу."""
-        assert display_name("🔴🔵") == "🔴🔵"
+        assert strip_pictographs("🔴🔵") == "🔴🔵"
 
 
 class TestBuildSubtitle:
@@ -120,9 +120,34 @@ class TestBuildSectors:
         assert chart_svc.build_sectors(tournament.id)[0].color == PALETTE["UG"]
 
     def test_unresolvable_deck_gets_colorless(self, chart_svc, svc, user_svc, arch_svc, tournament):
-        _register(svc, user_svc, arch_svc, tournament, 1, "Gates")
+        _register(svc, user_svc, arch_svc, tournament, 1, "Uzmen")
 
         assert chart_svc.build_sectors(tournament.id)[0].color == PALETTE[""]
+
+    def test_deck_book_groups_names_into_one_sector(self, chart_svc, svc, user_svc, arch_svc, tournament):
+        """«Spy Walls» + «Spy» + «Spy Combo» — одна колода, названная по-разному."""
+        for tg_id, name in enumerate(("Spy Walls", "Spy", "Spy Combo"), start=1):
+            _register(svc, user_svc, arch_svc, tournament, tg_id, name)
+
+        sectors = chart_svc.build_sectors(tournament.id)
+
+        assert [(s.name, s.count) for s in sectors] == [("Spy Combo", 3)]
+        assert sectors[0].color == PALETTE["BG"]
+
+    def test_case_and_hyphen_duplicates_merge(self, chart_svc, svc, user_svc, arch_svc, tournament):
+        """В проде «Rakdos Madness» и «Rakdos madness» — разные архетипы, но одна колода."""
+        for tg_id, name in enumerate(("Rakdos Madness", "Rakdos madness"), start=1):
+            _register(svc, user_svc, arch_svc, tournament, tg_id, name)
+
+        sectors = chart_svc.build_sectors(tournament.id)
+
+        assert [(s.name, s.count) for s in sectors] == [("Rakdos Madness", 2)]
+
+    def test_tron_family_merges(self, chart_svc, svc, user_svc, arch_svc, tournament):
+        for tg_id, name in enumerate(("Flicker Tron", "Altar tron", "Monster Tron"), start=1):
+            _register(svc, user_svc, arch_svc, tournament, tg_id, name)
+
+        assert [(s.name, s.count) for s in chart_svc.build_sectors(tournament.id)] == [("Tron", 3)]
 
     def test_empty_tournament_has_no_sectors(self, chart_svc, tournament):
         assert chart_svc.build_sectors(tournament.id) == []

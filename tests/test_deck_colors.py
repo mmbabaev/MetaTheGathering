@@ -132,7 +132,7 @@ class TestDeckColorResolver:
         assert archetype.color_identity == "WR"  # закэшировано в БД
 
     def test_cached_value_wins_and_skips_llm(self, db):
-        archetype = ArchetypeService(db).get_or_create_by_name("Spy Combo")
+        archetype = ArchetypeService(db).get_or_create_by_name("Uzmen")
         archetype.color_identity = "BG"
         db.commit()
         llm = MagicMock()
@@ -142,7 +142,7 @@ class TestDeckColorResolver:
         llm.complete.assert_not_called()
 
     def test_llm_fallback_for_unparseable_name(self, db):
-        archetype = ArchetypeService(db).get_or_create_by_name("Spy Combo")
+        archetype = ArchetypeService(db).get_or_create_by_name("Uzmen")
         llm = MagicMock()
         llm.enabled = True
         llm.complete.return_value = '{"colors":"BG"}'
@@ -153,7 +153,7 @@ class TestDeckColorResolver:
 
     def test_color_emoji_field_used_when_name_unparseable(self, db):
         """У засеянных архетипов уже есть color_emoji — используем, прежде чем звать LLM."""
-        archetype = ArchetypeService(db).get_or_create_by_name("Elves")
+        archetype = ArchetypeService(db).get_or_create_by_name("Uzmen")
         archetype.color_emoji = "🟢"
         db.commit()
         llm = MagicMock()
@@ -172,7 +172,7 @@ class TestDeckColorResolver:
 
     def test_non_color_emoji_field_is_ignored(self, db, disabled_llm):
         """🟤 у «Jund Wildfire» — не цвет MTG, не должен давать ложную идентичность."""
-        archetype = ArchetypeService(db).get_or_create_by_name("Rogue")
+        archetype = ArchetypeService(db).get_or_create_by_name("Uzmen")
         archetype.color_emoji = "🟤"
         db.commit()
 
@@ -188,7 +188,7 @@ class TestDeckColorResolver:
         llm.complete.assert_not_called()
 
     def test_llm_answer_c_means_colorless(self, db):
-        archetype = ArchetypeService(db).get_or_create_by_name("Gates")
+        archetype = ArchetypeService(db).get_or_create_by_name("Uzmen")
         llm = MagicMock()
         llm.enabled = True
         llm.complete.return_value = '{"colors":"C"}'
@@ -197,7 +197,7 @@ class TestDeckColorResolver:
         assert archetype.color_identity == COLORLESS
 
     def test_llm_answer_is_canonicalized(self, db):
-        archetype = ArchetypeService(db).get_or_create_by_name("Gates")
+        archetype = ArchetypeService(db).get_or_create_by_name("Uzmen")
         llm = MagicMock()
         llm.enabled = True
         llm.complete.return_value = 'Вот ответ: {"colors":"gu"}'
@@ -205,14 +205,31 @@ class TestDeckColorResolver:
         assert DeckColorResolver(db, llm=llm).resolve(archetype) == "UG"
 
     def test_artifact_name_reaches_llm(self, db):
-        """Раньше маркер «tron» кэшировал «Flicker Tron» серым навсегда, мимо LLM."""
-        archetype = ArchetypeService(db).get_or_create_by_name("Flicker Tron")
+        """Раньше маркер «tron»/«affinity» кэшировал такое имя серым навсегда, мимо LLM."""
+        archetype = ArchetypeService(db).get_or_create_by_name("Affinity")
         llm = MagicMock()
         llm.enabled = True
-        llm.complete.return_value = '{"colors":"U"}'
+        llm.complete.return_value = '{"colors":"BR"}'
 
-        assert DeckColorResolver(db, llm=llm).resolve(archetype) == "U"
+        assert DeckColorResolver(db, llm=llm).resolve(archetype) == "BR"
         llm.complete.assert_called_once()
+
+    def test_deck_book_wins_over_stale_cache(self, db):
+        """Словарь — источник истины: правка в коде должна применяться сразу,
+        не дожидаясь, пока протухнет color_identity в БД."""
+        archetype = ArchetypeService(db).get_or_create_by_name("Spy Walls")
+        archetype.color_identity = "R"  # устаревшее/ошибочное значение в кэше
+        db.commit()
+        llm = MagicMock()
+        llm.enabled = True
+
+        assert DeckColorResolver(db, llm=llm).resolve(archetype) == "BG"
+        llm.complete.assert_not_called()
+
+    def test_deck_book_wins_over_heuristic(self, db, disabled_llm):
+        """«Poison Storm» эвристикой не читается, а «Walls» — читалось бы неверно."""
+        walls = ArchetypeService(db).get_or_create_by_name("Walls")
+        assert DeckColorResolver(db, llm=disabled_llm).resolve(walls) == "G"
 
     @pytest.mark.parametrize(
         "answer",
@@ -226,7 +243,7 @@ class TestDeckColorResolver:
         ],
     )
     def test_bad_llm_answer_falls_back_to_colorless_without_caching(self, db, answer):
-        archetype = ArchetypeService(db).get_or_create_by_name("Gates")
+        archetype = ArchetypeService(db).get_or_create_by_name("Uzmen")
         llm = MagicMock()
         llm.enabled = True
         llm.complete.return_value = answer
@@ -236,7 +253,7 @@ class TestDeckColorResolver:
         assert archetype.color_identity is None
 
     def test_default_is_not_cached_when_llm_disabled(self, db, disabled_llm):
-        archetype = ArchetypeService(db).get_or_create_by_name("Gates")
+        archetype = ArchetypeService(db).get_or_create_by_name("Uzmen")
 
         assert DeckColorResolver(db, llm=disabled_llm).resolve(archetype) == COLORLESS
         assert archetype.color_identity is None

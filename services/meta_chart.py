@@ -18,6 +18,7 @@ from PIL import Image, ImageDraw, ImageFont
 from sqlalchemy.orm import Session
 
 from core import models
+from services.deck_book import lookup_deck, normalize_deck_name, strip_pictographs
 from services.deck_colors import DeckColorResolver, hex_for
 from services.stats import StatsService
 
@@ -74,30 +75,8 @@ class ChartSector:
     color: str  # hex
 
 
-# Эмодзи и прочие пиктограммы: в DejaVu для них нет глифов — без чистки легенда
-# заполнится квадратами-тофу. Игроки часто пишут «🟢🔵🐸 Bogles»; сам цвет при этом
-# уже учтён в services/deck_colors.py и продублирован квадратиком в легенде.
-_PICTOGRAPHS_RE = re.compile(
-    "["
-    "\U0001f000-\U0001faff"  # эмодзи, цветные квадраты и круги
-    "←-⇿"  # стрелки
-    "⌀-⏿"  # технические символы
-    "☀-➿"  # прочие символы и дингбаты (⚫ ⚪ ⚙)
-    "⬀-⯿"
-    "️"  # variation selector — «хвост» цветных эмодзи
-    "‍"  # zero-width joiner
-    "]"
-)
-
-
 def _font(filename: str, size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.truetype(str(_FONT_DIR / filename), size)
-
-
-def display_name(name: str) -> str:
-    """Название колоды для легенды: без эмодзи и лишних пробелов."""
-    cleaned = re.sub(r"\s+", " ", _PICTOGRAPHS_RE.sub("", name)).strip()
-    return cleaned or name.strip()
 
 
 def build_subtitle(club: Optional[str], title: str, fallback_date: Optional[datetime] = None) -> str:
@@ -212,7 +191,7 @@ def _draw_legend_row(
         radius=SWATCH_RADIUS,
         fill=sector.color,
     )
-    name = _ellipsize(draw, display_name(sector.name), name_font, COL_W - NAME_DX - 60)
+    name = _ellipsize(draw, strip_pictographs(sector.name), name_font, COL_W - NAME_DX - 60)
     draw.text((col_x + NAME_DX, middle), name, font=name_font, fill=CREAM, anchor="lm")
     draw.text((col_x + COL_W, middle), str(sector.count), font=count_font, fill=GOLD, anchor="rm")
     draw.line([(col_x - 14, top + ROW_H), (col_x + COL_W, top + ROW_H)], fill=SEPARATOR, width=1)
@@ -261,20 +240,35 @@ class MetaChartService:
         self.colors = colors if colors is not None else DeckColorResolver(db)
 
     def build_sectors(self, tournament_id: int) -> list[ChartSector]:
-        """Секторы графика: архетипы турнира с цветом, по убыванию количества колод."""
+        """Секторы графика: колоды турнира с цветом, по убыванию количества.
+
+        Названия схлопываются в группы: и по справочнику («Spy Walls» + «Spy» → «Spy Combo»),
+        и по нормализованному имени — в проде «Rakdos Madness» и «Rakdos madness» лежат
+        разными архетипами и без этого дробили бы график на два сектора.
+        """
         rows = self.stats.get_tournament_meta(tournament_id)
         if not rows:
             return []
         archetypes = self._archetypes_by_id([r.archetype_id for r in rows])
         identities = self.colors.resolve_many(archetypes.values())
-        return [
-            ChartSector(
-                name=row.archetype_name,
-                count=row.count,
-                color=hex_for(identities.get(row.archetype_id)),
-            )
-            for row in rows
-        ]
+
+        groups: dict[str, ChartSector] = {}
+        for row in rows:
+            key, name = self._group_of(row.archetype_name)
+            sector = groups.get(key)
+            if sector is None:
+                groups[key] = ChartSector(name=name, count=row.count, color=hex_for(identities.get(row.archetype_id)))
+            else:
+                sector.count += row.count
+        return sorted(groups.values(), key=lambda s: -s.count)
+
+    @staticmethod
+    def _group_of(archetype_name: str) -> tuple[str, str]:
+        """(ключ группировки, название для легенды) для архетипа."""
+        known = lookup_deck(archetype_name)
+        if known is not None:
+            return normalize_deck_name(known.display), known.display
+        return normalize_deck_name(archetype_name), strip_pictographs(archetype_name)
 
     def render(self, tournament_id: int) -> Optional[tuple[bytes, str]]:
         """PNG со срезом метагейма. None — в турнире ещё нет ни одной колоды."""
