@@ -598,15 +598,9 @@ async def _send_completion_announce(bot, chart, text: str) -> None:
         await bot.send_message(chat_id=chat_id, text=text)
         return
 
-    # send_document, а не send_photo: Telegram ужимает фото до 1280px и пережимает в JPEG —
-    # подписи колод в легенде становятся кашей.
+    # Картинкой (send_photo) — чтобы в чате было превью, а не файл-вложение.
     if _caption_length(text) <= CAPTION_LIMIT:
-        await bot.send_document(
-            chat_id=chat_id,
-            document=io.BytesIO(chart.png),
-            filename=chart.filename,
-            caption=text,
-        )
+        await bot.send_photo(chat_id=chat_id, photo=io.BytesIO(chart.png), caption=text)
         return
 
     # Много игроков без поражений — подпись не влезла: текст отдельным сообщением.
@@ -614,7 +608,7 @@ async def _send_completion_announce(bot, chart, text: str) -> None:
     # идемпотентности не встанет и уже доставленный анонс придёт повторно.
     await bot.send_message(chat_id=chat_id, text=text)
     try:
-        await bot.send_document(chat_id=chat_id, document=io.BytesIO(chart.png), filename=chart.filename)
+        await bot.send_photo(chat_id=chat_id, photo=io.BytesIO(chart.png))
     except TelegramError:
         logger.exception("maybe_announce_meta_gather_completed: chart upload failed after the text was sent")
 

@@ -420,12 +420,10 @@ async def callback_meta_chart(update: Update, context: ContextTypes.DEFAULT_TYPE
         if chart is None:
             await query.message.reply_text("В этом турнире ещё нет ни одной колоды.")
             return
-        # send_document, а не send_photo: Telegram ужимает фото до 1280px и пережимает
-        # в JPEG — подписи колод в легенде превращаются в кашу. Только в чат инициатора.
-        await context.bot.send_document(
+        # Картинкой (send_photo) — чтобы в чате было превью. Только в чат инициатора.
+        await context.bot.send_photo(
             chat_id=query.message.chat_id,
-            document=io.BytesIO(chart.png),
-            filename=chart.filename,
+            photo=io.BytesIO(chart.png),
         )
         _log("meta_chart", user, tournament_id=tournament_id)
     finally:

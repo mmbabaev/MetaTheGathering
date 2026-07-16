@@ -168,20 +168,19 @@ async def test_announces_to_owner_once(db, user_svc, arch_svc, monkeypatch):
 
     await maybe_announce_meta_gather_completed(bot, db, t.id)
 
-    # график уходит документом, текст — подписью к нему
-    bot.send_document.assert_awaited_once()
-    kwargs = bot.send_document.call_args.kwargs
+    # график уходит картинкой (превью в чате), текст — подписью к ней
+    bot.send_photo.assert_awaited_once()
+    kwargs = bot.send_photo.call_args.kwargs
     assert kwargs["chat_id"] == 777  # owner DM, not the tournament chat (100)
     assert "Сбор метагейма завершён" in kwargs["caption"]
     assert "Carol — Elves" in kwargs["caption"]
-    assert kwargs["filename"] == f"meta_chart_{t.id}.png"
-    assert kwargs["document"].getvalue().startswith(b"\x89PNG")
+    assert kwargs["photo"].getvalue().startswith(b"\x89PNG")
     bot.send_message.assert_not_awaited()
     assert db.get(models.Tournament, t.id).completed_announced_at is not None
 
     # idempotent — a second import must not re-announce
     await maybe_announce_meta_gather_completed(bot, db, t.id)
-    bot.send_document.assert_awaited_once()
+    bot.send_photo.assert_awaited_once()
 
 
 async def test_chart_is_rendered_off_the_event_loop_without_db(db, user_svc, arch_svc, monkeypatch):
@@ -227,7 +226,7 @@ async def test_announce_falls_back_to_text_when_chart_fails(db, user_svc, arch_s
 
     bot.send_message.assert_awaited_once()
     assert "Сбор метагейма завершён" in bot.send_message.call_args.kwargs["text"]
-    bot.send_document.assert_not_awaited()
+    bot.send_photo.assert_not_awaited()
     assert db.get(models.Tournament, t.id).completed_announced_at is not None
 
 
@@ -241,8 +240,8 @@ async def test_long_announce_sends_text_separately(db, user_svc, arch_svc, monke
     await maybe_announce_meta_gather_completed(bot, db, t.id)
 
     bot.send_message.assert_awaited_once()
-    bot.send_document.assert_awaited_once()
-    assert "caption" not in bot.send_document.call_args.kwargs
+    bot.send_photo.assert_awaited_once()
+    assert "caption" not in bot.send_photo.call_args.kwargs
 
 
 async def test_caption_limit_counts_utf16_units(db, user_svc, arch_svc, monkeypatch):
@@ -259,7 +258,7 @@ async def test_caption_limit_counts_utf16_units(db, user_svc, arch_svc, monkeypa
     await maybe_announce_meta_gather_completed(bot, db, t.id)
 
     bot.send_message.assert_awaited_once()
-    assert "caption" not in bot.send_document.call_args.kwargs
+    assert "caption" not in bot.send_photo.call_args.kwargs
 
 
 async def test_chart_upload_failure_does_not_re_announce(db, user_svc, arch_svc, monkeypatch):
@@ -272,7 +271,7 @@ async def test_chart_upload_failure_does_not_re_announce(db, user_svc, arch_svc,
     monkeypatch.setattr("bot.scheduler.format_meta_gather_completed", MagicMock(return_value="x" * 1100))
     t = _complete_tournament(db, user_svc, arch_svc)
     bot = AsyncMock()
-    bot.send_document.side_effect = TelegramError("upload failed")
+    bot.send_photo.side_effect = TelegramError("upload failed")
 
     await maybe_announce_meta_gather_completed(bot, db, t.id)
 
