@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -65,6 +66,10 @@ class PlayerProfile:
     archetype_name: str | None
     final_place: int | None
 
+
+# Минимальная длительность настоящего турнира. Раньше «сбор завершён» быть не может —
+# гард против преждевременной завершённости, когда AetherHub уже отдал счёт раннего раунда.
+MIN_TOURNAMENT_DURATION = timedelta(hours=4)
 
 # Очки за матч (стандарт Magic): победа 3, ничья 1, поражение 0.
 POINTS_WIN = 3

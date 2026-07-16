@@ -10,7 +10,6 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
-from telegram.error import TelegramError
 from telegram.ext import Application, ContextTypes
 
 from bot.chart import build_chart, build_standings
@@ -20,7 +19,7 @@ from core import models
 from core.config import Club, ClubSchedule, app_cfg, settings
 from core.database import SessionLocal
 from core.schemas import TournamentCreate
-from services.aetherhub_import_service import AetherhubImportService
+from services.aetherhub_import_service import MIN_TOURNAMENT_DURATION, AetherhubImportService
 from services.aetherhub_service import AetherhubService
 from services.datalens import DataLensService
 from services.stats import StatsService
@@ -537,10 +536,6 @@ class AutoRevealDecksJob:
 # Helpers
 # ---------------------------------------------------------------------------
 
-# Минимальная длительность настоящего турнира. Раньше «сбор завершён» быть не может —
-# гард против преждевременного анонса, когда AetherHub уже отдал счёт раннего раунда.
-MIN_TOURNAMENT_DURATION = timedelta(hours=4)
-
 
 async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, chart_svc=None) -> None:
     """Один раз анонсирует «сбор метагейма завершён» с графиком и стендингами.
@@ -590,9 +585,16 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, char
     undefeated = svc.get_undefeated_players(tournament_id)
     text = format_meta_gather_completed(tournament.title, total, with_deck, undefeated)
 
-    await _send_completion_announce(bot, chart, standings, text)
+    # Порядок важен для идемпотентности:
+    # 1) текст — суть анонса; упал → исключение пробрасывается, флаг НЕ ставим, повтор на импорте.
+    await bot.send_message(chat_id=settings.OWNER_CHAT_ID, text=text)
+    # 2) флаг ставим СРАЗУ после доставки текста, до картинок: анонс уже доставлен, повторять
+    #    его нельзя, даже если картинки ниже упадут.
     tournament.completed_announced_at = models.utc_now()
     db.commit()
+    # 3) картинки — украшение, строго best-effort: их сбой (в т.ч. отказ Telegram) не должен
+    #    ни ронять уже доставленный анонс, ни зацикливать повтор.
+    await _send_announce_images(bot, [img for img in ([chart] if chart else []) + list(standings)])
     logger.info("maybe_announce_meta_gather_completed: announced completion for #%s", tournament_id)
 
 
@@ -601,20 +603,12 @@ def _decks_count(db, tournament_id: int) -> int:
     return sum(row.count for row in StatsService(db).get_tournament_meta(tournament_id))
 
 
-async def _send_completion_announce(bot, chart, standings, text: str) -> None:
-    """Анонс: текст сообщением, затем график и страницы стендингов картинками.
-
-    Текст — суть анонса, шлём его отдельным сообщением (не подписью): если оно упадёт,
-    исключение пробрасывается — флаг идемпотентности не встанет и анонс повторится.
-    Картинки — украшение, шлём best-effort: их сбой (в т.ч. если Telegram отверг картинку)
-    не должен ни ронять уже доставленный анонс, ни зациклить повтор.
-    """
-    chat_id = settings.OWNER_CHAT_ID
-    await bot.send_message(chat_id=chat_id, text=text)
-    for image in ([chart] if chart is not None else []) + list(standings):
+async def _send_announce_images(bot, images) -> None:
+    """Best-effort отправка картинок анонса. Ловим любую ошибку — картинки не критичны."""
+    for image in images:
         try:
-            await bot.send_photo(chat_id=chat_id, photo=io.BytesIO(image.png))
-        except TelegramError:
+            await bot.send_photo(chat_id=settings.OWNER_CHAT_ID, photo=io.BytesIO(image.png))
+        except Exception:
             logger.exception("maybe_announce_meta_gather_completed: image upload failed (%s)", image.filename)
 
 

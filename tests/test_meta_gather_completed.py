@@ -273,6 +273,20 @@ async def test_image_upload_failure_does_not_re_announce(db, user_svc, arch_svc,
     assert db.get(models.Tournament, t.id).completed_announced_at is not None
 
 
+async def test_flag_set_before_images_so_any_image_error_never_re_announces(db, user_svc, arch_svc, monkeypatch):
+    """Флаг ставится сразу после текста, до картинок: любая ошибка картинки (даже
+    не TelegramError) не должна привести к повторному анонсу."""
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    t = _complete_tournament(db, user_svc, arch_svc)
+    bot = AsyncMock()
+    bot.send_photo.side_effect = RuntimeError("нежданная ошибка")
+
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+
+    bot.send_message.assert_awaited_once()
+    assert db.get(models.Tournament, t.id).completed_announced_at is not None
+
+
 async def test_text_failure_reannounces(db, user_svc, arch_svc, monkeypatch):
     """Если само текстовое сообщение не ушло — анонс не доставлен: исключение
     пробрасывается (в проде его ловит джоба), флаг не встаёт, повтор на импорте."""
