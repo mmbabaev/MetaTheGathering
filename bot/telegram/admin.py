@@ -439,15 +439,17 @@ async def callback_standings(update: Update, context: ContextTypes.DEFAULT_TYPE)
     (tournament_id,) = ids
     db = SessionLocal()
     try:
-        if not _admin_handler(db).can_build_standings(user.id, tournament_id):
+        availability = _admin_handler(db).standings_availability(user.id, tournament_id)
+        if availability != "ok":
             # Алерт только здесь: повторный answer после «Считаю…» игнорится (см. #123).
-            await query.answer("Нет прав или турнир не найден.", show_alert=True)
+            msg = {
+                "no_access": "Нет прав или турнир не найден.",
+                "not_ready": "Стендинги ещё не готовы — турнир не завершён.",
+            }[availability]
+            await query.answer(msg, show_alert=True)
             return
         await query.answer("Считаю стендинги…")
         pages = await build_standings(db, tournament_id)
-        if not pages:
-            await query.message.reply_text("Стендинги ещё не готовы — турнир не завершён.")
-            return
         # Картинками (send_photo) — превью в чате. Длинный список — несколько страниц.
         for page in pages:
             await context.bot.send_photo(chat_id=query.message.chat_id, photo=io.BytesIO(page.png))

@@ -1677,6 +1677,37 @@ class TestCanBuildMetaChart:
         assert handler.can_build_meta_chart(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id) is True
 
 
+class TestStandingsAvailability:
+    def test_not_privileged(self, handler, user_alice, active_tournament):
+        assert handler.standings_availability(user_alice.tg_id, active_tournament.id) == "no_access"
+
+    def test_tournament_not_found(self, handler, admin_user):
+        assert handler.standings_availability(ADMIN_TG_ID, 99999) == "no_access"
+
+    def test_not_ready_while_ongoing(self, handler, admin_user, active_tournament):
+        """Турнир без счёта матчей — стендинги «ещё не готовы», а не промежуточные."""
+        assert handler.standings_availability(ADMIN_TG_ID, active_tournament.id) == "not_ready"
+
+    def test_ok_when_complete(self, handler, admin_user, active_tournament, svc, user_alice, arch_svc, db):
+        arch = arch_svc.get_or_create_by_name("Burn")
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id, archetype_id=arch.id)
+        for r in (1, 2, 3, 4):
+            db.add(
+                m.RoundPairing(
+                    tournament_id=active_tournament.id,
+                    round_number=r,
+                    player_name="Alice",
+                    opponent_name="Opp",
+                    table_number=1,
+                    player_wins=2,
+                    opponent_wins=0,
+                )
+            )
+        db.commit()
+
+        assert handler.standings_availability(ADMIN_TG_ID, active_tournament.id) == "ok"
+
+
 # ── handle_schedule ───────────────────────────────────────────────────────────
 
 

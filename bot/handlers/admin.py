@@ -564,16 +564,10 @@ class AdminHandler:
     def can_build_meta_chart(self, tg_id: int, tournament_id: int) -> bool:
         """Можно ли строить «Метагейм-срез»: есть права и турнир существует.
 
-        Саму картинку собирает `bot.chart` — там рисование уходит в отдельный поток,
-        и держать эту механику в чистом хендлере незачем.
+        График работает и по ходу турнира, поэтому завершённость не требуется. Саму
+        картинку собирает `bot.chart` — рисование уходит в поток, и держать эту механику
+        в чистом хендлере незачем.
         """
-        return self._can_view_tournament_image(tg_id, tournament_id)
-
-    def can_build_standings(self, tg_id: int, tournament_id: int) -> bool:
-        """Можно ли строить «Итоговые стендинги»: есть права и турнир существует."""
-        return self._can_view_tournament_image(tg_id, tournament_id)
-
-    def _can_view_tournament_image(self, tg_id: int, tournament_id: int) -> bool:
         if not self.user_svc.is_privileged(tg_id):
             return False
         try:
@@ -581,6 +575,18 @@ class AdminHandler:
         except errors.TournamentNotFound:
             return False
         return True
+
+    def standings_availability(self, tg_id: int, tournament_id: int) -> str:
+        """Доступность «Итоговых стендингов»: 'no_access' | 'not_ready' | 'ok'.
+
+        Стендинги — итоговые, поэтому показываем только для завершённого турнира (у всех
+        матчей есть счёт), иначе картинка «Итоговые» врала бы промежуточными результатами.
+        """
+        if not self.can_build_meta_chart(tg_id, tournament_id):
+            return "no_access"
+        if not AetherhubImportService(self.svc.db).is_tournament_complete(tournament_id):
+            return "not_ready"
+        return "ok"
 
     def handle_delete_tournament_prompt(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Показывает запрос подтверждения удаления турнира."""

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from core import models
 from services import errors
 from services.aetherhub_models import AetherhubRound, AetherhubTournamentData
+from services.names import format_participant_name
 from services.user import UserService
 
 
@@ -454,11 +455,14 @@ class AetherhubImportService:
                 )
             )
 
-        # Сортировка: сначала по финальному месту (у кого есть), затем по очкам, затем по имени.
+        # Сортировка: сначала по очкам (Swiss всегда по очкам), затем — тай-брейк финальным
+        # местом AetherHub (у кого известно), затем по имени. По очкам, а не по месту первым:
+        # если имя игрока не сматчилось и место не подтянулось, он всё равно окажется наверху
+        # по очкам, а не улетит в самый низ.
         rows.sort(
             key=lambda item: (
-                item[0] if item[0] is not None else 10**9,
                 -item[1].points,
+                item[0] if item[0] is not None else 10**9,
                 item[1].display_name.lower(),
             )
         )
@@ -470,9 +474,8 @@ class AetherhubImportService:
 
     @staticmethod
     def _display_name(first_name: str | None, last_name: str | None, fallback: str) -> str:
-        """«Фамилия Имя»; если ни одного поля нет — имя из парингов."""
-        parts = [p for p in (last_name, first_name) if p]
-        return " ".join(parts) if parts else fallback
+        """«Фамилия Имя» тем же форматтером, что и в UI; нет имени — имя из парингов."""
+        return format_participant_name(first_name, last_name) or fallback
 
     def get_player_opponents(self, tournament_id: int, participant_id: int) -> tuple[list[OpponentInfo], str | None]:
         """Return (opponents, error_key).

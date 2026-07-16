@@ -1,5 +1,9 @@
 # Шаблоны сообщений
 
+# Форматирование ФИО живёт в services/names.py, чтобы одинаково работало и в картинках
+# (services-слой). Здесь — реэкспорт для существующих импортов из bot.messages.
+from services.names import family_name_sort_key, format_participant_name
+
 NO_ACTIVE_TOURNAMENTS = "Нет активных турниров."
 CHOOSE_ARCHETYPE = "Выберите архетип колоды:"
 CUSTOM_ARCHETYPE_PROMPT = "Напишите название архетипа:"
@@ -79,64 +83,6 @@ def _participant_icon(p) -> str:
 
 
 # Типичные окончания русских фамилий
-_FAMILY_SUFFIXES = (
-    "ов",
-    "ев",
-    "ёв",
-    "ин",
-    "ын",
-    "ый",
-    "ий",
-    "ой",
-    "ский",
-    "цкий",
-    "ской",
-    "ная",
-    "ная",
-    "ных",
-    "ых",
-    "ина",
-    "ева",
-    "ова",
-    "ская",
-)
-
-
-def _looks_like_family_name(word: str) -> bool:
-    w = word.lower()
-    return any(w.endswith(s) for s in _FAMILY_SUFFIXES)
-
-
-def format_participant_name(first_name: str | None, last_name: str | None) -> str:
-    """Возвращает имя в формате «Фамилия Имя».
-
-    Если оба поля заполнены — просто last_name + first_name.
-    Если только first_name (Telegram-юзер с именем в одном поле) — применяет эвристику:
-    если последнее слово выглядит как фамилия (суффикс -ов/-ин/-ский и т.п.),
-    переставляет слова; иначе оставляет как есть (первое слово уже фамилия).
-    """
-    if last_name and first_name:
-        return f"{last_name} {first_name}"
-    if last_name:
-        return last_name
-    if not first_name:
-        return ""
-    words = first_name.split()
-    if len(words) == 2 and _looks_like_family_name(words[1]):
-        return f"{words[1]} {words[0]}"
-    return first_name
-
-
-def family_name_sort_key(first_name: str | None, last_name: str | None) -> str:
-    """Возвращает фамилию в нижнем регистре для сортировки."""
-    if last_name:
-        return last_name.lower()
-    if not first_name:
-        return ""
-    words = first_name.split()
-    if len(words) == 2 and _looks_like_family_name(words[1]):
-        return words[1].lower()
-    return (words[0] if words else "").lower()
 
 
 def sort_participants(participants: list) -> list:
