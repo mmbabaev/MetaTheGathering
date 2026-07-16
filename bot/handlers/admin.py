@@ -564,9 +564,16 @@ class AdminHandler:
     def can_build_meta_chart(self, tg_id: int, tournament_id: int) -> bool:
         """Можно ли строить «Метагейм-срез»: есть права и турнир существует.
 
-        Сам график собирает `bot.chart.build_chart` — там рисование уходит в отдельный
-        поток, и держать эту механику в чистом хендлере незачем.
+        Саму картинку собирает `bot.chart` — там рисование уходит в отдельный поток,
+        и держать эту механику в чистом хендлере незачем.
         """
+        return self._can_view_tournament_image(tg_id, tournament_id)
+
+    def can_build_standings(self, tg_id: int, tournament_id: int) -> bool:
+        """Можно ли строить «Итоговые стендинги»: есть права и турнир существует."""
+        return self._can_view_tournament_image(tg_id, tournament_id)
+
+    def _can_view_tournament_image(self, tg_id: int, tournament_id: int) -> bool:
         if not self.user_svc.is_privileged(tg_id):
             return False
         try:

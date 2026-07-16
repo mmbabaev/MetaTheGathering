@@ -9,7 +9,7 @@ from telegram.constants import ChatType
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
-from bot.chart import build_chart
+from bot.chart import build_chart, build_standings
 from bot.handlers.admin import parse_bulk_player_line
 from bot.keyboards import (
     admin_more_keyboard,
@@ -428,6 +428,34 @@ async def callback_meta_chart(update: Update, context: ContextTypes.DEFAULT_TYPE
             filename=chart.filename,
         )
         _log("meta_chart", user, tournament_id=tournament_id)
+    finally:
+        db.close()
+
+
+async def callback_standings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка «🏆 Итоговые стендинги» — отправляет картинку со стендингами."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+    db = SessionLocal()
+    try:
+        if not _admin_handler(db).can_build_standings(user.id, tournament_id):
+            # Алерт только здесь: повторный answer после «Считаю…» игнорится (см. #123).
+            await query.answer("Нет прав или турнир не найден.", show_alert=True)
+            return
+        await query.answer("Считаю стендинги…")
+        standings = await build_standings(db, tournament_id)
+        if standings is None:
+            await query.message.reply_text("Стендинги ещё не готовы — турнир не завершён.")
+            return
+        # Картинкой (send_photo) — чтобы в чате было превью. Только в чат инициатора.
+        await context.bot.send_photo(chat_id=query.message.chat_id, photo=io.BytesIO(standings.png))
+        _log("standings", user, tournament_id=tournament_id)
     finally:
         db.close()
 

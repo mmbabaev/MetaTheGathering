@@ -55,6 +55,33 @@ class UndefeatedPlayer:
     wins: int
 
 
+# Очки за матч (стандарт Magic): победа 3, ничья 1, поражение 0.
+POINTS_WIN = 3
+POINTS_DRAW = 1
+
+
+@dataclass
+class StandingRow:
+    """Строка итоговых стендингов турнира."""
+
+    place: int  # порядковый номер в стендингах (1-based)
+    display_name: str  # «Фамилия Имя», либо имя из парингов, если игрок не найден в боте
+    archetype_name: str | None  # колода; None = не записана / игрок не найден
+    wins: int
+    losses: int
+    draws: int
+
+    @property
+    def points(self) -> int:
+        return self.wins * POINTS_WIN + self.draws * POINTS_DRAW
+
+    @property
+    def record(self) -> str:
+        """«4-0» или «3-1-1» (ничьи показываем только если они есть)."""
+        base = f"{self.wins}-{self.losses}"
+        return f"{base}-{self.draws}" if self.draws else base
+
+
 class AetherhubImportService:
     def __init__(self, db: Session) -> None:
         self.db = db
@@ -376,6 +403,64 @@ class AetherhubImportService:
 
         players.sort(key=lambda u: (u.final_place if u.final_place is not None else 10**9, u.player_name.lower()))
         return players
+
+    def get_standings(self, tournament_id: int) -> list[StandingRow]:
+        """Итоговые стендинги: все игроки из парингов, по финальному месту.
+
+        Место берётся из `Participant.final_place` (порядок AetherHub). Для игроков без
+        места (не найдены в боте / место не проставлено) — фолбэк по очкам, затем по имени.
+        Колода известна только для само-зарегистрированных игроков; иначе None.
+        """
+        records = self._player_records(tournament_id)
+        if not records:
+            return []
+
+        rows: list[tuple[int | None, StandingRow]] = []
+        for name, rec in records.items():
+            user = self.find_user_by_name(name)
+            display_name = name
+            archetype_name: str | None = None
+            final_place: int | None = None
+            if user is not None:
+                display_name = self._display_name(user.first_name, user.last_name, name)
+                participant = self._get_participant(tournament_id, user.id)
+                if participant is not None:
+                    final_place = participant.final_place
+                    if participant.archetype is not None:
+                        archetype_name = participant.archetype.name
+            rows.append(
+                (
+                    final_place,
+                    StandingRow(
+                        place=0,  # проставим после сортировки
+                        display_name=display_name,
+                        archetype_name=archetype_name,
+                        wins=rec["wins"],
+                        losses=rec["losses"],
+                        draws=rec["draws"],
+                    ),
+                )
+            )
+
+        # Сортировка: сначала по финальному месту (у кого есть), затем по очкам, затем по имени.
+        rows.sort(
+            key=lambda item: (
+                item[0] if item[0] is not None else 10**9,
+                -item[1].points,
+                item[1].display_name.lower(),
+            )
+        )
+        standings = []
+        for i, (_, row) in enumerate(rows, start=1):
+            row.place = i
+            standings.append(row)
+        return standings
+
+    @staticmethod
+    def _display_name(first_name: str | None, last_name: str | None, fallback: str) -> str:
+        """«Фамилия Имя»; если ни одного поля нет — имя из парингов."""
+        parts = [p for p in (last_name, first_name) if p]
+        return " ".join(parts) if parts else fallback
 
     def get_player_opponents(self, tournament_id: int, participant_id: int) -> tuple[list[OpponentInfo], str | None]:
         """Return (opponents, error_key).
