@@ -13,7 +13,7 @@ from sqlalchemy import select
 from telegram.error import TelegramError
 from telegram.ext import Application, ContextTypes
 
-from bot.chart import build_chart
+from bot.chart import build_chart, build_standings
 from bot.messages import format_decks_revealed, format_meta_gather_completed
 from bot.telegram.round_notify import send_round_notifications
 from core import models
@@ -575,12 +575,13 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, char
         return
 
     chart = await build_chart(db, tournament_id, chart_svc)
+    standings = await build_standings(db, tournament_id)
     total = len(TournamentService(db).list_participants_for_tournament(tournament_id))
     with_deck = sum(s.count for s in chart.sectors) if chart else _decks_count(db, tournament_id)
     undefeated = svc.get_undefeated_players(tournament_id)
     text = format_meta_gather_completed(tournament.title, total, with_deck, undefeated)
 
-    await _send_completion_announce(bot, chart, text)
+    await _send_completion_announce(bot, chart, standings, text)
     tournament.completed_announced_at = models.utc_now()
     db.commit()
     logger.info("maybe_announce_meta_gather_completed: announced completion for #%s", tournament_id)
@@ -591,32 +592,32 @@ def _decks_count(db, tournament_id: int) -> int:
     return sum(row.count for row in StatsService(db).get_tournament_meta(tournament_id))
 
 
-async def _send_completion_announce(bot, chart, text: str) -> None:
-    """Анонс с бубликом. Графика нет — уходит как раньше, текстом: она не должна ломать анонс."""
+async def _send_completion_announce(bot, chart, standings, text: str) -> None:
+    """Анонс: текст + график + страницы стендингов, всё картинками.
+
+    Картинки — украшение: их сбой не должен ломать анонс и не должен мешать поставить флаг
+    идемпотентности (иначе уже доставленный анонс придёт повторно на следующем импорте).
+    Поэтому текст доставляем гарантированно, а каждую картинку шлём best-effort.
+    """
     chat_id = settings.OWNER_CHAT_ID
-    if chart is None:
+    images = ([chart] if chart is not None else []) + list(standings)
+
+    if images and _caption_length(text) <= CAPTION_LIMIT:
+        # Текст едет подписью первой картинки. Эту отправку НЕ глушим: если она упадёт,
+        # анонс не доставлен — исключение пробрасывается, флаг не встаёт, повтор на импорте.
+        await bot.send_photo(chat_id=chat_id, photo=io.BytesIO(images[0].png), caption=text)
+        rest = images[1:]
+    else:
+        # Подпись не влезла (или картинок нет): текст отдельным гарантированным сообщением.
         await bot.send_message(chat_id=chat_id, text=text)
-        return
+        rest = images
 
-    # send_document, а не send_photo: Telegram ужимает фото до 1280px и пережимает в JPEG —
-    # подписи колод в легенде становятся кашей.
-    if _caption_length(text) <= CAPTION_LIMIT:
-        await bot.send_document(
-            chat_id=chat_id,
-            document=io.BytesIO(chart.png),
-            filename=chart.filename,
-            caption=text,
-        )
-        return
-
-    # Много игроков без поражений — подпись не влезла: текст отдельным сообщением.
-    # Анонс — это текст, график лишь бонус, поэтому его сбой глушим: иначе флаг
-    # идемпотентности не встанет и уже доставленный анонс придёт повторно.
-    await bot.send_message(chat_id=chat_id, text=text)
-    try:
-        await bot.send_document(chat_id=chat_id, document=io.BytesIO(chart.png), filename=chart.filename)
-    except TelegramError:
-        logger.exception("maybe_announce_meta_gather_completed: chart upload failed after the text was sent")
+    # Остальные картинки — украшение: их сбой не должен ронять уже доставленный анонс.
+    for image in rest:
+        try:
+            await bot.send_photo(chat_id=chat_id, photo=io.BytesIO(image.png))
+        except TelegramError:
+            logger.exception("maybe_announce_meta_gather_completed: image upload failed (%s)", image.filename)
 
 
 def _find_active_club_tournament(db, club_name: str):

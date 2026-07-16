@@ -10,9 +10,9 @@ from core.schemas import TournamentCreate
 from services.aetherhub_import_service import AetherhubImportService, StandingRow
 from services.chart_style import WIDTH
 from services.standings_image import (
-    PAGE_SIZE,
     StandingsImageService,
     accent_color,
+    paginate,
     render_standings,
     render_standings_pages,
 )
@@ -154,19 +154,32 @@ class TestRenderStandings:
         assert render_standings(rows).startswith(b"\x89PNG")
 
 
-class TestPaging:
-    def test_one_page_up_to_page_size(self):
-        rows = [StandingRow(i, f"P{i}", None, 1, 0, 0) for i in range(1, PAGE_SIZE + 1)]
-        assert len(render_standings_pages(rows)) == 1
+class TestPaginate:
+    @pytest.mark.parametrize(
+        "n,expected_sizes",
+        [
+            (0, []),
+            (1, [1]),
+            (2, [1, 1]),
+            (17, [9, 8]),  # ≤50 — пополам
+            (45, [23, 22]),
+            (50, [25, 25]),  # ровно порог — ещё пополам
+            (51, [30, 21]),  # >50 — батчами по 30
+            (60, [30, 30]),
+            (61, [30, 30, 1]),
+        ],
+    )
+    def test_page_sizes(self, n, expected_sizes):
+        rows = list(range(n))
+        assert [len(p) for p in paginate(rows)] == expected_sizes
 
-    def test_splits_into_pages_of_thirty(self):
-        rows = [StandingRow(i, f"P{i}", None, 1, 0, 0) for i in range(1, 46)]
-        pages = render_standings_pages(rows)
-        assert len(pages) == 2  # 30 + 15
-        assert all(p.startswith(b"\x89PNG") for p in pages)
+    def test_pages_cover_all_players_in_order(self):
+        rows = list(range(45))
+        assert [x for page in paginate(rows) for x in page] == rows
 
-    def test_render_returns_first_page(self):
+    def test_render_pages_match_paginate(self):
         rows = [StandingRow(i, f"P{i}", None, 1, 0, 0) for i in range(1, 46)]
+        assert len(render_standings_pages(rows)) == 2
         assert render_standings(rows) == render_standings_pages(rows)[0]
 
 
@@ -176,10 +189,11 @@ class TestStandingsImageService:
 
         pages = StandingsImageService(db).render(t.id)
 
-        assert len(pages) == 1  # 4 игрока — одна страница
+        assert len(pages) == 2  # 4 игрока ≤50 → делим пополам
         png, filename = pages[0]
         assert png.startswith(b"\x89PNG")
         assert filename == f"standings_{t.id}_1.png"
+        assert pages[1][1] == f"standings_{t.id}_2.png"
 
     def test_prepare_resolves_pips_and_render_needs_no_db(self, db, svc, user_svc, arch_svc):
         """prepare() — вся работа с БД (включая пипы по имени колоды); render рисует без сессии."""

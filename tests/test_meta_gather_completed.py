@@ -9,6 +9,7 @@ import threading
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from sqlalchemy.exc import OperationalError
 from telegram.error import TelegramError
 
@@ -168,20 +169,22 @@ async def test_announces_to_owner_once(db, user_svc, arch_svc, monkeypatch):
 
     await maybe_announce_meta_gather_completed(bot, db, t.id)
 
-    # график уходит документом, текст — подписью к нему
-    bot.send_document.assert_awaited_once()
-    kwargs = bot.send_document.call_args.kwargs
-    assert kwargs["chat_id"] == 777  # owner DM, not the tournament chat (100)
-    assert "Сбор метагейма завершён" in kwargs["caption"]
-    assert "Carol — Elves" in kwargs["caption"]
-    assert kwargs["filename"] == f"meta_chart_{t.id}.png"
-    assert kwargs["document"].getvalue().startswith(b"\x89PNG")
+    # график + страницы стендингов уходят картинками; текст — подписью первой (график)
+    assert bot.send_photo.await_count >= 2  # график + минимум одна страница стендингов
+    first = bot.send_photo.call_args_list[0].kwargs
+    assert first["chat_id"] == 777  # owner DM, not the tournament chat (100)
+    assert "Сбор метагейма завершён" in first["caption"]
+    assert "Carol — Elves" in first["caption"]
+    assert first["photo"].getvalue().startswith(b"\x89PNG")
+    # остальные картинки без подписи (одна подпись на сообщение)
+    assert all("caption" not in c.kwargs or c.kwargs["caption"] is None for c in bot.send_photo.call_args_list[1:])
     bot.send_message.assert_not_awaited()
     assert db.get(models.Tournament, t.id).completed_announced_at is not None
 
     # idempotent — a second import must not re-announce
+    sent = bot.send_photo.await_count
     await maybe_announce_meta_gather_completed(bot, db, t.id)
-    bot.send_document.assert_awaited_once()
+    assert bot.send_photo.await_count == sent
 
 
 async def test_chart_is_rendered_off_the_event_loop_without_db(db, user_svc, arch_svc, monkeypatch):
@@ -216,10 +219,11 @@ async def test_chart_is_rendered_off_the_event_loop_without_db(db, user_svc, arc
     assert seen["render_thread"] != main_thread
 
 
-async def test_announce_falls_back_to_text_when_chart_fails(db, user_svc, arch_svc, monkeypatch):
-    """Картинка не должна ломать анонс: рендер упал — текст всё равно уходит."""
+async def test_announce_text_delivered_when_all_images_fail_to_build(db, user_svc, arch_svc, monkeypatch):
+    """Картинки не должны ломать анонс: и график, и стендинги не отрисовались — текст уходит."""
     monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
     monkeypatch.setattr("bot.chart.render_sectors", MagicMock(side_effect=RuntimeError("шрифт не найден")))
+    monkeypatch.setattr("bot.chart.render_standings_pages", MagicMock(side_effect=RuntimeError("bang")))
     t = _complete_tournament(db, user_svc, arch_svc)
     bot = AsyncMock()
 
@@ -227,12 +231,13 @@ async def test_announce_falls_back_to_text_when_chart_fails(db, user_svc, arch_s
 
     bot.send_message.assert_awaited_once()
     assert "Сбор метагейма завершён" in bot.send_message.call_args.kwargs["text"]
-    bot.send_document.assert_not_awaited()
+    bot.send_photo.assert_not_awaited()
     assert db.get(models.Tournament, t.id).completed_announced_at is not None
 
 
 async def test_long_announce_sends_text_separately(db, user_svc, arch_svc, monkeypatch):
-    """Подпись в Telegram ограничена 1024 символами — длинный текст уходит сообщением."""
+    """Подпись в Telegram ограничена 1024 символами — длинный текст уходит сообщением,
+    а картинки следом, без подписи."""
     monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
     monkeypatch.setattr("bot.scheduler.format_meta_gather_completed", MagicMock(return_value="x" * 1100))
     t = _complete_tournament(db, user_svc, arch_svc)
@@ -241,8 +246,8 @@ async def test_long_announce_sends_text_separately(db, user_svc, arch_svc, monke
     await maybe_announce_meta_gather_completed(bot, db, t.id)
 
     bot.send_message.assert_awaited_once()
-    bot.send_document.assert_awaited_once()
-    assert "caption" not in bot.send_document.call_args.kwargs
+    assert bot.send_photo.await_count >= 1
+    assert all(c.kwargs.get("caption") is None for c in bot.send_photo.call_args_list)
 
 
 async def test_caption_limit_counts_utf16_units(db, user_svc, arch_svc, monkeypatch):
@@ -259,20 +264,20 @@ async def test_caption_limit_counts_utf16_units(db, user_svc, arch_svc, monkeypa
     await maybe_announce_meta_gather_completed(bot, db, t.id)
 
     bot.send_message.assert_awaited_once()
-    assert "caption" not in bot.send_document.call_args.kwargs
+    assert all(c.kwargs.get("caption") is None for c in bot.send_photo.call_args_list)
 
 
-async def test_chart_upload_failure_does_not_re_announce(db, user_svc, arch_svc, monkeypatch):
-    """Анонс — это текст, график лишь бонус.
+async def test_secondary_image_failure_does_not_re_announce(db, user_svc, arch_svc, monkeypatch):
+    """Текст доставлен (отдельным сообщением), а картинки — best-effort.
 
-    Если текст доставлен, а картинка не загрузилась, флаг всё равно должен встать:
-    иначе следующий импорт пришлёт уже доставленный анонс повторно.
+    Падение картинки не должно мешать флагу идемпотентности: иначе доставленный анонс
+    придёт повторно на следующем импорте.
     """
     monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
     monkeypatch.setattr("bot.scheduler.format_meta_gather_completed", MagicMock(return_value="x" * 1100))
     t = _complete_tournament(db, user_svc, arch_svc)
     bot = AsyncMock()
-    bot.send_document.side_effect = TelegramError("upload failed")
+    bot.send_photo.side_effect = TelegramError("upload failed")
 
     await maybe_announce_meta_gather_completed(bot, db, t.id)
 
@@ -280,23 +285,36 @@ async def test_chart_upload_failure_does_not_re_announce(db, user_svc, arch_svc,
     assert db.get(models.Tournament, t.id).completed_announced_at is not None
 
 
-async def test_db_error_while_building_chart_still_sets_flag(db, user_svc, arch_svc, monkeypatch):
-    """Сбой БД при построении графика не должен отравить сессию.
+async def test_caption_image_failure_reannounces(db, user_svc, arch_svc, monkeypatch):
+    """Короткий текст едет подписью первой картинки. Если та не отправилась — анонс НЕ
+    доставлен: исключение пробрасывается (в проде его ловит джоба), флаг не встаёт,
+    попытка повторится на следующем импорте."""
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    t = _complete_tournament(db, user_svc, arch_svc)
+    bot = AsyncMock()
+    bot.send_photo.side_effect = TelegramError("upload failed")
+
+    with pytest.raises(TelegramError):
+        await maybe_announce_meta_gather_completed(bot, db, t.id)
+
+    assert db.get(models.Tournament, t.id).completed_announced_at is None
+
+
+async def test_db_error_while_building_images_still_sets_flag(db, user_svc, arch_svc, monkeypatch):
+    """Сбой БД при построении картинок не должен отравить сессию.
 
     Иначе анонс уходит, а коммит флага падает — и он приходит заново на каждый импорт.
     """
     monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
-    monkeypatch.setattr(
-        chart_mod.MetaChartService,
-        "prepare",
-        MagicMock(side_effect=OperationalError("SELECT 1", {}, Exception("connection lost"))),
-    )
+    db_error = MagicMock(side_effect=OperationalError("SELECT 1", {}, Exception("connection lost")))
+    monkeypatch.setattr(chart_mod.MetaChartService, "prepare", db_error)
+    monkeypatch.setattr(chart_mod.StandingsImageService, "prepare", db_error)
     t = _complete_tournament(db, user_svc, arch_svc)
     bot = AsyncMock()
 
     await maybe_announce_meta_gather_completed(bot, db, t.id)
 
-    bot.send_message.assert_awaited_once()  # анонс ушёл текстом
+    bot.send_message.assert_awaited_once()  # обе картинки отвалились — анонс ушёл текстом
     assert db.get(models.Tournament, t.id).completed_announced_at is not None  # и флаг сохранился
 
 

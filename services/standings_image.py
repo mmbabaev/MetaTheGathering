@@ -21,7 +21,10 @@ from services.deck_colors import colors_for_deck_name
 
 MARGIN = 63
 TITLE = "Итоговые стендинги"
-PAGE_SIZE = 30  # игроков на одну картинку
+# До BATCH_THRESHOLD игроков список делим примерно пополам (две нестыдно-высокие картинки);
+# больше — режем батчами по BATCH_SIZE, чтобы страницы не разрастались.
+BATCH_THRESHOLD = 50
+BATCH_SIZE = 30
 
 HEADER_Y = 40
 TABLE_TOP = 150
@@ -88,9 +91,20 @@ class StandingsData:
     filename_prefix: str
 
 
+def paginate(rows: list) -> list[list]:
+    """Разбивает игроков на страницы: ≤50 — пополам, больше — батчами по 30."""
+    n = len(rows)
+    if n <= 1:
+        return [rows] if rows else []
+    if n > BATCH_THRESHOLD:
+        return [rows[i : i + BATCH_SIZE] for i in range(0, n, BATCH_SIZE)]
+    half = (n + 1) // 2
+    return [rows[:half], rows[half:]]
+
+
 def render_standings_pages(rows: list[StandingRow], subtitle: str = "") -> list[bytes]:
-    """PNG-страницы стендингов, по PAGE_SIZE игроков на страницу."""
-    pages = [rows[i : i + PAGE_SIZE] for i in range(0, len(rows), PAGE_SIZE)]
+    """PNG-страницы стендингов (см. paginate)."""
+    pages = paginate(rows)
     total = len(pages)
     return [_render_page(page, subtitle, i + 1, total) for i, page in enumerate(pages)]
 
