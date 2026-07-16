@@ -537,14 +537,23 @@ class AutoRevealDecksJob:
 # Helpers
 # ---------------------------------------------------------------------------
 
+# Минимальная длительность настоящего турнира. Раньше «сбор завершён» быть не может —
+# гард против преждевременного анонса, когда AetherHub уже отдал счёт раннего раунда.
+MIN_TOURNAMENT_DURATION = timedelta(hours=4)
+
 
 async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, chart_svc=None) -> None:
-    """Один раз анонсирует «сбор метагейма завершён» с графиком, когда турнир сыгран до конца.
+    """Один раз анонсирует «сбор метагейма завершён» с графиком и стендингами.
 
-    Срабатывает после импорта, когда у всех матчей появился счёт (признак завершения
-    турнира + получены финальные стендинги). Идемпотентность — флаг
-    ``Tournament.completed_announced_at``: флаг ставим ТОЛЬКО после успешной отправки,
-    поэтому сбой отправки не «съедает» анонс — он повторится при следующем импорте.
+    Срабатывает после импорта при выполнении ВСЕХ условий:
+    - турнир привязан к AetherHub (``aetherhub_url``) — только настоящие турниры;
+    - прошло ≥ ``MIN_TOURNAMENT_DURATION`` с начала игры (``started_at``) — иначе счёт
+      раннего раунда мог бы преждевременно сойти за завершённость;
+    - у всех не-бай матчей есть счёт (``is_tournament_complete``).
+
+    Идемпотентность — флаг ``Tournament.completed_announced_at``: ставим ТОЛЬКО после
+    успешной отправки, поэтому сбой отправки не «съедает» анонс — он повторится при
+    следующем импорте (в т.ч. ночной 06:00-реимпорт — гарантированный бэкап, там >4ч всегда).
 
     Пока шлём владельцу (``settings.OWNER_CHAT_ID``), а не в чат турнира — и в debug,
     и в prod. Позже можно переключить на чат клуба, поменяв адресата здесь.
@@ -555,6 +564,19 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, char
         return
     tournament = db.get(models.Tournament, tournament_id)
     if tournament is None or tournament.completed_announced_at is not None:
+        return
+
+    # Только для «настоящих» турниров, привязанных к AetherHub: у отладочных/ручных нет
+    # aetherhub_url, и их завершённость по счёту матчей неопределена.
+    if not tournament.aetherhub_url:
+        return
+
+    # Минимальная длительность турнира — 4 часа. Раньше «сбор завершён» быть не может:
+    # это отсекает преждевременный анонс, когда AetherHub уже проставил счёт раннего раунда,
+    # но следующие ещё не сыграны. started_at ≈ старт игры (первый импорт раунда).
+    if tournament.started_at is None:
+        return
+    if models.utc_now() - tournament.started_at < MIN_TOURNAMENT_DURATION:
         return
 
     svc = AetherhubImportService(db)

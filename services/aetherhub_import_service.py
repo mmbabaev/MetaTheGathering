@@ -281,6 +281,13 @@ class AetherhubImportService:
         if real_rounds:
             self._delete_rounds_above(tournament_id, max(real_rounds))
 
+        # Момент старта игры ≈ первый импорт с раундами (переход «турнир начался» в UI не
+        # вызывается, так что started_at иначе остаётся пустым). Нужен, чтобы не анонсировать
+        # «сбор завершён» раньше минимальной длительности турнира (см. bot/scheduler.py).
+        if real_rounds and tournament.started_at is None:
+            tournament.started_at = models.utc_now()
+            self.db.commit()
+
         return ImportResult(
             registered=registered,
             already_registered=already_registered,

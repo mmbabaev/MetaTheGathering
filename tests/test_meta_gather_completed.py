@@ -6,6 +6,7 @@ and announce, once, to the owner DM — listing the undefeated (X-0) players and
 """
 
 import threading
+from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -56,6 +57,12 @@ def _complete_tournament(db, user_svc, arch_svc):
     record is independent — realism of who-beat-whom is irrelevant to the math.
     """
     t = TournamentService(db).create_tournament(TournamentCreate(title="Pauper Friday", chat_id=100))
+    # По умолчанию — «настоящий» завершённый турнир: привязан к AetherHub и стартовал 5ч назад,
+    # чтобы проходили гарды анонса (aetherhub_url + минимальная длительность).
+    row = db.get(models.Tournament, t.id)
+    row.aetherhub_url = "https://aetherhub.com/Tourney/RoundTourney/1"
+    row.started_at = models.utc_now() - timedelta(hours=5)
+    db.commit()
     burn = arch_svc.get_or_create_by_name("Burn")
     elves = arch_svc.get_or_create_by_name("Elves")
 
@@ -317,4 +324,45 @@ async def test_no_announce_without_owner_chat_id(db, user_svc, arch_svc, monkeyp
     t = _complete_tournament(db, user_svc, arch_svc)
     bot = AsyncMock()
     await maybe_announce_meta_gather_completed(bot, db, t.id)
+    bot.send_message.assert_not_awaited()
+
+
+async def test_no_announce_without_aetherhub_link(db, user_svc, arch_svc, monkeypatch):
+    """Отладочные/ручные турниры без привязки к AetherHub не анонсируются."""
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    t = _complete_tournament(db, user_svc, arch_svc)
+    db.get(models.Tournament, t.id).aetherhub_url = None
+    db.commit()
+
+    bot = AsyncMock()
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+
+    bot.send_message.assert_not_awaited()
+    assert db.get(models.Tournament, t.id).completed_announced_at is None
+
+
+async def test_no_announce_before_min_duration(db, user_svc, arch_svc, monkeypatch):
+    """Гард против преждевременного анонса: раньше 4ч с начала игры — не завершаем."""
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    t = _complete_tournament(db, user_svc, arch_svc)
+    db.get(models.Tournament, t.id).started_at = models.utc_now() - timedelta(hours=1)
+    db.commit()
+
+    bot = AsyncMock()
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+
+    bot.send_message.assert_not_awaited()
+    assert db.get(models.Tournament, t.id).completed_announced_at is None
+
+
+async def test_no_announce_without_started_at(db, user_svc, arch_svc, monkeypatch):
+    """Нет started_at (первый раунд ещё не импортирован) — рано анонсировать."""
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    t = _complete_tournament(db, user_svc, arch_svc)
+    db.get(models.Tournament, t.id).started_at = None
+    db.commit()
+
+    bot = AsyncMock()
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+
     bot.send_message.assert_not_awaited()
