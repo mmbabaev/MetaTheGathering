@@ -9,7 +9,13 @@ from core import models
 from core.schemas import TournamentCreate
 from services.aetherhub_import_service import AetherhubImportService, StandingRow
 from services.chart_style import WIDTH
-from services.standings_image import StandingsImageService, render_standings, tier_background
+from services.standings_image import (
+    PAGE_SIZE,
+    StandingsImageService,
+    accent_color,
+    render_standings,
+    render_standings_pages,
+)
 
 
 class TestStandingRow:
@@ -29,22 +35,22 @@ class TestStandingRow:
         assert row.record == record
 
 
-class TestTierBackground:
+class TestAccentColor:
     def test_undefeated_is_green(self):
-        assert tier_background(12) == (0x2C, 0x40, 0x2E)
+        assert accent_color(12) == (0x54, 0xB8, 0x6A)
 
     def test_no_loss_with_draw(self):
-        assert tier_background(10) is not None
+        assert accent_color(10) is not None
 
     def test_one_loss(self):
-        assert tier_background(9) is not None
+        assert accent_color(9) is not None
 
-    def test_below_nine_is_plain(self):
-        assert tier_background(8) is None
-        assert tier_background(0) is None
+    def test_below_nine_has_no_accent(self):
+        assert accent_color(8) is None
+        assert accent_color(0) is None
 
     def test_tiers_are_distinct(self):
-        assert len({tier_background(12), tier_background(10), tier_background(9)}) == 3
+        assert len({accent_color(12), accent_color(10), accent_color(9)}) == 3
 
 
 # ── get_standings ────────────────────────────────────────────────────────────
@@ -136,31 +142,56 @@ class TestRenderStandings:
         assert many.height > one.height
 
     def test_emoji_in_deck_name_does_not_crash(self):
-        rows = [StandingRow(1, "Alice", "🟢🔵🐸 Bogles", 4, 0, 0)]
+        rows = [StandingRow(1, "Alice", "🟢🔵🐸 Bogles", 4, 0, 0, color_identity="UG")]
         assert render_standings(rows).startswith(b"\x89PNG")
 
     def test_long_name_and_deck_do_not_crash(self):
-        rows = [StandingRow(1, "Оченьдлиннаяфамилия Оченьдлинноеимя", "Очень длинное название колоды" * 3, 3, 1, 0)]
+        rows = [StandingRow(1, "Оченьдлиннаяфамилия Оченьдлинноеимя", "Очень длинное название" * 3, 3, 1, 0)]
+        assert render_standings(rows).startswith(b"\x89PNG")
+
+    def test_all_mana_colors_render(self):
+        rows = [StandingRow(1, "Alice", "5c", 4, 0, 0, color_identity="WUBRG")]
         assert render_standings(rows).startswith(b"\x89PNG")
 
 
+class TestPaging:
+    def test_one_page_up_to_page_size(self):
+        rows = [StandingRow(i, f"P{i}", None, 1, 0, 0) for i in range(1, PAGE_SIZE + 1)]
+        assert len(render_standings_pages(rows)) == 1
+
+    def test_splits_into_pages_of_thirty(self):
+        rows = [StandingRow(i, f"P{i}", None, 1, 0, 0) for i in range(1, 46)]
+        pages = render_standings_pages(rows)
+        assert len(pages) == 2  # 30 + 15
+        assert all(p.startswith(b"\x89PNG") for p in pages)
+
+    def test_render_returns_first_page(self):
+        rows = [StandingRow(i, f"P{i}", None, 1, 0, 0) for i in range(1, 46)]
+        assert render_standings(rows) == render_standings_pages(rows)[0]
+
+
 class TestStandingsImageService:
-    def test_render_returns_png_and_filename(self, db, svc, user_svc, arch_svc):
+    def test_render_returns_pages_with_filenames(self, db, svc, user_svc, arch_svc):
         t = _four_round_tournament(db, svc, user_svc, arch_svc)
 
-        png, filename = StandingsImageService(db).render(t.id)
+        pages = StandingsImageService(db).render(t.id)
 
+        assert len(pages) == 1  # 4 игрока — одна страница
+        png, filename = pages[0]
         assert png.startswith(b"\x89PNG")
-        assert filename == f"standings_{t.id}.png"
+        assert filename == f"standings_{t.id}_1.png"
 
-    def test_prepare_reads_db_and_render_needs_none(self, db, svc, user_svc, arch_svc):
-        """prepare() — вся работа с БД; render_standings() потом рисует без сессии."""
+    def test_prepare_resolves_pips_and_render_needs_no_db(self, db, svc, user_svc, arch_svc):
+        """prepare() — вся работа с БД (включая пипы по имени колоды); render рисует без сессии."""
         t = _four_round_tournament(db, svc, user_svc, arch_svc)
         data = StandingsImageService(db).prepare(t.id)
 
         db.close()
 
         assert data.subtitle == "Единорог · 13.07.2026"
+        # Elves → зелёная колода (справочник), пип G проставлен на этапе prepare
+        elves_row = next(r for r in data.rows if r.archetype_name == "Elves")
+        assert elves_row.color_identity == "G"
         assert render_standings(data.rows, data.subtitle).startswith(b"\x89PNG")
 
     def test_returns_none_without_standings(self, db, svc):

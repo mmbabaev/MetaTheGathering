@@ -228,6 +228,19 @@ def parse_color_identity(name: str) -> Optional[str]:
     return _from_color_words(lowered)
 
 
+def colors_for_deck_name(name: Optional[str]) -> str:
+    """Цветовая идентичность по названию колоды без похода в БД: справочник → эвристика → «».
+
+    Для пипов маны в стендингах: кэш/color_emoji не нужны, важно только имя.
+    """
+    if not name:
+        return COLORLESS
+    known = lookup_deck(name)
+    if known is not None:
+        return canon(known.colors)
+    return parse_color_identity(name) or COLORLESS
+
+
 class DeckColorResolver:
     """Определяет и кэширует цветовую идентичность архетипов."""
 

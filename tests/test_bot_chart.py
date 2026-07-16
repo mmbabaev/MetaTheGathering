@@ -127,15 +127,16 @@ def _finished_tournament(db, user_svc, arch_svc):
 async def test_standings_returns_png(db, user_svc, arch_svc):
     t = _finished_tournament(db, user_svc, arch_svc)
 
-    result = await build_standings(db, t.id)
+    pages = await build_standings(db, t.id)
 
-    assert result.png.startswith(b"\x89PNG")
-    assert result.filename == f"standings_{t.id}.png"
+    assert len(pages) == 1
+    assert pages[0].png.startswith(b"\x89PNG")
+    assert pages[0].filename == f"standings_{t.id}_1.png"
 
 
-async def test_standings_none_without_pairings(db):
+async def test_standings_empty_without_pairings(db):
     t = TournamentService(db).create_tournament(TournamentCreate(title="Пусто", chat_id=1))
-    assert await build_standings(db, t.id) is None
+    assert await build_standings(db, t.id) == []
 
 
 async def test_standings_db_failure_rolls_back(db, user_svc, arch_svc, monkeypatch):
@@ -146,7 +147,7 @@ async def test_standings_db_failure_rolls_back(db, user_svc, arch_svc, monkeypat
         MagicMock(side_effect=OperationalError("SELECT 1", {}, Exception("connection lost"))),
     )
 
-    assert await build_standings(db, t.id) is None
+    assert await build_standings(db, t.id) == []
     db.commit()  # сессия не отравлена
 
 
@@ -154,7 +155,7 @@ async def test_standings_db_work_stays_on_caller_thread(db, user_svc, arch_svc, 
     t = _finished_tournament(db, user_svc, arch_svc)
     main_thread = threading.get_ident()
     seen = {}
-    real_prepare, real_render = chart_mod.StandingsImageService.prepare, chart_mod.render_standings
+    real_prepare, real_render = chart_mod.StandingsImageService.prepare, chart_mod.render_standings_pages
 
     def spy_prepare(self, tid):
         seen["prepare"] = threading.get_ident()
@@ -165,7 +166,7 @@ async def test_standings_db_work_stays_on_caller_thread(db, user_svc, arch_svc, 
         return real_render(rows, subtitle)
 
     monkeypatch.setattr(chart_mod.StandingsImageService, "prepare", spy_prepare)
-    monkeypatch.setattr(chart_mod, "render_standings", spy_render)
+    monkeypatch.setattr(chart_mod, "render_standings_pages", spy_render)
 
     await build_standings(db, t.id)
 

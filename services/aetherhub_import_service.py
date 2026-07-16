@@ -70,6 +70,7 @@ class StandingRow:
     wins: int
     losses: int
     draws: int
+    color_identity: str = ""  # WUBRG-пипы колоды; заполняет слой картинки, БД-слою не нужно
 
     @property
     def points(self) -> int:

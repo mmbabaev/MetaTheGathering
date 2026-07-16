@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Callable, Optional
 
 from services.meta_chart import ChartSector, MetaChartService, render_sectors
-from services.standings_image import StandingsImageService, render_standings
+from services.standings_image import StandingsImageService, render_standings_pages
 
 logger = logging.getLogger(__name__)
 
@@ -73,13 +73,13 @@ async def build_chart(db, tournament_id: int, chart_svc: Optional[MetaChartServi
 
 async def build_standings(
     db, tournament_id: int, standings_svc: Optional[StandingsImageService] = None
-) -> Optional[RenderedImage]:
-    """Итоговые стендинги турнира или None — стендингов нет либо что-то сломалось."""
+) -> list[RenderedImage]:
+    """Страницы итоговых стендингов (по 30 игроков). Пустой список — стендингов нет либо сбой."""
     svc = standings_svc if standings_svc is not None else StandingsImageService(db)
     result = await _safe_build(
-        db, tournament_id, svc.prepare, lambda d: render_standings(d.rows, d.subtitle), "build_standings"
+        db, tournament_id, svc.prepare, lambda d: render_standings_pages(d.rows, d.subtitle), "build_standings"
     )
     if result is None:
-        return None
-    data, png = result
-    return RenderedImage(png=png, filename=data.filename)
+        return []
+    data, pages = result
+    return [RenderedImage(png=png, filename=f"{data.filename_prefix}_{i + 1}.png") for i, png in enumerate(pages)]

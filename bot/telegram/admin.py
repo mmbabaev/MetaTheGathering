@@ -449,12 +449,13 @@ async def callback_standings(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await query.answer("Нет прав или турнир не найден.", show_alert=True)
             return
         await query.answer("Считаю стендинги…")
-        standings = await build_standings(db, tournament_id)
-        if standings is None:
+        pages = await build_standings(db, tournament_id)
+        if not pages:
             await query.message.reply_text("Стендинги ещё не готовы — турнир не завершён.")
             return
-        # Картинкой (send_photo) — чтобы в чате было превью. Только в чат инициатора.
-        await context.bot.send_photo(chat_id=query.message.chat_id, photo=io.BytesIO(standings.png))
+        # Картинками (send_photo) — превью в чате. Длинный список — несколько страниц.
+        for page in pages:
+            await context.bot.send_photo(chat_id=query.message.chat_id, photo=io.BytesIO(page.png))
         _log("standings", user, tournament_id=tournament_id)
     finally:
         db.close()
