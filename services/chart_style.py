@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
@@ -34,8 +35,16 @@ CLUB_NAMES = {"edinorog": "Единорог", "goldfish": "Goldfish"}
 _DATE_IN_TITLE_RE = re.compile(r"\b(\d{2}\.\d{2}\.\d{4})\b")
 
 
+@lru_cache(maxsize=None)
 def font(filename: str, size: int) -> ImageFont.FreeTypeFont:
+    """Шрифт из assets/fonts. Кэшируем: TTF-файлы по ~700КБ, парсить их на каждую строку дорого."""
     return ImageFont.truetype(str(_FONT_DIR / filename), size)
+
+
+def hex_to_rgb(value: str) -> tuple:
+    """'#3B7DD8' → (59, 125, 216)."""
+    h = value.lstrip("#")
+    return tuple(int(h[i : i + 2], 16) for i in (0, 2, 4))
 
 
 def background(height: int, width: int = WIDTH) -> Image.Image:

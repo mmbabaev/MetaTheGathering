@@ -538,19 +538,6 @@ class AutoRevealDecksJob:
 # ---------------------------------------------------------------------------
 
 
-# Лимит Telegram на подпись к документу/фото — в UTF-16, а не в символах Python.
-CAPTION_LIMIT = 1024
-
-
-def _caption_length(text: str) -> int:
-    """Длина подписи по счёту Telegram — в кодовых единицах UTF-16.
-
-    В названиях колод живут эмодзи («🟢🔵🐸 Bogles»), а каждый такой символ весит две
-    единицы: len() насчитал бы меньше лимита, и Telegram отверг бы подпись.
-    """
-    return len(text.encode("utf-16-le")) // 2
-
-
 async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, chart_svc=None) -> None:
     """Один раз анонсирует «сбор метагейма завершён» с графиком, когда турнир сыгран до конца.
 
@@ -593,27 +580,16 @@ def _decks_count(db, tournament_id: int) -> int:
 
 
 async def _send_completion_announce(bot, chart, standings, text: str) -> None:
-    """Анонс: текст + график + страницы стендингов, всё картинками.
+    """Анонс: текст сообщением, затем график и страницы стендингов картинками.
 
-    Картинки — украшение: их сбой не должен ломать анонс и не должен мешать поставить флаг
-    идемпотентности (иначе уже доставленный анонс придёт повторно на следующем импорте).
-    Поэтому текст доставляем гарантированно, а каждую картинку шлём best-effort.
+    Текст — суть анонса, шлём его отдельным сообщением (не подписью): если оно упадёт,
+    исключение пробрасывается — флаг идемпотентности не встанет и анонс повторится.
+    Картинки — украшение, шлём best-effort: их сбой (в т.ч. если Telegram отверг картинку)
+    не должен ни ронять уже доставленный анонс, ни зациклить повтор.
     """
     chat_id = settings.OWNER_CHAT_ID
-    images = ([chart] if chart is not None else []) + list(standings)
-
-    if images and _caption_length(text) <= CAPTION_LIMIT:
-        # Текст едет подписью первой картинки. Эту отправку НЕ глушим: если она упадёт,
-        # анонс не доставлен — исключение пробрасывается, флаг не встаёт, повтор на импорте.
-        await bot.send_photo(chat_id=chat_id, photo=io.BytesIO(images[0].png), caption=text)
-        rest = images[1:]
-    else:
-        # Подпись не влезла (или картинок нет): текст отдельным гарантированным сообщением.
-        await bot.send_message(chat_id=chat_id, text=text)
-        rest = images
-
-    # Остальные картинки — украшение: их сбой не должен ронять уже доставленный анонс.
-    for image in rest:
+    await bot.send_message(chat_id=chat_id, text=text)
+    for image in ([chart] if chart is not None else []) + list(standings):
         try:
             await bot.send_photo(chat_id=chat_id, photo=io.BytesIO(image.png))
         except TelegramError:

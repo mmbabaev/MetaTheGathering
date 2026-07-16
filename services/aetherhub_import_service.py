@@ -55,6 +55,16 @@ class UndefeatedPlayer:
     wins: int
 
 
+@dataclass
+class PlayerProfile:
+    """Данные игрока из бота: имя, колода, финальное место (общее для стендингов и X-0)."""
+
+    first_name: str | None
+    last_name: str | None
+    archetype_name: str | None
+    final_place: int | None
+
+
 # Очки за матч (стандарт Magic): победа 3, ничья 1, поражение 0.
 POINTS_WIN = 3
 POINTS_DRAW = 1
@@ -360,6 +370,24 @@ class AetherhubImportService:
                 rec["draws"] += 1
         return records
 
+    def _player_profile(self, tournament_id: int, name: str) -> "PlayerProfile":
+        """Имя из бота, колода и финальное место для игрока из парингов (по имени).
+
+        Общий блок для стендингов и списка X-0: игрока ищем в боте, у участника берём
+        место и колоду. Не найден / не участник — только имя из парингов.
+        """
+        user = self.find_user_by_name(name)
+        if user is None:
+            return PlayerProfile(first_name=None, last_name=None, archetype_name=None, final_place=None)
+        participant = self._get_participant(tournament_id, user.id)
+        archetype_name = None
+        final_place = None
+        if participant is not None:
+            final_place = participant.final_place
+            if participant.archetype is not None:
+                archetype_name = participant.archetype.name
+        return PlayerProfile(user.first_name, user.last_name, archetype_name, final_place)
+
     def get_undefeated_players(self, tournament_id: int) -> list[UndefeatedPlayer]:
         """Игроки без поражений (X-0): сыграли все раунды, выиграли все матчи, без поражений/ничьих.
 
@@ -380,24 +408,14 @@ class AetherhubImportService:
             )
             if not undefeated:
                 continue
-            user = self.find_user_by_name(name)
-            archetype_name: str | None = None
-            final_place: int | None = None
-            first_name = last_name = None
-            if user is not None:
-                first_name, last_name = user.first_name, user.last_name
-                participant = self._get_participant(tournament_id, user.id)
-                if participant is not None:
-                    final_place = participant.final_place
-                    if participant.archetype is not None:
-                        archetype_name = participant.archetype.name
+            p = self._player_profile(tournament_id, name)
             players.append(
                 UndefeatedPlayer(
                     player_name=name,
-                    first_name=first_name,
-                    last_name=last_name,
-                    archetype_name=archetype_name,
-                    final_place=final_place,
+                    first_name=p.first_name,
+                    last_name=p.last_name,
+                    archetype_name=p.archetype_name,
+                    final_place=p.final_place,
                     wins=rec["wins"],
                 )
             )
@@ -418,17 +436,10 @@ class AetherhubImportService:
 
         rows: list[tuple[int | None, StandingRow]] = []
         for name, rec in records.items():
-            user = self.find_user_by_name(name)
-            display_name = name
-            archetype_name: str | None = None
-            final_place: int | None = None
-            if user is not None:
-                display_name = self._display_name(user.first_name, user.last_name, name)
-                participant = self._get_participant(tournament_id, user.id)
-                if participant is not None:
-                    final_place = participant.final_place
-                    if participant.archetype is not None:
-                        archetype_name = participant.archetype.name
+            p = self._player_profile(tournament_id, name)
+            display_name = self._display_name(p.first_name, p.last_name, name)
+            final_place = p.final_place
+            archetype_name = p.archetype_name
             rows.append(
                 (
                     final_place,

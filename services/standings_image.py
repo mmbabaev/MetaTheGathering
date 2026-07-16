@@ -15,9 +15,9 @@ from sqlalchemy.orm import Session
 
 from core import models
 from services.aetherhub_import_service import AetherhubImportService, StandingRow
-from services.chart_style import WIDTH, background, build_subtitle, ellipsize, font
+from services.chart_style import WIDTH, background, build_subtitle, ellipsize, font, hex_to_rgb
 from services.deck_book import strip_pictographs
-from services.deck_colors import colors_for_deck_name
+from services.deck_colors import colors_for_deck_name, hex_for
 
 MARGIN = 63
 TITLE = "Итоговые стендинги"
@@ -39,24 +39,14 @@ MUTED = (0x8A, 0x92, 0x9E)  # подзаголовок / пагинация
 CARD_BG = (0x1B, 0x20, 0x2A)  # фон карточки строки
 SEPARATOR = (0x2A, 0x30, 0x3B)  # тонкие вертикальные разделители колонок
 
-# Акцент слева по очкам за матч (победа 3, ничья 1).
-POINTS_UNDEFEATED = 12  # 4-0
-POINTS_NO_LOSS_DRAW = 10  # 3-0-1 и подобные без поражений
-POINTS_ONE_LOSS = 9  # 3-1
-ACCENTS = {
-    POINTS_UNDEFEATED: (0x54, 0xB8, 0x6A),  # зелёный — без поражений
-    POINTS_NO_LOSS_DRAW: (0xE0, 0xB8, 0x4C),  # золотой
-    POINTS_ONE_LOSS: (0xE0, 0x8A, 0x3C),  # оранжевый
-}
+# Акцент слева по РЕЗУЛЬТАТУ (запись W-L-D), а не по абсолютным очкам: так тир не зависит
+# от числа раундов. Для 4-раундового турнира это ровно 4-0 / 3-0-1 / 3-1, как просил владелец.
+ACCENT_UNDEFEATED = (0x54, 0xB8, 0x6A)  # зелёный — без поражений и ничьих (4-0)
+ACCENT_NO_LOSS = (0xE0, 0xB8, 0x4C)  # золотой — без поражений, но с ничьёй (3-0-1)
+ACCENT_ONE_LOSS = (0xE0, 0x8A, 0x3C)  # оранжевый — ровно одно поражение, без ничьих (3-1)
 
-# Цвета пипов маны — узнаваемые цвета MTG.
-PIP_COLORS = {
-    "W": (0xF3, 0xEE, 0xD6),
-    "U": (0x3B, 0x7D, 0xD8),
-    "B": (0x5A, 0x54, 0x66),
-    "R": (0xD4, 0x45, 0x3C),
-    "G": (0x3F, 0xA3, 0x5F),
-}
+# Цвета пипов маны — из той же палитры, что секторы графика (один источник истины).
+PIP_COLORS = {c: hex_to_rgb(hex_for(c)) for c in "WUBRG"}
 PIP_D = 34  # диаметр пипа
 PIP_GAP = 42  # шаг между пипами
 
@@ -71,14 +61,18 @@ POINTS_X = WIDTH - MARGIN - 30  # очки (правый край)
 DECK_MAX = POINTS_X - 70 - DECK_X
 
 
-def accent_color(points: int) -> Optional[tuple]:
-    """Цвет левого акцента по очкам. None — не топ-тир."""
-    if points >= POINTS_UNDEFEATED:
-        return ACCENTS[POINTS_UNDEFEATED]
-    if points >= POINTS_NO_LOSS_DRAW:
-        return ACCENTS[POINTS_NO_LOSS_DRAW]
-    if points >= POINTS_ONE_LOSS:
-        return ACCENTS[POINTS_ONE_LOSS]
+def accent_color(row: "StandingRow") -> Optional[tuple]:
+    """Цвет левого акцента по записи игрока. None — не топ-тир.
+
+    Верх — тем, кто без поражений (4-0, затем 3-0-1) и ровно с одним поражением (3-1).
+    Требуем сыгранные матчи (wins > 0), чтобы «пустой» игрок не подсветился.
+    """
+    if row.wins == 0:
+        return None
+    if row.losses == 0:
+        return ACCENT_UNDEFEATED if row.draws == 0 else ACCENT_NO_LOSS
+    if row.losses == 1 and row.draws == 0:
+        return ACCENT_ONE_LOSS
     return None
 
 
@@ -111,7 +105,7 @@ def render_standings_pages(rows: list[StandingRow], subtitle: str = "") -> list[
 
 def render_standings(rows: list[StandingRow], subtitle: str = "") -> bytes:
     """Одна картинка (первая страница) — для тестов и простых вызовов."""
-    return render_standings_pages(rows, subtitle)[0]
+    return _render_page(rows, subtitle, 1, 1)
 
 
 def _render_page(rows: list[StandingRow], subtitle: str, page: int, total: int) -> bytes:
@@ -146,7 +140,7 @@ def _draw_row(draw, row, top, place_font, name_font, deck_font, points_font) -> 
     middle = top + ROW_H // 2
     draw.rounded_rectangle((MARGIN, top, WIDTH - MARGIN, top + ROW_H), radius=14, fill=CARD_BG)
 
-    accent = accent_color(row.points)
+    accent = accent_color(row)
     if accent is not None:
         draw.rounded_rectangle((MARGIN, top + 6, MARGIN + ACCENT_W, top + ROW_H - 6), radius=3, fill=accent)
 
