@@ -1,5 +1,7 @@
 # Telegram-обёртки для /start и /help
 
+import logging
+
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -8,6 +10,26 @@ from bot.messages import HELP_TEXT, HELP_TEXT_ADMIN
 from core.database import SessionLocal
 from core.event_log import event_logger
 from services.user import UserService
+
+logger = logging.getLogger(__name__)
+
+
+async def announce_completion_if_ready(bot, db, tournament_id: int | None) -> None:
+    """Best-effort проверка «сбор метагейма завершён» после записи колоды.
+
+    Условие внутри идемпотентно и само проверяет все гарды, поэтому зовём после любой
+    записи колоды — анонс уходит сразу, как заполнена последняя недостающая колода, не
+    дожидаясь следующего импорта AetherHub. Ошибку глушим: действие игрока уже выполнено.
+    Ленивый импорт scheduler — он импортит bot.telegram (иначе циклический импорт).
+    """
+    if tournament_id is None:
+        return
+    from bot.scheduler import maybe_announce_meta_gather_completed  # noqa: PLC0415
+
+    try:
+        await maybe_announce_meta_gather_completed(bot, db, tournament_id)
+    except Exception:
+        logger.exception("announce_completion_if_ready failed for #%s", tournament_id)
 
 
 async def parse_callback_ints(query, count: int) -> tuple[int, ...] | None:
