@@ -219,6 +219,23 @@ class PlayerHandler:
         self.user_svc.merge_placeholder_by_name(tg_id, first_name or last_name, last_name if first_name else None)
         return self._archetype_keyboard_for_player(tournament_id, tg_id)
 
+    def _register_user(
+        self, tg_id: int, username: str | None, first_name: str | None, last_name: str | None
+    ) -> "models.User":
+        """Находит/создаёт реального юзера и подтягивает его импортный placeholder-дубль.
+
+        Слияние по имени нужно не только при вводе имени (см. handle_save_name_then_register),
+        но и при обычной регистрации: возвращающийся игрок с уже сохранённым именем иначе
+        оставил бы отдельным участником placeholder, заведённый импортом AetherHub раньше.
+        """
+        db_user = self.user_svc.get_or_create(
+            tg_id=tg_id, username=username, first_name=first_name, last_name=last_name
+        )
+        fn, ln = db_user.first_name, db_user.last_name
+        if fn or ln:
+            self.user_svc.merge_placeholder_by_name(tg_id, fn or ln, ln if fn else None)
+        return db_user
+
     def handle_archetype(
         self,
         tg_id: int,
@@ -229,12 +246,7 @@ class PlayerHandler:
         archetype_id: int,
     ) -> HandlerResult:
         try:
-            db_user = self.user_svc.get_or_create(
-                tg_id=tg_id,
-                username=username,
-                first_name=first_name,
-                last_name=last_name,
-            )
+            db_user = self._register_user(tg_id, username, first_name, last_name)
             try:
                 self.svc.register_participant(
                     tournament_id=tournament_id,
@@ -268,12 +280,7 @@ class PlayerHandler:
     ) -> HandlerResult:
         try:
             archetype = self.arch_svc.get_or_create_by_name(name, is_custom=True)
-            db_user = self.user_svc.get_or_create(
-                tg_id=tg_id,
-                username=username,
-                first_name=first_name,
-                last_name=last_name,
-            )
+            db_user = self._register_user(tg_id, username, first_name, last_name)
             try:
                 self.svc.register_participant(
                     tournament_id=tournament_id,

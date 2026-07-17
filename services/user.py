@@ -77,12 +77,8 @@ class UserService:
         last = parts[1] if len(parts) > 1 else None
         return self._find_user_flexible(first, last)
 
-    def _find_user_flexible(self, first_name: str, last_name: Optional[str]) -> Optional[models.User]:
-        """Гибкий поиск пользователя по имени:
-        — регистронезависимый
-        — нормализует ё→е
-        — пробует оба порядка (Имя Фамилия / Фамилия Имя)
-        — при нескольких совпадениях предпочитает того, у кого есть история колод
+    def _find_name_candidates(self, first_name: str, last_name: Optional[str]) -> list[models.User]:
+        """Все юзеры, чьё имя совпадает по имени/фамилии (оба порядка, регистр, ё→е).
 
         Работает на Python-уровне (fetches all users). Допустимо при небольшом
         числе пользователей (~500).
@@ -90,10 +86,8 @@ class UserService:
         fn = _normalize_name(first_name)
         ln = _normalize_name(last_name) if last_name else None
 
-        all_users = self.db.execute(select(models.User)).scalars().all()
-
         candidates: list[models.User] = []
-        for user in all_users:
+        for user in self.db.execute(select(models.User)).scalars().all():
             ufn = _normalize_name(user.first_name or "")
             uln = _normalize_name(user.last_name or "")
 
@@ -104,7 +98,19 @@ class UserService:
 
             if direct or swapped:
                 candidates.append(user)
+        return candidates
 
+    def _find_user_flexible(self, first_name: str, last_name: Optional[str]) -> Optional[models.User]:
+        """Гибкий поиск пользователя по имени:
+        — регистронезависимый
+        — нормализует ё→е
+        — пробует оба порядка (Имя Фамилия / Фамилия Имя)
+        — при нескольких совпадениях предпочитает того, у кого есть история колод
+
+        Работает на Python-уровне (fetches all users). Допустимо при небольшом
+        числе пользователей (~500).
+        """
+        candidates = self._find_name_candidates(first_name, last_name)
         if not candidates:
             return None
         if len(candidates) == 1:
@@ -170,21 +176,34 @@ class UserService:
         return user, True
 
     def merge_placeholder_by_name(self, real_tg_id: int, first_name: str, last_name: Optional[str]) -> bool:
-        """Привязывает реального пользователя к существующему placeholder-юзеру по имени.
+        """Привязывает реального пользователя к placeholder-дублю(ям) по имени.
 
-        Когда реальный tg-пользователь впервые вводит своё имя, ищем placeholder
-        (tg_id < 0) с таким же именем. Если находим — переносим ему UserDeckHistory
-        и Participant-записи, placeholder удаляем.
-        Возвращает True если слияние произошло.
+        Placeholder (tg_id < 0) с таким же именем заводит импорт AetherHub. Ищем ИМЕННО
+        placeholder среди всех совпадений по имени (не через _find_user_flexible — тот при
+        конфликте предпочёл бы самого реального юзера, и дубль не нашёлся бы). Переносим
+        placeholder'у UserDeckHistory и Participant-записи, placeholder удаляем.
+
+        Зовём и при вводе имени, и при регистрации: возвращающийся игрок с уже сохранённым
+        именем иначе оставил бы placeholder отдельным участником. Возвращает True если слияние
+        произошло.
         """
         real_user = self.get_by_tg_id(real_tg_id)
         if not real_user:
             return False
 
-        placeholder = self._find_user_flexible(first_name, last_name)
-        if not placeholder or placeholder.tg_id >= 0 or placeholder.id == real_user.id:
+        placeholders = [
+            u for u in self._find_name_candidates(first_name, last_name) if u.tg_id < 0 and u.id != real_user.id
+        ]
+        if not placeholders:
             return False
 
+        for placeholder in placeholders:
+            self._absorb_placeholder(real_user, placeholder)
+        self.db.commit()
+        return True
+
+    def _absorb_placeholder(self, real_user: models.User, placeholder: models.User) -> None:
+        """Переносит историю/участие с placeholder на real_user и удаляет placeholder."""
         # Переносим историю колод
         self.db.execute(
             sa_update(models.UserDeckHistory)
@@ -221,8 +240,6 @@ class UserService:
                 real_user.last_name = placeholder.last_name
 
         self.db.delete(placeholder)
-        self.db.commit()
-        return True
 
     def merge_users_by_id(self, source_id: int, target_id: int, adopt_name: bool = True) -> bool:
         """Перенести Participant и UserDeckHistory от source к target, затем удалить source.
