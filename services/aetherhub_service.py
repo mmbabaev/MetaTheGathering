@@ -15,14 +15,6 @@ from services.aetherhub_models import (
 
 PAUPER_RE = re.compile(r"pauper|паупер|пупер", re.IGNORECASE)
 
-# Явно НЕ паупер: если организатор назвал турнир другим форматом — не привязываем его,
-# даже если он сегодняшний. Всё остальное (в т.ч. имя вида «17.07» без слова «паупер»)
-# считаем допустимым паупер-кандидатом — у клубов нет строгих правил именования.
-_NON_PAUPER_RE = re.compile(
-    r"modern|legacy|standard|pioneer|vintage|commander|\bedh\b|premodern|draft|sealed|limited|cube",
-    re.IGNORECASE,
-)
-
 # Ссылка на страницу турнира — с числовым id (отсекает навигацию: /Tourney/, /Tourney/Leagues …)
 _TOURNEY_LINK_RE = re.compile(r"/Tourney/\w+/\d+")
 
@@ -49,7 +41,9 @@ _DATE_FORMATS = [
 # без слэша дата из имени не читалась и код падал на хрупкий «N days ago».
 _DAY_MONTH_RE = re.compile(r"\b(\d{1,2})[./](\d{1,2})\b")
 
-_DAYS_AGO_RE = re.compile(r"(\d+)\s+days?\s+ago", re.IGNORECASE)
+# «Сколько назад создан» внизу ячейки клуба: «4 hours ago», «1 day ago», «an hour ago» …
+# Это надёжный признак сегодняшнего турнира: всё мельче суток (секунды/минуты/часы) = сегодня.
+_CREATED_AGO_RE = re.compile(r"(\d+|an?)\s+(second|minute|hour|day|week|month|year)s?\s+ago", re.IGNORECASE)
 
 _MONTH_MAP = {
     "jan": 1,
@@ -229,16 +223,32 @@ class AetherhubService:
         except ValueError:
             return None
 
-    def _extract_days_ago(self, container, today: date) -> date | None:
+    def _extract_created_ago(self, container, today: date) -> date | None:
+        """Дата создания турнира из текста «N <unit> ago» внизу ячейки.
+
+        Всё мельче суток (секунды/минуты/часы) → сегодня: турнир создают в день события.
+        «just now» тоже сегодня. Недели/месяцы/годы — заведомо не сегодня.
+        """
         if container is None:
             return None
         small = container.find("small", class_="text-muted")
         if small is None:
             return None
-        m = _DAYS_AGO_RE.search(small.get_text(strip=True))
+        text = small.get_text(strip=True).lower()
+        if "just now" in text or "moment" in text:
+            return today
+        m = _CREATED_AGO_RE.search(text)
         if not m:
             return None
-        return today - timedelta(days=int(m.group(1)))
+        qty = 1 if m.group(1) in ("a", "an") else int(m.group(1))
+        unit = m.group(2)
+        if unit in ("second", "minute", "hour"):
+            return today
+        if unit == "day":
+            return today - timedelta(days=qty)
+        if unit == "week":
+            return today - timedelta(weeks=qty)
+        return today - timedelta(days=(365 if unit == "year" else 30) * qty)
 
     def _parse_club_page(self, html: str, today: date | None = None) -> list[ClubTournamentLink]:
         soup = BeautifulSoup(html, "html.parser")
@@ -260,13 +270,20 @@ class AetherhubService:
                 continue
 
             container = a.find_parent("div", class_="w-100") or a.find_parent("tr") or a.find_parent("li") or a.parent
+            cell_text = container.get_text(" ", strip=True) if container else name
+            # Дата из имени авторитетна (это дата события); «N ago» — фолбэк, когда даты в имени нет.
             tournament_date = (
-                self._extract_date(name)
-                or self._extract_days_ago(container, today)
-                or self._extract_date(container.get_text(" ", strip=True) if container else name)
+                self._extract_date(name) or self._extract_created_ago(container, today) or self._extract_date(cell_text)
             )
 
-            results.append(ClubTournamentLink(name=name, url=url, date=tournament_date))
+            results.append(
+                ClubTournamentLink(
+                    name=name,
+                    url=url,
+                    date=tournament_date,
+                    is_pauper=bool(PAUPER_RE.search(cell_text)),
+                )
+            )
 
         return results
 
@@ -277,19 +294,16 @@ class AetherhubService:
     def find_todays_pauper_tournament(self, club_url: str, today: date | None = None) -> str | None:
         """URL сегодняшнего паупер-турнира клуба, либо None.
 
-        Дата важнее имени. Организаторы называют паупер-турнир как попало — иногда просто
-        «17.07» без слова «паупер», — поэтому имя не жёсткий фильтр, а лишь приоритет:
-        среди сегодняшних предпочитаем явно паупер-названные, иначе берём сегодняшний с
-        нейтральным именем. Отсекаем только турниры, явно названные другим форматом.
+        Список клуба отсортирован свежими сверху, поэтому берём ПЕРВЫЙ турнир, который
+        одновременно (1) паупер — по тексту ячейки: у Goldfish это подзаголовок
+        «Constructed: Pauper Tourney», у Edinorog «Паупер …» в имени; и (2) сегодняшний —
+        дата из имени либо «создан N часов назад» указывает на сегодня.
+        ``today=None`` (debug) снимает проверку даты — возвращаем самый свежий паупер.
         """
-        candidates = [
-            link for link in self.fetch_club_tournaments(club_url, today=today) if today is None or link.date == today
-        ]
-        pauper_named = [link for link in candidates if PAUPER_RE.search(link.name)]
-        if pauper_named:
-            return pauper_named[0].url
-        neutral = [link for link in candidates if not _NON_PAUPER_RE.search(link.name)]
-        return neutral[0].url if neutral else None
+        for link in self.fetch_club_tournaments(club_url, today=today):
+            if link.is_pauper and (today is None or link.date == today):
+                return link.url
+        return None
 
     def _pairings_url(self, tourney_id: str, round_num: int) -> str:
         return f"https://aetherhub.com/Tourney/RoundTourneyPublicPairings?id={tourney_id}&p={round_num}"

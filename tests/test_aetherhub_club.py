@@ -36,6 +36,31 @@ def _club_page_html(entries: list[dict]) -> str:
     return f"<html><body><table>{rows}</table></body></html>"
 
 
+def _club_cards_html(cards: list[dict]) -> str:
+    """Реалистичная разметка страницы клуба AetherHub (карточки, свежие сверху).
+
+    Каждая карточка: заголовок-имя, подзаголовок формата и «N <unit> ago» внизу.
+    У Goldfish имя — дата, формат в подзаголовке «Constructed: Pauper Tourney»;
+    у Edinorog формат — в имени, подзаголовок нейтральный «Constructed Tourney».
+    cards: [{name, url, subtitle?, ago?}]
+    """
+    body = ""
+    for c in cards:
+        body += (
+            '<div class="d-flex"><div class="w-100 pl-2">'
+            f'<h5 class="card-title"><a href="{c["url"]}"><b>{c["name"]}</b></a></h5> '
+            f"{c.get('subtitle', 'Constructed Tourney')} <br/>"
+            f'<small class="text-muted">{c.get("ago", "")}</small>'
+            "</div></div>"
+        )
+    return f"<html><body>{body}</body></html>"
+
+
+# Подзаголовки формата, как их отдаёт AetherHub
+PAUPER_SUBTITLE = "Constructed: Pauper Tourney"  # Goldfish — формат в подзаголовке
+PLAIN_SUBTITLE = "Constructed Tourney"  # Edinorog — формат в имени
+
+
 TODAY = date(2026, 4, 24)
 TOURNEY_URL = "https://aetherhub.com/Tourney/RoundTourney/12345"
 
@@ -297,6 +322,37 @@ class TestParseClubPage:
         links = self.svc._parse_club_page(html, today=today)
         assert links[0].date == date(2026, 4, 24)
 
+    @pytest.mark.parametrize("ago", ["4 hours ago", "an hour ago", "1 hour ago", "30 minutes ago", "just now"])
+    def test_created_within_a_day_is_today(self, ago):
+        """Всё моложе суток (часы/минуты/just now) без даты в имени → сегодня."""
+        html = _club_cards_html([{"name": "Паупер", "url": "/Tourney/RoundTourney/1", "ago": ago}])
+        today = date(2026, 4, 24)
+        links = self.svc._parse_club_page(html, today=today)
+        assert links[0].date == today
+
+    def test_a_day_ago_is_yesterday(self):
+        html = _club_cards_html([{"name": "Паупер", "url": "/Tourney/RoundTourney/1", "ago": "a day ago"}])
+        today = date(2026, 4, 24)
+        links = self.svc._parse_club_page(html, today=today)
+        assert links[0].date == date(2026, 4, 23)
+
+    def test_week_ago(self):
+        html = _club_cards_html([{"name": "Паупер", "url": "/Tourney/RoundTourney/1", "ago": "1 week ago"}])
+        today = date(2026, 4, 24)
+        links = self.svc._parse_club_page(html, today=today)
+        assert links[0].date == date(2026, 4, 17)
+
+    def test_is_pauper_from_subtitle_when_name_is_date_only(self):
+        """Goldfish: имя «17.07» без слова «паупер», но подзаголовок делает турнир паупером."""
+        html = _club_cards_html([{"name": "17.07", "url": "/Tourney/RoundTourney/1", "subtitle": PAUPER_SUBTITLE}])
+        assert self.svc._parse_club_page(html)[0].is_pauper is True
+
+    def test_not_pauper_when_neither_name_nor_subtitle_says_so(self):
+        html = _club_cards_html(
+            [{"name": "Легаси 15.07.2026", "url": "/Tourney/RoundTourney/1", "subtitle": PLAIN_SUBTITLE}]
+        )
+        assert self.svc._parse_club_page(html)[0].is_pauper is False
+
 
 # ---------------------------------------------------------------------------
 # find_todays_pauper_tournament
@@ -380,8 +436,8 @@ class TestFindTodaysPauperTournament:
         assert result is None
 
 
-class TestFindTodaysDateOverName:
-    """Дата важнее имени: организаторы называют паупер-турнир как попало."""
+class TestFindTodaysGoldfishStyle:
+    """Goldfish: имя — просто дата, «паупер» стоит в подзаголовке «Constructed: Pauper Tourney»."""
 
     def _svc(self, html: str) -> AetherhubService:
         mock = MagicMock()
@@ -389,60 +445,169 @@ class TestFindTodaysDateOverName:
         return AetherhubService(scraper=mock)
 
     @pytest.mark.parametrize(
-        "name",
+        "name,ago",
         [
-            "24.04",  # только дата, без слова «паупер» — как реальный «17.07»
-            "24/04",  # дата через слэш
-            "Weekly 24.04",  # нейтральное имя + дата
-            "Паупер 24.04",  # классическое
-            "MTG Pauper 24.04",
-            "паупер 24/04",  # слэш + «паупер»
+            ("24.04", "4 hours ago"),  # реальный кейс Goldfish: дата в имени + создан сегодня
+            ("24/04", "2 hours ago"),  # дата через слэш
+            ("Паупер 24.04", "1 hour ago"),  # и «паупер», и дата
+            ("паупер 24/04", "30 minutes ago"),
+            ("Weekly", "an hour ago"),  # даты в имени нет — сегодня определяется по «создан час назад»
         ],
     )
-    def test_todays_tournament_matched_regardless_of_name(self, name):
-        html = _club_page_html([{"name": name, "url": "/Tourney/RoundTourney/100670"}])
+    def test_todays_pauper_matched_by_subtitle_and_date(self, name, ago):
+        html = _club_cards_html(
+            [{"name": name, "url": "/Tourney/RoundTourney/100670", "subtitle": PAUPER_SUBTITLE, "ago": ago}]
+        )
         result = self._svc(html).find_todays_pauper_tournament("https://aetherhub.com/User/GoldFish", today=TODAY)
         assert result == "https://aetherhub.com/Tourney/RoundTourney/100670"
 
     def test_yesterdays_pauper_not_matched(self):
-        """«Паупер 23/04» на 24.04 — вчерашний, слэш-дата читается и турнир не берётся."""
-        html = _club_page_html([{"name": "Паупер 23/04", "url": "/Tourney/RoundTourney/100661"}])
-        result = self._svc(html).find_todays_pauper_tournament("https://aetherhub.com/User/GoldFish", today=TODAY)
-        assert result is None
-
-    def test_explicit_other_format_today_not_matched(self):
-        html = _club_page_html([{"name": "Modern 24.04", "url": "/Tourney/RoundTourney/1"}])
-        result = self._svc(html).find_todays_pauper_tournament("https://aetherhub.com/User/GoldFish", today=TODAY)
-        assert result is None
-
-    def test_prefers_pauper_named_over_neutral(self):
-        """Если есть и «паупер»-названный, и нейтральный сегодняшний — берём паупер-названный."""
-        html = _club_page_html(
+        """«Паупер 23/04» на 24.04 — дата в имени вчерашняя, турнир не берётся."""
+        html = _club_cards_html(
             [
-                {"name": "24.04", "url": "/Tourney/RoundTourney/1"},
-                {"name": "Паупер 24.04", "url": "/Tourney/RoundTourney/2"},
+                {
+                    "name": "Паупер 23/04",
+                    "url": "/Tourney/RoundTourney/100661",
+                    "subtitle": PAUPER_SUBTITLE,
+                    "ago": "1 day ago",
+                }
             ]
         )
         result = self._svc(html).find_todays_pauper_tournament("https://aetherhub.com/User/GoldFish", today=TODAY)
-        assert result == "https://aetherhub.com/Tourney/RoundTourney/2"
+        assert result is None
 
-    def test_incident_regression_prod_100670_vs_100661(self):
-        """Регрессия инцидента 17.07.2026: реальный «17.07» (100670) против вчерашнего
-        «Паупер 16/07» (100661), который AetherHub утром показывал как «0 days ago».
-        Слэш-дата из имени (16/07) приоритетнее относительной, поэтому 100661 — вчера и
-        отсеивается, а берётся сегодняшний date-only 100670."""
-        html = (
-            "<html><body>"
-            '<div class="w-100"><a href="/Tourney/RoundTourney/100670">17.07</a></div>'
-            '<div class="w-100"><a href="/Tourney/RoundTourney/100661">Паупер 16/07</a>'
-            '<small class="text-muted">0 days ago</small></div>'
-            "</body></html>"
+    def test_returns_first_freshest(self):
+        """Список свежими сверху — берём первый сегодняшний паупер."""
+        html = _club_cards_html(
+            [
+                {
+                    "name": "24.04",
+                    "url": "/Tourney/RoundTourney/100670",
+                    "subtitle": PAUPER_SUBTITLE,
+                    "ago": "4 hours ago",
+                },
+                {
+                    "name": "Паупер 17/04",
+                    "url": "/Tourney/RoundTourney/999",
+                    "subtitle": PAUPER_SUBTITLE,
+                    "ago": "7 days ago",
+                },
+            ]
         )
+        result = self._svc(html).find_todays_pauper_tournament("https://aetherhub.com/User/GoldFish", today=TODAY)
+        assert result == "https://aetherhub.com/Tourney/RoundTourney/100670"
+
+    def test_incident_regression_100670_vs_100661(self):
+        """Регрессия инцидента 17.07.2026 на реальной разметке: свежий «17.07» (100670,
+        создан сегодня) против вчерашнего «Паупер 16/07» (100661). Оба паупер по подзаголовку,
+        но 100661 датирован вчера (имя «16/07») — берётся 100670."""
+        html = _club_cards_html(
+            [
+                {
+                    "name": "17.07",
+                    "url": "/Tourney/RoundTourney/100670",
+                    "subtitle": PAUPER_SUBTITLE,
+                    "ago": "4 hours ago",
+                },
+                {
+                    "name": "Паупер 16/07",
+                    "url": "/Tourney/RoundTourney/100661",
+                    "subtitle": PAUPER_SUBTITLE,
+                    "ago": "1 day ago",
+                },
+            ]
+        )
+        result = self._svc(html).find_todays_pauper_tournament(
+            "https://aetherhub.com/User/GoldFish", today=date(2026, 7, 17)
+        )
+        assert result == "https://aetherhub.com/Tourney/RoundTourney/100670"
+
+    def test_name_date_beats_misleading_hours_ago(self):
+        """Даже если вчерашний вечерний турнир показан как «14 hours ago» (моложе суток),
+        дата в имени «16/07» авторитетна и отсекает его — ровно защита от инцидента."""
+        html = _club_cards_html(
+            [
+                {
+                    "name": "17.07",
+                    "url": "/Tourney/RoundTourney/100670",
+                    "subtitle": PAUPER_SUBTITLE,
+                    "ago": "2 hours ago",
+                },
+                {
+                    "name": "Паупер 16/07",
+                    "url": "/Tourney/RoundTourney/100661",
+                    "subtitle": PAUPER_SUBTITLE,
+                    "ago": "14 hours ago",
+                },
+            ]
+        )
+        result = self._svc(html).find_todays_pauper_tournament(
+            "https://aetherhub.com/User/GoldFish", today=date(2026, 7, 17)
+        )
+        assert result == "https://aetherhub.com/Tourney/RoundTourney/100670"
+
+
+class TestFindTodaysEdinorogStyle:
+    """Edinorog: мультиформатный клуб, формат («Паупер»/«Легаси»/…) стоит в имени."""
+
+    def _svc(self, html: str) -> AetherhubService:
         mock = MagicMock()
         mock.get.return_value.text = html
-        svc = AetherhubService(scraper=mock)
-        result = svc.find_todays_pauper_tournament("https://aetherhub.com/User/GoldFish", today=date(2026, 7, 17))
-        assert result == "https://aetherhub.com/Tourney/RoundTourney/100670"
+        return AetherhubService(scraper=mock)
+
+    def _page(self) -> str:
+        # как на реальной странице: свежие сверху, полные даты в имени
+        return _club_cards_html(
+            [
+                {
+                    "name": "Легаси 15.07.2026",
+                    "url": "/Tourney/RoundTourney/100647",
+                    "subtitle": PLAIN_SUBTITLE,
+                    "ago": "2 days ago",
+                },
+                {
+                    "name": "Пионер 14.07.2026",
+                    "url": "/Tourney/RoundTourney/100638",
+                    "subtitle": PLAIN_SUBTITLE,
+                    "ago": "3 days ago",
+                },
+                {
+                    "name": "Паупер 13.07.2026",
+                    "url": "/Tourney/RoundTourney/100624",
+                    "subtitle": PLAIN_SUBTITLE,
+                    "ago": "4 days ago",
+                },
+                {
+                    "name": "Модерн 10.07.2026",
+                    "url": "/Tourney/RoundTourney/100552",
+                    "subtitle": PLAIN_SUBTITLE,
+                    "ago": "7 days ago",
+                },
+            ]
+        )
+
+    def test_picks_pauper_on_pauper_day(self):
+        result = self._svc(self._page()).find_todays_pauper_tournament(
+            "https://aetherhub.com/User/Edinorog/", today=date(2026, 7, 13)
+        )
+        assert result == "https://aetherhub.com/Tourney/RoundTourney/100624"
+
+    def test_does_not_grab_todays_legacy(self):
+        """15.07 — день Легаси (не паупер). Не хватаем сегодняшний Легаси, паупера сегодня нет."""
+        result = self._svc(self._page()).find_todays_pauper_tournament(
+            "https://aetherhub.com/User/Edinorog/", today=date(2026, 7, 15)
+        )
+        assert result is None
+
+    @pytest.mark.parametrize(
+        "other", ["Легаси 24.04.2026", "Пионер 24.04.2026", "Модерн 24.04.2026", "Винтаж 24.04.2026"]
+    )
+    def test_todays_non_pauper_russian_format_not_matched(self, other):
+        html = _club_cards_html(
+            [{"name": other, "url": "/Tourney/RoundTourney/1", "subtitle": PLAIN_SUBTITLE, "ago": "3 hours ago"}]
+        )
+        result = self._svc(html).find_todays_pauper_tournament("https://aetherhub.com/User/Edinorog/", today=TODAY)
+        assert result is None
 
 
 # ---------------------------------------------------------------------------

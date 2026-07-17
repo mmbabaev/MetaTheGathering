@@ -38,3 +38,7 @@ class ClubTournamentLink:
     name: str
     url: str
     date: date | None
+    # Паупер ли турнир: определяется по всему тексту ячейки (имя + формат-подзаголовок).
+    # У Goldfish имя — просто дата, а «Pauper» стоит в подзаголовке «Constructed: Pauper Tourney»;
+    # у Edinorog формат («Паупер»/«Легаси»/…) стоит в имени. Поиск по тексту ячейки ловит оба.
+    is_pauper: bool = False
