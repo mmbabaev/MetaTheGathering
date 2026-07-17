@@ -59,15 +59,22 @@ async def send_registration_open(bot, club: Club, tournament_id: int, text: str)
     """
     if bot is None:
         return
+    targets = {cid for cid in (club.chat_id, settings.OWNER_CHAT_ID) if cid}
+    if not targets:
+        return
+
+    # Кнопка требует username бота. Если get_me отвалился — не глушим анонс целиком,
+    # а шлём текст без кнопки: сообщение о старте регистрации важнее диплинка.
+    markup = None
     try:
         me = await bot.get_me()
+        markup = InlineKeyboardMarkup(
+            [[InlineKeyboardButton("📝 Записать колоду", url=deck_deeplink(me.username, tournament_id))]]
+        )
     except TelegramError:
-        logger.exception("send_registration_open: get_me failed for #%s", tournament_id)
-        return
-    markup = InlineKeyboardMarkup(
-        [[InlineKeyboardButton("📝 Записать колоду", url=deck_deeplink(me.username, tournament_id))]]
-    )
-    for chat_id in {cid for cid in (club.chat_id, settings.OWNER_CHAT_ID) if cid}:
+        logger.exception("send_registration_open: get_me failed for #%s — шлём без кнопки", tournament_id)
+
+    for chat_id in targets:
         try:
             await bot.send_message(chat_id=chat_id, text=text, reply_markup=markup)
         except TelegramError:

@@ -4,6 +4,8 @@ from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 from zoneinfo import ZoneInfo
 
+from telegram.error import TelegramError
+
 from bot.scheduler import PreStartReminderJob, get_clubs, send_registration_open
 from core.config import Club, ClubSchedule
 from core.schemas import TournamentCreate
@@ -41,6 +43,19 @@ class TestSendRegistrationOpen:
         await send_registration_open(bot, club, tournament_id=1, text="x")
 
         bot.send_message.assert_not_awaited()
+        bot.get_me.assert_not_awaited()  # без адресатов даже get_me не зовём
+
+    async def test_get_me_failure_still_sends_without_button(self, db, monkeypatch):
+        """Сбой get_me не должен глушить анонс: шлём текст без кнопки-диплинка."""
+        monkeypatch.setattr("bot.scheduler.settings.OWNER_CHAT_ID", 777)
+        club = Club(name="Edinorog", chat_id=-100, schedules=[])
+        bot = _bot()
+        bot.get_me.side_effect = TelegramError("boom")
+
+        await send_registration_open(bot, club, tournament_id=42, text="Регистрация открыта")
+
+        assert bot.send_message.await_count == 2
+        assert all(c.kwargs.get("reply_markup") is None for c in bot.send_message.call_args_list)
 
 
 class TestPreStartReminderJob:

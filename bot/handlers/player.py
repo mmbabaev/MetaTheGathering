@@ -19,6 +19,7 @@ from bot.messages import (
     format_tournament_status,
     sort_participants,
 )
+from core import models
 from services import errors
 from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeItem, ArchetypeService
@@ -177,13 +178,19 @@ class PlayerHandler:
     def handle_deeplink_deck(self, tournament_id: int, tg_id: int) -> HandlerResult:
         """Диплинк в запись колоды на турнир (см. bot/deeplink.py).
 
-        Нет колоды (не записан или записан без колоды) → выбор архетипа. Уже с колодой —
-        карточка турнира (записывать нечего). Турнира нет — сообщение об этом.
+        Регистрация ещё идёт и колоды нет (не записан или записан без колоды) → выбор
+        архетипа. Уже с колодой или регистрация закрыта → карточка турнира (в ней виден
+        статус). Турнира нет — сообщение об этом.
         """
         try:
-            get_tournament(self.svc.db, tournament_id)
+            tournament = get_tournament(self.svc.db, tournament_id)
         except errors.TournamentNotFound:
             return HandlerResult(TOURNAMENT_NOT_FOUND)
+
+        # Регистрация закрыта — не ведём в выбор архетипа (register_participant всё равно
+        # бросил бы TournamentInvalidState). Показываем карточку со статусом.
+        if tournament.status != models.TournamentStatus.REGISTRATION:
+            return self.handle_tournament_select(tournament_id, tg_id=tg_id)
 
         user = self.user_svc.get_by_tg_id(tg_id)
         if user is not None:
