@@ -17,6 +17,11 @@ class TestPayload:
     def test_non_deck_payloads_are_none(self, bad):
         assert parse_deck_payload(bad or "") is None
 
+    @pytest.mark.parametrize("payload", ["deck_²", "deck_１２３", "deck_٣"])
+    def test_unicode_digits_do_not_crash(self, payload):
+        """str.isdigit() пропускает не-ASCII цифры, а int() на них падает — не должны."""
+        assert parse_deck_payload(payload) is None
+
     def test_deeplink_url(self):
         assert deck_deeplink("MyBot", 7) == "https://t.me/MyBot?start=deck_7"
 
@@ -62,3 +67,13 @@ class TestHandleDeeplinkDeck:
         # карточка турнира, не выбор архетипа
         assert result.text != CHOOSE_ARCHETYPE
         assert isinstance(result, HandlerResult)
+
+    def test_registration_closed_does_not_offer_archetype(self, player_handler, svc, user_svc, tournament):
+        """Регистрация закрыта — диплинк ведёт на карточку, а не в выбор архетипа
+        (иначе выбор упал бы TournamentInvalidState)."""
+        svc.close_tournament(tournament.id)
+        u = user_svc.get_or_create(tg_id=1, first_name="Алиса")
+
+        result = player_handler.handle_deeplink_deck(tournament.id, tg_id=u.tg_id)
+
+        assert result.text != CHOOSE_ARCHETYPE

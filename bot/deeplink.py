@@ -17,11 +17,15 @@ def deck_payload(tournament_id: int) -> str:
 
 
 def parse_deck_payload(payload: str) -> Optional[int]:
-    """tournament_id из start-payload, либо None, если это не deck-диплинк."""
+    """tournament_id из start-payload, либо None, если это не deck-диплинк.
+
+    Требуем именно ASCII-цифры: str.isdigit() пропускает Unicode-цифры (напр. «²»),
+    на которых int() бросает ValueError — иначе `/start deck_²` уронил бы обработчик.
+    """
     if not payload or not payload.startswith(_DECK_PREFIX):
         return None
     rest = payload[len(_DECK_PREFIX) :]
-    return int(rest) if rest.isdigit() else None
+    return int(rest) if rest.isascii() and rest.isdigit() else None
 
 
 def deck_deeplink(bot_username: str, tournament_id: int) -> str:
