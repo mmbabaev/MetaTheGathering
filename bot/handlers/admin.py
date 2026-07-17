@@ -28,9 +28,10 @@ from bot.messages import (
     format_tournament_status,
     sort_participants,
 )
+from core import models
 from core.schemas import TournamentCreate
 from services import errors
-from services.aetherhub_import_service import AetherhubImportService
+from services.aetherhub_import_service import MIN_TOURNAMENT_DURATION, AetherhubImportService
 from services.archetype import ArchetypeService
 from services.export import ExportService
 from services.meta_table_import import MetaTableImportService
@@ -564,8 +565,9 @@ class AdminHandler:
     def can_build_meta_chart(self, tg_id: int, tournament_id: int) -> bool:
         """Можно ли строить «Метагейм-срез»: есть права и турнир существует.
 
-        Сам график собирает `bot.chart.build_chart` — там рисование уходит в отдельный
-        поток, и держать эту механику в чистом хендлере незачем.
+        График работает и по ходу турнира, поэтому завершённость не требуется. Саму
+        картинку собирает `bot.chart` — рисование уходит в поток, и держать эту механику
+        в чистом хендлере незачем.
         """
         if not self.user_svc.is_privileged(tg_id):
             return False
@@ -574,6 +576,25 @@ class AdminHandler:
         except errors.TournamentNotFound:
             return False
         return True
+
+    def standings_availability(self, tg_id: int, tournament_id: int) -> str:
+        """Доступность «Итоговых стендингов»: 'no_access' | 'not_ready' | 'ok'.
+
+        Стендинги — итоговые, поэтому показываем только для завершённого турнира (у всех
+        матчей есть счёт), иначе картинка «Итоговые» врала бы промежуточными результатами.
+        Дополнительно, для AetherHub-турниров, — не раньше минимальной длительности с начала
+        игры: у AetherHub счёт раннего раунда может появиться раньше, чем сыграны следующие,
+        и `is_tournament_complete` в этот зазор преждевременно True. Турниры без ``started_at``
+        (например, из meta-import) этот гард не затрагивает.
+        """
+        if not self.can_build_meta_chart(tg_id, tournament_id):
+            return "no_access"
+        tournament = get_tournament(self.svc.db, tournament_id)
+        if tournament.started_at is not None and models.utc_now() - tournament.started_at < MIN_TOURNAMENT_DURATION:
+            return "not_ready"
+        if not AetherhubImportService(self.svc.db).is_tournament_complete(tournament_id):
+            return "not_ready"
+        return "ok"
 
     def handle_delete_tournament_prompt(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Показывает запрос подтверждения удаления турнира."""

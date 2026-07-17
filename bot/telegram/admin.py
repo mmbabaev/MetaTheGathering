@@ -9,7 +9,7 @@ from telegram.constants import ChatType
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
-from bot.chart import build_chart
+from bot.chart import build_chart, build_standings
 from bot.handlers.admin import parse_bulk_player_line
 from bot.keyboards import (
     admin_more_keyboard,
@@ -420,14 +420,40 @@ async def callback_meta_chart(update: Update, context: ContextTypes.DEFAULT_TYPE
         if chart is None:
             await query.message.reply_text("В этом турнире ещё нет ни одной колоды.")
             return
-        # send_document, а не send_photo: Telegram ужимает фото до 1280px и пережимает
-        # в JPEG — подписи колод в легенде превращаются в кашу. Только в чат инициатора.
-        await context.bot.send_document(
-            chat_id=query.message.chat_id,
-            document=io.BytesIO(chart.png),
-            filename=chart.filename,
-        )
+        # Картинкой (send_photo) — чтобы в чате было превью. Только в чат инициатора.
+        await context.bot.send_photo(chat_id=query.message.chat_id, photo=io.BytesIO(chart.png))
         _log("meta_chart", user, tournament_id=tournament_id)
+    finally:
+        db.close()
+
+
+async def callback_standings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка «🏆 Итоговые стендинги» — отправляет картинку со стендингами."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+    db = SessionLocal()
+    try:
+        availability = _admin_handler(db).standings_availability(user.id, tournament_id)
+        if availability != "ok":
+            # Алерт только здесь: повторный answer после «Считаю…» игнорится (см. #123).
+            msg = {
+                "no_access": "Нет прав или турнир не найден.",
+                "not_ready": "Стендинги ещё не готовы — турнир не завершён.",
+            }[availability]
+            await query.answer(msg, show_alert=True)
+            return
+        await query.answer("Считаю стендинги…")
+        pages = await build_standings(db, tournament_id)
+        # Картинками (send_photo) — превью в чате. Длинный список — несколько страниц.
+        for page in pages:
+            await context.bot.send_photo(chat_id=query.message.chat_id, photo=io.BytesIO(page.png))
+        _log("standings", user, tournament_id=tournament_id)
     finally:
         db.close()
 

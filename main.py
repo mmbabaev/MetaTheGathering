@@ -69,6 +69,7 @@ from bot.keyboards import (
     CB_SETTINGS_TOGGLE_EMOJI,
     CB_SETTINGS_TOGGLE_OPPONENT_NOTIFY,
     CB_SETTINGS_TOGGLE_STATUS_PAIRINGS,
+    CB_STANDINGS,
     CB_TOURNAMENT,
     CB_TSTATUS,
 )
@@ -262,6 +263,7 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(admin.callback_export_players, pattern=f"^{CB_EXPORT_PLAYERS}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_export_excel, pattern=f"^{CB_EXPORT_EXCEL}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_meta_chart, pattern=f"^{CB_META_CHART}:"))
+    app.add_handler(CallbackQueryHandler(admin.callback_standings, pattern=f"^{CB_STANDINGS}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_delete_tournament_prompt, pattern=f"^{CB_DELETE_TOURNAMENT}:"))
     app.add_handler(
         CallbackQueryHandler(admin.callback_delete_tournament_confirm, pattern=f"^{CB_DELETE_TOURNAMENT_CONFIRM}:")

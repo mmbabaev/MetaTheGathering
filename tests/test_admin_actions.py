@@ -1,5 +1,6 @@
 """Tests for admin handler business logic (AdminHandler methods)."""
 
+from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -43,7 +44,7 @@ from core import models as m
 from core.models import TournamentStatus
 from core.schemas import TournamentCreate
 from services import errors
-from services.aetherhub_import_service import AetherhubImportService
+from services.aetherhub_import_service import MIN_TOURNAMENT_DURATION, AetherhubImportService
 from services.aetherhub_models import AetherhubPairing, AetherhubRound, AetherhubTournamentData
 from services.deck_colors import DeckColorResolver
 from services.feature_flags import FeatureFlags
@@ -1675,6 +1676,60 @@ class TestCanBuildMetaChart:
 
     def test_admin_may(self, handler, admin_user, active_tournament):
         assert handler.can_build_meta_chart(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id) is True
+
+
+class TestStandingsAvailability:
+    def test_not_privileged(self, handler, user_alice, active_tournament):
+        assert handler.standings_availability(user_alice.tg_id, active_tournament.id) == "no_access"
+
+    def test_tournament_not_found(self, handler, admin_user):
+        assert handler.standings_availability(ADMIN_TG_ID, 99999) == "no_access"
+
+    def test_not_ready_while_ongoing(self, handler, admin_user, active_tournament):
+        """Турнир без счёта матчей — стендинги «ещё не готовы», а не промежуточные."""
+        assert handler.standings_availability(ADMIN_TG_ID, active_tournament.id) == "not_ready"
+
+    def test_ok_when_complete(self, handler, admin_user, active_tournament, svc, user_alice, arch_svc, db):
+        arch = arch_svc.get_or_create_by_name("Burn")
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id, archetype_id=arch.id)
+        for r in (1, 2, 3, 4):
+            db.add(
+                m.RoundPairing(
+                    tournament_id=active_tournament.id,
+                    round_number=r,
+                    player_name="Alice",
+                    opponent_name="Opp",
+                    table_number=1,
+                    player_wins=2,
+                    opponent_wins=0,
+                )
+            )
+        db.commit()
+
+        assert handler.standings_availability(ADMIN_TG_ID, active_tournament.id) == "ok"
+
+    def test_not_ready_within_min_duration(self, handler, admin_user, active_tournament, svc, user_alice, arch_svc, db):
+        """AetherHub-турнир, стартовавший <4ч назад: счёт раннего раунда мог появиться, но
+        стендинги ещё не итоговые."""
+        arch = arch_svc.get_or_create_by_name("Burn")
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id, archetype_id=arch.id)
+        for r in (1, 2, 3, 4):
+            db.add(
+                m.RoundPairing(
+                    tournament_id=active_tournament.id,
+                    round_number=r,
+                    player_name="Alice",
+                    opponent_name="Opp",
+                    table_number=1,
+                    player_wins=2,
+                    opponent_wins=0,
+                )
+            )
+        row = db.get(m.Tournament, active_tournament.id)
+        row.started_at = m.utc_now() - (MIN_TOURNAMENT_DURATION - timedelta(hours=1))
+        db.commit()
+
+        assert handler.standings_availability(ADMIN_TG_ID, active_tournament.id) == "not_ready"
 
 
 # ── handle_schedule ───────────────────────────────────────────────────────────

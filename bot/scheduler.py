@@ -10,17 +10,16 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
-from telegram.error import TelegramError
 from telegram.ext import Application, ContextTypes
 
-from bot.chart import build_chart
+from bot.chart import build_chart, build_standings
 from bot.messages import format_decks_revealed, format_meta_gather_completed
 from bot.telegram.round_notify import send_round_notifications
 from core import models
 from core.config import Club, ClubSchedule, app_cfg, settings
 from core.database import SessionLocal
 from core.schemas import TournamentCreate
-from services.aetherhub_import_service import AetherhubImportService
+from services.aetherhub_import_service import MIN_TOURNAMENT_DURATION, AetherhubImportService
 from services.aetherhub_service import AetherhubService
 from services.datalens import DataLensService
 from services.stats import StatsService
@@ -538,26 +537,18 @@ class AutoRevealDecksJob:
 # ---------------------------------------------------------------------------
 
 
-# Лимит Telegram на подпись к документу/фото — в UTF-16, а не в символах Python.
-CAPTION_LIMIT = 1024
-
-
-def _caption_length(text: str) -> int:
-    """Длина подписи по счёту Telegram — в кодовых единицах UTF-16.
-
-    В названиях колод живут эмодзи («🟢🔵🐸 Bogles»), а каждый такой символ весит две
-    единицы: len() насчитал бы меньше лимита, и Telegram отверг бы подпись.
-    """
-    return len(text.encode("utf-16-le")) // 2
-
-
 async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, chart_svc=None) -> None:
-    """Один раз анонсирует «сбор метагейма завершён» с графиком, когда турнир сыгран до конца.
+    """Один раз анонсирует «сбор метагейма завершён» с графиком и стендингами.
 
-    Срабатывает после импорта, когда у всех матчей появился счёт (признак завершения
-    турнира + получены финальные стендинги). Идемпотентность — флаг
-    ``Tournament.completed_announced_at``: флаг ставим ТОЛЬКО после успешной отправки,
-    поэтому сбой отправки не «съедает» анонс — он повторится при следующем импорте.
+    Срабатывает после импорта при выполнении ВСЕХ условий:
+    - турнир привязан к AetherHub (``aetherhub_url``) — только настоящие турниры;
+    - прошло ≥ ``MIN_TOURNAMENT_DURATION`` с начала игры (``started_at``) — иначе счёт
+      раннего раунда мог бы преждевременно сойти за завершённость;
+    - у всех не-бай матчей есть счёт (``is_tournament_complete``).
+
+    Идемпотентность — флаг ``Tournament.completed_announced_at``: ставим ТОЛЬКО после
+    успешной отправки, поэтому сбой отправки не «съедает» анонс — он повторится при
+    следующем импорте (в т.ч. ночной 06:00-реимпорт — гарантированный бэкап, там >4ч всегда).
 
     Пока шлём владельцу (``settings.OWNER_CHAT_ID``), а не в чат турнира — и в debug,
     и в prod. Позже можно переключить на чат клуба, поменяв адресата здесь.
@@ -570,19 +561,40 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, char
     if tournament is None or tournament.completed_announced_at is not None:
         return
 
+    # Только для «настоящих» турниров, привязанных к AetherHub: у отладочных/ручных нет
+    # aetherhub_url, и их завершённость по счёту матчей неопределена.
+    if not tournament.aetherhub_url:
+        return
+
+    # Минимальная длительность турнира — 4 часа. Раньше «сбор завершён» быть не может:
+    # это отсекает преждевременный анонс, когда AetherHub уже проставил счёт раннего раунда,
+    # но следующие ещё не сыграны. started_at ≈ старт игры (первый импорт раунда).
+    if tournament.started_at is None:
+        return
+    if models.utc_now() - tournament.started_at < MIN_TOURNAMENT_DURATION:
+        return
+
     svc = AetherhubImportService(db)
     if not svc.is_tournament_complete(tournament_id):
         return
 
     chart = await build_chart(db, tournament_id, chart_svc)
+    standings = await build_standings(db, tournament_id)
     total = len(TournamentService(db).list_participants_for_tournament(tournament_id))
     with_deck = sum(s.count for s in chart.sectors) if chart else _decks_count(db, tournament_id)
     undefeated = svc.get_undefeated_players(tournament_id)
     text = format_meta_gather_completed(tournament.title, total, with_deck, undefeated)
 
-    await _send_completion_announce(bot, chart, text)
+    # Порядок важен для идемпотентности:
+    # 1) текст — суть анонса; упал → исключение пробрасывается, флаг НЕ ставим, повтор на импорте.
+    await bot.send_message(chat_id=settings.OWNER_CHAT_ID, text=text)
+    # 2) флаг ставим СРАЗУ после доставки текста, до картинок: анонс уже доставлен, повторять
+    #    его нельзя, даже если картинки ниже упадут.
     tournament.completed_announced_at = models.utc_now()
     db.commit()
+    # 3) картинки — украшение, строго best-effort: их сбой (в т.ч. отказ Telegram) не должен
+    #    ни ронять уже доставленный анонс, ни зацикливать повтор.
+    await _send_announce_images(bot, [img for img in ([chart] if chart else []) + list(standings)])
     logger.info("maybe_announce_meta_gather_completed: announced completion for #%s", tournament_id)
 
 
@@ -591,32 +603,13 @@ def _decks_count(db, tournament_id: int) -> int:
     return sum(row.count for row in StatsService(db).get_tournament_meta(tournament_id))
 
 
-async def _send_completion_announce(bot, chart, text: str) -> None:
-    """Анонс с бубликом. Графика нет — уходит как раньше, текстом: она не должна ломать анонс."""
-    chat_id = settings.OWNER_CHAT_ID
-    if chart is None:
-        await bot.send_message(chat_id=chat_id, text=text)
-        return
-
-    # send_document, а не send_photo: Telegram ужимает фото до 1280px и пережимает в JPEG —
-    # подписи колод в легенде становятся кашей.
-    if _caption_length(text) <= CAPTION_LIMIT:
-        await bot.send_document(
-            chat_id=chat_id,
-            document=io.BytesIO(chart.png),
-            filename=chart.filename,
-            caption=text,
-        )
-        return
-
-    # Много игроков без поражений — подпись не влезла: текст отдельным сообщением.
-    # Анонс — это текст, график лишь бонус, поэтому его сбой глушим: иначе флаг
-    # идемпотентности не встанет и уже доставленный анонс придёт повторно.
-    await bot.send_message(chat_id=chat_id, text=text)
-    try:
-        await bot.send_document(chat_id=chat_id, document=io.BytesIO(chart.png), filename=chart.filename)
-    except TelegramError:
-        logger.exception("maybe_announce_meta_gather_completed: chart upload failed after the text was sent")
+async def _send_announce_images(bot, images) -> None:
+    """Best-effort отправка картинок анонса. Ловим любую ошибку — картинки не критичны."""
+    for image in images:
+        try:
+            await bot.send_photo(chat_id=settings.OWNER_CHAT_ID, photo=io.BytesIO(image.png))
+        except Exception:
+            logger.exception("maybe_announce_meta_gather_completed: image upload failed (%s)", image.filename)
 
 
 def _find_active_club_tournament(db, club_name: str):
