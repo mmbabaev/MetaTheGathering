@@ -15,6 +15,17 @@ from services.aetherhub_models import (
 
 PAUPER_RE = re.compile(r"pauper|паупер|пупер", re.IGNORECASE)
 
+# Явно НЕ паупер: если организатор назвал турнир другим форматом — не привязываем его,
+# даже если он сегодняшний. Всё остальное (в т.ч. имя вида «17.07» без слова «паупер»)
+# считаем допустимым паупер-кандидатом — у клубов нет строгих правил именования.
+_NON_PAUPER_RE = re.compile(
+    r"modern|legacy|standard|pioneer|vintage|commander|\bedh\b|premodern|draft|sealed|limited|cube",
+    re.IGNORECASE,
+)
+
+# Ссылка на страницу турнира — с числовым id (отсекает навигацию: /Tourney/, /Tourney/Leagues …)
+_TOURNEY_LINK_RE = re.compile(r"/Tourney/\w+/\d+")
+
 _RESULT_RE = re.compile(r"(\d+)\s*[-–]\s*(\d+)")
 
 
@@ -33,8 +44,10 @@ _DATE_FORMATS = [
     (re.compile(r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+\d{1,2},?\s+\d{4}", re.IGNORECASE), None),
 ]
 
-# DD.MM without year — matched separately to infer year
-_DAY_MONTH_RE = re.compile(r"\b(\d{1,2})\.(\d{2})\b")
+# DD.MM / DD/MM without year — matched separately to infer year.
+# Слэш обязателен: организаторы пишут дату и через точку («16.07»), и через слэш («16/07»);
+# без слэша дата из имени не читалась и код падал на хрупкий «N days ago».
+_DAY_MONTH_RE = re.compile(r"\b(\d{1,2})[./](\d{1,2})\b")
 
 _DAYS_AGO_RE = re.compile(r"(\d+)\s+days?\s+ago", re.IGNORECASE)
 
@@ -235,7 +248,7 @@ class AetherhubService:
 
         for a in soup.find_all("a", href=True):
             href: str = a["href"]
-            if "/Tourney/" not in href:
+            if not _TOURNEY_LINK_RE.search(href):
                 continue
             url = href if href.startswith("http") else f"https://aetherhub.com{href}"
             if url in seen:
@@ -262,10 +275,21 @@ class AetherhubService:
         return self._parse_club_page(html, today=today)
 
     def find_todays_pauper_tournament(self, club_url: str, today: date | None = None) -> str | None:
-        for link in self.fetch_club_tournaments(club_url, today=today):
-            if (today is None or link.date == today) and PAUPER_RE.search(link.name):
-                return link.url
-        return None
+        """URL сегодняшнего паупер-турнира клуба, либо None.
+
+        Дата важнее имени. Организаторы называют паупер-турнир как попало — иногда просто
+        «17.07» без слова «паупер», — поэтому имя не жёсткий фильтр, а лишь приоритет:
+        среди сегодняшних предпочитаем явно паупер-названные, иначе берём сегодняшний с
+        нейтральным именем. Отсекаем только турниры, явно названные другим форматом.
+        """
+        candidates = [
+            link for link in self.fetch_club_tournaments(club_url, today=today) if today is None or link.date == today
+        ]
+        pauper_named = [link for link in candidates if PAUPER_RE.search(link.name)]
+        if pauper_named:
+            return pauper_named[0].url
+        neutral = [link for link in candidates if not _NON_PAUPER_RE.search(link.name)]
+        return neutral[0].url if neutral else None
 
     def _pairings_url(self, tourney_id: str, round_num: int) -> str:
         return f"https://aetherhub.com/Tourney/RoundTourneyPublicPairings?id={tourney_id}&p={round_num}"

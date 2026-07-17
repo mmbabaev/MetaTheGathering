@@ -77,6 +77,9 @@ class TestExtractDate:
     def test_day_month_without_year(self):
         assert self.svc._extract_date("Паупер 24.04") is not None
 
+    def test_day_month_slash_without_year(self):
+        assert self.svc._extract_date("Паупер 16/07") is not None
+
     def test_day_month_full_format_takes_priority(self):
         # 24.04.2026 should parse as ISO date, not DD.MM
         assert self.svc._extract_date("Goldfish 24.04.2026") == date(2026, 4, 24)
@@ -99,6 +102,15 @@ class TestExtractDayMonth:
 
     def test_invalid_date_returns_none(self):
         assert self.svc._extract_day_month("Паупер 99.99") is None
+
+    def test_slash_separator(self):
+        """Дата через слэш («16/07») читается наравне с точкой — иначе она терялась."""
+        today = date(2026, 7, 17)
+        assert self.svc._extract_day_month("Паупер 16/07", today=today) == date(2026, 7, 16)
+
+    def test_slash_one_digit_month(self):
+        today = date(2026, 7, 17)
+        assert self.svc._extract_day_month("Паупер 16/7", today=today) == date(2026, 7, 16)
 
 
 # ---------------------------------------------------------------------------
@@ -194,6 +206,24 @@ class TestParseClubPage:
         )
         links = self.svc._parse_club_page(html)
         assert len(links) == 1
+
+    def test_ignores_tourney_nav_links_without_id(self):
+        """Навигация (/Tourney/, /Tourney/Leagues …) не турниры — у них нет числового id."""
+        html = (
+            "<html><body>"
+            '<a href="/Tourney/">Browse Tournaments</a>'
+            '<a href="/Tourney/Leagues">Browse Leagues</a>'
+            '<a href="/Tourney/MyTourneys">My Tournaments</a>'
+            '<a href="/Tourney/RoundTourney/100670">17.07</a>'
+            "</body></html>"
+        )
+        links = self.svc._parse_club_page(html)
+        assert [link.url for link in links] == ["https://aetherhub.com/Tourney/RoundTourney/100670"]
+
+    def test_extracts_slash_date_from_name(self):
+        html = _club_page_html([{"name": "Паупер 16/07", "url": "/Tourney/RoundTourney/1"}])
+        links = self.svc._parse_club_page(html, today=date(2026, 7, 17))
+        assert links[0].date == date(2026, 7, 16)
 
     def test_absolute_urls_preserved(self):
         html = f'<html><body><a href="{TOURNEY_URL}">Pauper 2026-04-24</a></body></html>'
@@ -331,15 +361,15 @@ class TestFindTodaysPauperTournament:
         """today=None returns first pauper regardless of date."""
         html = _club_page_html(
             [
-                {"name": "Pauper 2026-03-01", "url": "/Tourney/RoundTourney/OLD", "date_str": "2026-03-01"},
+                {"name": "Pauper 2026-03-01", "url": "/Tourney/RoundTourney/300", "date_str": "2026-03-01"},
             ]
         )
         svc = self._svc(html)
         result = svc.find_todays_pauper_tournament("https://aetherhub.com/User/GoldFish", today=None)
-        assert result == "https://aetherhub.com/Tourney/RoundTourney/OLD"
+        assert result == "https://aetherhub.com/Tourney/RoundTourney/300"
 
     def test_find_latest_skips_non_pauper(self):
-        """today=None still filters by pauper name."""
+        """today=None: явно другой формат не берём даже как «последний»."""
         html = _club_page_html(
             [
                 {"name": "Modern League 2026-03-01", "url": "/Tourney/RoundTourney/1", "date_str": "2026-03-01"},
@@ -348,6 +378,71 @@ class TestFindTodaysPauperTournament:
         svc = self._svc(html)
         result = svc.find_todays_pauper_tournament("https://aetherhub.com/User/GoldFish", today=None)
         assert result is None
+
+
+class TestFindTodaysDateOverName:
+    """Дата важнее имени: организаторы называют паупер-турнир как попало."""
+
+    def _svc(self, html: str) -> AetherhubService:
+        mock = MagicMock()
+        mock.get.return_value.text = html
+        return AetherhubService(scraper=mock)
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "24.04",  # только дата, без слова «паупер» — как реальный «17.07»
+            "24/04",  # дата через слэш
+            "Weekly 24.04",  # нейтральное имя + дата
+            "Паупер 24.04",  # классическое
+            "MTG Pauper 24.04",
+            "паупер 24/04",  # слэш + «паупер»
+        ],
+    )
+    def test_todays_tournament_matched_regardless_of_name(self, name):
+        html = _club_page_html([{"name": name, "url": "/Tourney/RoundTourney/100670"}])
+        result = self._svc(html).find_todays_pauper_tournament("https://aetherhub.com/User/GoldFish", today=TODAY)
+        assert result == "https://aetherhub.com/Tourney/RoundTourney/100670"
+
+    def test_yesterdays_pauper_not_matched(self):
+        """«Паупер 23/04» на 24.04 — вчерашний, слэш-дата читается и турнир не берётся."""
+        html = _club_page_html([{"name": "Паупер 23/04", "url": "/Tourney/RoundTourney/100661"}])
+        result = self._svc(html).find_todays_pauper_tournament("https://aetherhub.com/User/GoldFish", today=TODAY)
+        assert result is None
+
+    def test_explicit_other_format_today_not_matched(self):
+        html = _club_page_html([{"name": "Modern 24.04", "url": "/Tourney/RoundTourney/1"}])
+        result = self._svc(html).find_todays_pauper_tournament("https://aetherhub.com/User/GoldFish", today=TODAY)
+        assert result is None
+
+    def test_prefers_pauper_named_over_neutral(self):
+        """Если есть и «паупер»-названный, и нейтральный сегодняшний — берём паупер-названный."""
+        html = _club_page_html(
+            [
+                {"name": "24.04", "url": "/Tourney/RoundTourney/1"},
+                {"name": "Паупер 24.04", "url": "/Tourney/RoundTourney/2"},
+            ]
+        )
+        result = self._svc(html).find_todays_pauper_tournament("https://aetherhub.com/User/GoldFish", today=TODAY)
+        assert result == "https://aetherhub.com/Tourney/RoundTourney/2"
+
+    def test_incident_regression_prod_100670_vs_100661(self):
+        """Регрессия инцидента 17.07.2026: реальный «17.07» (100670) против вчерашнего
+        «Паупер 16/07» (100661), который AetherHub утром показывал как «0 days ago».
+        Слэш-дата из имени (16/07) приоритетнее относительной, поэтому 100661 — вчера и
+        отсеивается, а берётся сегодняшний date-only 100670."""
+        html = (
+            "<html><body>"
+            '<div class="w-100"><a href="/Tourney/RoundTourney/100670">17.07</a></div>'
+            '<div class="w-100"><a href="/Tourney/RoundTourney/100661">Паупер 16/07</a>'
+            '<small class="text-muted">0 days ago</small></div>'
+            "</body></html>"
+        )
+        mock = MagicMock()
+        mock.get.return_value.text = html
+        svc = AetherhubService(scraper=mock)
+        result = svc.find_todays_pauper_tournament("https://aetherhub.com/User/GoldFish", today=date(2026, 7, 17))
+        assert result == "https://aetherhub.com/Tourney/RoundTourney/100670"
 
 
 # ---------------------------------------------------------------------------
