@@ -85,3 +85,4 @@ class TestReminderSchedule:
         assert times[("Goldfish", "thursday")] == "19:45"
         assert times[("Goldfish", "friday")] == "19:45"
         assert times[("Edinorog", "monday")] == "19:25"
+        assert times[("Edinorog", "thursday")] == "19:25"

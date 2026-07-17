@@ -154,6 +154,7 @@ def get_clubs() -> list[Club]:
                     weekday="thursday",
                     game_time="19:30",
                     create_time="12:00",
+                    reminder_time="19:25",
                     aetherhub_fetch_times=[
                         "20:00",
                         "20:30",
