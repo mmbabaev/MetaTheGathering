@@ -10,9 +10,12 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.error import TelegramError
 from telegram.ext import Application, ContextTypes
 
 from bot.chart import build_chart, build_standings
+from bot.deeplink import deck_deeplink
 from bot.messages import format_decks_revealed, format_meta_gather_completed
 from bot.telegram.round_notify import send_round_notifications
 from core import models
@@ -47,6 +50,30 @@ def _ptb_day(weekday: str) -> int:
     return (DAYS[weekday] + 1) % 7
 
 
+async def send_registration_open(bot, club: Club, tournament_id: int, text: str) -> None:
+    """Сообщение с кнопкой-диплинком «Записать колоду» в чат клуба и владельцу (issue #136).
+
+    Диплинк ведёт игрока сразу в запись колоды. Адресаты — групповой чат клуба (если задан)
+    и владелец, дедуплицированно; отсутствующие пропускаем. Best-effort: сбой одной отправки
+    (или get_me) не роняет джобу.
+    """
+    if bot is None:
+        return
+    try:
+        me = await bot.get_me()
+    except TelegramError:
+        logger.exception("send_registration_open: get_me failed for #%s", tournament_id)
+        return
+    markup = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("📝 Записать колоду", url=deck_deeplink(me.username, tournament_id))]]
+    )
+    for chat_id in {cid for cid in (club.chat_id, settings.OWNER_CHAT_ID) if cid}:
+        try:
+            await bot.send_message(chat_id=chat_id, text=text, reply_markup=markup)
+        except TelegramError:
+            logger.exception("send_registration_open: send to %s failed for #%s", chat_id, tournament_id)
+
+
 # ---------------------------------------------------------------------------
 # Club definitions
 # ---------------------------------------------------------------------------
@@ -65,6 +92,7 @@ def get_clubs() -> list[Club]:
                     weekday="thursday",
                     game_time="19:45",
                     create_time="03:10",
+                    reminder_time="19:45",
                     aetherhub_fetch_times=[
                         "20:00",
                         "20:30",
@@ -82,6 +110,7 @@ def get_clubs() -> list[Club]:
                     weekday="friday",
                     game_time="19:45",
                     create_time="12:00",
+                    reminder_time="19:45",
                     aetherhub_fetch_times=[
                         "20:00",
                         "20:30",
@@ -107,6 +136,7 @@ def get_clubs() -> list[Club]:
                     weekday="monday",
                     game_time="19:30",
                     create_time="12:00",
+                    reminder_time="19:25",
                     aetherhub_fetch_times=[
                         "20:00",
                         "20:30",
@@ -206,16 +236,44 @@ class CreateTournamentJob:
                 )
                 logger.info(f"Created tournament #{new_t.id} '{title}' for '{self.club.name}'")
 
-                if settings.OWNER_CHAT_ID and bot is not None:
-                    await bot.send_message(
-                        chat_id=settings.OWNER_CHAT_ID,
-                        text=(
-                            f"🏆 {self.club.name} Pauper — сегодня в {self.schedule.game_time}\n"
-                            f"Турнир создан. Регистрация открыта."
-                        ),
+                if bot is not None:
+                    text = (
+                        f"🏆 {self.club.name} Pauper — сегодня в {self.schedule.game_time}\n"
+                        f"Турнир создан. Регистрация открыта."
                     )
+                    await send_registration_open(bot, self.club, new_t.id, text)
             except Exception as e:
                 logger.error(f"CreateTournamentJob error for '{self.club.name}': {e}", exc_info=True)
+        finally:
+            if close_db:
+                db.close()
+
+
+class PreStartReminderJob:
+    """Перед началом турнира напоминает игрокам записать колоду (кнопка-диплинк, issue #136)."""
+
+    def __init__(self, club: Club, schedule: ClubSchedule) -> None:
+        self.club = club
+        self.schedule = schedule
+
+    async def run(self, bot, now: datetime, db=None) -> None:
+        if now.weekday() != DAYS[self.schedule.weekday]:
+            return
+        close_db = db is None
+        if close_db:
+            db = SessionLocal()
+        try:
+            active = TournamentService(db).get_active_tournament_for_chat(self.club.chat_id or 0)
+            if active is None:
+                logger.info("PreStartReminderJob: no active tournament for '%s'", self.club.name)
+                return
+            text = (
+                f"⏰ {self.club.name} Pauper начинается в {self.schedule.game_time}!\n"
+                f"Ещё не записали колоду? Успейте — жмите кнопку ниже."
+            )
+            await send_registration_open(bot, self.club, active.id, text)
+        except Exception:
+            logger.exception("PreStartReminderJob error for '%s'", self.club.name)
         finally:
             if close_db:
                 db.close()
@@ -669,6 +727,20 @@ def setup_scheduler(app: Application) -> None:
                 f"Scheduler: {club.name} create on {schedule.weekday} at {time_str} "
                 f"({settings.TOURNAMENT_TIMEZONE}), game at {schedule.game_time}"
             )
+
+            if schedule.reminder_time:
+                reminder_time = datetime.strptime(schedule.reminder_time, "%H:%M").time().replace(tzinfo=tz)
+                reminder_job = PreStartReminderJob(club, schedule)
+
+                async def _reminder(context: ContextTypes.DEFAULT_TYPE, _job=reminder_job) -> None:
+                    tz_ = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
+                    await _job.run(bot=context.bot, now=datetime.now(tz_))
+
+                _reminder.__name__ = f"prestart_reminder[{club.name}/{schedule.weekday}]"
+                app.job_queue.run_daily(_reminder, time=reminder_time, days=(_ptb_day(schedule.weekday),))
+                logger.info(
+                    f"Scheduler: pre-start reminder for '{club.name}' ({schedule.weekday}) at {schedule.reminder_time}"
+                )
 
             for fetch_time_str in schedule.aetherhub_fetch_times:
                 fetch_time = datetime.strptime(fetch_time_str, "%H:%M").time().replace(tzinfo=tz)

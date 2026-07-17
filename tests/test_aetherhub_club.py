@@ -635,19 +635,34 @@ class TestCreateTournamentJob:
         old_refreshed = db.get(cm.Tournament, old.id)
         assert old_refreshed.status == TournamentStatus.CLOSED
 
-    def test_sends_message_to_owner_chat_id(self, db):
+    def test_registration_open_goes_to_club_chat_and_owner_with_deeplink(self, db):
         job = _make_create_job(weekday="friday", chat_id=42)
         bot = AsyncMock()
+        bot.get_me.return_value = MagicMock(username="TestBot")
         with patch("bot.scheduler.settings") as mock_settings:
             mock_settings.OWNER_CHAT_ID = 999
             asyncio.run(job.run(bot=bot, now=FRIDAY_NOW, db=db))
-        bot.send_message.assert_called_once()
-        call_kwargs = bot.send_message.call_args
-        assert call_kwargs.kwargs.get("chat_id") == 999 or call_kwargs.args[0] == 999
+        # анонс регистрации ушёл и в чат клуба, и владельцу
+        chats = {c.kwargs["chat_id"] for c in bot.send_message.call_args_list}
+        assert chats == {42, 999}
+        # с кнопкой-диплинком «Записать колоду»
+        button = bot.send_message.call_args_list[0].kwargs["reply_markup"].inline_keyboard[0][0]
+        assert button.url.startswith("https://t.me/TestBot?start=deck_")
 
-    def test_no_message_when_owner_chat_id_not_set(self, db):
+    def test_registration_open_to_club_chat_even_without_owner(self, db):
         job = _make_create_job(weekday="friday", chat_id=42)
         bot = AsyncMock()
+        bot.get_me.return_value = MagicMock(username="TestBot")
+        with patch("bot.scheduler.settings") as mock_settings:
+            mock_settings.OWNER_CHAT_ID = None
+            asyncio.run(job.run(bot=bot, now=FRIDAY_NOW, db=db))
+        chats = {c.kwargs["chat_id"] for c in bot.send_message.call_args_list}
+        assert chats == {42}
+
+    def test_no_registration_message_without_any_target(self, db):
+        job = _make_create_job(weekday="friday", chat_id=0)  # нет ни группы клуба
+        bot = AsyncMock()
+        bot.get_me.return_value = MagicMock(username="TestBot")
         with patch("bot.scheduler.settings") as mock_settings:
             mock_settings.OWNER_CHAT_ID = None
             asyncio.run(job.run(bot=bot, now=FRIDAY_NOW, db=db))

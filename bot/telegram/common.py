@@ -3,6 +3,7 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from bot.deeplink import parse_deck_payload
 from bot.messages import HELP_TEXT, HELP_TEXT_ADMIN
 from core.database import SessionLocal
 from core.event_log import event_logger
@@ -37,6 +38,14 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.effective_message or not update.effective_user:
         return
     user = update.effective_user
+
+    # Диплинк `?start=deck_<id>` — сразу в запись колоды на турнир (issue #136).
+    payload = (context.args or [None])[0]
+    tournament_id = parse_deck_payload(payload) if payload else None
+    if tournament_id is not None:
+        await _start_deck_deeplink(update, context, user, tournament_id)
+        return
+
     _log("cmd_start", user)
     db = SessionLocal()
     try:
@@ -53,6 +62,24 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.effective_message.reply_text(
         greeting + "Используйте /tournaments чтобы увидеть активные турниры и записаться."
     )
+
+
+async def _start_deck_deeplink(update: Update, context: ContextTypes.DEFAULT_TYPE, user, tournament_id: int) -> None:
+    """Обработка deck-диплинка: нет колоды → выбор архетипа, есть → карточка турнира."""
+    # Локальный импорт: bot.telegram.player импортирует common — верхнеуровневый импорт замкнул бы цикл.
+    from bot.telegram.player import USER_DATA_PENDING_NAME, _player_handler  # noqa: PLC0415
+
+    _log("cmd_start_deeplink", user, tournament_id=tournament_id)
+    db = SessionLocal()
+    try:
+        result = _player_handler(db).handle_deeplink_deck(tournament_id, tg_id=user.id)
+        if result.needs_name:
+            if context.user_data is None:
+                context.user_data = {}
+            context.user_data[USER_DATA_PENDING_NAME] = tournament_id
+        await update.effective_message.reply_text(result.text, reply_markup=result.keyboard)
+    finally:
+        db.close()
 
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

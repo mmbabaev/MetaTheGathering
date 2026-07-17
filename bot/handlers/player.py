@@ -174,6 +174,24 @@ class PlayerHandler:
                 return HandlerResult(NAME_REQUIRED_FOR_REGISTRATION, needs_name=True)
         return self._archetype_keyboard_for_player(tournament_id, tg_id)
 
+    def handle_deeplink_deck(self, tournament_id: int, tg_id: int) -> HandlerResult:
+        """Диплинк в запись колоды на турнир (см. bot/deeplink.py).
+
+        Нет колоды (не записан или записан без колоды) → выбор архетипа. Уже с колодой —
+        карточка турнира (записывать нечего). Турнира нет — сообщение об этом.
+        """
+        try:
+            get_tournament(self.svc.db, tournament_id)
+        except errors.TournamentNotFound:
+            return HandlerResult(TOURNAMENT_NOT_FOUND)
+
+        user = self.user_svc.get_by_tg_id(tg_id)
+        if user is not None:
+            participant = self.svc.get_participant(tournament_id, user.id)
+            if participant is not None and participant.archetype_id is not None:
+                return self.handle_tournament_select(tournament_id, tg_id=tg_id)
+        return self.handle_register(tournament_id, tg_id=tg_id)
+
     def handle_archetype_more(self, tournament_id: int, tg_id: int) -> HandlerResult:
         """Разворачивает полный список архетипов (история + топ)."""
         return self._archetype_keyboard_for_player(tournament_id, tg_id, expanded=True)
