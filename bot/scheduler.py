@@ -488,7 +488,9 @@ class AetherhubTimedImportJob:
             db2.close()
 
 
-FINAL_REIMPORT_TIME = "06:00"  # утро следующего дня — добрать финальный счёт
+FINAL_REIMPORT_TIME = (
+    "09:00"  # утро следующего дня — добрать финальный счёт (не в 6 утра: анонс мог бы уйти слишком рано)
+)
 FINAL_REIMPORT_WINDOW_DAYS = 2  # окно «недавних» турниров для повторного импорта
 
 
@@ -623,11 +625,12 @@ class AutoRevealDecksJob:
 async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, chart_svc=None) -> None:
     """Один раз анонсирует «сбор метагейма завершён» с графиком и стендингами.
 
-    Срабатывает после импорта при выполнении ВСЕХ условий:
+    Срабатывает после импорта ИЛИ после записи колоды при выполнении ВСЕХ условий:
     - турнир привязан к AetherHub (``aetherhub_url``) — только настоящие турниры;
     - прошло ≥ ``MIN_TOURNAMENT_DURATION`` с начала игры (``started_at``) — иначе счёт
       раннего раунда мог бы преждевременно сойти за завершённость;
-    - у всех не-бай матчей есть счёт (``is_tournament_complete``).
+    - у всех не-бай матчей есть счёт (``is_tournament_complete``);
+    - у всех участников заполнена колода (``_all_decks_filled``) — метагейм собран.
 
     Идемпотентность — флаг ``Tournament.completed_announced_at``: ставим ТОЛЬКО после
     успешной отправки, поэтому сбой отправки не «съедает» анонс — он повторится при
@@ -661,6 +664,11 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, char
     if not svc.is_tournament_complete(tournament_id):
         return
 
+    # Метагейм собран только когда у ВСЕХ участников заполнена колода — неважно кем (сам
+    # записался или дописали через «запись оппонентов»). Пока хоть у одного пусто — ждём.
+    if not _all_decks_filled(db, tournament_id):
+        return
+
     chart = await build_chart(db, tournament_id, chart_svc)
     standings = await build_standings(db, tournament_id)
     total = len(TournamentService(db).list_participants_for_tournament(tournament_id))
@@ -684,6 +692,16 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, char
 def _decks_count(db, tournament_id: int) -> int:
     """Сколько участников с колодой. Нужен, только если график не построился."""
     return sum(row.count for row in StatsService(db).get_tournament_meta(tournament_id))
+
+
+def _all_decks_filled(db, tournament_id: int) -> bool:
+    """True, если есть участники и у ВСЕХ проставлена колода (archetype_id)."""
+    archetype_ids = (
+        db.execute(select(models.Participant.archetype_id).where(models.Participant.tournament_id == tournament_id))
+        .scalars()
+        .all()
+    )
+    return bool(archetype_ids) and all(aid is not None for aid in archetype_ids)
 
 
 async def _send_announce_images(bot, images) -> None:

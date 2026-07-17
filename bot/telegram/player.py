@@ -9,8 +9,8 @@ from bot.handlers.player import PlayerHandler
 from bot.handlers.settings import SettingsHandler
 from bot.keyboards import Keyboards
 from bot.messages import CUSTOM_ARCHETYPE_PROMPT
+from bot.telegram.common import announce_completion_if_ready, parse_callback_ints
 from bot.telegram.common import log_event as _log
-from bot.telegram.common import parse_callback_ints
 from core.database import SessionLocal
 from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeService
@@ -133,6 +133,7 @@ async def callback_archetype(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.answer()
         card = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id)
         await query.message.reply_text(card.text, reply_markup=card.keyboard)
+        await announce_completion_if_ready(context.bot, db, tournament_id)
     finally:
         db.close()
 
@@ -309,6 +310,9 @@ async def _handle_pending_admin_custom_arch(msg, user, text, context) -> bool:
         if not result.is_alert:
             _log("admin_custom_arch", user, participant_id=participant_id, arch_name=text)
         await msg.reply_text(result.text, reply_markup=result.keyboard)
+        if not result.is_alert:
+            part = TournamentService(db).get_participant_by_id(participant_id)
+            await announce_completion_if_ready(context.bot, db, part.tournament_id if part else None)
     finally:
         db.close()
     return True
@@ -352,6 +356,7 @@ async def _handle_pending_custom_arch(msg, user, text, context) -> bool:
         if not result.is_alert:
             card = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id)
             await msg.reply_text(card.text, reply_markup=card.keyboard)
+            await announce_completion_if_ready(context.bot, db, tournament_id)
     finally:
         db.close()
     return True

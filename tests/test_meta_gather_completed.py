@@ -380,3 +380,37 @@ async def test_no_announce_without_started_at(db, user_svc, arch_svc, monkeypatc
     await maybe_announce_meta_gather_completed(bot, db, t.id)
 
     bot.send_message.assert_not_awaited()
+
+
+async def test_no_announce_while_a_deck_is_missing(db, user_svc, arch_svc, monkeypatch):
+    """Стендинги готовы, но у одного участника нет колоды — метагейм не собран, молчим."""
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    t = _complete_tournament(db, user_svc, arch_svc)
+    _register(db, user_svc, t.id, 5, "Eve", archetype=None, final_place=5)  # без колоды
+
+    bot = AsyncMock()
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+
+    bot.send_message.assert_not_awaited()
+    assert db.get(models.Tournament, t.id).completed_announced_at is None
+
+
+async def test_announces_once_last_deck_filled(db, user_svc, arch_svc, monkeypatch):
+    """Как только заполнена последняя недостающая колода — анонс уходит (триггер записи колоды)."""
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    t = _complete_tournament(db, user_svc, arch_svc)
+    eve = _register(db, user_svc, t.id, 5, "Eve", archetype=None, final_place=5)
+    bot = AsyncMock()
+
+    # пока у Eve нет колоды — тишина
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+    bot.send_message.assert_not_awaited()
+
+    # дописали колоду Eve → следующий вызов (после записи колоды) анонсирует
+    burn = arch_svc.get_or_create_by_name("Burn")
+    db.query(models.Participant).filter_by(tournament_id=t.id, user_id=eve.id).one().archetype_id = burn.id
+    db.commit()
+
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+    bot.send_message.assert_awaited_once()
+    assert db.get(models.Tournament, t.id).completed_announced_at is not None
