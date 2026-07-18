@@ -55,23 +55,21 @@ def parse_meta_table(text: str) -> tuple[list[tuple[str, Optional[str]]], dict[i
     pairings: dict[int, list[tuple[str, str]]] = {}
 
     current_round: Optional[int] = None
-    in_players = False
 
     for raw_line in text.splitlines():
         line = raw_line.strip()
         if not line:
             continue
 
-        # Section headers (start with ##)
+        # Section headers (start with ##). «## Игроки» лишь сбрасывает текущий раунд:
+        # строки игроков определяются по разделителю «|», а не по этому заголовку.
         if re.match(r"^##\s*Игроки", line, re.IGNORECASE):
-            in_players = True
             current_round = None
             continue
 
         m = re.match(r"^##\s*Раунд\s*(\d+)", line, re.IGNORECASE)
         if m:
             current_round = int(m.group(1))
-            in_players = False
             pairings.setdefault(current_round, [])
             continue
 
@@ -79,14 +77,15 @@ def parse_meta_table(text: str) -> tuple[list[tuple[str, Optional[str]]], dict[i
         if line.startswith("#"):
             continue
 
-        if in_players:
-            if "|" in line:
-                parts = line.split("|", 1)
-                name = parts[0].strip()
-                deck_raw = parts[1].strip()
-                deck = deck_raw if deck_raw and deck_raw != "?" else None
-                if name:
-                    players.append((name, deck))
+        # Строка игрока: «Имя | Колода». Разделитель «|» есть только у игроков (у пейрингов
+        # его нет), поэтому заголовок «## Игроки» не обязателен — простую таблицу тоже примем.
+        if "|" in line:
+            parts = line.split("|", 1)
+            name = parts[0].strip()
+            deck_raw = parts[1].strip()
+            deck = deck_raw if deck_raw and deck_raw != "?" else None
+            if name:
+                players.append((name, deck))
             continue
 
         if current_round is not None:
