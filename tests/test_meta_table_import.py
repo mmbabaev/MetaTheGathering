@@ -98,6 +98,20 @@ class TestParseMetaTable:
         assert len(players) == 2
         assert len(pairings[1]) == 1
 
+    def test_players_without_header(self):
+        """Простая таблица «Имя | Колода» без заголовка «## Игроки» тоже парсится."""
+        text = "Юрковский Илья | Mono U Terror\nГасанлы Фарид | UW Weenie\n"
+        players, pairings = parse_meta_table(text)
+        assert players == [("Юрковский Илья", "Mono U Terror"), ("Гасанлы Фарид", "UW Weenie")]
+        assert pairings == {}
+
+    def test_header_less_players_then_rounds(self):
+        """Игроки без заголовка + раунды: строки с «|» — игроки, со счётом — пары."""
+        text = "А А | Burn\nБ Б | Elves\n## Раунд 1\nА А 2-0 Б Б\n"
+        players, pairings = parse_meta_table(text)
+        assert len(players) == 2
+        assert pairings[1] == [("А А", "Б Б")]
+
 
 # ── MetaTableImportService.import_from_table ──────────────────────────────────
 
@@ -108,6 +122,16 @@ class TestMetaTableImportService:
     def test_registers_new_players(self, import_svc, svc, user_svc, tournament):
         result = import_svc.import_from_table(tournament.id, self.TABLE, IMPORTER_TG_ID)
         assert result.registered == 2
+
+    def test_imports_header_less_table(self, import_svc, tournament, db):
+        """Таблица без «## Игроки» регистрирует игроков с колодами (реальный кейс из чата)."""
+        table = "Юрковский Илья | Mono U Terror\nГасанлы Фарид | UW Weenie\n"
+        result = import_svc.import_from_table(tournament.id, table, IMPORTER_TG_ID)
+        assert result.registered == 2
+        decks = {
+            p.archetype.name for p in db.query(Participant).filter_by(tournament_id=tournament.id).all() if p.archetype
+        }
+        assert decks == {"Mono U Terror", "UW Weenie"}
 
     def test_sets_deck_added_by(self, import_svc, svc, user_svc, tournament, db):
         import_svc.import_from_table(tournament.id, self.TABLE, IMPORTER_TG_ID)
