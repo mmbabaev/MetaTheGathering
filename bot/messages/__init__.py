@@ -182,15 +182,16 @@ def format_meta_gather_completed(title: str, total: int, with_deck: int, undefea
     return "\n".join(lines)
 
 
-def _match_noun(n: int) -> str:
+def _game_noun(n: int) -> str:
+    """Склонение «партия» (bo3-игра). DataLens отдаёт число партий, не матчей."""
     if 11 <= n % 100 <= 14:
-        return "матчей"
+        return "партий"
     rem = n % 10
     if rem == 1:
-        return "матч"
+        return "партия"
     if 2 <= rem <= 4:
-        return "матча"
-    return "матчей"
+        return "партии"
+    return "партий"
 
 
 def format_opponent_notification(
@@ -207,9 +208,10 @@ def format_opponent_notification(
     """Личное сообщение игроку о его паре в новом раунде.
 
     ``datalens_decks`` / ``head_to_head`` — обогащение из DataLens (объекты с
-    атрибутами ``name``/``matches``/``winrate``). Если переданы — показываем
-    колоды оппонента с ЕГО винрейтом на них и число личных матчей с твоим
-    винрейтом; иначе откатываемся на список колод из БД бота (``opponent_decks``).
+    атрибутами ``name``/``matches``/``winrate``; ``matches`` — это число сыгранных
+    партий bo3, а не матчей). Если переданы — показываем колоды оппонента с ЕГО
+    винрейтом на них и число личных партий с твоим винрейтом; иначе откатываемся
+    на список колод из БД бота (``opponent_decks``).
     """
     if is_bye:
         return f"🔔 Раунд {round_number}\n\nВ этом раунде у тебя бай — отдыхай! 🎉"
@@ -227,7 +229,7 @@ def format_opponent_notification(
     if datalens_decks:
         lines.append("")
         lines.append("Колоды оппонента и общий винрейт (3 мес):")
-        lines.extend(f"• {d.name} — {round(d.winrate)}% ({d.matches} {_match_noun(d.matches)})" for d in datalens_decks)
+        lines.extend(f"• {d.name} — {round(d.winrate)}% ({d.matches} {_game_noun(d.matches)})" for d in datalens_decks)
     elif opponent_decks:
         lines.append("")
         lines.append("Последние колоды оппонента:")
@@ -238,6 +240,6 @@ def format_opponent_notification(
 
     if head_to_head is not None:
         lines.append("")
-        lines.append(f"Матчей против оппонента: {head_to_head.matches}, твой винрейт {round(head_to_head.winrate)}%")
+        lines.append(f"Партий против оппонента: {head_to_head.matches}, твой винрейт {round(head_to_head.winrate)}%")
 
     return "\n".join(lines)

@@ -617,15 +617,24 @@ class TestFormatNotification:
         text = format_opponent_notification(1, 3, "Вадим", None, ["OldDeck"], datalens_decks=decks)
         assert "Flicker Tron" in text
         assert "67%" in text
-        assert "(49 матчей)" in text
+        assert "(49 партий)" in text
         assert "OldDeck" not in text  # DataLens заменяет список из БД бота
         assert "3 мес" in text
 
     def test_head_to_head_line(self):
         h2h = StatRow(name="Вадим", matches=8, winrate=33.3)
         text = format_opponent_notification(1, 3, "Вадим", None, [], head_to_head=h2h)
-        assert "Матчей против оппонента: 8" in text
+        assert "Партий против оппонента: 8" in text
         assert "33%" in text
+
+    @pytest.mark.parametrize(
+        "n,expected",
+        [(1, "1 партия"), (2, "2 партии"), (4, "4 партии"), (5, "5 партий"), (11, "11 партий"), (21, "21 партия")],
+    )
+    def test_games_noun_declension(self, n, expected):
+        decks = [StatRow(name="Tron", matches=n, winrate=50.0)]
+        text = format_opponent_notification(1, 1, "Bob", None, [], datalens_decks=decks)
+        assert expected in text
 
     def test_no_datalens_falls_back_to_db_decks(self):
         text = format_opponent_notification(1, 3, "Вадим", None, ["Tron"])
@@ -708,7 +717,7 @@ class TestRoundNotifyHandler:
         messages = self._handler(db, dl).build_for_new_rounds(t.id, [1])
         assert "Flicker Tron" in messages[0].text
         assert "67%" in messages[0].text
-        assert "Матчей против оппонента: 8" in messages[0].text
+        assert "Партий против оппонента: 8" in messages[0].text
 
     def test_datalens_not_queried_for_non_opted_in(self, db, svc, user_svc):
         t, _, _ = self._setup(db, svc, user_svc)  # nobody opts in
@@ -797,7 +806,7 @@ class TestSendRoundNotificationsDataLens:
         assert sent == 1
         text = bot.send_message.await_args.kwargs["text"]
         assert "Flicker Tron" in text
-        assert "Матчей против оппонента: 8" in text
+        assert "Партий против оппонента: 8" in text
 
     async def test_without_datalens_still_sends_base_message(self, db, svc, user_svc):
         t, alice, _ = self._setup(db, svc, user_svc)
