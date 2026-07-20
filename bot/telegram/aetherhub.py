@@ -16,6 +16,7 @@ from core.database import SessionLocal
 from services.aetherhub_import_service import AetherhubImportService
 from services.aetherhub_models import AetherhubTournamentData
 from services.aetherhub_service import AetherhubService
+from services.datalens import DataLensService
 from services.tournament import TournamentService
 from services.user import UserService
 from services.utils import get_tournament
@@ -192,7 +193,15 @@ async def callback_aetherhub_confirm(update: Update, context: ContextTypes.DEFAU
     if result.new_round_numbers:
         db_notify = SessionLocal()
         try:
-            await send_round_notifications(context.bot, db_notify, tournament_id, result.new_round_numbers)
+            # DataLens обязателен и здесь: без него ручной импорт слал бы уведомления без винрейта
+            # (в отличие от scheduled-джоб, которые его передают) — см. bot/scheduler.py.
+            await send_round_notifications(
+                context.bot,
+                db_notify,
+                tournament_id,
+                result.new_round_numbers,
+                datalens_service=DataLensService(),
+            )
         finally:
             db_notify.close()
 
