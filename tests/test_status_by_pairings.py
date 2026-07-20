@@ -53,66 +53,64 @@ class TestFlatButtonModel:
 
 
 class TestPairingButtonModel:
-    def test_table_marker_row_above_players(self):
+    def test_one_row_per_table_with_number_prefixed_on_first(self):
         a = _participant("Иванов", "Иван", None, pid=1, uid=1)
         b = _participant("Петров", "Пётр", "Burn", pid=2, uid=2)
         c = _participant("Сидоров", "Сидор", None, pid=3, uid=3)
         d = _participant("Кузнецов", "Кузьма", "Elves", pid=4, uid=4)
         pairs = [(1, a, "A", b, "B"), (2, c, "C", d, "D")]  # resolver gives table order
         rows = participant_button_rows([a, b, c, d], tournament_id=10, pairs=pairs, unpaired=[])
-        # метка стола — отдельным широким рядом НАД парой игроков
-        assert rows[0] == [StatusButton("🎲 Стол №1", "noop")]
-        assert [b.callback_data for b in rows[1]] == ["adm_pick:1", "adm_pick:2"]
-        assert rows[2] == [StatusButton("🎲 Стол №2", "noop")]
-        assert [b.callback_data for b in rows[3]] == ["adm_pick:3", "adm_pick:4"]
+        # один ряд на стол; номер стола — префиксом на первой кнопке
+        assert [b.callback_data for b in rows[0]] == ["adm_pick:1", "adm_pick:2"]
+        assert rows[0][0].label.startswith("№1 · ")
+        assert [b.callback_data for b in rows[1]] == ["adm_pick:3", "adm_pick:4"]
+        assert rows[1][0].label.startswith("№2 · ")
         assert rows[-1] == [StatusButton("⬅️ Назад", "t:10")]
 
-    def test_table_marker_is_noninteractive_noop(self):
+    def test_second_player_has_no_table_prefix(self):
         a = _participant("Иванов", "Иван", None, pid=1, uid=1)
         b = _participant("Петров", "Пётр", None, pid=2, uid=2)
         rows = participant_button_rows([a, b], tournament_id=10, pairs=[(7, a, "A", b, "B")], unpaired=[])
-        marker = rows[0][0]
-        assert len(rows[0]) == 1  # метка занимает весь ряд
-        assert marker.label == "🎲 Стол №7"
-        assert marker.callback_data == "noop"
+        assert rows[0][0].label.startswith("№7 · ")
+        assert not rows[0][1].label.startswith("№")  # у второго игрока номера нет
 
-    def test_no_marker_when_table_unknown(self):
+    def test_no_prefix_when_table_unknown(self):
         a = _participant("Иванов", "Иван", None, pid=1, uid=1)
         b = _participant("Петров", "Пётр", None, pid=2, uid=2)
         rows = participant_button_rows([a, b], tournament_id=10, pairs=[(None, a, "A", b, "B")], unpaired=[])
-        assert [b.callback_data for b in rows[0]] == ["adm_pick:1", "adm_pick:2"]  # без ряда-метки
+        assert [b.callback_data for b in rows[0]] == ["adm_pick:1", "adm_pick:2"]
+        assert not rows[0][0].label.startswith("№")  # номер стола неизвестен → без префикса
 
     def test_row_order_follows_pairs(self):
         parts = [_participant(f"Ф{i}", f"И{i}", None, pid=i, uid=i) for i in range(1, 5)]
         a, b, c, d = parts
         pairs = [(5, a, "A", b, "B"), (6, c, "C", d, "D")]  # already table-ordered by resolver
         rows = participant_button_rows(parts, tournament_id=10, pairs=pairs, unpaired=[])
-        # чередование: метка стола, ряд игроков, метка стола, ряд игроков, «Назад»
-        assert [r[0].callback_data for r in rows] == ["noop", "adm_pick:1", "noop", "adm_pick:3", "t:10"]
-        assert [rows[0][0].label, rows[2][0].label] == ["🎲 Стол №5", "🎲 Стол №6"]
+        assert [r[0].callback_data for r in rows] == ["adm_pick:1", "adm_pick:3", "t:10"]
+        assert [rows[0][0].label.startswith("№5 · "), rows[1][0].label.startswith("№6 · ")] == [True, True]
 
-    def test_bye_marker_then_single_player(self):
+    def test_bye_is_single_player_with_prefix(self):
         a = _participant("Иванов", "Иван", None, pid=1, uid=1)
         rows = participant_button_rows([a], tournament_id=10, pairs=[(1, a, "A", None, None)], unpaired=[])
-        assert rows[0] == [StatusButton("🎲 Стол №1", "noop")]
-        assert [b.callback_data for b in rows[1]] == ["adm_pick:1"]  # один игрок стола
+        assert [b.callback_data for b in rows[0]] == ["adm_pick:1"]
+        assert rows[0][0].label.startswith("№1 · ")
 
-    def test_unresolved_opponent_marker_then_single_player(self):
+    def test_unresolved_opponent_is_single_player_with_prefix(self):
         a = _participant("Иванов", "Иван", None, pid=1, uid=1)
         rows = participant_button_rows([a], tournament_id=10, pairs=[(1, a, "A", None, "Гость")], unpaired=[])
-        assert rows[0] == [StatusButton("🎲 Стол №1", "noop")]
-        assert [b.callback_data for b in rows[1]] == ["adm_pick:1"]  # оппонент не участник → без кнопки
+        assert [b.callback_data for b in rows[0]] == ["adm_pick:1"]  # оппонент не участник → без кнопки
+        assert rows[0][0].label.startswith("№1 · ")
 
-    def test_unpaired_two_per_row_without_marker(self):
+    def test_unpaired_two_per_row_without_prefix(self):
         a = _participant("Иванов", "Иван", None, pid=1, uid=1)
         u1 = _participant("Новый", "Ник", None, pid=8, uid=8)
         u2 = _participant("Гость", "Гена", None, pid=9, uid=9)
         rows = participant_button_rows(
             [a, u1, u2], tournament_id=10, pairs=[(1, a, "A", None, None)], unpaired=[u1, u2]
         )
-        assert rows[0] == [StatusButton("🎲 Стол №1", "noop")]  # метка стола
-        assert [b.callback_data for b in rows[1]] == ["adm_pick:1"]  # bye — один игрок
-        assert [b.callback_data for b in rows[2]] == ["adm_pick:8", "adm_pick:9"]  # unpaired — без метки
+        assert rows[0][0].label.startswith("№1 · ")  # bye — один игрок с префиксом стола
+        assert [b.callback_data for b in rows[1]] == ["adm_pick:8", "adm_pick:9"]  # unpaired — без префикса
+        assert not rows[1][0].label.startswith("№")
 
     def test_filled_table_hidden_by_default_with_show_all_button(self):
         a = _participant("Иванов", "Иван", "Burn", pid=1, uid=1)  # с колодой
@@ -122,9 +120,9 @@ class TestPairingButtonModel:
         pairs = [(1, a, "A", b, "B"), (2, c, "C", d, "D")]
         rows = participant_button_rows([a, b, c, d], tournament_id=10, pairs=pairs, unpaired=[])
         # заполненный стол 1 скрыт; показан только стол 2 + «показать все» + назад
-        assert rows[0] == [StatusButton("🎲 Стол №2", "noop")]
-        assert [b.callback_data for b in rows[1]] == ["adm_pick:3", "adm_pick:4"]
-        assert rows[2] == [StatusButton("Показать все столы (1)", "adm_show_filled:10")]
+        assert [b.callback_data for b in rows[0]] == ["adm_pick:3", "adm_pick:4"]
+        assert rows[0][0].label.startswith("№2 · ")
+        assert rows[1] == [StatusButton("Показать все столы (1)", "adm_show_filled:10")]
         assert rows[-1] == [StatusButton("⬅️ Назад", "t:10")]
 
     def test_show_filled_reveals_all_tables(self):
@@ -133,15 +131,15 @@ class TestPairingButtonModel:
         rows = participant_button_rows(
             [a, b], tournament_id=10, pairs=[(1, a, "A", b, "B")], unpaired=[], show_filled=True
         )
-        assert rows[0] == [StatusButton("🎲 Стол №1", "noop")]
-        assert [b.callback_data for b in rows[1]] == ["adm_pick:1", "adm_pick:2"]
+        assert [b.callback_data for b in rows[0]] == ["adm_pick:1", "adm_pick:2"]
+        assert rows[0][0].label.startswith("№1 · ")
         assert all("Показать все столы" not in r[0].label for r in rows)  # уже показываем всё
 
     def test_partially_filled_table_still_shown(self):
         a = _participant("Иванов", "Иван", "Burn", pid=1, uid=1)  # с колодой
         b = _participant("Петров", "Пётр", None, pid=2, uid=2)  # без колоды → стол не заполнен
         rows = participant_button_rows([a, b], tournament_id=10, pairs=[(1, a, "A", b, "B")], unpaired=[])
-        assert rows[0] == [StatusButton("🎲 Стол №1", "noop")]  # показан
+        assert rows[0][0].label.startswith("№1 · ")  # показан
         assert not any("Показать все столы" in r[0].label for r in rows)
 
     def test_bye_table_with_deck_is_hidden(self):

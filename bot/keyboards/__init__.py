@@ -63,7 +63,6 @@ CB_PAY = "pay"  # pay:{tournament_id}
 CB_PAY_STATUS = "pay_status"  # pay_status:{tournament_id} — no-op, показывает статус оплаты
 CB_ADMIN_IMPORT_META = "adm_meta"  # adm_meta:{tournament_id}
 CB_DEBUG_ROUND_NOTIFY = "dbg_rnotify"  # dbg_rnotify:{tournament_id} — debug: DM all round notifications to presser
-CB_NOOP = "noop"  # мнимая кнопка (напр. номер стола): по нажатию просто гасим «часики»
 
 
 def features_keyboard(flags: list) -> InlineKeyboardMarkup:
@@ -126,11 +125,12 @@ def participant_button_rows(
             if not show_filled and all(p.archetype is not None for p in present):
                 hidden_tables += 1
                 continue
-            # Мнимая метка-заголовок стола ОТДЕЛЬНЫМ рядом над парой игроков (широкая, по центру) —
-            # чтобы легче искать игроков по столу и не сплющивать кнопки в один ряд.
+            # Один ряд на стол; номер стола — префиксом на кнопке первого игрока (компактно, без
+            # отдельного ряда-метки), чтобы номера читались сверху вниз по левому краю.
+            buttons = [_status_participant_button(p) for p in present]
             if table is not None:
-                rows.append([StatusButton(f"🎲 Стол №{table}", CB_NOOP)])
-            rows.append([_status_participant_button(p) for p in present])
+                buttons[0] = StatusButton(f"№{table} · {buttons[0].label}", buttons[0].callback_data)
+            rows.append(buttons)
         for i in range(0, len(unpaired or []), 2):
             rows.append([_status_participant_button(p) for p in (unpaired or [])[i : i + 2]])
         if hidden_tables and tournament_id is not None:
