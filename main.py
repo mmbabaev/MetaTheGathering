@@ -54,6 +54,7 @@ from bot.keyboards import (
     CB_LEAVE_CONFIRM,
     CB_LINK_POLL_BY_URL,
     CB_META_CHART,
+    CB_NOOP,
     CB_NOTIFY_CANCEL,
     CB_NOTIFY_CONFIRM,
     CB_NOTIFY_NO_DECK,
@@ -230,6 +231,7 @@ def main() -> None:
     app.add_handler(CommandHandler("schedule", admin.cmd_schedule, filters=private))
     app.add_handler(CommandHandler("features", features_handler.cmd_features, filters=private))
 
+    app.add_handler(CallbackQueryHandler(common.callback_noop, pattern=f"^{CB_NOOP}$"))
     app.add_handler(CallbackQueryHandler(player.callback_tournament_select, pattern=f"^{CB_TOURNAMENT}:"))
     app.add_handler(CallbackQueryHandler(player.callback_register, pattern=f"^{CB_REGISTER}:"))
     app.add_handler(CallbackQueryHandler(player.callback_archetype, pattern=f"^{CB_ARCHETYPE}:"))

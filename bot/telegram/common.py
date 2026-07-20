@@ -44,6 +44,12 @@ async def parse_callback_ints(query, count: int) -> tuple[int, ...] | None:
         return None
 
 
+async def callback_noop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Мнимая кнопка (напр. номер стола): тихо гасим «часики», ничего не делаем."""
+    if update.callback_query:
+        await update.callback_query.answer()
+
+
 def log_event(event: str, user, **params) -> None:
     event_logger.log(
         event,

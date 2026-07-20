@@ -63,6 +63,7 @@ CB_PAY = "pay"  # pay:{tournament_id}
 CB_PAY_STATUS = "pay_status"  # pay_status:{tournament_id} — no-op, показывает статус оплаты
 CB_ADMIN_IMPORT_META = "adm_meta"  # adm_meta:{tournament_id}
 CB_DEBUG_ROUND_NOTIFY = "dbg_rnotify"  # dbg_rnotify:{tournament_id} — debug: DM all round notifications to presser
+CB_NOOP = "noop"  # мнимая кнопка (напр. номер стола): по нажатию просто гасим «часики»
 
 
 def features_keyboard(flags: list) -> InlineKeyboardMarkup:
@@ -115,10 +116,14 @@ def participant_button_rows(
 
     if pairs is not None:
         rows: list[list[StatusButton]] = []
-        for _table, p1, _n1, p2, _n2 in pairs:
+        for table, p1, _n1, p2, _n2 in pairs:
             row = [_status_participant_button(p) for p in (p1, p2) if p is not None]
-            if row:
-                rows.append(row)
+            if not row:
+                continue
+            # Мнимая кнопка-метка стола слева — чтобы легче искать игроков по столу.
+            if table is not None:
+                row.insert(0, StatusButton(f"№{table}", CB_NOOP))
+            rows.append(row)
         for i in range(0, len(unpaired or []), 2):
             rows.append([_status_participant_button(p) for p in (unpaired or [])[i : i + 2]])
         if back:
