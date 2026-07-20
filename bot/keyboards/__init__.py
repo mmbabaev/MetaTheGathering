@@ -116,17 +116,27 @@ def participant_button_rows(
 
     if pairs is not None:
         rows: list[list[StatusButton]] = []
+        hidden_tables = 0
         for table, p1, _n1, p2, _n2 in pairs:
-            players = [_status_participant_button(p) for p in (p1, p2) if p is not None]
-            if not players:
+            present = [p for p in (p1, p2) if p is not None]
+            if not present:
+                continue
+            # Стол «заполнен», если у всех присутствующих участников проставлена колода.
+            # По умолчанию такие столы скрываем (их незачем дозаполнять) — показать все по кнопке.
+            if not show_filled and all(p.archetype is not None for p in present):
+                hidden_tables += 1
                 continue
             # Мнимая метка-заголовок стола ОТДЕЛЬНЫМ рядом над парой игроков (широкая, по центру) —
             # чтобы легче искать игроков по столу и не сплющивать кнопки в один ряд.
             if table is not None:
                 rows.append([StatusButton(f"🎲 Стол №{table}", CB_NOOP)])
-            rows.append(players)
+            rows.append([_status_participant_button(p) for p in present])
         for i in range(0, len(unpaired or []), 2):
             rows.append([_status_participant_button(p) for p in (unpaired or [])[i : i + 2]])
+        if hidden_tables and tournament_id is not None:
+            rows.append(
+                [StatusButton(f"Показать все столы ({hidden_tables})", f"{CB_ADMIN_SHOW_FILLED}:{tournament_id}")]
+            )
         if back:
             rows.append(back)
         return rows

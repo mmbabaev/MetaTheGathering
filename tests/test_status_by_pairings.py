@@ -114,6 +114,42 @@ class TestPairingButtonModel:
         assert [b.callback_data for b in rows[1]] == ["adm_pick:1"]  # bye — один игрок
         assert [b.callback_data for b in rows[2]] == ["adm_pick:8", "adm_pick:9"]  # unpaired — без метки
 
+    def test_filled_table_hidden_by_default_with_show_all_button(self):
+        a = _participant("Иванов", "Иван", "Burn", pid=1, uid=1)  # с колодой
+        b = _participant("Петров", "Пётр", "Elves", pid=2, uid=2)  # с колодой → стол 1 заполнен
+        c = _participant("Сидоров", "Сидор", None, pid=3, uid=3)  # без колоды → стол 2 нет
+        d = _participant("Кузнецов", "Кузьма", None, pid=4, uid=4)
+        pairs = [(1, a, "A", b, "B"), (2, c, "C", d, "D")]
+        rows = participant_button_rows([a, b, c, d], tournament_id=10, pairs=pairs, unpaired=[])
+        # заполненный стол 1 скрыт; показан только стол 2 + «показать все» + назад
+        assert rows[0] == [StatusButton("🎲 Стол №2", "noop")]
+        assert [b.callback_data for b in rows[1]] == ["adm_pick:3", "adm_pick:4"]
+        assert rows[2] == [StatusButton("Показать все столы (1)", "adm_show_filled:10")]
+        assert rows[-1] == [StatusButton("⬅️ Назад", "t:10")]
+
+    def test_show_filled_reveals_all_tables(self):
+        a = _participant("Иванов", "Иван", "Burn", pid=1, uid=1)
+        b = _participant("Петров", "Пётр", "Elves", pid=2, uid=2)
+        rows = participant_button_rows(
+            [a, b], tournament_id=10, pairs=[(1, a, "A", b, "B")], unpaired=[], show_filled=True
+        )
+        assert rows[0] == [StatusButton("🎲 Стол №1", "noop")]
+        assert [b.callback_data for b in rows[1]] == ["adm_pick:1", "adm_pick:2"]
+        assert all("Показать все столы" not in r[0].label for r in rows)  # уже показываем всё
+
+    def test_partially_filled_table_still_shown(self):
+        a = _participant("Иванов", "Иван", "Burn", pid=1, uid=1)  # с колодой
+        b = _participant("Петров", "Пётр", None, pid=2, uid=2)  # без колоды → стол не заполнен
+        rows = participant_button_rows([a, b], tournament_id=10, pairs=[(1, a, "A", b, "B")], unpaired=[])
+        assert rows[0] == [StatusButton("🎲 Стол №1", "noop")]  # показан
+        assert not any("Показать все столы" in r[0].label for r in rows)
+
+    def test_bye_table_with_deck_is_hidden(self):
+        a = _participant("Иванов", "Иван", "Burn", pid=1, uid=1)  # бай, с колодой → стол заполнен
+        rows = participant_button_rows([a], tournament_id=10, pairs=[(1, a, "A", None, None)], unpaired=[])
+        assert rows[0] == [StatusButton("Показать все столы (1)", "adm_show_filled:10")]
+        assert rows[-1] == [StatusButton("⬅️ Назад", "t:10")]
+
 
 # ── thin Telegram adapter faithfully mirrors the model ─────────────────────────
 
