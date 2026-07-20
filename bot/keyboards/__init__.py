@@ -117,13 +117,14 @@ def participant_button_rows(
     if pairs is not None:
         rows: list[list[StatusButton]] = []
         for table, p1, _n1, p2, _n2 in pairs:
-            row = [_status_participant_button(p) for p in (p1, p2) if p is not None]
-            if not row:
+            players = [_status_participant_button(p) for p in (p1, p2) if p is not None]
+            if not players:
                 continue
-            # Мнимая кнопка-метка стола слева — чтобы легче искать игроков по столу.
+            # Мнимая метка-заголовок стола ОТДЕЛЬНЫМ рядом над парой игроков (широкая, по центру) —
+            # чтобы легче искать игроков по столу и не сплющивать кнопки в один ряд.
             if table is not None:
-                row.insert(0, StatusButton(f"№{table}", CB_NOOP))
-            rows.append(row)
+                rows.append([StatusButton(f"🎲 Стол №{table}", CB_NOOP)])
+            rows.append(players)
         for i in range(0, len(unpaired or []), 2):
             rows.append([_status_participant_button(p) for p in (unpaired or [])[i : i + 2]])
         if back:
