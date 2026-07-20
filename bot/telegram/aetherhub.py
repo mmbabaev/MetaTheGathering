@@ -83,7 +83,14 @@ async def callback_aetherhub_import_prompt(update: Update, context: ContextTypes
             context.user_data[USER_DATA_AETHERHUB_DATA] = result.data
             await status_msg.edit_text(result.preview_text, reply_markup=aetherhub_confirm_keyboard(tournament_id))
             return
-        await status_msg.edit_text("Турнир сегодня не найден автоматически.")
+        # Сегодняшний турнир не найден — показываем список турниров клуба, а не «Игроков: 0».
+        not_found_text = "Турнир сегодня не найден автоматически."
+        if club_url:
+            try:
+                not_found_text = _aetherhub_handler().describe_club_tournaments(club_url)
+            except Exception:
+                logger.exception("describe_club_tournaments failed for tournament %s", tournament_id)
+        await status_msg.edit_text(not_found_text)
 
     context.user_data[USER_DATA_PENDING_AETHERHUB_URL] = tournament_id
     await query.message.reply_text(

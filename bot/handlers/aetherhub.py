@@ -29,14 +29,45 @@ class AetherhubHandler:
     def handle_import_prompt(
         self, stored_url: str | None, club_aetherhub_url: str | None
     ) -> AetherhubFetchResult | None:
-        """Find tournament URL and fetch preview. Returns None if URL must be provided manually."""
+        """Find tournament URL and fetch preview. Returns None if URL must be provided manually.
+
+        Автопоиск по клубу может найти турнир, который создан на AetherHub, но ещё без раундов
+        (0 игроков). Показывать «Игроков: 0» бессмысленно — трактуем как «не найден» и возвращаем
+        None, чтобы вызывающий показал список турниров клуба (см. describe_club_tournaments).
+        """
         url = stored_url
         if not url and club_aetherhub_url:
             url = self._aetherhub.find_todays_pauper_tournament(club_aetherhub_url)
         if not url:
             return None
         header = "🔄 Обновление AetherHub" if stored_url else "📥 Импорт AetherHub"
-        return self.handle_fetch_preview(url, header)
+        result = self.handle_fetch_preview(url, header)
+        if not stored_url and not result.data.players:
+            return None
+        return result
+
+    def describe_club_tournaments(self, club_aetherhub_url: str) -> str:
+        """Сообщение «сегодняшний турнир не найден» + список турниров со страницы клуба.
+
+        Показываем админу, что именно вернул AetherHub для клуба, когда сегодняшний паупер-турнир
+        найти не удалось (ещё не создан / создан пустым) — чтобы было видно, чего ждать, и можно
+        было при необходимости прислать ссылку вручную.
+        """
+        header = "❌ Сегодняшний паупер-турнир на AetherHub найти не удалось."
+        try:
+            links = self._aetherhub.fetch_club_tournaments(club_aetherhub_url)
+        except Exception:
+            return header
+        if not links:
+            return f"{header}\nНа странице клуба турниров не видно."
+        lines = [header, "", "Что сейчас на странице клуба:"]
+        for link in links[:8]:
+            date_str = link.date.strftime("%d.%m") if link.date else "—"
+            mark = "🎲" if link.is_pauper else "▫️"
+            lines.append(f"{mark} {date_str} — {link.name}")
+        lines.append("")
+        lines.append("Если нужный турнир уже создан — пришлите ссылку на него.")
+        return "\n".join(lines)
 
     def handle_fetch_preview(self, url: str, header: str) -> AetherhubFetchResult:
         data = self._aetherhub.fetch_tournament(url)

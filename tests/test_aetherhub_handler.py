@@ -1,11 +1,12 @@
 """Tests for AetherhubHandler business logic."""
 
+from datetime import date
 from unittest.mock import MagicMock
 
 import pytest
 
 from bot.handlers.aetherhub import AetherhubFetchResult, AetherhubHandler
-from services.aetherhub_models import AetherhubTournamentData
+from services.aetherhub_models import AetherhubTournamentData, ClubTournamentLink
 
 
 def _make_tournament_data(url: str = "https://aetherhub.com/Tourney/RoundTourney/1") -> AetherhubTournamentData:
@@ -65,6 +66,47 @@ class TestHandleImportPrompt:
         h = _handler(fetch_data=_make_tournament_data(url=url))
         result = h.handle_import_prompt(stored_url=url, club_aetherhub_url=None)
         assert result.data.url == url
+
+    def test_auto_find_empty_tournament_returns_none(self):
+        """Автопоиск нашёл пустой турнир (0 игроков) → None, чтобы показать список клуба."""
+        empty = AetherhubTournamentData(url="https://aetherhub.com/Tourney/RoundTourney/9", players=[], rounds=[])
+        h = _handler(find_url="https://aetherhub.com/Tourney/RoundTourney/9", fetch_data=empty)
+        assert h.handle_import_prompt(stored_url=None, club_aetherhub_url="https://club.url") is None
+
+    def test_stored_url_empty_tournament_still_shows_preview(self):
+        """Явно привязанный url показываем даже пустым (это осознанный ре-импорт)."""
+        empty = AetherhubTournamentData(url="https://aetherhub.com/Tourney/RoundTourney/9", players=[], rounds=[])
+        h = _handler(fetch_data=empty)
+        result = h.handle_import_prompt(stored_url=empty.url, club_aetherhub_url=None)
+        assert result is not None
+
+
+class TestDescribeClubTournaments:
+    def _handler_with_links(self, links) -> AetherhubHandler:
+        svc = MagicMock()
+        svc.fetch_club_tournaments.return_value = links
+        return AetherhubHandler(svc)
+
+    def test_lists_club_tournament_names(self):
+        links = [
+            ClubTournamentLink(name="17.07", url="u1", date=date(2026, 7, 17), is_pauper=True),
+            ClubTournamentLink(name="Легаси 15.07.2026", url="u2", date=date(2026, 7, 15), is_pauper=False),
+        ]
+        text = self._handler_with_links(links).describe_club_tournaments("https://club.url")
+        assert "найти не удалось" in text
+        assert "17.07" in text  # имя + дата турнира
+        assert "Легаси 15.07.2026" in text
+        assert "15.07" in text  # дата второго турнира
+
+    def test_no_links_message(self):
+        text = self._handler_with_links([]).describe_club_tournaments("https://club.url")
+        assert "турниров не видно" in text
+
+    def test_fetch_error_returns_header(self):
+        svc = MagicMock()
+        svc.fetch_club_tournaments.side_effect = RuntimeError("boom")
+        text = AetherhubHandler(svc).describe_club_tournaments("https://club.url")
+        assert "найти не удалось" in text
 
 
 class TestPreviewMessage:
