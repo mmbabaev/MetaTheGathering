@@ -29,8 +29,9 @@ from services.chart_style import (
     ellipsize,
     font,
 )
-from services.deck_book import lookup_deck, normalize_deck_name, strip_pictographs
-from services.deck_colors import DeckColorResolver, hex_for
+from services.deck_book import strip_pictographs
+from services.deck_colors import DeckColorResolver, colors_for_deck_name, hex_for
+from services.deck_mapping import general_archetype
 from services.stats import StatsService
 
 MARGIN = 63
@@ -189,35 +190,35 @@ class MetaChartService:
         self.colors = colors if colors is not None else DeckColorResolver(db)
 
     def build_sectors(self, tournament_id: int) -> list[ChartSector]:
-        """Секторы графика: колоды турнира с цветом, по убыванию количества.
+        """Секторы графика: колоды турнира сведены к ОБЩЕМУ типу, с цветом, по убыванию количества.
 
-        Названия схлопываются в группы: и по справочнику («Spy Walls» + «Spy» → «Spy Combo»),
-        и по нормализованному имени — в проде «Rakdos Madness» и «Rakdos madness» лежат
-        разными архетипами и без этого дробили бы график на два сектора.
+        Разные записи одной деки («Blue Delver»/«Blue Terror»; «Rakdos madness»/«BR madness»)
+        схлопываются в один сектор по общему типу (services.deck_mapping / Archetype.general_name).
+        Цвет сектора — по общему типу.
         """
         rows = self.stats.get_tournament_meta(tournament_id)
         if not rows:
             return []
         archetypes = self._archetypes_by_id([r.archetype_id for r in rows])
-        identities = self.colors.resolve_many(archetypes.values())
 
         groups: dict[str, ChartSector] = {}
         for row in rows:
-            key, name = self._group_of(row.archetype_name)
-            sector = groups.get(key)
+            general = self._general_of(archetypes.get(row.archetype_id), row.archetype_name)
+            sector = groups.get(general.lower())
             if sector is None:
-                groups[key] = ChartSector(name=name, count=row.count, color=hex_for(identities.get(row.archetype_id)))
+                groups[general.lower()] = ChartSector(
+                    name=general, count=row.count, color=hex_for(colors_for_deck_name(general))
+                )
             else:
                 sector.count += row.count
         return sorted(groups.values(), key=lambda s: -s.count)
 
     @staticmethod
-    def _group_of(archetype_name: str) -> tuple[str, str]:
-        """(ключ группировки, название для легенды) для архетипа."""
-        known = lookup_deck(archetype_name)
-        if known is not None:
-            return normalize_deck_name(known.display), known.display
-        return normalize_deck_name(archetype_name), strip_pictographs(archetype_name)
+    def _general_of(archetype: Optional[models.Archetype], archetype_name: str) -> str:
+        """Общий тип колоды: из кэша Archetype.general_name, иначе считаем на лету по имени."""
+        if archetype is not None and archetype.general_name:
+            return archetype.general_name
+        return general_archetype(archetype_name) or strip_pictographs(archetype_name)
 
     def prepare(self, tournament_id: int) -> Optional[ChartData]:
         """Всё, что нужно для рисования, одним походом в БД. None — колод ещё нет.
