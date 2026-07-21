@@ -8,6 +8,7 @@ from sqlalchemy import func, nulls_last, select
 from sqlalchemy.orm import Session
 
 from core import models
+from services.deck_mapping import general_archetype
 
 logger = logging.getLogger(__name__)
 
@@ -161,7 +162,11 @@ class ArchetypeService:
         archetype = self.db.execute(stmt).scalar_one_or_none()
         if archetype:
             return archetype
-        archetype = models.Archetype(name=name.strip(), is_custom=is_custom)
+        archetype = models.Archetype(
+            name=name.strip(),
+            is_custom=is_custom,
+            general_name=general_archetype(name),
+        )
         self.db.add(archetype)
         self.db.commit()
         self.db.refresh(archetype)
