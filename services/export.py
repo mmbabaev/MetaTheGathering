@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from bot.messages import format_participant_name
 from core import models
+from services.deck_mapping import general_archetype
 from services.stats import StatsService
 from services.utils import get_tournament
 
@@ -154,7 +155,9 @@ class ExportService:
 
         header_fill = PatternFill(start_color="2E7D32", end_color="2E7D32", fill_type="solid")
         header_font = Font(color="FFFFFF", bold=True)
-        headers = ["#", "@Ник", "Имя Фамилия"] if t.decks_hidden else ["#", "@Ник", "Имя Фамилия", "Колода"]
+        headers = (
+            ["#", "@Ник", "Имя Фамилия"] if t.decks_hidden else ["#", "@Ник", "Имя Фамилия", "Колода", "Общий тип"]
+        )
         for col, h in enumerate(headers, 1):
             cell = ws.cell(row=1, column=col, value=h)
             cell.fill = header_fill
@@ -171,13 +174,18 @@ class ExportService:
             ws.cell(row=row, column=2, value=username)
             ws.cell(row=row, column=3, value=full_name)
             if not t.decks_hidden:
-                deck = p.archetype.name if p.archetype else ""
-                ws.cell(row=row, column=4, value=deck)
+                ws.cell(row=row, column=4, value=p.archetype.name if p.archetype else "")
+                # общий («канонический») тип — новый столбик; фолбэк на лету, если кэш пуст
+                general = ""
+                if p.archetype:
+                    general = p.archetype.general_name or general_archetype(p.archetype.name) or ""
+                ws.cell(row=row, column=5, value=general)
 
         ws.column_dimensions["A"].width = 6
         ws.column_dimensions["B"].width = 22
         ws.column_dimensions["C"].width = 28
         ws.column_dimensions["D"].width = 30
+        ws.column_dimensions["E"].width = 24
 
         buf = io.BytesIO()
         wb.save(buf)

@@ -138,6 +138,9 @@ class Archetype(Base):
     # "" = бесцветная, NULL = ещё не определяли. Определяется один раз и кэшируется (см. services/deck_colors.py).
     color_identity = Column(String(8), nullable=True)
     short_name = Column(String(64), nullable=True)  # "RDW"
+    # Общий («канонический») тип колоды: разные записи одной деки сводятся сюда
+    # («Blue Delver»/«Blue Terror» → «Blue Terror»). Кэш из services/deck_mapping; NULL — не определяли.
+    general_name = Column(String(255), nullable=True, index=True)
     meta_rank = Column(Integer, nullable=True, index=True)  # позиция в топ-мета (1=первый); NULL — нет места в списке
     is_custom = Column(
         Boolean, nullable=False, default=False, server_default="false"

@@ -88,6 +88,20 @@ class TestExportExcelSorting:
         assert names[0] == "Bob"
         assert names[1] == "Alice"
 
+    def test_general_type_column(self, export_svc, db, tournament, user_alice, arch_svc):
+        tournament_row = db.query(models.Tournament).filter_by(id=tournament.id).one()
+        tournament_row.decks_hidden = False  # колонки колод показываются только когда раскрыты
+        db.commit()
+        arch = arch_svc.get_or_create_by_name("Blue Delver")  # общий тип → «Blue Terror»
+        _add_participant(db, tournament, user_alice, final_place=1, archetype=arch)
+        data, _ = export_svc.export_participants_excel(tournament.id)
+        wb = openpyxl.load_workbook(io.BytesIO(data))
+        ws = wb.active
+        assert ws.cell(row=1, column=4).value == "Колода"
+        assert ws.cell(row=1, column=5).value == "Общий тип"
+        assert ws.cell(row=2, column=4).value == "Blue Delver"
+        assert ws.cell(row=2, column=5).value == "Blue Terror"
+
 
 # ── TestExportCsvSorting ──────────────────────────────────────────────────────
 
