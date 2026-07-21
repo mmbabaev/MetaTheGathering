@@ -188,6 +188,8 @@ async def test_announces_to_owner_once(db, user_svc, arch_svc, monkeypatch):
         assert c.kwargs["photo"].getvalue().startswith(b"\x89PNG")
         assert c.kwargs.get("caption") is None
     assert db.get(models.Tournament, t.id).completed_announced_at is not None
+    # после анонса турнир автоматически закрывается
+    assert db.get(models.Tournament, t.id).status == models.TournamentStatus.CLOSED
 
     # idempotent — a second import must not re-announce
     await maybe_announce_meta_gather_completed(bot, db, t.id)
