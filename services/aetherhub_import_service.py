@@ -190,6 +190,17 @@ class AetherhubImportService:
     def _save_pairings(self, tournament_id: int, rounds: list[AetherhubRound]) -> int:
         saved = 0
         for rnd in rounds:
+            if not rnd.pairings:
+                continue
+            # Удаляем осиротевшие паринги раунда: игроков, которых больше нет в свежих данных.
+            # AetherHub иногда перегенерирует пары раунда (игрока перепарили) — старая строка
+            # оставалась бы без счёта и держала is_tournament_complete=False (стендинги «не готовы»).
+            fresh_names = {p.player for p in rnd.pairings}
+            self.db.query(models.RoundPairing).filter(
+                models.RoundPairing.tournament_id == tournament_id,
+                models.RoundPairing.round_number == rnd.number,
+                models.RoundPairing.player_name.notin_(fresh_names),
+            ).delete(synchronize_session=False)
             for pairing in rnd.pairings:
                 existing = self.db.execute(
                     select(models.RoundPairing).where(
