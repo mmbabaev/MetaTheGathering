@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 from telegram.error import TelegramError
 from telegram.ext import Application, ContextTypes
 
@@ -675,12 +675,13 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, char
     with_deck = sum(s.count for s in chart.sectors) if chart else _decks_count(db, tournament_id)
     undefeated = svc.get_undefeated_players(tournament_id)
     text = format_meta_gather_completed(tournament.title, total, with_deck, undefeated)
+    images = ([chart] if chart else []) + list(standings)
 
-    # Порядок важен для идемпотентности:
-    # 1) текст — суть анонса; упал → исключение пробрасывается, флаг НЕ ставим, повтор на импорте.
-    await bot.send_message(chat_id=settings.OWNER_CHAT_ID, text=text)
-    # 2) флаг ставим СРАЗУ после доставки текста, до картинок: анонс уже доставлен, повторять
-    #    его нельзя, даже если картинки ниже упадут.
+    # 1) Отбивку шлём ОДНИМ сообщением: картинки меты и стендингов — альбомом, текст — подписью
+    #    к первой картинке (а не отдельными сообщениями). Если картинок нет или текст не влезает
+    #    в подпись Telegram — шлём текст отдельно, картинки останутся на best-effort ниже.
+    leftover = await _send_announce(bot, text, images)
+    # 2) флаг ставим СРАЗУ после доставки: анонс уже отправлен, повторять его нельзя.
     tournament.completed_announced_at = models.utc_now()
     db.commit()
     # 3) турнир завершён — закрываем (REGISTRATION → CLOSED). Best-effort: сбой закрытия не должен
@@ -689,9 +690,8 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, char
         TournamentService(db).close_tournament(tournament_id)
     except Exception:
         logger.exception("maybe_announce_meta_gather_completed: close failed for #%s", tournament_id)
-    # 4) картинки — украшение, строго best-effort: их сбой (в т.ч. отказ Telegram) не должен
-    #    ни ронять уже доставленный анонс, ни зацикливать повтор.
-    await _send_announce_images(bot, [img for img in ([chart] if chart else []) + list(standings)])
+    # 4) не вошедшие в альбом картинки (переполнение/длинный текст) — строго best-effort.
+    await _send_announce_images(bot, leftover)
     logger.info("maybe_announce_meta_gather_completed: announced completion for #%s", tournament_id)
 
 
@@ -708,6 +708,32 @@ def _all_decks_filled(db, tournament_id: int) -> bool:
         .all()
     )
     return bool(archetype_ids) and all(aid is not None for aid in archetype_ids)
+
+
+_TG_CAPTION_LIMIT = 1024  # максимум символов в подписи к медиа
+_TG_ALBUM_LIMIT = 10  # максимум элементов в media group
+
+
+async def _send_announce(bot, text: str, images: list) -> list:
+    """Отправить отбивку одним сообщением: картинки альбомом, текст — подписью к первой.
+
+    Возвращает картинки, не поместившиеся в альбом (для best-effort дослать отдельно).
+    Если картинок нет или текст длиннее подписи — шлём текст отдельным сообщением и возвращаем
+    все картинки как «остаток». Сбой альбома → фолбэк на текст (анонс важнее картинок).
+    """
+    if not images or len(text) > _TG_CAPTION_LIMIT:
+        await bot.send_message(chat_id=settings.OWNER_CHAT_ID, text=text)
+        return images
+
+    album = images[:_TG_ALBUM_LIMIT]
+    media = [InputMediaPhoto(io.BytesIO(img.png), caption=text if i == 0 else None) for i, img in enumerate(album)]
+    try:
+        await bot.send_media_group(chat_id=settings.OWNER_CHAT_ID, media=media)
+    except Exception:
+        logger.exception("maybe_announce_meta_gather_completed: media group failed — шлём текстом")
+        await bot.send_message(chat_id=settings.OWNER_CHAT_ID, text=text)
+        return images
+    return images[_TG_ALBUM_LIMIT:]
 
 
 async def _send_announce_images(bot, images) -> None:
