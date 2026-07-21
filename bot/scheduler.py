@@ -683,7 +683,13 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, char
     #    его нельзя, даже если картинки ниже упадут.
     tournament.completed_announced_at = models.utc_now()
     db.commit()
-    # 3) картинки — украшение, строго best-effort: их сбой (в т.ч. отказ Telegram) не должен
+    # 3) турнир завершён — закрываем (REGISTRATION → CLOSED). Best-effort: сбой закрытия не должен
+    #    ронять уже доставленный анонс; флаг уже стоит, повтора анонса не будет.
+    try:
+        TournamentService(db).close_tournament(tournament_id)
+    except Exception:
+        logger.exception("maybe_announce_meta_gather_completed: close failed for #%s", tournament_id)
+    # 4) картинки — украшение, строго best-effort: их сбой (в т.ч. отказ Telegram) не должен
     #    ни ронять уже доставленный анонс, ни зацикливать повтор.
     await _send_announce_images(bot, [img for img in ([chart] if chart else []) + list(standings)])
     logger.info("maybe_announce_meta_gather_completed: announced completion for #%s", tournament_id)
