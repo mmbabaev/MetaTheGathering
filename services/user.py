@@ -348,6 +348,20 @@ class UserService:
         self.db.commit()
         return bool(user.is_scorekeeper)
 
+    def is_poll_organizer(self, tg_id: int) -> bool:
+        """Организатор голосований (дейликов): создаёт опросы через бота и рассылает уведомления."""
+        user = self.get_by_tg_id(tg_id)
+        return user is not None and bool(user.is_poll_organizer)
+
+    def toggle_poll_organizer(self, tg_id: int) -> Optional[bool]:
+        """Инвертирует is_poll_organizer. Возвращает новое значение, или None если юзер не найден."""
+        user = self.get_by_tg_id(tg_id)
+        if user is None:
+            return None
+        user.is_poll_organizer = not user.is_poll_organizer
+        self.db.commit()
+        return bool(user.is_poll_organizer)
+
     def update_name(
         self,
         tg_id: int,
@@ -387,6 +401,20 @@ class UserService:
         """True, если пользователь включил уведомления об оппоненте в настройках."""
         user = self.get_by_tg_id(tg_id)
         return bool(user and user.notify_opponent_rounds)
+
+    def toggle_notify_poll(self, tg_id: int) -> bool:
+        """Инвертирует notify_poll (опт-ин на уведомления о голосованиях). Возвращает новое значение."""
+        user = self.get_by_tg_id(tg_id)
+        if not user:
+            return False
+        user.notify_poll = not user.notify_poll
+        self.db.commit()
+        return user.notify_poll
+
+    def wants_poll_notifications(self, tg_id: int) -> bool:
+        """True, если пользователь включил уведомления о голосованиях в настройках."""
+        user = self.get_by_tg_id(tg_id)
+        return bool(user and user.notify_poll)
 
     def toggle_status_by_pairings(self, tg_id: int) -> bool:
         """Инвертирует status_by_pairings. Возвращает новое значение флага."""

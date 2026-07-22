@@ -1896,3 +1896,33 @@ class TestHandlePlayerOpponentsSuccess:
         result = handler.handle_player_opponents(ADMIN_TG_ID, p.id, active_tournament.id)
         if not result.is_alert:
             assert "Раунд" in result.text
+
+
+class TestTogglePollOrganizer:
+    def test_non_admin_blocked(self, handler, svc, user_alice, active_tournament):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        result = handler.handle_toggle_poll_organizer(
+            tg_id=user_alice.tg_id, participant_id=p.id, tournament_id=active_tournament.id
+        )
+        assert result.is_alert and result.text == NOT_ADMIN
+
+    def test_participant_not_found(self, handler, admin_user, active_tournament):
+        result = handler.handle_toggle_poll_organizer(
+            tg_id=ADMIN_TG_ID, participant_id=99999, tournament_id=active_tournament.id
+        )
+        assert result.is_alert and result.text == PARTICIPANT_NOT_FOUND
+
+    def test_admin_grants_and_revokes(self, handler, svc, admin_user, active_tournament, user_alice):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        p = svc.get_participant(active_tournament.id, user_alice.id)
+        r1 = handler.handle_toggle_poll_organizer(
+            tg_id=ADMIN_TG_ID, participant_id=p.id, tournament_id=active_tournament.id
+        )
+        assert not r1.is_alert
+        assert handler.user_svc.is_poll_organizer(user_alice.tg_id) is True
+        r2 = handler.handle_toggle_poll_organizer(
+            tg_id=ADMIN_TG_ID, participant_id=p.id, tournament_id=active_tournament.id
+        )
+        assert handler.user_svc.is_poll_organizer(user_alice.tg_id) is False
+        assert r2.answer_text  # popup-алерт заполнен

@@ -834,6 +834,29 @@ async def callback_admin_toggle_scorekeeper(update: Update, context: ContextType
         db.close()
 
 
+async def callback_admin_toggle_poll_organizer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка «📊 Организатор голосований» — назначает/снимает роль организатора у игрока."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 2)
+    if ids is None:
+        return
+    participant_id, tournament_id = ids
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_toggle_poll_organizer(user.id, participant_id, tournament_id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        _log("admin_toggle_poll_organizer", user, participant_id=participant_id, tournament_id=tournament_id)
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+        await query.answer(result.answer_text or "", show_alert=bool(result.answer_text))
+    finally:
+        db.close()
+
+
 async def callback_admin_remove_do(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Подтверждение удаления участника — выполняет удаление."""
     query = update.callback_query

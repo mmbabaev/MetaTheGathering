@@ -55,8 +55,13 @@ class User(Base):
     is_admin = Column(Boolean, default=False, nullable=False)
     is_superadmin = Column(Boolean, default=False, nullable=False)
     is_scorekeeper = Column(Boolean, default=False, nullable=False)
+    # организатор голосований (дейликов): создаёт опросы через бота и рассылает уведомления (issue #157)
+    is_poll_organizer = Column(Boolean, default=False, nullable=False, server_default="false")
     hide_deck_emoji = Column(Boolean, default=False, nullable=False)
     notify_opponent_rounds = Column(Boolean, default=False, nullable=False)
+    notify_poll = Column(
+        Boolean, default=False, nullable=False, server_default="false"
+    )  # опт-ин на уведомления о голосованиях
     status_by_pairings = Column(Boolean, default=False, nullable=False)  # статус турнира попарно по парингам
 
     created_at = Column(DateTime, default=utc_now, nullable=False)

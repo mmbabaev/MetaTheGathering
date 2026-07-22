@@ -16,6 +16,7 @@ CB_TOURNAMENT = "t"
 CB_SETTINGS_NAME = "settings_name"
 CB_SETTINGS_TOGGLE_EMOJI = "settings_toggle_emoji"
 CB_SETTINGS_TOGGLE_OPPONENT_NOTIFY = "settings_toggle_opp_notify"
+CB_SETTINGS_TOGGLE_POLL_NOTIFY = "settings_toggle_poll_notify"
 CB_SETTINGS_TOGGLE_STATUS_PAIRINGS = "settings_toggle_status_pairings"
 CB_TSTATUS = "tstatus"
 CB_LEAVE = "leave"
@@ -55,6 +56,7 @@ CB_ADMIN_REMOVE_CONFIRM = "adm_rm"  # adm_rm:{participant_id}:{tournament_id}
 CB_ADMIN_REMOVE_DO = "adm_rm_do"  # adm_rm_do:{participant_id}:{tournament_id}
 CB_ADMIN_SHOW_OPPONENTS = "adm_opps_p"  # adm_opps_p:{participant_id}:{tournament_id}
 CB_ADMIN_TOGGLE_SCOREKEEPER = "adm_sk"  # adm_sk:{participant_id}:{tournament_id}
+CB_ADMIN_TOGGLE_POLL_ORGANIZER = "adm_po"  # adm_po:{participant_id}:{tournament_id}
 CB_CLOSE_TOURNAMENT = "close_t"  # close_t:{tournament_id}
 CB_ADMIN_OPPONENTS = "adm_opps"  # adm_opps:{tournament_id}
 CB_FEATURE_TOGGLE = "feat_toggle"  # feat_toggle:{flag_name}
@@ -342,17 +344,20 @@ class Keyboards:
         is_admin: bool = False,
         hide_deck_emoji: bool = False,
         notify_opponent_rounds: bool = False,
+        notify_poll: bool = False,
         status_by_pairings: bool = False,
     ) -> InlineKeyboardMarkup:
         emoji_label = "🚫 Эмоджи колод: выкл" if hide_deck_emoji else "🎨 Эмоджи колод: вкл"
         notify_label = (
             "🔔 Уведомления об оппоненте: вкл" if notify_opponent_rounds else "🔕 Уведомления об оппоненте: выкл"
         )
+        poll_label = "🔔 Уведомления о голосованиях: вкл" if notify_poll else "🔕 Уведомления о голосованиях: выкл"
         pairings_label = "👥 Статус по парингам: вкл" if status_by_pairings else "📋 Статус по парингам: выкл"
         rows = [
             [InlineKeyboardButton("✏️ Изменить имя", callback_data=CB_SETTINGS_NAME)],
             [InlineKeyboardButton(emoji_label, callback_data=CB_SETTINGS_TOGGLE_EMOJI)],
             [InlineKeyboardButton(notify_label, callback_data=CB_SETTINGS_TOGGLE_OPPONENT_NOTIFY)],
+            [InlineKeyboardButton(poll_label, callback_data=CB_SETTINGS_TOGGLE_POLL_NOTIFY)],
             [InlineKeyboardButton(pairings_label, callback_data=CB_SETTINGS_TOGGLE_STATUS_PAIRINGS)],
         ]
         return InlineKeyboardMarkup(rows)
@@ -381,6 +386,7 @@ class Keyboards:
         is_admin: bool = True,
         has_pairings: bool = True,
         is_target_scorekeeper: bool = False,
+        is_target_poll_organizer: bool = False,
         is_privileged: bool = True,
     ) -> InlineKeyboardMarkup:
         buttons = []
@@ -414,6 +420,15 @@ class Keyboards:
                         "🗑 Удалить",
                         callback_data=f"{CB_ADMIN_REMOVE_CONFIRM}:{participant_id}:{tournament_id}",
                     ),
+                ]
+            )
+            po_label = "📊 Снять организатора" if is_target_poll_organizer else "📊 Организатор голосований"
+            buttons.append(
+                [
+                    InlineKeyboardButton(
+                        po_label,
+                        callback_data=f"{CB_ADMIN_TOGGLE_POLL_ORGANIZER}:{participant_id}:{tournament_id}",
+                    )
                 ]
             )
         buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_ADMIN_PICK_ARCH}:{participant_id}")])
@@ -578,12 +593,14 @@ def settings_keyboard(
     is_admin: bool = False,
     hide_deck_emoji: bool = False,
     notify_opponent_rounds: bool = False,
+    notify_poll: bool = False,
     status_by_pairings: bool = False,
 ) -> InlineKeyboardMarkup:
     return _default.settings_keyboard(
         is_admin=is_admin,
         hide_deck_emoji=hide_deck_emoji,
         notify_opponent_rounds=notify_opponent_rounds,
+        notify_poll=notify_poll,
         status_by_pairings=status_by_pairings,
     )
 
@@ -606,6 +623,7 @@ def admin_player_actions_keyboard(
     is_admin: bool = True,
     has_pairings: bool = True,
     is_target_scorekeeper: bool = False,
+    is_target_poll_organizer: bool = False,
     is_privileged: bool = True,
 ) -> InlineKeyboardMarkup:
     return _default.admin_player_actions_keyboard(
@@ -614,6 +632,7 @@ def admin_player_actions_keyboard(
         is_admin=is_admin,
         has_pairings=has_pairings,
         is_target_scorekeeper=is_target_scorekeeper,
+        is_target_poll_organizer=is_target_poll_organizer,
         is_privileged=is_privileged,
     )
 

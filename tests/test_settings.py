@@ -238,3 +238,58 @@ class TestArchetypeKeyboardEmoji:
         labels = [b.text for row in result.inline_keyboard for b in row]
         assert any(t == "Red Kuldotha" for t in labels)
         assert all("🔴" not in t for t in labels)
+
+
+# --- UserService.toggle_notify_poll (опт-ин на уведомления о голосованиях) ---
+
+
+class TestToggleNotifyPoll:
+    def test_default_is_false(self, user_svc):
+        user_svc.get_or_create(tg_id=9300, username="u", first_name="X")
+        assert user_svc.get_by_tg_id(9300).notify_poll is False
+        assert user_svc.wants_poll_notifications(9300) is False
+
+    def test_toggle_enables_and_disables(self, user_svc):
+        user_svc.get_or_create(tg_id=9301, username="u", first_name="X")
+        assert user_svc.toggle_notify_poll(9301) is True
+        assert user_svc.wants_poll_notifications(9301) is True
+        assert user_svc.toggle_notify_poll(9301) is False
+
+    def test_toggle_unknown_user_returns_false(self, user_svc):
+        assert user_svc.toggle_notify_poll(99999) is False
+        assert user_svc.wants_poll_notifications(99999) is False
+
+
+class TestHandleTogglePollNotify:
+    def test_toggles_flag_and_shows_settings(self, handler, user_svc):
+        user_svc.get_or_create(tg_id=9310, username="u", first_name="X")
+        result = handler.handle_toggle_poll_notify(tg_id=9310)
+        assert SETTINGS_MENU in result.text
+        assert user_svc.get_by_tg_id(9310).notify_poll is True
+
+    def test_keyboard_reflects_state(self, handler, user_svc):
+        user_svc.get_or_create(tg_id=9311, username="u", first_name="X")
+        handler.handle_toggle_poll_notify(tg_id=9311)
+        result = handler.handle_settings(tg_id=9311)
+        buttons_text = [b.text for row in result.keyboard.inline_keyboard for b in row]
+        assert any("Уведомления о голосованиях: вкл" in t for t in buttons_text)
+
+
+# --- UserService: роль организатора голосований ---
+
+
+class TestPollOrganizerRole:
+    def test_default_is_false(self, user_svc):
+        user_svc.get_or_create(tg_id=9400, username="u", first_name="X")
+        assert user_svc.is_poll_organizer(9400) is False
+
+    def test_toggle_grants_and_revokes(self, user_svc):
+        user_svc.get_or_create(tg_id=9401, username="u", first_name="X")
+        assert user_svc.toggle_poll_organizer(9401) is True
+        assert user_svc.is_poll_organizer(9401) is True
+        assert user_svc.toggle_poll_organizer(9401) is False
+        assert user_svc.is_poll_organizer(9401) is False
+
+    def test_toggle_unknown_user_returns_none(self, user_svc):
+        assert user_svc.toggle_poll_organizer(99999) is None
+        assert user_svc.is_poll_organizer(99999) is False
