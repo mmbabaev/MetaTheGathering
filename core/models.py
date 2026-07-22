@@ -297,6 +297,19 @@ class PollVote(Base):
     __table_args__ = (UniqueConstraint("poll_id", "tg_user_id", name="uq_poll_vote_unique"),)
 
 
+class PollNotification(Base):
+    """Кому бот разослал уведомление о голосовании (для ping-списка «кому ещё написать»)."""
+
+    __tablename__ = "poll_notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    poll_id = Column(Integer, ForeignKey("tournament_polls.id", ondelete="CASCADE"), nullable=False, index=True)
+    tg_user_id = Column(BigInteger, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+    __table_args__ = (UniqueConstraint("poll_id", "tg_user_id", name="uq_poll_notification_unique"),)
+
+
 class FeatureFlag(Base):
     """Глобальный feature flag — вкл/выкл функциональности для всех чатов."""
 

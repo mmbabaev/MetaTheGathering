@@ -8,7 +8,12 @@ from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from bot.handlers.admin import AdminHandler
-from bot.keyboards import fill_deck_keyboard, notify_confirm_keyboard, poll_menu_keyboard
+from bot.keyboards import (
+    fill_deck_keyboard,
+    notify_confirm_keyboard,
+    poll_broadcast_keyboard,
+    poll_menu_keyboard,
+)
 from bot.telegram.common import log_event as _log
 from bot.telegram.common import parse_callback_ints
 from core.config import settings
@@ -81,7 +86,7 @@ async def callback_poll_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     db = SessionLocal()
     try:
-        if not UserService(db).is_admin(user.id):
+        if not UserService(db).can_manage_polls(user.id):
             await query.answer("Нет прав.", show_alert=True)
             return
 
@@ -118,7 +123,7 @@ async def callback_link_poll_prompt(update: Update, context: ContextTypes.DEFAUL
 
     db = SessionLocal()
     try:
-        if not UserService(db).is_admin(user.id):
+        if not UserService(db).can_manage_polls(user.id):
             await query.answer("Нет прав.", show_alert=True)
             return
     finally:
@@ -242,7 +247,8 @@ async def callback_create_poll(update: Update, context: ContextTypes.DEFAULT_TYP
         except Exception:
             chat_username = None
 
-        PollService(db).create_poll(
+        poll_svc = PollService(db)
+        poll_svc.create_poll(
             tournament_id=tournament_id,
             chat_id=chat_id,
             tg_poll_id=msg.poll.id,
@@ -251,10 +257,90 @@ async def callback_create_poll(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         _log("create_poll", user, tournament_id=tournament_id)
         poll_link = _poll_message_link(chat_id, msg.message_id, chat_username)
+        created_text = f"✅ Опрос создан!\n{poll_link}" if poll_link else "✅ Опрос создан!"
+        subscribers = poll_svc.get_poll_subscribers()
         await query.answer()
-        await query.message.reply_text(f"✅ Опрос создан!\n{poll_link}" if poll_link else "✅ Опрос создан!")
+        # Предлагаем разослать уведомление подписчикам — с явным аппрувом (без случайных массовых DM).
+        if subscribers:
+            await query.message.reply_text(
+                f"{created_text}\n\nРазослать уведомление {len(subscribers)} подписчикам?",
+                reply_markup=poll_broadcast_keyboard(tournament_id, len(subscribers)),
+            )
+        else:
+            await query.message.reply_text(f"{created_text}\n\nПодписчиков на уведомления пока нет.")
     finally:
         db.close()
+
+
+def _organizer_display(user: User) -> str:
+    if user.first_name or user.last_name:
+        return " ".join(filter(None, [user.first_name, user.last_name]))
+    return f"@{user.username}" if user.username else "Организатор"
+
+
+async def callback_poll_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Аппрув «📣 Разослать (N)» — рассылает уведомление о голосовании подписчикам (опт-ин)."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+
+    db = SessionLocal()
+    try:
+        if not UserService(db).can_manage_polls(user.id):
+            await query.answer("Нет прав.", show_alert=True)
+            return
+        t = get_tournament(db, tournament_id)
+        poll_svc = PollService(db)
+        poll = poll_svc.get_latest_poll_for_chat(t.chat_id)
+        if poll is None:
+            await query.edit_message_text("Опрос не найден.")
+            await query.answer()
+            return
+        poll_link = _poll_message_link(poll.chat_id, poll.message_id, poll.chat_username)
+        organizer = _organizer_display(user)
+
+        # Кому шлём: подписчики минус уже уведомлённые ботом, минус уже проголосовавшие, минус сам организатор.
+        already = poll_svc.get_poll_notified_ids(poll.id)
+        voted = poll_svc.get_poll_voter_ids(poll.id)
+        targets = [
+            tg for tg in poll_svc.get_poll_subscribers() if tg not in already and tg not in voted and tg != user.id
+        ]
+
+        if poll_link:
+            text = f"📊 {organizer} создал(а) голосование на дейлик «{t.title}» — проголосуй 👉 {poll_link}"
+        else:
+            text = f"📊 {organizer} создал(а) голосование на дейлик «{t.title}» — проголосуй в чате клуба."
+
+        sent = 0
+        notified: list[int] = []
+        for tg_id in targets:
+            if not _is_notify_allowed(tg_id):
+                continue
+            try:
+                await context.bot.send_message(chat_id=tg_id, text=text)
+                notified.append(tg_id)
+                sent += 1
+            except Exception as e:
+                logger.warning(f"[poll] Could not DM subscriber tg_id={tg_id}: {e}")
+        if notified:
+            poll_svc.mark_poll_notified(poll.id, notified)
+        _log("poll_broadcast", user, tournament_id=tournament_id, sent=sent, total=len(targets))
+        await query.edit_message_text(f"✅ Уведомление разослано {sent} подписчикам.")
+        await query.answer()
+    finally:
+        db.close()
+
+
+async def callback_poll_broadcast_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Отмена рассылки уведомления о голосовании."""
+    query = update.callback_query
+    await query.edit_message_text("Рассылка уведомления отменена.")
+    await query.answer()
 
 
 async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -335,7 +421,7 @@ async def callback_notify_no_deck(update: Update, context: ContextTypes.DEFAULT_
 
     db = SessionLocal()
     try:
-        if not UserService(db).is_admin(user.id):
+        if not UserService(db).can_manage_polls(user.id):
             await query.answer("Нет прав.", show_alert=True)
             return
 
@@ -365,7 +451,7 @@ async def callback_notify_confirm(update: Update, context: ContextTypes.DEFAULT_
 
     db = SessionLocal()
     try:
-        if not UserService(db).is_admin(user.id):
+        if not UserService(db).can_manage_polls(user.id):
             await query.answer("Нет прав.", show_alert=True)
             return
 

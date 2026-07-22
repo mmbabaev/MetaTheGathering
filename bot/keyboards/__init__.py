@@ -43,6 +43,8 @@ CB_HIDE_DECKS = "hide_decks"  # hide_decks:{tournament_id}
 CB_POLL_MENU = "poll_menu"  # poll_menu:{tournament_id}
 CB_LINK_POLL_BY_URL = "link_poll_url"  # link_poll_url:{tournament_id}
 CB_CREATE_POLL = "create_poll"  # create_poll:{tournament_id}
+CB_POLL_BROADCAST = "poll_bcast"  # poll_bcast:{tournament_id} — разослать подписчикам
+CB_POLL_BROADCAST_CANCEL = "poll_bcast_no"  # poll_bcast_no:{tournament_id}
 CB_NOTIFY_NO_DECK = "notify_no_deck"  # notify_no_deck:{tournament_id}
 CB_NOTIFY_CONFIRM = "notify_confirm"  # notify_confirm:{tournament_id}
 CB_NOTIFY_CANCEL = "notify_cancel"  # notify_cancel:{tournament_id}
@@ -319,6 +321,19 @@ class Keyboards:
             ]
         )
 
+    def poll_broadcast_keyboard(self, tournament_id: int, count: int) -> InlineKeyboardMarkup:
+        """Аппрув рассылки уведомления о голосовании подписчикам."""
+        return InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton("❌ Отмена", callback_data=f"{CB_POLL_BROADCAST_CANCEL}:{tournament_id}"),
+                    InlineKeyboardButton(
+                        f"📣 Разослать ({count})", callback_data=f"{CB_POLL_BROADCAST}:{tournament_id}"
+                    ),
+                ]
+            ]
+        )
+
     def aetherhub_confirm_keyboard(self, tournament_id: int) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(
             [
@@ -579,6 +594,10 @@ def poll_menu_keyboard(tournament_id: int, poll_link: str | None = None) -> Inli
 
 def notify_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
     return _default.notify_confirm_keyboard(tournament_id)
+
+
+def poll_broadcast_keyboard(tournament_id: int, count: int) -> InlineKeyboardMarkup:
+    return _default.poll_broadcast_keyboard(tournament_id, count)
 
 
 def aetherhub_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:

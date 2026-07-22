@@ -323,3 +323,45 @@ class TestLinkPollToTournament:
         assert latest is not None
         poll_svc.link_poll_to_tournament(latest.id, new_t.id)
         assert poll_svc.get_poll_for_tournament(new_t.id).id == poll.id
+
+
+# ── Фаза 2: подписчики, учёт уведомлённых, голосовавшие ───────────────────────
+
+
+class TestPollSubscribersAndNotified:
+    def test_subscribers_are_optin_users_with_real_tg_id(self, poll_svc, user_svc):
+        a = user_svc.get_or_create(tg_id=5001, username="a")
+        user_svc.get_or_create(tg_id=5002, username="b")  # не подписан
+        user_svc.toggle_notify_poll(a.tg_id)
+        # плейсхолдер с notify_poll (tg_id<0) не должен попасть
+        ph, _ = user_svc.get_or_create_by_name("Пётр", "Иванов")
+        ph.notify_poll = True
+        user_svc.db.commit()
+        assert poll_svc.get_poll_subscribers() == [5001]
+
+    def test_mark_and_get_notified_idempotent(self, poll_svc, tournament):
+        poll = poll_svc.create_poll(tournament.id, 100, "p_notif", 1)
+        poll_svc.mark_poll_notified(poll.id, [111, 222])
+        poll_svc.mark_poll_notified(poll.id, [222, 333])  # 222 — дубль
+        assert poll_svc.get_poll_notified_ids(poll.id) == {111, 222, 333}
+
+    def test_voter_ids(self, poll_svc, tournament):
+        poll = poll_svc.create_poll(tournament.id, 100, "p_vote", 1)
+        poll_svc.upsert_vote(poll.id, 111, 0)
+        poll_svc.upsert_vote(poll.id, 222, 1)
+        assert poll_svc.get_poll_voter_ids(poll.id) == {111, 222}
+
+
+class TestCanManagePolls:
+    def test_admin_can(self, user_svc, admin_user):
+        assert user_svc.can_manage_polls(admin_user.tg_id) is True
+
+    def test_organizer_can(self, user_svc):
+        u = user_svc.get_or_create(tg_id=6001, username="org")
+        assert user_svc.can_manage_polls(u.tg_id) is False
+        user_svc.toggle_poll_organizer(u.tg_id)
+        assert user_svc.can_manage_polls(u.tg_id) is True
+
+    def test_regular_user_cannot(self, user_svc):
+        u = user_svc.get_or_create(tg_id=6002, username="plain")
+        assert user_svc.can_manage_polls(u.tg_id) is False

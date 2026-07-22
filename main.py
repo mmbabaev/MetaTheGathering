@@ -60,6 +60,8 @@ from bot.keyboards import (
     CB_NOTIFY_NO_DECK,
     CB_PAY,
     CB_PAY_STATUS,
+    CB_POLL_BROADCAST,
+    CB_POLL_BROADCAST_CANCEL,
     CB_POLL_MENU,
     CB_REGISTER,
     CB_REVEAL_DECKS,
@@ -296,6 +298,10 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(poll_handler.callback_poll_menu, pattern=f"^{CB_POLL_MENU}:"))
     app.add_handler(CallbackQueryHandler(poll_handler.callback_link_poll_prompt, pattern=f"^{CB_LINK_POLL_BY_URL}:"))
     app.add_handler(CallbackQueryHandler(poll_handler.callback_create_poll, pattern=f"^{CB_CREATE_POLL}:"))
+    app.add_handler(CallbackQueryHandler(poll_handler.callback_poll_broadcast, pattern=f"^{CB_POLL_BROADCAST}:"))
+    app.add_handler(
+        CallbackQueryHandler(poll_handler.callback_poll_broadcast_cancel, pattern=f"^{CB_POLL_BROADCAST_CANCEL}:")
+    )
     app.add_handler(CallbackQueryHandler(poll_handler.callback_notify_no_deck, pattern=f"^{CB_NOTIFY_NO_DECK}:"))
     app.add_handler(CallbackQueryHandler(poll_handler.callback_notify_confirm, pattern=f"^{CB_NOTIFY_CONFIRM}:"))
     app.add_handler(CallbackQueryHandler(poll_handler.callback_notify_cancel, pattern=f"^{CB_NOTIFY_CANCEL}:"))

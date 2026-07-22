@@ -353,6 +353,10 @@ class UserService:
         user = self.get_by_tg_id(tg_id)
         return user is not None and bool(user.is_poll_organizer)
 
+    def can_manage_polls(self, tg_id: int) -> bool:
+        """Кто может создавать опросы и рассылать уведомления: админ или организатор голосований."""
+        return self.is_admin(tg_id) or self.is_poll_organizer(tg_id)
+
     def toggle_poll_organizer(self, tg_id: int) -> Optional[bool]:
         """Инвертирует is_poll_organizer. Возвращает новое значение, или None если юзер не найден."""
         user = self.get_by_tg_id(tg_id)

@@ -181,6 +181,49 @@ class PollService:
             result.setdefault(tg_id, f"id{tg_id}")
         return result
 
+    def get_poll_subscribers(self) -> list[int]:
+        """tg_id пользователей, включивших опт-ин «уведомления о голосованиях» (реальные tg_id)."""
+        return list(
+            self.db.execute(
+                select(models.User.tg_id).where(
+                    models.User.notify_poll.is_(True),
+                    models.User.tg_id > 0,
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    def mark_poll_notified(self, poll_id: int, tg_user_ids: list[int]) -> None:
+        """Записывает, что боту разослал уведомление о голосовании этим tg_id (без дублей)."""
+        if not tg_user_ids:
+            return
+        already = self.get_poll_notified_ids(poll_id)
+        for tg_id in tg_user_ids:
+            if tg_id in already:
+                continue
+            self.db.add(models.PollNotification(poll_id=poll_id, tg_user_id=tg_id))
+            already.add(tg_id)
+        self.db.commit()
+
+    def get_poll_notified_ids(self, poll_id: int) -> set[int]:
+        """tg_id, которым бот уже разослал уведомление об этом опросе."""
+        return set(
+            self.db.execute(
+                select(models.PollNotification.tg_user_id).where(models.PollNotification.poll_id == poll_id)
+            )
+            .scalars()
+            .all()
+        )
+
+    def get_poll_voter_ids(self, poll_id: int) -> set[int]:
+        """tg_id всех, кто проголосовал в опросе (любой вариант)."""
+        return set(
+            self.db.execute(select(models.PollVote.tg_user_id).where(models.PollVote.poll_id == poll_id))
+            .scalars()
+            .all()
+        )
+
     def mark_notified(self, tournament_id: int, tg_user_ids: list[int]) -> None:
         """Записывает время последнего DM для участников турнира."""
         if not tg_user_ids:
