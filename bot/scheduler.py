@@ -636,12 +636,13 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, char
     успешной отправки, поэтому сбой отправки не «съедает» анонс — он повторится при
     следующем импорте (в т.ч. ночной 06:00-реимпорт — гарантированный бэкап, там >4ч всегда).
 
-    Пока шлём владельцу (``settings.OWNER_CHAT_ID``), а не в чат турнира — и в debug,
-    и в prod. Позже можно переключить на чат клуба, поменяв адресата здесь.
+    Шлём в чат клуба (``tournament.chat_id``, где создан турнир) И владельцу в личку
+    (``settings.OWNER_CHAT_ID``), дедуплицированно. Плюс благодарим метаписцев, записавших
+    ≥2 колод. Флаг ставим, если доставили хотя бы в один чат.
 
     ``chart_svc`` — шов для тестов, чтобы они не поднимали сервис из глобального конфига.
     """
-    if bot is None or not settings.OWNER_CHAT_ID:
+    if bot is None:
         return
     tournament = db.get(models.Tournament, tournament_id)
     if tournament is None or tournament.completed_announced_at is not None:
@@ -674,14 +675,31 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, char
     total = len(TournamentService(db).list_participants_for_tournament(tournament_id))
     with_deck = sum(s.count for s in chart.sectors) if chart else _decks_count(db, tournament_id)
     undefeated = svc.get_undefeated_players(tournament_id)
-    text = format_meta_gather_completed(tournament.title, total, with_deck, undefeated)
+    scorekeepers = TournamentService(db).get_deck_recorders(tournament_id, min_count=2)
+    text = format_meta_gather_completed(tournament.title, total, with_deck, undefeated, scorekeepers)
     images = ([chart] if chart else []) + list(standings)
 
-    # 1) Отбивку шлём ОДНИМ сообщением: картинки меты и стендингов — альбомом, текст — подписью
-    #    к первой картинке (а не отдельными сообщениями). Если картинок нет или текст не влезает
-    #    в подпись Telegram — шлём текст отдельно, картинки останутся на best-effort ниже.
-    leftover = await _send_announce(bot, text, images)
-    # 2) флаг ставим СРАЗУ после доставки: анонс уже отправлен, повторять его нельзя.
+    # Адресаты отбивки: чат клуба (где создан турнир) и владелец в личку — дедуплицированно.
+    targets = list(dict.fromkeys(cid for cid in (tournament.chat_id, settings.OWNER_CHAT_ID) if cid))
+    if not targets:
+        return
+
+    # 1) В каждый чат — одно сообщение-альбом (картинки + текст подписью к первой); не вошедшие в
+    #    альбом картинки — best-effort. Сбой одного адресата не мешает остальным.
+    delivered = False
+    for chat_id in targets:
+        try:
+            leftover = await _send_announce(bot, chat_id, text, images)
+        except Exception:
+            logger.exception(
+                "maybe_announce_meta_gather_completed: announce to %s failed for #%s", chat_id, tournament_id
+            )
+            continue
+        delivered = True
+        await _send_announce_images(bot, chat_id, leftover)
+    # 2) флаг ставим, только если доставили хотя бы в один чат — иначе повтор на следующем импорте.
+    if not delivered:
+        return
     tournament.completed_announced_at = models.utc_now()
     db.commit()
     # 3) турнир завершён — закрываем (REGISTRATION → CLOSED). Best-effort: сбой закрытия не должен
@@ -690,8 +708,6 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, char
         TournamentService(db).close_tournament(tournament_id)
     except Exception:
         logger.exception("maybe_announce_meta_gather_completed: close failed for #%s", tournament_id)
-    # 4) не вошедшие в альбом картинки (переполнение/длинный текст) — строго best-effort.
-    await _send_announce_images(bot, leftover)
     logger.info("maybe_announce_meta_gather_completed: announced completion for #%s", tournament_id)
 
 
@@ -714,33 +730,33 @@ _TG_CAPTION_LIMIT = 1024  # максимум символов в подписи 
 _TG_ALBUM_LIMIT = 10  # максимум элементов в media group
 
 
-async def _send_announce(bot, text: str, images: list) -> list:
-    """Отправить отбивку одним сообщением: картинки альбомом, текст — подписью к первой.
+async def _send_announce(bot, chat_id: int, text: str, images: list) -> list:
+    """Отправить отбивку в один чат одним сообщением: картинки альбомом, текст — подписью к первой.
 
     Возвращает картинки, не поместившиеся в альбом (для best-effort дослать отдельно).
     Если картинок нет или текст длиннее подписи — шлём текст отдельным сообщением и возвращаем
     все картинки как «остаток». Сбой альбома → фолбэк на текст (анонс важнее картинок).
     """
     if not images or len(text) > _TG_CAPTION_LIMIT:
-        await bot.send_message(chat_id=settings.OWNER_CHAT_ID, text=text)
+        await bot.send_message(chat_id=chat_id, text=text)
         return images
 
     album = images[:_TG_ALBUM_LIMIT]
     media = [InputMediaPhoto(io.BytesIO(img.png), caption=text if i == 0 else None) for i, img in enumerate(album)]
     try:
-        await bot.send_media_group(chat_id=settings.OWNER_CHAT_ID, media=media)
+        await bot.send_media_group(chat_id=chat_id, media=media)
     except Exception:
         logger.exception("maybe_announce_meta_gather_completed: media group failed — шлём текстом")
-        await bot.send_message(chat_id=settings.OWNER_CHAT_ID, text=text)
+        await bot.send_message(chat_id=chat_id, text=text)
         return images
     return images[_TG_ALBUM_LIMIT:]
 
 
-async def _send_announce_images(bot, images) -> None:
+async def _send_announce_images(bot, chat_id: int, images: list) -> None:
     """Best-effort отправка картинок анонса. Ловим любую ошибку — картинки не критичны."""
     for image in images:
         try:
-            await bot.send_photo(chat_id=settings.OWNER_CHAT_ID, photo=io.BytesIO(image.png))
+            await bot.send_photo(chat_id=chat_id, photo=io.BytesIO(image.png))
         except Exception:
             logger.exception("maybe_announce_meta_gather_completed: image upload failed (%s)", image.filename)
 

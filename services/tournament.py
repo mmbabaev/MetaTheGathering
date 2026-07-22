@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import List, Optional
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,16 @@ from services.utils import ensure_tournament_status, get_tournament
 CONFIRM_THRESHOLD = 3  # up - down >= 3 → confirmed = True
 REJECT_THRESHOLD = 3  # down - up >= 3 → confirmed = False
 CHANGE_VOTE_COOLDOWN = timedelta(seconds=30)
+
+
+@dataclass
+class DeckRecorder:
+    """Метаписец: кто и сколько колод записал в турнире."""
+
+    username: Optional[str]
+    first_name: Optional[str]
+    last_name: Optional[str]
+    count: int
 
 
 class TournamentService:
@@ -329,6 +340,32 @@ class TournamentService:
         )
         participants = self.db.execute(stmt).scalars().all()
         return [ParticipantWithUserAndArchetype.model_validate(p) for p in participants]
+
+    def get_deck_recorders(self, tournament_id: int, min_count: int = 2) -> List[DeckRecorder]:
+        """Метаписцы: кто записал ≥ ``min_count`` колод в турнире, по убыванию количества.
+
+        Считаем по ``deck_added_by_tg_id`` участников с колодой (сам игрок, админ или оппонент).
+        """
+        rows = self.db.execute(
+            select(
+                models.User.username,
+                models.User.first_name,
+                models.User.last_name,
+                func.count(models.Participant.id).label("cnt"),
+            )
+            .join(models.User, models.User.tg_id == models.Participant.deck_added_by_tg_id)
+            .where(
+                models.Participant.tournament_id == tournament_id,
+                models.Participant.archetype_id.isnot(None),
+                models.Participant.deck_added_by_tg_id.isnot(None),
+            )
+            .group_by(models.User.id, models.User.username, models.User.first_name, models.User.last_name)
+            .having(func.count(models.Participant.id) >= min_count)
+            .order_by(func.count(models.Participant.id).desc(), models.User.last_name.asc())
+        ).all()
+        return [
+            DeckRecorder(username=r.username, first_name=r.first_name, last_name=r.last_name, count=r.cnt) for r in rows
+        ]
 
     def get_participant_by_id(self, participant_id: int) -> Optional[models.Participant]:
         """Вернуть участника по participant.id или None."""
