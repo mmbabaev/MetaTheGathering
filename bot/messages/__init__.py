@@ -164,12 +164,16 @@ def format_decks_revealed(title: str, total: int, with_deck: int, meta_rows: lis
     return "\n".join(lines)
 
 
-def format_meta_gather_completed(title: str, total: int, with_deck: int, undefeated: list) -> str:
+def format_meta_gather_completed(
+    title: str, total: int, with_deck: int, undefeated: list, scorekeepers: list = ()
+) -> str:
     """Анонс «сбор метагейма завершён»: турнир, счётчики, игроки без поражений и их колоды.
 
     ``undefeated`` — список с атрибутами ``first_name``/``last_name``/``player_name``/
     ``archetype_name``/``wins`` (services.aetherhub_import_service.UndefeatedPlayer),
     отсортированный по финальному месту.
+    ``scorekeepers`` — метаписцы (services.tournament.DeckRecorder): ``username``/``first_name``/
+    ``last_name``/``count``, отсортированы по убыванию количества записанных колод.
     """
     lines = [f"🎉 Сбор метагейма завершён — {title}", f"Участников: {total} ({with_deck} с колодой)"]
     if undefeated:
@@ -179,6 +183,13 @@ def format_meta_gather_completed(title: str, total: int, with_deck: int, undefea
             name = format_participant_name(u.first_name, u.last_name) or u.player_name
             deck = u.archetype_name or "колода неизвестна"
             lines.append(f"• {name} — {deck}")
+    if scorekeepers:
+        lines.append("")
+        lines.append("🙏 Спасибо за записанные колоды:")
+        for s in scorekeepers:
+            name = format_participant_name(s.first_name, s.last_name) or "?"
+            handle = f"@{s.username} " if s.username else ""
+            lines.append(f"• {handle}{name} — {s.count}")
     return "\n".join(lines)
 
 

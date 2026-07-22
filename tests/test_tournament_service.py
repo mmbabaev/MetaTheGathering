@@ -795,3 +795,28 @@ class TestSetAetherhubUrl:
         tournaments = svc.list_all_active_tournaments()
         match = next(t for t in tournaments if t.id == tournament.id)
         assert match.aetherhub_url == url
+
+
+class TestDeckRecorders:
+    def test_lists_recorders_with_2plus_sorted_by_count(self, svc, user_svc, arch_svc):
+        t = svc.create_tournament(TournamentCreate(title="T", chat_id=1))
+        arch = arch_svc.get_or_create_by_name("Burn")
+        user_svc.get_or_create(tg_id=999, username="scorer", first_name="Анна", last_name="Волкова")
+        loner = user_svc.get_or_create(tg_id=888, username="solo", first_name="Пётр", last_name="Иванов")
+
+        # scorer (tg 999) записал 3 колоды за троих; loner (tg 888) — только 1 свою
+        for tg in (1, 2, 3):
+            u = user_svc.get_or_create(tg_id=tg, first_name=f"P{tg}")
+            svc.register_participant(tournament_id=t.id, user_id=u.id, archetype_id=arch.id, deck_added_by_tg_id=999)
+        svc.register_participant(tournament_id=t.id, user_id=loner.id, archetype_id=arch.id, deck_added_by_tg_id=888)
+
+        recs = svc.get_deck_recorders(t.id, min_count=2)
+        assert [(r.username, r.count) for r in recs] == [("scorer", 3)]
+        assert recs[0].last_name == "Волкова" and recs[0].first_name == "Анна"
+
+    def test_empty_when_nobody_reaches_min(self, svc, user_svc, arch_svc):
+        t = svc.create_tournament(TournamentCreate(title="T", chat_id=1))
+        arch = arch_svc.get_or_create_by_name("Burn")
+        u = user_svc.get_or_create(tg_id=1, first_name="P1")
+        svc.register_participant(tournament_id=t.id, user_id=u.id, archetype_id=arch.id, deck_added_by_tg_id=1)
+        assert svc.get_deck_recorders(t.id, min_count=2) == []
