@@ -310,6 +310,22 @@ class PollNotification(Base):
     __table_args__ = (UniqueConstraint("poll_id", "tg_user_id", name="uq_poll_notification_unique"),)
 
 
+class PollRegular(Base):
+    """Регуляр клуба (chat_id) — кого организатор голосований вручную зовёт на дейлики.
+
+    Ping-список «кому ещё написать» = регуляры МИНУС уже уведомлённые ботом и проголосовавшие.
+    """
+
+    __tablename__ = "poll_regulars"
+
+    id = Column(Integer, primary_key=True, index=True)
+    chat_id = Column(BigInteger, nullable=False, index=True)  # клуб
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+    __table_args__ = (UniqueConstraint("chat_id", "user_id", name="uq_poll_regular_unique"),)
+
+
 class FeatureFlag(Base):
     """Глобальный feature flag — вкл/выкл функциональности для всех чатов."""
 

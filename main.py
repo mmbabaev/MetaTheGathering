@@ -62,7 +62,12 @@ from bot.keyboards import (
     CB_PAY_STATUS,
     CB_POLL_BROADCAST,
     CB_POLL_BROADCAST_CANCEL,
+    CB_POLL_CLUB,
     CB_POLL_MENU,
+    CB_POLL_ORG_MENU,
+    CB_POLL_PING,
+    CB_POLL_REGULAR_TOGGLE,
+    CB_POLL_REGULARS,
     CB_REGISTER,
     CB_REVEAL_DECKS,
     CB_REVEAL_DECKS_CANCEL,
@@ -126,12 +131,15 @@ _SCOREKEEPER_COMMANDS = _USER_COMMANDS + [
     BotCommand("add_players", "Массовая запись"),
 ]
 
+_POLL_CMD = BotCommand("poll", "Меню голосований: регуляры и рассылка")
+
 _ADMIN_COMMANDS = _SCOREKEEPER_COMMANDS + [
     BotCommand("archive", "Архив закрытых турниров"),
     BotCommand("create_tournament", "Создать турнир"),
     BotCommand("delete_tournament", "Удалить турнир"),
     BotCommand("schedule", "Расписание автозаданий"),
     BotCommand("features", "Feature flags"),
+    _POLL_CMD,
 ]
 
 
@@ -170,10 +178,21 @@ async def _set_commands(app: Application) -> None:
             .scalars()
             .all()
         )
+        db_organizers = (
+            db.execute(
+                select(models.User.tg_id).where(
+                    models.User.tg_id > 0,
+                    models.User.is_poll_organizer == True,  # noqa: E712
+                )
+            )
+            .scalars()
+            .all()
+        )
     finally:
         db.close()
 
     admin_ids = set(settings.admin_ids) | set(db_admins)
+    organizer_ids = set(db_organizers) - admin_ids  # у админов /poll уже есть
     scorekeeper_ids = set(db_scorekeepers) - admin_ids
 
     for admin_id in admin_ids:
@@ -183,12 +202,22 @@ async def _set_commands(app: Application) -> None:
             pass
 
     for sk_id in scorekeeper_ids:
+        cmds = _SCOREKEEPER_COMMANDS + ([_POLL_CMD] if sk_id in organizer_ids else [])
         try:
-            await app.bot.set_my_commands(_SCOREKEEPER_COMMANDS, scope=BotCommandScopeChat(chat_id=sk_id))
+            await app.bot.set_my_commands(cmds, scope=BotCommandScopeChat(chat_id=sk_id))
         except Exception:
             pass
 
-    logger.info(f"Bot commands registered. Admins: {admin_ids}, Scorekeepers: {scorekeeper_ids}")
+    # Чистые организаторы голосований (не админ, не метаписец) — пользовательские команды + /poll
+    for org_id in organizer_ids - scorekeeper_ids:
+        try:
+            await app.bot.set_my_commands(_USER_COMMANDS + [_POLL_CMD], scope=BotCommandScopeChat(chat_id=org_id))
+        except Exception:
+            pass
+
+    logger.info(
+        f"Bot commands registered. Admins: {admin_ids}, Scorekeepers: {scorekeeper_ids}, Organizers: {organizer_ids}"
+    )
 
 
 def _debug_create_tournament() -> None:
@@ -225,6 +254,7 @@ def main() -> None:
     app.add_handler(CommandHandler("tournaments", player.cmd_tournaments, filters=private))
     app.add_handler(CommandHandler("social_rating", rating_handler.cmd_social_rating, filters=private))
     app.add_handler(CommandHandler("settings", settings_handler.cmd_settings, filters=private))
+    app.add_handler(CommandHandler("poll", poll_handler.cmd_poll, filters=private))
 
     app.add_handler(CommandHandler("add_players", admin.cmd_add_players, filters=private))
     app.add_handler(CommandHandler("tournament_status", admin.cmd_tournament_status, filters=private))
@@ -305,6 +335,13 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(poll_handler.callback_notify_no_deck, pattern=f"^{CB_NOTIFY_NO_DECK}:"))
     app.add_handler(CallbackQueryHandler(poll_handler.callback_notify_confirm, pattern=f"^{CB_NOTIFY_CONFIRM}:"))
     app.add_handler(CallbackQueryHandler(poll_handler.callback_notify_cancel, pattern=f"^{CB_NOTIFY_CANCEL}:"))
+    app.add_handler(CallbackQueryHandler(poll_handler.callback_poll_org_menu, pattern=f"^{CB_POLL_ORG_MENU}$"))
+    app.add_handler(CallbackQueryHandler(poll_handler.callback_poll_club, pattern=f"^{CB_POLL_CLUB}:"))
+    app.add_handler(CallbackQueryHandler(poll_handler.callback_poll_regulars, pattern=f"^{CB_POLL_REGULARS}:"))
+    app.add_handler(
+        CallbackQueryHandler(poll_handler.callback_poll_regular_toggle, pattern=f"^{CB_POLL_REGULAR_TOGGLE}:")
+    )
+    app.add_handler(CallbackQueryHandler(poll_handler.callback_poll_ping, pattern=f"^{CB_POLL_PING}:"))
     app.add_handler(
         CallbackQueryHandler(aetherhub_handler.callback_aetherhub_import_prompt, pattern=f"^{CB_AETHERHUB_IMPORT}:")
     )

@@ -224,6 +224,96 @@ class PollService:
             .all()
         )
 
+    # --- Регуляры клуба и ping-список (issue #157, фаза 3) ---
+
+    def list_club_chats(self) -> list[tuple[int, str]]:
+        """(chat_id, метка) по каждому клубу, где есть турниры. Метка — название клуба или последнего турнира."""
+        rows = self.db.execute(
+            select(models.Tournament.chat_id, models.Tournament.club, models.Tournament.title).order_by(
+                models.Tournament.created_at.desc()
+            )
+        ).all()
+        seen: dict[int, str] = {}
+        for chat_id, club, title in rows:
+            if chat_id in seen:
+                continue
+            seen[chat_id] = club or title or f"chat {chat_id}"
+        return list(seen.items())
+
+    def get_club_players(self, chat_id: int) -> list[models.User]:
+        """Реальные (tg_id>0) игроки, участвовавшие в турнирах клуба — кандидаты в регуляры."""
+        return list(
+            self.db.execute(
+                select(models.User)
+                .join(models.Participant, models.Participant.user_id == models.User.id)
+                .join(models.Tournament, models.Tournament.id == models.Participant.tournament_id)
+                .where(models.Tournament.chat_id == chat_id, models.User.tg_id > 0)
+                .distinct()
+                .order_by(models.User.first_name, models.User.last_name)
+            )
+            .scalars()
+            .all()
+        )
+
+    def get_regular_user_ids(self, chat_id: int) -> set[int]:
+        """Внутренние user.id регуляров клуба."""
+        return set(
+            self.db.execute(select(models.PollRegular.user_id).where(models.PollRegular.chat_id == chat_id))
+            .scalars()
+            .all()
+        )
+
+    def list_regulars(self, chat_id: int) -> list[models.User]:
+        """Пользователи-регуляры клуба, отсортированные по имени."""
+        return list(
+            self.db.execute(
+                select(models.User)
+                .join(models.PollRegular, models.PollRegular.user_id == models.User.id)
+                .where(models.PollRegular.chat_id == chat_id)
+                .order_by(models.User.first_name, models.User.last_name)
+            )
+            .scalars()
+            .all()
+        )
+
+    def toggle_regular(self, chat_id: int, user_id: int) -> bool:
+        """Добавляет/убирает игрока из регуляров клуба. Возвращает новое состояние (True = регуляр)."""
+        existing = self.db.execute(
+            select(models.PollRegular).where(
+                models.PollRegular.chat_id == chat_id,
+                models.PollRegular.user_id == user_id,
+            )
+        ).scalar_one_or_none()
+        if existing:
+            self.db.delete(existing)
+            self.db.commit()
+            return False
+        self.db.add(models.PollRegular(chat_id=chat_id, user_id=user_id))
+        self.db.commit()
+        return True
+
+    def get_ping_targets(self, chat_id: int, poll_id: int | None) -> list[int]:
+        """tg_id регуляров, кому «ещё написать»: регуляры МИНУС уведомлённые ботом МИНУС проголосовавшие.
+
+        poll_id — опрос, по которому считаем «уже написали / уже проголосовали». None (опроса нет) →
+        никого не исключаем, возвращаем всех регуляров.
+        """
+        regular_tg = set(
+            self.db.execute(
+                select(models.User.tg_id)
+                .join(models.PollRegular, models.PollRegular.user_id == models.User.id)
+                .where(models.PollRegular.chat_id == chat_id, models.User.tg_id > 0)
+            )
+            .scalars()
+            .all()
+        )
+        if not regular_tg:
+            return []
+        exclude: set[int] = set()
+        if poll_id is not None:
+            exclude = self.get_poll_notified_ids(poll_id) | self.get_poll_voter_ids(poll_id)
+        return sorted(regular_tg - exclude)
+
     def mark_notified(self, tournament_id: int, tg_user_ids: list[int]) -> None:
         """Записывает время последнего DM для участников турнира."""
         if not tg_user_ids:

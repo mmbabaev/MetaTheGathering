@@ -12,7 +12,10 @@ from bot.keyboards import (
     fill_deck_keyboard,
     notify_confirm_keyboard,
     poll_broadcast_keyboard,
+    poll_club_menu_keyboard,
+    poll_clubs_keyboard,
     poll_menu_keyboard,
+    poll_regulars_keyboard,
 )
 from bot.telegram.common import log_event as _log
 from bot.telegram.common import parse_callback_ints
@@ -340,6 +343,189 @@ async def callback_poll_broadcast_cancel(update: Update, context: ContextTypes.D
     """Отмена рассылки уведомления о голосовании."""
     query = update.callback_query
     await query.edit_message_text("Рассылка уведомления отменена.")
+    await query.answer()
+
+
+# --- Меню организатора голосований: клубы, регуляры, ping-список (issue #157, фаза 3) ---
+
+REGULARS_PAGE_SIZE = 8
+
+
+def _display_name(user: User) -> str:
+    parts = []
+    if user.username:
+        parts.append(f"@{user.username}")
+    name = " ".join(filter(None, [user.first_name, user.last_name]))
+    if name:
+        parts.append(name)
+    return " ".join(parts) if parts else f"id{user.tg_id}"
+
+
+async def cmd_poll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """/poll — меню организатора голосований: выбрать клуб, дальше регуляры / ping-список."""
+    user = update.effective_user
+    msg = update.effective_message
+    if not user or not msg:
+        return
+    _log("cmd_poll", user)
+    db = SessionLocal()
+    try:
+        if not UserService(db).can_manage_polls(user.id):
+            await msg.reply_text("Эта команда только для организаторов голосований.")
+            return
+        clubs = PollService(db).list_club_chats()
+    finally:
+        db.close()
+
+    if not clubs:
+        await msg.reply_text("Пока нет ни одного клуба с турнирами.")
+        return
+    await msg.reply_text("📊 Организатор голосований — выбери клуб:", reply_markup=poll_clubs_keyboard(clubs))
+
+
+async def callback_poll_org_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Назад к списку клубов из меню клуба."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    db = SessionLocal()
+    try:
+        if not UserService(db).can_manage_polls(user.id):
+            await query.answer("Нет прав.", show_alert=True)
+            return
+        clubs = PollService(db).list_club_chats()
+    finally:
+        db.close()
+    await query.edit_message_text("📊 Организатор голосований — выбери клуб:", reply_markup=poll_clubs_keyboard(clubs))
+    await query.answer()
+
+
+async def callback_poll_club(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Меню одного клуба: регуляры + «кому ещё написать»."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (chat_id,) = ids
+
+    db = SessionLocal()
+    try:
+        if not UserService(db).can_manage_polls(user.id):
+            await query.answer("Нет прав.", show_alert=True)
+            return
+        poll_svc = PollService(db)
+        label = dict(poll_svc.list_club_chats()).get(chat_id, f"chat {chat_id}")
+        count = len(poll_svc.get_regular_user_ids(chat_id))
+    finally:
+        db.close()
+
+    await query.edit_message_text(
+        f"📊 Клуб «{label}»",
+        reply_markup=poll_club_menu_keyboard(chat_id, count),
+    )
+    await query.answer()
+
+
+async def callback_poll_regulars(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Список кандидатов в регуляры с тумблерами (страница)."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 2)
+    if ids is None:
+        return
+    chat_id, page = ids
+
+    db = SessionLocal()
+    try:
+        if not UserService(db).can_manage_polls(user.id):
+            await query.answer("Нет прав.", show_alert=True)
+            return
+        poll_svc = PollService(db)
+        players = [(u.id, _display_name(u)) for u in poll_svc.get_club_players(chat_id)]
+        regular_ids = poll_svc.get_regular_user_ids(chat_id)
+    finally:
+        db.close()
+
+    if not players:
+        await query.answer("В этом клубе пока нет игроков с ботом.", show_alert=True)
+        return
+    await query.edit_message_text(
+        "👥 Регуляры клуба — отметь, кого зовём на дейлики:",
+        reply_markup=poll_regulars_keyboard(chat_id, players, regular_ids, page, page_size=REGULARS_PAGE_SIZE),
+    )
+    await query.answer()
+
+
+async def callback_poll_regular_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Вкл/выкл одного регуляра, перерисовывает список на той же странице."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 3)
+    if ids is None:
+        return
+    chat_id, target_user_id, page = ids
+
+    db = SessionLocal()
+    try:
+        if not UserService(db).can_manage_polls(user.id):
+            await query.answer("Нет прав.", show_alert=True)
+            return
+        poll_svc = PollService(db)
+        now_regular = poll_svc.toggle_regular(chat_id, target_user_id)
+        players = [(u.id, _display_name(u)) for u in poll_svc.get_club_players(chat_id)]
+        regular_ids = poll_svc.get_regular_user_ids(chat_id)
+    finally:
+        db.close()
+
+    await query.edit_message_reply_markup(
+        reply_markup=poll_regulars_keyboard(chat_id, players, regular_ids, page, page_size=REGULARS_PAGE_SIZE)
+    )
+    await query.answer("✅ Добавлен в регуляры" if now_regular else "Убран из регуляров")
+
+
+async def callback_poll_ping(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«Кому ещё написать» — регуляры минус уже уведомлённые ботом и проголосовавшие."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (chat_id,) = ids
+
+    db = SessionLocal()
+    try:
+        if not UserService(db).can_manage_polls(user.id):
+            await query.answer("Нет прав.", show_alert=True)
+            return
+        poll_svc = PollService(db)
+        label = dict(poll_svc.list_club_chats()).get(chat_id, f"chat {chat_id}")
+        regulars_count = len(poll_svc.get_regular_user_ids(chat_id))
+        if regulars_count == 0:
+            await query.answer("Регуляров нет — добавь их в «👥 Регуляры».", show_alert=True)
+            return
+        poll = poll_svc.get_latest_poll_for_chat(chat_id)
+        targets = poll_svc.get_ping_targets(chat_id, poll.id if poll else None)
+        names = poll_svc.get_voter_display_names(targets)
+    finally:
+        db.close()
+
+    if not targets:
+        text = f"📋 «{label}»: все регуляры уже написаны/проголосовали 🎉"
+    else:
+        lines = [f"📋 «{label}» — кому ещё написать ({len(targets)}):"]
+        lines += [f"  • {names[tg_id]}" for tg_id in targets]
+        text = "\n".join(lines)
+    await query.edit_message_text(text, reply_markup=poll_club_menu_keyboard(chat_id, regulars_count))
     await query.answer()
 
 

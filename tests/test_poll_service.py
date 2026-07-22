@@ -352,6 +352,80 @@ class TestPollSubscribersAndNotified:
         assert poll_svc.get_poll_voter_ids(poll.id) == {111, 222}
 
 
+class TestClubRegulars:
+    def test_list_club_chats_latest_label(self, poll_svc, svc):
+        old = svc.create_tournament(TournamentCreate(title="Old", chat_id=100))
+        svc.close_tournament(old.id)
+        svc.create_tournament(TournamentCreate(title="New", chat_id=100, club="Goldfish"))
+        svc.create_tournament(TournamentCreate(title="Other", chat_id=200))
+        clubs = dict(poll_svc.list_club_chats())
+        assert clubs[100] == "Goldfish"  # club последнего турнира предпочтён
+        assert clubs[200] == "Other"
+
+    def test_club_players_only_real_participants(self, poll_svc, svc, tournament, user_alice, user_svc):
+        # placeholder (tg_id<0) не участвует как кандидат
+        ph, _ = user_svc.get_or_create_by_name("Пётр", "Иванов")
+        user_svc.db.commit()
+        svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=None)
+        svc.register_participant(tournament_id=tournament.id, user_id=ph.id, archetype_id=None)
+        players = poll_svc.get_club_players(tournament.chat_id)
+        ids = {u.id for u in players}
+        assert user_alice.id in ids
+        assert ph.id not in ids
+
+    def test_club_players_scoped_by_chat(self, poll_svc, svc, user_alice):
+        t1 = svc.create_tournament(TournamentCreate(title="C1", chat_id=100))
+        t2 = svc.create_tournament(TournamentCreate(title="C2", chat_id=200))
+        svc.register_participant(tournament_id=t1.id, user_id=user_alice.id, archetype_id=None)
+        assert user_alice.id in {u.id for u in poll_svc.get_club_players(100)}
+        assert poll_svc.get_club_players(200) == []
+        assert t2.chat_id == 200
+
+    def test_toggle_regular_adds_and_removes(self, poll_svc, user_alice):
+        assert poll_svc.get_regular_user_ids(100) == set()
+        assert poll_svc.toggle_regular(100, user_alice.id) is True
+        assert poll_svc.get_regular_user_ids(100) == {user_alice.id}
+        assert poll_svc.toggle_regular(100, user_alice.id) is False
+        assert poll_svc.get_regular_user_ids(100) == set()
+
+    def test_regulars_scoped_by_chat(self, poll_svc, user_alice):
+        poll_svc.toggle_regular(100, user_alice.id)
+        assert poll_svc.get_regular_user_ids(100) == {user_alice.id}
+        assert poll_svc.get_regular_user_ids(200) == set()
+
+    def test_list_regulars_returns_users(self, poll_svc, user_alice, user_bob):
+        poll_svc.toggle_regular(100, user_alice.id)
+        poll_svc.toggle_regular(100, user_bob.id)
+        regulars = poll_svc.list_regulars(100)
+        assert {u.id for u in regulars} == {user_alice.id, user_bob.id}
+
+
+class TestPingTargets:
+    def test_no_regulars_empty(self, poll_svc):
+        assert poll_svc.get_ping_targets(100, poll_id=None) == []
+
+    def test_all_regulars_when_no_poll(self, poll_svc, user_alice, user_bob):
+        poll_svc.toggle_regular(100, user_alice.id)
+        poll_svc.toggle_regular(100, user_bob.id)
+        assert poll_svc.get_ping_targets(100, poll_id=None) == sorted([user_alice.tg_id, user_bob.tg_id])
+
+    def test_excludes_notified_and_voted(self, poll_svc, tournament, user_alice, user_bob, user_svc):
+        carol = user_svc.get_or_create(tg_id=1003, username="carol")
+        for u in (user_alice, user_bob, carol):
+            poll_svc.toggle_regular(tournament.chat_id, u.id)
+        poll = poll_svc.create_poll(tournament.id, tournament.chat_id, "p_ping", 1)
+        poll_svc.mark_poll_notified(poll.id, [user_alice.tg_id])  # уже написали
+        poll_svc.upsert_vote(poll.id, user_bob.tg_id, choice=0)  # уже проголосовал
+        targets = poll_svc.get_ping_targets(tournament.chat_id, poll_id=poll.id)
+        assert targets == [carol.tg_id]
+
+    def test_excludes_placeholder_regular(self, poll_svc, user_svc):
+        ph, _ = user_svc.get_or_create_by_name("Плейс", "Холдер")
+        user_svc.db.commit()
+        poll_svc.toggle_regular(100, ph.id)  # placeholder tg_id<0
+        assert poll_svc.get_ping_targets(100, poll_id=None) == []
+
+
 class TestCanManagePolls:
     def test_admin_can(self, user_svc, admin_user):
         assert user_svc.can_manage_polls(admin_user.tg_id) is True
