@@ -18,6 +18,8 @@ from bot.messages import (
     NO_ACTIVE_TOURNAMENT,
     NOT_ADMIN,
     PARTICIPANT_NOT_FOUND,
+    POLL_ORGANIZER_GRANTED,
+    POLL_ORGANIZER_REVOKED,
     REGISTRATION_CLOSED,
     SCOREKEEPER_GRANTED,
     SCOREKEEPER_REVOKED,
@@ -330,6 +332,7 @@ class AdminHandler:
         user = self.user_svc.get_by_id(p.user_id)
         has_pairings = AetherhubImportService(self.svc.db).has_pairings(tournament_id)
         is_target_scorekeeper = bool(user.is_scorekeeper) if user else False
+        is_target_poll_organizer = bool(user.is_poll_organizer) if user else False
         name = (
             format_participant_name(user.first_name if user else None, user.last_name if user else None) or f"id{p.id}"
         )
@@ -344,6 +347,7 @@ class AdminHandler:
                 is_admin=is_admin,
                 has_pairings=has_pairings,
                 is_target_scorekeeper=is_target_scorekeeper,
+                is_target_poll_organizer=is_target_poll_organizer,
                 is_privileged=is_privileged,
             ),
         )
@@ -361,6 +365,23 @@ class AdminHandler:
         name = format_participant_name(target_user.first_name, target_user.last_name) or f"id{p.id}"
         new_value = self.user_svc.toggle_scorekeeper(target_user.tg_id)
         msg = SCOREKEEPER_GRANTED.format(name=name) if new_value else SCOREKEEPER_REVOKED.format(name=name)
+        result = self._tournament_status_result(tournament_id, prefix=msg, tg_id=tg_id)
+        result.answer_text = msg
+        return result
+
+    def handle_toggle_poll_organizer(self, tg_id: int, participant_id: int, tournament_id: int) -> HandlerResult:
+        """Назначить или снять роль организатора голосований у игрока (только админ)."""
+        if not self.user_svc.is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN, is_alert=True)
+        p = self.svc.get_participant_by_id(participant_id)
+        if p is None:
+            return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
+        target_user = self.user_svc.get_by_id(p.user_id)
+        if target_user is None:
+            return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
+        name = format_participant_name(target_user.first_name, target_user.last_name) or f"id{p.id}"
+        new_value = self.user_svc.toggle_poll_organizer(target_user.tg_id)
+        msg = POLL_ORGANIZER_GRANTED.format(name=name) if new_value else POLL_ORGANIZER_REVOKED.format(name=name)
         result = self._tournament_status_result(tournament_id, prefix=msg, tg_id=tg_id)
         result.answer_text = msg
         return result

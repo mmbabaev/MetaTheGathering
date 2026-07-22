@@ -29,6 +29,7 @@ from bot.keyboards import (
     CB_ADMIN_SET_ARCH,
     CB_ADMIN_SHOW_FILLED,
     CB_ADMIN_SHOW_OPPONENTS,
+    CB_ADMIN_TOGGLE_POLL_ORGANIZER,
     CB_ADMIN_TOGGLE_SCOREKEEPER,
     CB_AETHERHUB_CANCEL,
     CB_AETHERHUB_CONFIRM,
@@ -68,6 +69,7 @@ from bot.keyboards import (
     CB_SETTINGS_NAME,
     CB_SETTINGS_TOGGLE_EMOJI,
     CB_SETTINGS_TOGGLE_OPPONENT_NOTIFY,
+    CB_SETTINGS_TOGGLE_POLL_NOTIFY,
     CB_SETTINGS_TOGGLE_STATUS_PAIRINGS,
     CB_STANDINGS,
     CB_TOURNAMENT,
@@ -250,6 +252,11 @@ def main() -> None:
     )
     app.add_handler(
         CallbackQueryHandler(
+            settings_handler.callback_toggle_poll_notify, pattern=f"^{CB_SETTINGS_TOGGLE_POLL_NOTIFY}$"
+        )
+    )
+    app.add_handler(
+        CallbackQueryHandler(
             settings_handler.callback_toggle_status_pairings, pattern=f"^{CB_SETTINGS_TOGGLE_STATUS_PAIRINGS}$"
         )
     )
@@ -278,6 +285,9 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(admin.callback_admin_remove_do, pattern=f"^{CB_ADMIN_REMOVE_DO}:"))
     app.add_handler(
         CallbackQueryHandler(admin.callback_admin_toggle_scorekeeper, pattern=f"^{CB_ADMIN_TOGGLE_SCOREKEEPER}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(admin.callback_admin_toggle_poll_organizer, pattern=f"^{CB_ADMIN_TOGGLE_POLL_ORGANIZER}:")
     )
     app.add_handler(CallbackQueryHandler(admin.callback_reveal_decks, pattern=f"^{CB_REVEAL_DECKS}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_reveal_decks_confirm, pattern=f"^{CB_REVEAL_DECKS_CONFIRM}:"))
