@@ -43,6 +43,13 @@ CB_HIDE_DECKS = "hide_decks"  # hide_decks:{tournament_id}
 CB_POLL_MENU = "poll_menu"  # poll_menu:{tournament_id}
 CB_LINK_POLL_BY_URL = "link_poll_url"  # link_poll_url:{tournament_id}
 CB_CREATE_POLL = "create_poll"  # create_poll:{tournament_id}
+CB_POLL_BROADCAST = "poll_bcast"  # poll_bcast:{tournament_id} — разослать подписчикам
+CB_POLL_BROADCAST_CANCEL = "poll_bcast_no"  # poll_bcast_no:{tournament_id}
+CB_POLL_ORG_MENU = "poll_org"  # poll_org — меню организатора: список клубов (фаза 3)
+CB_POLL_CLUB = "poll_club"  # poll_club:{chat_id} — меню клуба (регуляры / ping)
+CB_POLL_REGULARS = "poll_reg"  # poll_reg:{chat_id}:{page} — список регуляров (тумблеры)
+CB_POLL_REGULAR_TOGGLE = "poll_reg_t"  # poll_reg_t:{chat_id}:{user_id}:{page} — вкл/выкл регуляра
+CB_POLL_PING = "poll_ping"  # poll_ping:{chat_id} — «кому ещё написать»
 CB_NOTIFY_NO_DECK = "notify_no_deck"  # notify_no_deck:{tournament_id}
 CB_NOTIFY_CONFIRM = "notify_confirm"  # notify_confirm:{tournament_id}
 CB_NOTIFY_CANCEL = "notify_cancel"  # notify_cancel:{tournament_id}
@@ -319,6 +326,70 @@ class Keyboards:
             ]
         )
 
+    def poll_broadcast_keyboard(self, tournament_id: int, count: int) -> InlineKeyboardMarkup:
+        """Аппрув рассылки уведомления о голосовании подписчикам."""
+        return InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton("❌ Отмена", callback_data=f"{CB_POLL_BROADCAST_CANCEL}:{tournament_id}"),
+                    InlineKeyboardButton(
+                        f"📣 Разослать ({count})", callback_data=f"{CB_POLL_BROADCAST}:{tournament_id}"
+                    ),
+                ]
+            ]
+        )
+
+    def poll_clubs_keyboard(self, clubs: list[tuple[int, str]]) -> InlineKeyboardMarkup:
+        """Список клубов для меню организатора голосований (/poll)."""
+        rows = [[InlineKeyboardButton(label, callback_data=f"{CB_POLL_CLUB}:{chat_id}")] for chat_id, label in clubs]
+        return InlineKeyboardMarkup(rows)
+
+    def poll_club_menu_keyboard(self, chat_id: int, regulars_count: int) -> InlineKeyboardMarkup:
+        """Меню одного клуба: регуляры + «кому ещё написать»."""
+        return InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        f"👥 Регуляры ({regulars_count})", callback_data=f"{CB_POLL_REGULARS}:{chat_id}:0"
+                    )
+                ],
+                [InlineKeyboardButton("📋 Кому ещё написать", callback_data=f"{CB_POLL_PING}:{chat_id}")],
+                [InlineKeyboardButton("⬅️ Назад", callback_data=CB_POLL_ORG_MENU)],
+            ]
+        )
+
+    def poll_regulars_keyboard(
+        self,
+        chat_id: int,
+        players: list[tuple[int, str]],
+        regular_ids: set[int],
+        page: int,
+        page_size: int = 8,
+    ) -> InlineKeyboardMarkup:
+        """Тумблеры кандидатов в регуляры (✅/⬜) с пагинацией. players: (user_id, label)."""
+        start = page * page_size
+        chunk = players[start : start + page_size]
+        rows = []
+        for user_id, label in chunk:
+            mark = "✅" if user_id in regular_ids else "⬜️"
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        f"{mark} {label}",
+                        callback_data=f"{CB_POLL_REGULAR_TOGGLE}:{chat_id}:{user_id}:{page}",
+                    )
+                ]
+            )
+        nav = []
+        if page > 0:
+            nav.append(InlineKeyboardButton("◀️", callback_data=f"{CB_POLL_REGULARS}:{chat_id}:{page - 1}"))
+        if start + page_size < len(players):
+            nav.append(InlineKeyboardButton("▶️", callback_data=f"{CB_POLL_REGULARS}:{chat_id}:{page + 1}"))
+        if nav:
+            rows.append(nav)
+        rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_POLL_CLUB}:{chat_id}")])
+        return InlineKeyboardMarkup(rows)
+
     def aetherhub_confirm_keyboard(self, tournament_id: int) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(
             [
@@ -579,6 +650,28 @@ def poll_menu_keyboard(tournament_id: int, poll_link: str | None = None) -> Inli
 
 def notify_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
     return _default.notify_confirm_keyboard(tournament_id)
+
+
+def poll_broadcast_keyboard(tournament_id: int, count: int) -> InlineKeyboardMarkup:
+    return _default.poll_broadcast_keyboard(tournament_id, count)
+
+
+def poll_clubs_keyboard(clubs: list[tuple[int, str]]) -> InlineKeyboardMarkup:
+    return _default.poll_clubs_keyboard(clubs)
+
+
+def poll_club_menu_keyboard(chat_id: int, regulars_count: int) -> InlineKeyboardMarkup:
+    return _default.poll_club_menu_keyboard(chat_id, regulars_count)
+
+
+def poll_regulars_keyboard(
+    chat_id: int,
+    players: list[tuple[int, str]],
+    regular_ids: set[int],
+    page: int,
+    page_size: int = 8,
+) -> InlineKeyboardMarkup:
+    return _default.poll_regulars_keyboard(chat_id, players, regular_ids, page, page_size=page_size)
 
 
 def aetherhub_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
