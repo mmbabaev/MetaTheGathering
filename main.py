@@ -69,6 +69,7 @@ from bot.keyboards import (
     CB_POLL_REGULAR_TOGGLE,
     CB_POLL_REGULARS,
     CB_REGISTER,
+    CB_REOPEN_TOURNAMENT,
     CB_REVEAL_DECKS,
     CB_REVEAL_DECKS_CANCEL,
     CB_REVEAL_DECKS_CONFIRM,
@@ -355,6 +356,7 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(admin.callback_admin_more, pattern=f"^{CB_ADMIN_MORE}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_debug_round_notify, pattern=f"^{CB_DEBUG_ROUND_NOTIFY}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_close_tournament, pattern=f"^{CB_CLOSE_TOURNAMENT}:"))
+    app.add_handler(CallbackQueryHandler(admin.callback_reopen_tournament, pattern=f"^{CB_REOPEN_TOURNAMENT}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_fill_opponents, pattern=f"^{CB_ADMIN_OPPONENTS}:"))
     app.add_handler(CallbackQueryHandler(features_handler.callback_feature_info, pattern=f"^{CB_FEATURE_INFO}:"))
     app.add_handler(CallbackQueryHandler(features_handler.callback_feature_toggle, pattern=f"^{CB_FEATURE_TOGGLE}:"))
