@@ -68,6 +68,9 @@ CB_CLOSE_TOURNAMENT = "close_t"  # close_t:{tournament_id}
 CB_REOPEN_TOURNAMENT = "reopen_t"  # reopen_t:{tournament_id} — вернуть закрытый турнир в регистрацию
 CB_ADMIN_OPPONENTS = "adm_opps"  # adm_opps:{tournament_id}
 CB_FEATURE_TOGGLE = "feat_toggle"  # feat_toggle:{flag_name}
+CB_SCHEDULE_LIST = "sched_list"  # sched_list — список строк расписания (issue #124)
+CB_SCHEDULE_ROW = "sched_row"  # sched_row:{row_id} — карточка одной строки
+CB_SCHEDULE_TOGGLE = "sched_tgl"  # sched_tgl:{row_id} — включить/выключить строку
 CB_FEATURE_INFO = "feat_info"  # feat_info:{flag_name}
 CB_PAY = "pay"  # pay:{tournament_id}
 CB_PAY_STATUS = "pay_status"  # pay_status:{tournament_id} — no-op, показывает статус оплаты
@@ -394,6 +397,22 @@ class Keyboards:
         rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_POLL_CLUB}:{chat_id}")])
         return InlineKeyboardMarkup(rows)
 
+    def schedule_list_keyboard(self, rows: list[tuple[int, str]]) -> InlineKeyboardMarkup:
+        """Список строк расписания: одна кнопка на строку. rows: (row_id, label)."""
+        return InlineKeyboardMarkup(
+            [[InlineKeyboardButton(label, callback_data=f"{CB_SCHEDULE_ROW}:{row_id}")] for row_id, label in rows]
+        )
+
+    def schedule_row_keyboard(self, row_id: int, enabled: bool) -> InlineKeyboardMarkup:
+        """Карточка одной строки расписания: тумблер + назад."""
+        toggle_label = "⏸ Выключить" if enabled else "▶️ Включить"
+        return InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton(toggle_label, callback_data=f"{CB_SCHEDULE_TOGGLE}:{row_id}")],
+                [InlineKeyboardButton("⬅️ Назад", callback_data=CB_SCHEDULE_LIST)],
+            ]
+        )
+
     def aetherhub_confirm_keyboard(self, tournament_id: int) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(
             [
@@ -676,6 +695,14 @@ def poll_regulars_keyboard(
     page_size: int = 8,
 ) -> InlineKeyboardMarkup:
     return _default.poll_regulars_keyboard(chat_id, players, regular_ids, page, page_size=page_size)
+
+
+def schedule_list_keyboard(rows: list[tuple[int, str]]) -> InlineKeyboardMarkup:
+    return _default.schedule_list_keyboard(rows)
+
+
+def schedule_row_keyboard(row_id: int, enabled: bool) -> InlineKeyboardMarkup:
+    return _default.schedule_row_keyboard(row_id, enabled)
 
 
 def aetherhub_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:

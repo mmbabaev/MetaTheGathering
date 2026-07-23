@@ -19,12 +19,14 @@ from bot.deeplink import deck_deeplink
 from bot.messages import format_decks_revealed, format_meta_gather_completed
 from bot.telegram.round_notify import send_round_notifications
 from core import models
-from core.config import Club, ClubSchedule, app_cfg, settings
+from core.clubs import debug_club, default_clubs
+from core.config import Club, ClubSchedule, settings
 from core.database import SessionLocal
 from core.schemas import TournamentCreate
 from services.aetherhub_import_service import MIN_TOURNAMENT_DURATION, AetherhubImportService
 from services.aetherhub_service import AetherhubService
 from services.datalens import DataLensService
+from services.schedule import ScheduleService
 from services.stats import StatsService
 from services.tournament import TournamentService
 
@@ -87,98 +89,30 @@ async def send_registration_open(bot, club: Club, tournament_id: int, text: str)
 
 
 def get_clubs() -> list[Club]:
-    """Returns the list of configured clubs."""
-    clubs = [
-        Club(
-            name="Goldfish",
-            chat_id=app_cfg.goldfish_chat_id or 0,
-            aetherhub_url="https://aetherhub.com/User/GoldFish",
-            title_prefix="🐠 ",
-            schedules=[
-                # Четверг у Goldfish отключён — турниры остались только по пятницам.
-                ClubSchedule(
-                    weekday="friday",
-                    game_time="19:45",
-                    create_time="12:00",
-                    reminder_time="19:45",
-                    aetherhub_fetch_times=[
-                        "20:00",
-                        "20:30",
-                        "21:00",
-                        "21:30",
-                        "22:00",
-                        "22:30",
-                        "23:00",
-                        "23:30",
-                        "00:00",
-                        "00:30",
-                    ],
-                ),
-            ],
-        ),
-        Club(
-            name="Edinorog",
-            chat_id=app_cfg.edinorog_chat_id or 0,
-            aetherhub_url="https://aetherhub.com/User/Edinorog/",
-            title_prefix="🦄 ",
-            schedules=[
-                ClubSchedule(
-                    weekday="monday",
-                    game_time="19:30",
-                    create_time="12:00",
-                    reminder_time="19:25",
-                    aetherhub_fetch_times=[
-                        "20:00",
-                        "20:30",
-                        "21:00",
-                        "21:30",
-                        "22:00",
-                        "22:30",
-                        "23:00",
-                        "23:30",
-                        "00:00",
-                        "00:30",
-                    ],
-                ),
-                ClubSchedule(
-                    weekday="thursday",
-                    game_time="19:30",
-                    create_time="12:00",
-                    reminder_time="19:25",
-                    aetherhub_fetch_times=[
-                        "20:00",
-                        "20:30",
-                        "21:00",
-                        "21:30",
-                        "22:00",
-                        "22:30",
-                        "23:00",
-                        "23:30",
-                        "00:00",
-                        "00:30",
-                    ],
-                ),
-            ],
-        ),
-    ]
-    if settings.DEBUG:
-        clubs.append(
-            Club(
-                name="Debug",
-                chat_id=app_cfg.goldfish_chat_id or 0,
-                aetherhub_url="https://aetherhub.com/User/GoldFish",
-                title_prefix="[DEBUG] 🐠 ",
-                schedules=[
-                    ClubSchedule(
-                        weekday="thursday",
-                        game_time="12:30",
-                        create_time="12:30",
-                        aetherhub_fetch_times=["12:31"],
-                        find_latest=True,
-                    )
-                ],
-            )
-        )
+    """Клубы с расписанием из БД (issue #124/#125).
+
+    Расписание — данные, а не код: строки лежат в `club_schedules` и правятся админом из
+    `/schedule`. Если БД недоступна или таблица пуста (первый старт до `ensure_defaults`),
+    возвращаем дефолты из кода — остаться совсем без расписания хуже, чем отработать по
+    дефолтному. Отладочный клуб добавляется только при DEBUG и через БД не управляется.
+    """
+    clubs: list[Club] | None = None
+    db = SessionLocal()
+    try:
+        rows = ScheduleService(db).list_rows()
+        if rows:
+            clubs = ScheduleService(db).build_clubs()
+    except Exception:
+        logger.exception("get_clubs: не смог прочитать расписание из БД — беру дефолты из кода")
+    finally:
+        db.close()
+
+    if clubs is None:
+        clubs = default_clubs()
+
+    debug = debug_club()
+    if debug is not None:
+        clubs = [*clubs, debug]
     return clubs
 
 
@@ -763,8 +697,71 @@ def _find_active_club_tournament(db, club_name: str):
 # ---------------------------------------------------------------------------
 
 
+"""Префиксы имён джоб, которые строятся из расписания клубов.
+
+Только эти джобы снимаются и вешаются заново при правке расписания в UI
+(`reload_schedule_jobs`). Глобальные джобы (таймер импорта, ночной реимпорт,
+авто-раскрытие колод) расписанием не управляются и живут до перезапуска бота.
+"""
+SCHEDULE_JOB_PREFIXES = ("create_tournament[", "prestart_reminder[", "aetherhub_import[")
+
+
+def reload_schedule_jobs(app: Application) -> int:
+    """Перевешивает джобы расписания по текущему состоянию БД. Возвращает число снятых джоб.
+
+    Зовём после каждой правки расписания в `/schedule`, чтобы изменение применялось сразу,
+    без перезапуска бота.
+    """
+    removed = 0
+    for job in list(app.job_queue.jobs()):
+        if job.name and job.name.startswith(SCHEDULE_JOB_PREFIXES):
+            job.schedule_removal()
+            removed += 1
+    _register_schedule_jobs(app)
+    logger.info("Scheduler: расписание перечитано — снято %s джоб, зарегистрированы заново", removed)
+    return removed
+
+
 def setup_scheduler(app: Application) -> None:
     """Registers daily jobs for each club and schedule."""
+    tz = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
+
+    _register_schedule_jobs(app)
+
+    timed_job = AetherhubTimedImportJob(AetherhubService())
+
+    async def _timed_import(context: ContextTypes.DEFAULT_TYPE) -> None:
+        tz_ = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
+        await timed_job.run(now=datetime.now(tz_), bot=context.bot)
+
+    app.job_queue.run_repeating(_timed_import, interval=60, first=10)
+    logger.info("Scheduler: AetherhubTimedImportJob registered (every 60s)")
+
+    final_job = AetherhubFinalReimportJob(AetherhubService())
+    final_time = datetime.strptime(FINAL_REIMPORT_TIME, "%H:%M").time().replace(tzinfo=tz)
+
+    async def _final_reimport(context: ContextTypes.DEFAULT_TYPE) -> None:
+        tz_ = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
+        await final_job.run(now=datetime.now(tz_), bot=context.bot)
+
+    _final_reimport.__name__ = "aetherhub_final_reimport"
+    app.job_queue.run_daily(_final_reimport, time=final_time)
+    logger.info(f"Scheduler: AetherhubFinalReimportJob registered (daily {FINAL_REIMPORT_TIME})")
+
+    reveal_job = AutoRevealDecksJob()
+    reveal_time = datetime.strptime(REVEAL_DECKS_TIME, "%H:%M").time().replace(tzinfo=tz)
+
+    async def _reveal_decks(context: ContextTypes.DEFAULT_TYPE) -> None:
+        tz_ = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
+        await reveal_job.run(now=datetime.now(tz_), bot=context.bot)
+
+    _reveal_decks.__name__ = "auto_reveal_decks"
+    app.job_queue.run_daily(_reveal_decks, time=reveal_time)
+    logger.info(f"Scheduler: AutoRevealDecksJob registered (daily {REVEAL_DECKS_TIME})")
+
+
+def _register_schedule_jobs(app: Application) -> None:
+    """Вешает джобы создания/напоминания/импорта по строкам расписания (только включённым)."""
     tz = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
 
     for club in get_clubs():
@@ -810,37 +807,6 @@ def setup_scheduler(app: Application) -> None:
                 _import.__name__ = f"aetherhub_import[{club.name}/{schedule.weekday}/{fetch_time_str}]"
                 app.job_queue.run_daily(_import, time=fetch_time, days=(_ptb_day(schedule.weekday),))
                 logger.info(f"Scheduler: AetherHub import for '{club.name}' ({schedule.weekday}) at {fetch_time_str}")
-
-    timed_job = AetherhubTimedImportJob(AetherhubService())
-
-    async def _timed_import(context: ContextTypes.DEFAULT_TYPE) -> None:
-        tz_ = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
-        await timed_job.run(now=datetime.now(tz_), bot=context.bot)
-
-    app.job_queue.run_repeating(_timed_import, interval=60, first=10)
-    logger.info("Scheduler: AetherhubTimedImportJob registered (every 60s)")
-
-    final_job = AetherhubFinalReimportJob(AetherhubService())
-    final_time = datetime.strptime(FINAL_REIMPORT_TIME, "%H:%M").time().replace(tzinfo=tz)
-
-    async def _final_reimport(context: ContextTypes.DEFAULT_TYPE) -> None:
-        tz_ = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
-        await final_job.run(now=datetime.now(tz_), bot=context.bot)
-
-    _final_reimport.__name__ = "aetherhub_final_reimport"
-    app.job_queue.run_daily(_final_reimport, time=final_time)
-    logger.info(f"Scheduler: AetherhubFinalReimportJob registered (daily {FINAL_REIMPORT_TIME})")
-
-    reveal_job = AutoRevealDecksJob()
-    reveal_time = datetime.strptime(REVEAL_DECKS_TIME, "%H:%M").time().replace(tzinfo=tz)
-
-    async def _reveal_decks(context: ContextTypes.DEFAULT_TYPE) -> None:
-        tz_ = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
-        await reveal_job.run(now=datetime.now(tz_), bot=context.bot)
-
-    _reveal_decks.__name__ = "auto_reveal_decks"
-    app.job_queue.run_daily(_reveal_decks, time=reveal_time)
-    logger.info(f"Scheduler: AutoRevealDecksJob registered (daily {REVEAL_DECKS_TIME})")
 
 
 _DAY_RU = {

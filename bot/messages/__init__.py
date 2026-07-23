@@ -258,3 +258,41 @@ def format_opponent_notification(
         lines.append(f"Партий против оппонента: {head_to_head.matches}, твой винрейт {round(head_to_head.winrate)}%")
 
     return "\n".join(lines)
+
+
+# ── Расписание клубов (issue #124/#125) ──────────────────────────────────────
+
+
+def schedule_row_label(row) -> str:
+    """Подпись строки расписания для кнопки: «🐠 Goldfish · пятница ✅»."""
+    from core.clubs import club_identities  # noqa: PLC0415 — иначе цикл импортов
+    from services.schedule import WEEKDAY_RU  # noqa: PLC0415
+
+    prefix = next((c.title_prefix for c in club_identities() if c.name == row.club_name), "")
+    day = WEEKDAY_RU.get(row.weekday, row.weekday)
+    mark = "✅" if row.enabled else "⏸"
+    return f"{prefix}{row.club_name} · {day} {mark}"
+
+
+def format_schedule_rows(rows, tz: str) -> str:
+    """Текст /schedule по строкам из БД — включая выключенные (их в планировщике нет)."""
+    from services.schedule import WEEKDAY_RU, parse_import_times  # noqa: PLC0415
+
+    if not rows:
+        return "📅 Расписание пусто."
+
+    lines = [f"📅 Расписание ({tz}):"]
+    current_club = None
+    for row in rows:
+        if row.club_name != current_club:
+            current_club = row.club_name
+            lines.append(f"\n{row.club_name}:")
+        day = WEEKDAY_RU.get(row.weekday, row.weekday)
+        status = "" if row.enabled else "  ⏸ выключено"
+        lines.append(f"  {day}: создание {row.create_time}, игра {row.game_time}{status}")
+        if row.reminder_time:
+            lines.append(f"    напоминание: {row.reminder_time}")
+        times = parse_import_times(row.import_times)
+        if times:
+            lines.append(f"    импорт: {', '.join(times)}")
+    return "\n".join(lines)

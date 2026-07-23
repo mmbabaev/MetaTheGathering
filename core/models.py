@@ -326,6 +326,33 @@ class PollRegular(Base):
     __table_args__ = (UniqueConstraint("chat_id", "user_id", name="uq_poll_regular_unique"),)
 
 
+class ClubScheduleRow(Base):
+    """Расписание клуба на один день недели — источник правды для планировщика (issue #124/#125).
+
+    Раньше расписание было захардкожено в `get_clubs()`, и любая правка требовала деплоя.
+    Теперь строки живут здесь и редактируются админом из `/schedule`; код держит только
+    дефолты для первичного сида (`ScheduleService.ensure_defaults`) и идентичность клуба
+    (chat_id, ссылка на AetherHub, эмодзи) — это инфраструктура, а не расписание.
+    """
+
+    __tablename__ = "club_schedules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    club_name = Column(String(64), nullable=False, index=True)  # "Goldfish" / "Edinorog"
+    weekday = Column(String(16), nullable=False)  # "monday".."sunday"
+    enabled = Column(Boolean, default=True, nullable=False, server_default="true")
+
+    create_time = Column(String(5), nullable=False)  # "12:00" — когда создаём турнир (анонс 1)
+    game_time = Column(String(5), nullable=False)  # "19:30" — время игры, идёт в текст анонса
+    reminder_time = Column(String(5), nullable=True)  # "19:25" — напоминание (анонс 2); NULL = выключено
+    import_times = Column(String(512), nullable=False, default="")  # CSV "20:00,20:30"; "" = импортов нет
+
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+    __table_args__ = (UniqueConstraint("club_name", "weekday", name="uq_club_schedule_day"),)
+
+
 class FeatureFlag(Base):
     """Глобальный feature flag — вкл/выкл функциональности для всех чатов."""
 

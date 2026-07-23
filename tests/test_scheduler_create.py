@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from bot.scheduler import _ptb_day, setup_scheduler
+from bot.scheduler import _ptb_day, reload_schedule_jobs, setup_scheduler
 from core.config import Club, ClubSchedule
 
 TZ = "Europe/Moscow"
@@ -261,3 +261,75 @@ class TestPtbDay:
             setup_scheduler(app)
         call_kwargs = app.job_queue.run_daily.call_args_list[0].kwargs
         assert call_kwargs["days"] == (0,)  # sunday = 0 in PTB
+
+
+# ── reload_schedule_jobs: правка расписания применяется без рестарта (issue #124) ──
+
+
+class _FakeJob:
+    def __init__(self, name):
+        self.name = name
+        self.removed = False
+
+    def schedule_removal(self):
+        self.removed = True
+
+
+class TestReloadScheduleJobs:
+    def _clubs(self):
+        return [
+            Club(
+                name="Test",
+                chat_id=1,
+                schedules=[ClubSchedule(weekday="friday", game_time="19:30", reminder_time="19:25")],
+            )
+        ]
+
+    def test_removes_only_schedule_jobs(self):
+        jobs = [
+            _FakeJob("create_tournament[Test/friday]"),
+            _FakeJob("prestart_reminder[Test/friday]"),
+            _FakeJob("aetherhub_import[Test/friday/20:00]"),
+            _FakeJob("aetherhub_final_reimport"),  # глобальная — не трогаем
+            _FakeJob("auto_reveal_decks"),  # глобальная — не трогаем
+        ]
+        app = _make_app()
+        app.job_queue.jobs.return_value = jobs
+
+        with patch("bot.scheduler.settings", _mock_settings()), patch("bot.scheduler.get_clubs", return_value=[]):
+            removed = reload_schedule_jobs(app)
+
+        assert removed == 3
+        assert [j.name for j in jobs if j.removed] == [
+            "create_tournament[Test/friday]",
+            "prestart_reminder[Test/friday]",
+            "aetherhub_import[Test/friday/20:00]",
+        ]
+        assert not jobs[3].removed
+        assert not jobs[4].removed
+
+    def test_reregisters_from_current_clubs(self):
+        app = _make_app()
+        app.job_queue.jobs.return_value = []
+
+        with (
+            patch("bot.scheduler.settings", _mock_settings()),
+            patch("bot.scheduler.get_clubs", return_value=self._clubs()),
+        ):
+            reload_schedule_jobs(app)
+
+        # создание + напоминание, глобальные джобы при перезагрузке не трогаются
+        assert app.job_queue.run_daily.call_count == 2
+        assert app.job_queue.run_repeating.call_count == 0
+
+    def test_disabled_schedule_registers_nothing(self):
+        app = _make_app()
+        app.job_queue.jobs.return_value = [_FakeJob("create_tournament[Test/friday]")]
+
+        # get_clubs отдаёт клуб без расписаний — так выглядит выключенная строка
+        clubs = [Club(name="Test", chat_id=1, schedules=[])]
+        with patch("bot.scheduler.settings", _mock_settings()), patch("bot.scheduler.get_clubs", return_value=clubs):
+            removed = reload_schedule_jobs(app)
+
+        assert removed == 1
+        assert app.job_queue.run_daily.call_count == 0
