@@ -34,6 +34,8 @@ from bot.keyboards import (
     CB_AETHERHUB_CANCEL,
     CB_AETHERHUB_CONFIRM,
     CB_AETHERHUB_IMPORT,
+    CB_APP_STATS_HOME,
+    CB_APP_STATS_NOTIFY_ROUNDS,
     CB_ARCHETYPE,
     CB_ARCHETYPE_MORE,
     CB_BULK_ADD,
@@ -93,6 +95,7 @@ from bot.keyboards import (
 from bot.scheduler import setup_scheduler
 from bot.telegram import admin, common, player
 from bot.telegram import aetherhub as aetherhub_handler
+from bot.telegram import app_stats as app_stats_handler
 from bot.telegram import features as features_handler
 from bot.telegram import payment as payment_handler
 from bot.telegram import poll as poll_handler
@@ -142,6 +145,7 @@ _SCOREKEEPER_COMMANDS = _USER_COMMANDS + [
 ]
 
 _POLL_CMD = BotCommand("poll", "Меню голосований: регуляры и рассылка")
+_APP_STATS_CMD = BotCommand("app_statistics", "Статистика приложения (владелец)")
 
 _ADMIN_COMMANDS = _SCOREKEEPER_COMMANDS + [
     BotCommand("archive", "Архив закрытых турниров"),
@@ -208,9 +212,12 @@ async def _set_commands(app: Application) -> None:
     organizer_ids = set(db_organizers) - admin_ids  # у админов /poll уже есть
     scorekeeper_ids = set(db_scorekeepers) - admin_ids
 
+    owner_id = settings.OWNER_CHAT_ID
     for admin_id in admin_ids:
+        # Владельцу — те же админ-команды плюс /app_statistics (статистика приложения).
+        cmds = _ADMIN_COMMANDS + [_APP_STATS_CMD] if admin_id == owner_id else _ADMIN_COMMANDS
         try:
-            await app.bot.set_my_commands(_ADMIN_COMMANDS, scope=BotCommandScopeChat(chat_id=admin_id))
+            await app.bot.set_my_commands(cmds, scope=BotCommandScopeChat(chat_id=admin_id))
         except Exception:
             pass
 
@@ -268,6 +275,7 @@ def main() -> None:
     app.add_handler(CommandHandler("social_rating", rating_handler.cmd_social_rating, filters=private))
     app.add_handler(CommandHandler("settings", settings_handler.cmd_settings, filters=private))
     app.add_handler(CommandHandler("poll", poll_handler.cmd_poll, filters=private))
+    app.add_handler(CommandHandler("app_statistics", app_stats_handler.cmd_app_statistics, filters=private))
 
     app.add_handler(CommandHandler("add_players", admin.cmd_add_players, filters=private))
     app.add_handler(CommandHandler("tournament_status", admin.cmd_tournament_status, filters=private))
@@ -385,6 +393,12 @@ def main() -> None:
         CallbackQueryHandler(schedule_handler.callback_schedule_set_weekday, pattern=f"^{CB_SCHEDULE_SET_WEEKDAY}:")
     )
     app.add_handler(CallbackQueryHandler(admin.callback_fill_opponents, pattern=f"^{CB_ADMIN_OPPONENTS}:"))
+    app.add_handler(CallbackQueryHandler(app_stats_handler.callback_app_stats_home, pattern=f"^{CB_APP_STATS_HOME}$"))
+    app.add_handler(
+        CallbackQueryHandler(
+            app_stats_handler.callback_app_stats_notify_rounds, pattern=f"^{CB_APP_STATS_NOTIFY_ROUNDS}$"
+        )
+    )
     app.add_handler(CallbackQueryHandler(features_handler.callback_feature_info, pattern=f"^{CB_FEATURE_INFO}:"))
     app.add_handler(CallbackQueryHandler(features_handler.callback_feature_toggle, pattern=f"^{CB_FEATURE_TOGGLE}:"))
     app.add_handler(CallbackQueryHandler(payment_handler.callback_pay, pattern=f"^{CB_PAY}:"))
