@@ -81,6 +81,8 @@ CB_PAY = "pay"  # pay:{tournament_id}
 CB_PAY_STATUS = "pay_status"  # pay_status:{tournament_id} — no-op, показывает статус оплаты
 CB_ADMIN_IMPORT_META = "adm_meta"  # adm_meta:{tournament_id}
 CB_DEBUG_ROUND_NOTIFY = "dbg_rnotify"  # dbg_rnotify:{tournament_id} — debug: DM all round notifications to presser
+CB_APP_STATS_HOME = "appstat_home"  # appstat_home — меню статистики приложения (владелец)
+CB_APP_STATS_NOTIFY_ROUNDS = "appstat_nr"  # appstat_nr — список включивших уведомления о раундах
 
 
 def features_keyboard(flags: list) -> InlineKeyboardMarkup:
@@ -401,6 +403,22 @@ class Keyboards:
             rows.append(nav)
         rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_POLL_CLUB}:{chat_id}")])
         return InlineKeyboardMarkup(rows)
+
+    def app_stats_keyboard(self, notify_rounds: int) -> InlineKeyboardMarkup:
+        """Меню статистики приложения: строка-метрика по тапу открывает список."""
+        return InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        f"🔔 Уведомления о раундах: {notify_rounds}",
+                        callback_data=CB_APP_STATS_NOTIFY_ROUNDS,
+                    )
+                ]
+            ]
+        )
+
+    def app_stats_back_keyboard(self) -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data=CB_APP_STATS_HOME)]])
 
     def schedule_list_keyboard(self, rows: list[tuple[int, str]]) -> InlineKeyboardMarkup:
         """Список строк расписания: одна кнопка на строку. rows: (row_id, label)."""
@@ -741,6 +759,14 @@ def poll_regulars_keyboard(
     page_size: int = 8,
 ) -> InlineKeyboardMarkup:
     return _default.poll_regulars_keyboard(chat_id, players, regular_ids, page, page_size=page_size)
+
+
+def app_stats_keyboard(notify_rounds: int) -> InlineKeyboardMarkup:
+    return _default.app_stats_keyboard(notify_rounds)
+
+
+def app_stats_back_keyboard() -> InlineKeyboardMarkup:
+    return _default.app_stats_back_keyboard()
 
 
 def schedule_list_keyboard(rows: list[tuple[int, str]]) -> InlineKeyboardMarkup:
