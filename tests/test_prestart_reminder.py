@@ -97,7 +97,8 @@ class TestPreStartReminderJob:
 class TestReminderSchedule:
     def test_configured_reminder_times(self):
         times = {(c.name, s.weekday): s.reminder_time for c in get_clubs() for s in c.schedules}
-        assert times[("Goldfish", "thursday")] == "19:45"
         assert times[("Goldfish", "friday")] == "19:45"
         assert times[("Edinorog", "monday")] == "19:25"
         assert times[("Edinorog", "thursday")] == "19:25"
+        # Четверг у Goldfish отключён — остались только пятницы
+        assert ("Goldfish", "thursday") not in times

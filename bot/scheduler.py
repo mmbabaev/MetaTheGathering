@@ -95,24 +95,7 @@ def get_clubs() -> list[Club]:
             aetherhub_url="https://aetherhub.com/User/GoldFish",
             title_prefix="🐠 ",
             schedules=[
-                ClubSchedule(
-                    weekday="thursday",
-                    game_time="19:45",
-                    create_time="03:10",
-                    reminder_time="19:45",
-                    aetherhub_fetch_times=[
-                        "20:00",
-                        "20:30",
-                        "21:00",
-                        "21:30",
-                        "22:00",
-                        "22:30",
-                        "23:00",
-                        "23:30",
-                        "00:00",
-                        "00:30",
-                    ],
-                ),
+                # Четверг у Goldfish отключён — турниры остались только по пятницам.
                 ClubSchedule(
                     weekday="friday",
                     game_time="19:45",
