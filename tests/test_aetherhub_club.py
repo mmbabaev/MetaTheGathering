@@ -837,7 +837,8 @@ class TestDebugClubConfig:
     """Verify debug club has correct find_latest and fetch times."""
 
     def test_debug_club_has_find_latest(self):
-        with patch("bot.scheduler.settings") as mock_settings:
+        # DEBUG-клуб собирается в core.clubs (расписание переехало в БД, issue #124)
+        with patch("core.clubs.settings") as mock_settings:
             mock_settings.DEBUG = True
             clubs = get_clubs()
 
@@ -847,7 +848,8 @@ class TestDebugClubConfig:
         assert any(s.find_latest for s in debug.schedules)
 
     def test_debug_club_fetch_times(self):
-        with patch("bot.scheduler.settings") as mock_settings:
+        # DEBUG-клуб собирается в core.clubs (расписание переехало в БД, issue #124)
+        with patch("core.clubs.settings") as mock_settings:
             mock_settings.DEBUG = True
             clubs = get_clubs()
 
@@ -856,7 +858,8 @@ class TestDebugClubConfig:
         assert "12:31" in all_times
 
     def test_debug_club_has_aetherhub_url(self):
-        with patch("bot.scheduler.settings") as mock_settings:
+        # DEBUG-клуб собирается в core.clubs (расписание переехало в БД, issue #124)
+        with patch("core.clubs.settings") as mock_settings:
             mock_settings.DEBUG = True
             clubs = get_clubs()
 

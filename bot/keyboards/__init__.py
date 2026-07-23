@@ -6,6 +6,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from bot.deck_emoji import deck_emoji
 from bot.messages import format_participant_name
+from services.schedule import WEEKDAY_RU, WEEKDAYS
 
 # Callback data prefixes (max 64 bytes in Telegram)
 CB_REGISTER = "reg"
@@ -68,6 +69,13 @@ CB_CLOSE_TOURNAMENT = "close_t"  # close_t:{tournament_id}
 CB_REOPEN_TOURNAMENT = "reopen_t"  # reopen_t:{tournament_id} — вернуть закрытый турнир в регистрацию
 CB_ADMIN_OPPONENTS = "adm_opps"  # adm_opps:{tournament_id}
 CB_FEATURE_TOGGLE = "feat_toggle"  # feat_toggle:{flag_name}
+CB_SCHEDULE_LIST = "sched_list"  # sched_list — список строк расписания (issue #124)
+CB_SCHEDULE_ROW = "sched_row"  # sched_row:{row_id} — карточка одной строки
+CB_SCHEDULE_TOGGLE = "sched_tgl"  # sched_tgl:{row_id} — включить/выключить строку
+CB_SCHEDULE_EDIT_FIELD = "sched_ef"  # sched_ef:{row_id}:{field_idx} — правка времени (текстом)
+CB_SCHEDULE_IMPORTS = "sched_imp"  # sched_imp:{row_id} — правка времён импорта
+CB_SCHEDULE_WEEKDAY = "sched_wd"  # sched_wd:{row_id} — пикер дня недели
+CB_SCHEDULE_SET_WEEKDAY = "sched_swd"  # sched_swd:{row_id}:{weekday_idx} — задать день недели
 CB_FEATURE_INFO = "feat_info"  # feat_info:{flag_name}
 CB_PAY = "pay"  # pay:{tournament_id}
 CB_PAY_STATUS = "pay_status"  # pay_status:{tournament_id} — no-op, показывает статус оплаты
@@ -394,6 +402,63 @@ class Keyboards:
         rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_POLL_CLUB}:{chat_id}")])
         return InlineKeyboardMarkup(rows)
 
+    def schedule_list_keyboard(self, rows: list[tuple[int, str]]) -> InlineKeyboardMarkup:
+        """Список строк расписания: одна кнопка на строку. rows: (row_id, label)."""
+        return InlineKeyboardMarkup(
+            [[InlineKeyboardButton(label, callback_data=f"{CB_SCHEDULE_ROW}:{row_id}")] for row_id, label in rows]
+        )
+
+    def schedule_row_keyboard(
+        self,
+        row_id: int,
+        enabled: bool,
+        create_time: str = "",
+        game_time: str = "",
+        reminder_time: str | None = None,
+        imports_summary: str = "",
+        weekday_ru: str = "",
+    ) -> InlineKeyboardMarkup:
+        """Карточка строки расписания: правка времён/дня/импортов + тумблер + назад."""
+        toggle_label = "⏸ Выключить" if enabled else "▶️ Включить"
+        reminder_label = reminder_time or "выкл"
+        return InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        f"🕐 Создание: {create_time}", callback_data=f"{CB_SCHEDULE_EDIT_FIELD}:{row_id}:0"
+                    )
+                ],
+                [InlineKeyboardButton(f"🎮 Игра: {game_time}", callback_data=f"{CB_SCHEDULE_EDIT_FIELD}:{row_id}:1")],
+                [
+                    InlineKeyboardButton(
+                        f"🔔 Напоминание: {reminder_label}", callback_data=f"{CB_SCHEDULE_EDIT_FIELD}:{row_id}:2"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        f"🔄 Импорты: {imports_summary}", callback_data=f"{CB_SCHEDULE_IMPORTS}:{row_id}"
+                    )
+                ],
+                [InlineKeyboardButton(f"📆 День: {weekday_ru}", callback_data=f"{CB_SCHEDULE_WEEKDAY}:{row_id}")],
+                [InlineKeyboardButton(toggle_label, callback_data=f"{CB_SCHEDULE_TOGGLE}:{row_id}")],
+                [InlineKeyboardButton("⬅️ Назад", callback_data=CB_SCHEDULE_LIST)],
+            ]
+        )
+
+    def schedule_weekday_keyboard(self, row_id: int, current_weekday: str) -> InlineKeyboardMarkup:
+        """Пикер дня недели: 7 кнопок (текущий помечен), по 2 в ряд, + назад к карточке."""
+        buttons = []
+        for idx, wd in enumerate(WEEKDAYS):
+            mark = "✅ " if wd == current_weekday else ""
+            buttons.append(
+                InlineKeyboardButton(
+                    f"{mark}{WEEKDAY_RU[wd]}", callback_data=f"{CB_SCHEDULE_SET_WEEKDAY}:{row_id}:{idx}"
+                )
+            )
+        rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
+        rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_SCHEDULE_ROW}:{row_id}")])
+        return InlineKeyboardMarkup(rows)
+
     def aetherhub_confirm_keyboard(self, tournament_id: int) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(
             [
@@ -676,6 +741,34 @@ def poll_regulars_keyboard(
     page_size: int = 8,
 ) -> InlineKeyboardMarkup:
     return _default.poll_regulars_keyboard(chat_id, players, regular_ids, page, page_size=page_size)
+
+
+def schedule_list_keyboard(rows: list[tuple[int, str]]) -> InlineKeyboardMarkup:
+    return _default.schedule_list_keyboard(rows)
+
+
+def schedule_row_keyboard(
+    row_id: int,
+    enabled: bool,
+    create_time: str = "",
+    game_time: str = "",
+    reminder_time: str | None = None,
+    imports_summary: str = "",
+    weekday_ru: str = "",
+) -> InlineKeyboardMarkup:
+    return _default.schedule_row_keyboard(
+        row_id,
+        enabled,
+        create_time=create_time,
+        game_time=game_time,
+        reminder_time=reminder_time,
+        imports_summary=imports_summary,
+        weekday_ru=weekday_ru,
+    )
+
+
+def schedule_weekday_keyboard(row_id: int, current_weekday: str) -> InlineKeyboardMarkup:
+    return _default.schedule_weekday_keyboard(row_id, current_weekday)
 
 
 def aetherhub_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:

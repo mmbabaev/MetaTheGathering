@@ -73,6 +73,13 @@ from bot.keyboards import (
     CB_REVEAL_DECKS,
     CB_REVEAL_DECKS_CANCEL,
     CB_REVEAL_DECKS_CONFIRM,
+    CB_SCHEDULE_EDIT_FIELD,
+    CB_SCHEDULE_IMPORTS,
+    CB_SCHEDULE_LIST,
+    CB_SCHEDULE_ROW,
+    CB_SCHEDULE_SET_WEEKDAY,
+    CB_SCHEDULE_TOGGLE,
+    CB_SCHEDULE_WEEKDAY,
     CB_SET_IMPORT_TIME,
     CB_SETTINGS_NAME,
     CB_SETTINGS_TOGGLE_EMOJI,
@@ -90,12 +97,14 @@ from bot.telegram import features as features_handler
 from bot.telegram import payment as payment_handler
 from bot.telegram import poll as poll_handler
 from bot.telegram import rating as rating_handler
+from bot.telegram import schedule as schedule_handler
 from bot.telegram import settings as settings_handler
 from core import models
 from core.config import settings
 from core.database import SessionLocal
 from core.schemas import TournamentCreate
 from services.feature_flags import FeatureFlagService
+from services.schedule import ScheduleService
 from services.tournament import TournamentService
 
 logging.basicConfig(
@@ -148,6 +157,9 @@ async def _post_init(app: Application) -> None:
     db = SessionLocal()
     try:
         FeatureFlagService(db).ensure_defaults()
+        created = ScheduleService(db).ensure_defaults()
+        if created:
+            logger.info("Расписание засеяно из кода: %s строк", created)
     finally:
         db.close()
     await _set_commands(app)
@@ -262,7 +274,7 @@ def main() -> None:
     app.add_handler(CommandHandler("archive", admin.cmd_archive, filters=private))
     app.add_handler(CommandHandler("create_tournament", admin.cmd_create_tournament, filters=private))
     app.add_handler(CommandHandler("delete_tournament", admin.cmd_delete_tournament, filters=private))
-    app.add_handler(CommandHandler("schedule", admin.cmd_schedule, filters=private))
+    app.add_handler(CommandHandler("schedule", schedule_handler.cmd_schedule, filters=private))
     app.add_handler(CommandHandler("features", features_handler.cmd_features, filters=private))
 
     app.add_handler(CallbackQueryHandler(player.callback_tournament_select, pattern=f"^{CB_TOURNAMENT}:"))
@@ -357,6 +369,21 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(admin.callback_debug_round_notify, pattern=f"^{CB_DEBUG_ROUND_NOTIFY}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_close_tournament, pattern=f"^{CB_CLOSE_TOURNAMENT}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_reopen_tournament, pattern=f"^{CB_REOPEN_TOURNAMENT}:"))
+    app.add_handler(CallbackQueryHandler(schedule_handler.callback_schedule_list, pattern=f"^{CB_SCHEDULE_LIST}$"))
+    app.add_handler(CallbackQueryHandler(schedule_handler.callback_schedule_row, pattern=f"^{CB_SCHEDULE_ROW}:"))
+    app.add_handler(CallbackQueryHandler(schedule_handler.callback_schedule_toggle, pattern=f"^{CB_SCHEDULE_TOGGLE}:"))
+    app.add_handler(
+        CallbackQueryHandler(schedule_handler.callback_schedule_edit_field, pattern=f"^{CB_SCHEDULE_EDIT_FIELD}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(schedule_handler.callback_schedule_imports, pattern=f"^{CB_SCHEDULE_IMPORTS}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(schedule_handler.callback_schedule_weekday, pattern=f"^{CB_SCHEDULE_WEEKDAY}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(schedule_handler.callback_schedule_set_weekday, pattern=f"^{CB_SCHEDULE_SET_WEEKDAY}:")
+    )
     app.add_handler(CallbackQueryHandler(admin.callback_fill_opponents, pattern=f"^{CB_ADMIN_OPPONENTS}:"))
     app.add_handler(CallbackQueryHandler(features_handler.callback_feature_info, pattern=f"^{CB_FEATURE_INFO}:"))
     app.add_handler(CallbackQueryHandler(features_handler.callback_feature_toggle, pattern=f"^{CB_FEATURE_TOGGLE}:"))
