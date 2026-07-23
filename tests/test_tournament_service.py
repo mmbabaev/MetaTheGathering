@@ -496,6 +496,50 @@ class TestOpenRegistration:
         assert t.registration_open_at is not None
 
 
+# ===== reopen_tournament =====
+
+
+class TestReopenTournament:
+    def test_closed_tournament_becomes_registration(self, svc):
+        t = svc.create_tournament(TournamentCreate(title="R", chat_id=330, slug="r330"))
+        svc.close_tournament(t.id)
+        t = svc.reopen_tournament(t.id)
+        assert t.status == TournamentStatus.REGISTRATION
+        assert t.ended_at is None
+        assert t.registration_open_at is not None
+
+    def test_reopened_is_active_for_chat(self, svc):
+        t = svc.create_tournament(TournamentCreate(title="R2", chat_id=331, slug="r331"))
+        svc.close_tournament(t.id)
+        assert svc.get_active_tournament_for_chat(331) is None
+        svc.reopen_tournament(t.id)
+        active = svc.get_active_tournament_for_chat(331)
+        assert active is not None
+        assert active.id == t.id
+
+    def test_rejects_non_closed_tournament(self, svc):
+        t = svc.create_tournament(TournamentCreate(title="R3", chat_id=332, slug="r332"))
+        with pytest.raises(TournamentInvalidState):
+            svc.reopen_tournament(t.id)
+
+    def test_rejects_when_chat_already_has_active(self, svc):
+        old = svc.create_tournament(TournamentCreate(title="Old", chat_id=333, slug="o333"))
+        svc.close_tournament(old.id)
+        svc.create_tournament(TournamentCreate(title="New", chat_id=333, slug="n333"))
+        with pytest.raises(TournamentAlreadyExists):
+            svc.reopen_tournament(old.id)
+
+    def test_other_chat_active_does_not_block(self, svc):
+        t = svc.create_tournament(TournamentCreate(title="A", chat_id=334, slug="a334"))
+        svc.close_tournament(t.id)
+        svc.create_tournament(TournamentCreate(title="B", chat_id=335, slug="b335"))
+        assert svc.reopen_tournament(t.id).status == TournamentStatus.REGISTRATION
+
+    def test_missing_tournament_raises(self, svc):
+        with pytest.raises(TournamentNotFound):
+            svc.reopen_tournament(999999)
+
+
 # ===== _get_participant error path =====
 
 

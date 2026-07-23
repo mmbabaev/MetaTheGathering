@@ -1926,3 +1926,37 @@ class TestTogglePollOrganizer:
         )
         assert handler.user_svc.is_poll_organizer(user_alice.tg_id) is False
         assert r2.answer_text  # popup-алерт заполнен
+
+
+# ── handle_reopen_tournament ─────────────────────────────────────────────────
+
+
+class TestReopenTournament:
+    def test_non_admin_returns_alert(self, handler, svc, active_tournament):
+        svc.close_tournament(active_tournament.id)
+        result = handler.handle_reopen_tournament(tg_id=1, tournament_id=active_tournament.id)
+        assert result.is_alert
+        assert NOT_ADMIN in result.text
+
+    def test_reopens_closed_tournament(self, handler, svc, admin_user, active_tournament):
+        svc.close_tournament(active_tournament.id)
+        result = handler.handle_reopen_tournament(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+        assert not result.is_alert
+        assert "снова активен" in result.text
+        assert svc.get_active_tournament_for_chat(CHAT_ID).id == active_tournament.id
+
+    def test_already_active_returns_alert(self, handler, admin_user, active_tournament):
+        result = handler.handle_reopen_tournament(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+        assert result.is_alert
+        assert "и так активен" in result.text
+
+    def test_blocked_when_chat_has_another_active(self, handler, svc, admin_user, active_tournament):
+        svc.close_tournament(active_tournament.id)
+        svc.create_tournament(TournamentCreate(title="Новый", chat_id=CHAT_ID, slug="new-one"))
+        result = handler.handle_reopen_tournament(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+        assert result.is_alert
+        assert "уже есть активный" in result.text
+
+    def test_not_found_returns_alert(self, handler, admin_user):
+        result = handler.handle_reopen_tournament(tg_id=ADMIN_TG_ID, tournament_id=99999)
+        assert result.is_alert

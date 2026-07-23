@@ -537,6 +537,23 @@ class AdminHandler:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
         return HandlerResult(TOURNAMENT_CLOSED_MSG)
 
+    def handle_reopen_tournament(self, tg_id: int, tournament_id: int) -> HandlerResult:
+        """Кнопка «🔓 Сделать активным» — возвращает закрытый турнир в регистрацию."""
+        if not self.user_svc.is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN, is_alert=True)
+        try:
+            t = self.svc.reopen_tournament(tournament_id)
+        except errors.TournamentNotFound:
+            return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
+        except errors.TournamentInvalidState:
+            return HandlerResult("⚠️ Турнир и так активен.", is_alert=True)
+        except errors.TournamentAlreadyExists:
+            return HandlerResult(
+                "⚠️ В этом чате уже есть активный турнир — сначала закройте его.",
+                is_alert=True,
+            )
+        return HandlerResult(f"🔓 Турнир «{t.title}» снова активен (регистрация открыта).")
+
     def handle_create_tournament(self, tg_id: int, chat_id: int, title: str | None = None) -> HandlerResult:
         """Создать новый турнир в текущем чате."""
         if not self.user_svc.is_admin(tg_id):

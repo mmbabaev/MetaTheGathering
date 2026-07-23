@@ -10,6 +10,7 @@ from bot.keyboards import (
     CB_ARCHETYPE_MORE,
     CB_CUSTOM_ARCHETYPE,
     CB_REGISTER,
+    CB_REOPEN_TOURNAMENT,
     CB_TOURNAMENT,
     Keyboards,
     admin_archetype_select_keyboard,
@@ -195,3 +196,33 @@ class TestTournamentCardKeyboard:
         markup = Keyboards().tournament_card_keyboard(1, is_registered=False, show_fill_opponents=True)
         texts = self._all_texts(markup)
         assert not any("оппонент" in t.lower() for t in texts)
+
+
+# ── admin_more_keyboard: кнопка «Сделать активным» ───────────────────────────
+
+
+class TestAdminMoreReopenButton:
+    def _rows(self, kb):
+        return [[b.text for b in row] for row in kb.inline_keyboard]
+
+    def _flat(self, kb):
+        return [b for row in kb.inline_keyboard for b in row]
+
+    def test_reopen_shown_only_for_closed(self):
+        kb_open = Keyboards().admin_more_keyboard(7, is_closed=False)
+        assert not any("Сделать активным" in b.text for b in self._flat(kb_open))
+
+        kb_closed = Keyboards().admin_more_keyboard(7, is_closed=True)
+        assert any("Сделать активным" in b.text for b in self._flat(kb_closed))
+
+    def test_reopen_sits_above_delete(self):
+        rows = self._rows(Keyboards().admin_more_keyboard(7, is_closed=True))
+        reopen_i = next(i for i, r in enumerate(rows) if any("Сделать активным" in t for t in r))
+        delete_i = next(i for i, r in enumerate(rows) if any("Удалить турнир" in t for t in r))
+        assert reopen_i == delete_i - 1
+
+    def test_reopen_callback_data(self):
+        btn = next(
+            b for b in self._flat(Keyboards().admin_more_keyboard(42, is_closed=True)) if "Сделать активным" in b.text
+        )
+        assert btn.callback_data == f"{CB_REOPEN_TOURNAMENT}:42"

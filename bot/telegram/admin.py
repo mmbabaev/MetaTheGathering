@@ -572,6 +572,29 @@ async def callback_close_tournament(update: Update, context: ContextTypes.DEFAUL
         db.close()
 
 
+async def callback_reopen_tournament(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка «🔓 Сделать активным» в меню «• • •» — возвращает турнир из архива в регистрацию."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_reopen_tournament(user.id, tournament_id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        _log("reopen_tournament", user, tournament_id=tournament_id)
+        await query.edit_message_text(result.text)
+        await query.answer()
+    finally:
+        db.close()
+
+
 async def callback_admin_more(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Кнопка «• • •» — показывает скрытые admin-действия."""
     query = update.callback_query

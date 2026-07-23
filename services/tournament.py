@@ -258,6 +258,36 @@ class TournamentService:
         self.db.refresh(tournament)
         return TournamentRead.model_validate(tournament)
 
+    def reopen_tournament(self, tournament_id: int) -> TournamentRead:
+        """Возвращает закрытый турнир в регистрацию (отмена закрытия).
+
+        Инвариант «один активный турнир на чат» проверяем здесь: если в том же чате уже есть
+        незакрытый турнир, реоткрытие сделало бы их два, и `get_active_tournament_for_chat`
+        начал бы отдавать произвольный. В этом случае — `TournamentAlreadyExists`.
+        """
+        tournament = get_tournament(self.db, tournament_id)
+        ensure_tournament_status(tournament, allowed=[models.TournamentStatus.CLOSED])
+
+        other = self.db.execute(
+            select(models.Tournament)
+            .where(
+                models.Tournament.chat_id == tournament.chat_id,
+                models.Tournament.status != models.TournamentStatus.CLOSED,
+                models.Tournament.id != tournament.id,
+            )
+            .limit(1)
+        ).scalar_one_or_none()
+        if other:
+            raise errors.TournamentAlreadyExists(f"Chat {tournament.chat_id} already has active tournament #{other.id}")
+
+        tournament.status = models.TournamentStatus.REGISTRATION
+        tournament.ended_at = None
+        tournament.registration_open_at = models.utc_now()
+
+        self.db.commit()
+        self.db.refresh(tournament)
+        return TournamentRead.model_validate(tournament)
+
     def delete_tournament(self, tournament_id: int) -> None:
         """Полностью удалить турнир и всех его участников из БД (для дебага/сброса)."""
         tournament = get_tournament(self.db, tournament_id)

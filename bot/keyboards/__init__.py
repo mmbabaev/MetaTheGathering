@@ -65,6 +65,7 @@ CB_ADMIN_SHOW_OPPONENTS = "adm_opps_p"  # adm_opps_p:{participant_id}:{tournamen
 CB_ADMIN_TOGGLE_SCOREKEEPER = "adm_sk"  # adm_sk:{participant_id}:{tournament_id}
 CB_ADMIN_TOGGLE_POLL_ORGANIZER = "adm_po"  # adm_po:{participant_id}:{tournament_id}
 CB_CLOSE_TOURNAMENT = "close_t"  # close_t:{tournament_id}
+CB_REOPEN_TOURNAMENT = "reopen_t"  # reopen_t:{tournament_id} — вернуть закрытый турнир в регистрацию
 CB_ADMIN_OPPONENTS = "adm_opps"  # adm_opps:{tournament_id}
 CB_FEATURE_TOGGLE = "feat_toggle"  # feat_toggle:{flag_name}
 CB_FEATURE_INFO = "feat_info"  # feat_info:{flag_name}
@@ -270,6 +271,9 @@ class Keyboards:
                 [InlineKeyboardButton("🔒 Закрыть турнир", callback_data=f"{CB_CLOSE_TOURNAMENT}:{tournament_id}")]
             )
         if is_closed:
+            rows.append(
+                [InlineKeyboardButton("🔓 Сделать активным", callback_data=f"{CB_REOPEN_TOURNAMENT}:{tournament_id}")]
+            )
             rows.append(
                 [InlineKeyboardButton("🗑 Удалить турнир", callback_data=f"{CB_DELETE_TOURNAMENT}:{tournament_id}")]
             )
