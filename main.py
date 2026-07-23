@@ -73,9 +73,13 @@ from bot.keyboards import (
     CB_REVEAL_DECKS,
     CB_REVEAL_DECKS_CANCEL,
     CB_REVEAL_DECKS_CONFIRM,
+    CB_SCHEDULE_EDIT_FIELD,
+    CB_SCHEDULE_IMPORTS,
     CB_SCHEDULE_LIST,
     CB_SCHEDULE_ROW,
+    CB_SCHEDULE_SET_WEEKDAY,
     CB_SCHEDULE_TOGGLE,
+    CB_SCHEDULE_WEEKDAY,
     CB_SET_IMPORT_TIME,
     CB_SETTINGS_NAME,
     CB_SETTINGS_TOGGLE_EMOJI,
@@ -368,6 +372,18 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(schedule_handler.callback_schedule_list, pattern=f"^{CB_SCHEDULE_LIST}$"))
     app.add_handler(CallbackQueryHandler(schedule_handler.callback_schedule_row, pattern=f"^{CB_SCHEDULE_ROW}:"))
     app.add_handler(CallbackQueryHandler(schedule_handler.callback_schedule_toggle, pattern=f"^{CB_SCHEDULE_TOGGLE}:"))
+    app.add_handler(
+        CallbackQueryHandler(schedule_handler.callback_schedule_edit_field, pattern=f"^{CB_SCHEDULE_EDIT_FIELD}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(schedule_handler.callback_schedule_imports, pattern=f"^{CB_SCHEDULE_IMPORTS}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(schedule_handler.callback_schedule_weekday, pattern=f"^{CB_SCHEDULE_WEEKDAY}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(schedule_handler.callback_schedule_set_weekday, pattern=f"^{CB_SCHEDULE_SET_WEEKDAY}:")
+    )
     app.add_handler(CallbackQueryHandler(admin.callback_fill_opponents, pattern=f"^{CB_ADMIN_OPPONENTS}:"))
     app.add_handler(CallbackQueryHandler(features_handler.callback_feature_info, pattern=f"^{CB_FEATURE_INFO}:"))
     app.add_handler(CallbackQueryHandler(features_handler.callback_feature_toggle, pattern=f"^{CB_FEATURE_TOGGLE}:"))

@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import re
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -14,6 +16,9 @@ from core.clubs import ClubIdentity, club_identities, default_schedules
 from core.config import Club, ClubSchedule
 
 WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+
+# Индекс поля времени в callback карточки строки → имя (порядок стабилен, менять нельзя).
+EDITABLE_TIME_FIELDS = ["create", "game", "reminder"]
 
 WEEKDAY_RU = {
     "monday": "понедельник",
@@ -24,6 +29,45 @@ WEEKDAY_RU = {
     "saturday": "суббота",
     "sunday": "воскресенье",
 }
+
+
+def normalize_time(value: str) -> str | None:
+    """'H:MM'/'HH:MM' → нормализованное 'HH:MM', или None если не валидно."""
+    m = re.match(r"^(\d{1,2}):(\d{2})$", value.strip())
+    if not m:
+        return None
+    h, mi = int(m.group(1)), int(m.group(2))
+    if not (0 <= h <= 23 and 0 <= mi <= 59):
+        return None
+    return f"{h:02d}:{mi:02d}"
+
+
+def _to_minutes(hhmm: str) -> int:
+    h, mi = hhmm.split(":")
+    return int(h) * 60 + int(mi)
+
+
+def generate_import_times(start: str, end: str, step_min: int) -> list[str] | None:
+    """Список времён импорта от start до end с шагом step_min (включительно), через полночь.
+
+    end раньше start трактуется как «следующий день» (20:00→00:30). Возвращает None при
+    бессмысленных параметрах (шаг < 5 мин или окно > суток).
+    """
+    if step_min < 5:
+        return None
+    start_m = _to_minutes(start)
+    end_m = _to_minutes(end)
+    if end_m <= start_m:
+        end_m += 24 * 60  # окно переходит через полночь
+    if end_m - start_m > 24 * 60:
+        return None
+    times = []
+    t = start_m
+    while t <= end_m:
+        m = t % (24 * 60)
+        times.append(f"{m // 60:02d}:{m % 60:02d}")
+        t += step_min
+    return times
 
 
 def parse_import_times(csv: str | None) -> list[str]:
@@ -93,6 +137,62 @@ class ScheduleService:
         row.enabled = not row.enabled
         self.db.commit()
         return bool(row.enabled)
+
+    def set_time_field(self, row_id: int, field: str, value: str) -> bool:
+        """Ставит create_time/game_time (нормализованное `value`). Возвращает False, если строки нет."""
+        row = self.get_row(row_id)
+        if row is None:
+            return False
+        if field == "create":
+            row.create_time = value
+        elif field == "game":
+            row.game_time = value
+        else:
+            raise ValueError(f"unknown time field: {field}")
+        self.db.commit()
+        return True
+
+    def set_reminder(self, row_id: int, value: str | None) -> bool:
+        """Ставит reminder_time (или None = выключить). Возвращает False, если строки нет."""
+        row = self.get_row(row_id)
+        if row is None:
+            return False
+        row.reminder_time = value
+        self.db.commit()
+        return True
+
+    def set_import_times(self, row_id: int, times: list[str]) -> bool:
+        """Ставит список времён импорта (может быть пустым). Возвращает False, если строки нет."""
+        row = self.get_row(row_id)
+        if row is None:
+            return False
+        row.import_times = format_import_times(times)
+        self.db.commit()
+        return True
+
+    def set_weekday(self, row_id: int, weekday: str) -> str:
+        """Меняет день недели строки. Возвращает 'ok' / 'not_found' / 'duplicate'.
+
+        'duplicate' — у этого клуба уже есть строка на такой день (нарушение уникальности
+        (club_name, weekday)); молча сливать две строки в одну нельзя.
+        """
+        row = self.get_row(row_id)
+        if row is None:
+            return "not_found"
+        if weekday == row.weekday:
+            return "ok"
+        clash = self.db.execute(
+            select(models.ClubScheduleRow.id).where(
+                models.ClubScheduleRow.club_name == row.club_name,
+                models.ClubScheduleRow.weekday == weekday,
+                models.ClubScheduleRow.id != row.id,
+            )
+        ).scalar_one_or_none()
+        if clash is not None:
+            return "duplicate"
+        row.weekday = weekday
+        self.db.commit()
+        return "ok"
 
     # --- сборка клубов для планировщика ---
 
