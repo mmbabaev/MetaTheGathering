@@ -384,7 +384,7 @@ async def test_no_announce_without_aetherhub_link(db, user_svc, arch_svc, monkey
 
 
 async def test_no_announce_before_min_duration(db, user_svc, arch_svc, monkeypatch):
-    """Гард против преждевременного анонса: раньше 4ч с начала игры — не завершаем."""
+    """Гард против преждевременного анонса: раньше порога (MIN_TOURNAMENT_DURATION) с начала игры — не завершаем."""
     monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
     t = _complete_tournament(db, user_svc, arch_svc)
     db.get(models.Tournament, t.id).started_at = models.utc_now() - timedelta(hours=1)

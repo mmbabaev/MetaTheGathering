@@ -102,7 +102,7 @@ allow-list `notify_allowed_ids`.
 
 - турнир **привязан к AetherHub** (`aetherhub_url`) — у отладочных/ручных турниров его нет,
   их завершённость по счёту неопределена;
-- прошло **≥ `MIN_TOURNAMENT_DURATION` (4 ч)** с начала игры (`Tournament.started_at`, который
+- прошло **≥ `MIN_TOURNAMENT_DURATION` (3 ч)** с начала игры (`Tournament.started_at`, который
   проставляется при первом импорте раунда ≈ старт игры). Настоящий турнир короче не бывает,
   так что это отсекает преждевременный анонс, когда AetherHub уже отдал счёт раннего раунда;
 - у всех не-бай матчей есть счёт (`AetherhubImportService.is_tournament_complete`);

@@ -1709,7 +1709,7 @@ class TestStandingsAvailability:
         assert handler.standings_availability(ADMIN_TG_ID, active_tournament.id) == "ok"
 
     def test_not_ready_within_min_duration(self, handler, admin_user, active_tournament, svc, user_alice, arch_svc, db):
-        """AetherHub-турнир, стартовавший <4ч назад: счёт раннего раунда мог появиться, но
+        """AetherHub-турнир, стартовавший меньше порога назад: счёт раннего раунда мог появиться, но
         стендинги ещё не итоговые."""
         arch = arch_svc.get_or_create_by_name("Burn")
         svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id, archetype_id=arch.id)
