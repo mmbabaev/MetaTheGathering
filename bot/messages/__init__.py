@@ -58,6 +58,15 @@ META_IMPORT_PROMPT = (
 )
 
 
+# Achievements (пока теневой режим — видят только владелец и админы)
+ACHIEVEMENTS_HEADER = "🏅 {title} — {unlocked} из {total}"
+ACHIEVEMENTS_UNLOCKED_TITLE = "Открыто"
+ACHIEVEMENTS_PROGRESS_TITLE = "В процессе"
+ACHIEVEMENTS_LOCKED_TITLE = "Закрыто"
+ACHIEVEMENTS_EMPTY = "Пока ачивок нет."
+ACHIEVEMENTS_UNAVAILABLE = "Команда пока недоступна."
+ACHIEVEMENTS_PLAYER_NOT_FOUND = "Игрок «{query}» не найден."
+
 HELP_TEXT = """\
 /tournaments — посмотреть активные турниры и записаться
   Выберите турнир → укажите колоду → готово.
@@ -77,7 +86,9 @@ HELP_TEXT_ADMIN = """\
 
 /add_players — массовая запись (каждая строка: Имя Фамилия)
 
-/poll — меню организатора голосований: регуляры клуба и «кому ещё написать»\
+/poll — меню организатора голосований: регуляры клуба и «кому ещё написать»
+
+/achievements — полка ачивок; /achievements Иванов — посмотреть чужую\
 """
 
 

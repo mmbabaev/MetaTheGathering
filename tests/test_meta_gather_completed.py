@@ -443,3 +443,35 @@ async def test_announces_once_last_deck_filled(db, user_svc, arch_svc, monkeypat
     await maybe_announce_meta_gather_completed(bot, db, t.id)
     assert bot.send_media_group.await_count == 2  # клуб + владелец
     assert db.get(models.Tournament, t.id).completed_announced_at is not None
+
+
+async def test_achievements_are_processed_after_close(db, user_svc, arch_svc, monkeypatch):
+    """Ачивки считаются на том же шве, что и закрытие турнира."""
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    t = _complete_tournament(db, user_svc, arch_svc)
+    # Alice записала свою колоду сама → турнир идёт ей в зачёт ачивок
+    alice = db.query(models.User).filter_by(tg_id=1).one()
+    db.query(models.Participant).filter_by(tournament_id=t.id, user_id=alice.id).one().deck_added_by_tg_id = alice.tg_id
+    db.commit()
+
+    await maybe_announce_meta_gather_completed(AsyncMock(), db, t.id)
+
+    codes = {a.code for a in db.query(models.UserAchievement).filter_by(user_id=alice.id).all()}
+    assert {"debut", "undefeated"} <= codes
+
+
+async def test_achievements_failure_does_not_break_announce(db, user_svc, arch_svc, monkeypatch):
+    """Падение движка ачивок не должно отменять уже доставленный анонс и закрытие турнира."""
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+
+    async def boom(*args, **kwargs):
+        raise RuntimeError("achievements exploded")
+
+    monkeypatch.setattr("bot.scheduler.send_achievements_report", boom)
+    t = _complete_tournament(db, user_svc, arch_svc)
+    bot = AsyncMock()
+
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+
+    assert db.get(models.Tournament, t.id).completed_announced_at is not None
+    assert db.get(models.Tournament, t.id).status == models.TournamentStatus.CLOSED
