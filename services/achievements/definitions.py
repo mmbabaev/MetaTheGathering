@@ -26,6 +26,10 @@ class Codes:
     FIRST_DECK = "first_deck"
     LOYALIST = "loyalist"
     COLLECTOR = "collector"
+    RESILIENT = "resilient"
+    CLUB_TOURIST = "club_tourist"
+    LAST_DECK = "last_deck"
+    REVENGE = "revenge"
 
 
 class Rarity:
@@ -180,7 +184,7 @@ _DEFS: list[AchievementDef] = [
         AchievementDef(
             code=Codes.COLLECTOR,
             level=level,
-            title="Коллекционер",
+            title="Полиглот",
             icon="🃏",
             description=description,
             hint="Играй на разных колодах из списка ниже — каждая даёт свою ачивку",
@@ -192,6 +196,42 @@ _DEFS: list[AchievementDef] = [
             (2, 10, Rarity.RARE, "Десять разных колод из списка"),
             (3, 15, Rarity.EPIC, "Все колоды из списка"),
         )
+    ),
+    AchievementDef(
+        code=Codes.RESILIENT,
+        level=1,
+        title="Побеждён, но не сломлен",
+        icon="💪",
+        description="Отыграл турнир до конца, проиграв почти всё",
+        hint="Доиграй все раунды, даже когда турнир не задался",
+        rarity=Rarity.RARE,
+    ),
+    AchievementDef(
+        code=Codes.CLUB_TOURIST,
+        level=1,
+        title="Рыборог",
+        icon="🦄",
+        description="Сыграл и в Goldfish, и в Единороге",
+        hint="Сходи на турнир второго клуба",
+        rarity=Rarity.RARE,
+    ),
+    AchievementDef(
+        code=Codes.LAST_DECK,
+        level=1,
+        title="Последний герой",
+        icon="🌚",
+        description="Записал колоду последним из всех",
+        hint="Запиши колоду последним — но обязательно запиши",
+        rarity=Rarity.COMMON,
+    ),
+    AchievementDef(
+        code=Codes.REVENGE,
+        level=1,
+        title="Сладкая месть",
+        icon="🍬",
+        description="Обыграл соперника, которому раньше стабильно проигрывал",
+        hint="Возьми верх над своим самым неудобным соперником",
+        rarity=Rarity.EPIC,
     ),
     # «Сыграл на такой-то колоде» — по одной одноразовой ачивке на колоду (services/achievements/decks.py)
     *(
@@ -221,6 +261,10 @@ CODE_ORDER: list[str] = [
     Codes.MULTICLASS,
     Codes.LOYALIST,
     Codes.COLLECTOR,
+    Codes.RESILIENT,
+    Codes.CLUB_TOURIST,
+    Codes.LAST_DECK,
+    Codes.REVENGE,
     *(deck.code for deck in DECK_ACHIEVEMENTS),
 ]
 

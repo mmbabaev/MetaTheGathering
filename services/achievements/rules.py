@@ -321,6 +321,128 @@ class CollectorRule(CounterRule):
         return len(decks), _clip(f"колод из списка: {shown}")
 
 
+class ResilientRule:
+    """💪 Побеждён, но не сломлен — отыграл все раунды, проиграв почти всё.
+
+    Награда за то, что человек не ушёл после двух поражений, а доиграл турнир до конца:
+    для сбора меты это ровно то поведение, которое нам нужно.
+    """
+
+    code = definitions.Codes.RESILIENT
+    MIN_ROUNDS = 3  # на двух раундах «проиграл почти всё» — не достижение, а просто неудача
+
+    def evaluate(self, ctx: TournamentContext) -> RuleOutcome:
+        outcome = RuleOutcome()
+        total = ctx.history.total_rounds(ctx.tournament.id)
+        if total < self.MIN_ROUNDS:
+            return outcome
+        for user_id in sorted(ctx.eligible_user_ids):
+            record = ctx.records.get(user_id)
+            if record is None or record.rounds < total:
+                continue  # снялся с турнира — это другая история
+            if record.losses < total - 1:
+                continue
+            outcome.awards.append(
+                Award(
+                    user_id=user_id,
+                    code=self.code,
+                    level=1,
+                    progress_value=None,
+                    evidence=_clip(f"{record.record}, но отыграл все {total} раунда"),
+                )
+            )
+        return outcome
+
+
+class ClubTouristRule:
+    """🦄 Рыборог — сыграл в обоих клубах."""
+
+    code = definitions.Codes.CLUB_TOURIST
+    REQUIRED = 2
+
+    def evaluate(self, ctx: TournamentContext) -> RuleOutcome:
+        outcome = RuleOutcome()
+        for user_id in sorted(ctx.eligible_user_ids):
+            clubs = ctx.history.clubs_played(user_id, until=ctx.played_at)
+            if len(clubs) < self.REQUIRED:
+                continue
+            outcome.awards.append(
+                Award(
+                    user_id=user_id,
+                    code=self.code,
+                    level=1,
+                    progress_value=len(clubs),
+                    evidence=_clip("клубы: " + ", ".join(sorted(clubs))),
+                )
+            )
+        return outcome
+
+
+class LastDeckRule:
+    """🌚 Последний герой — записал колоду последним из всех."""
+
+    code = definitions.Codes.LAST_DECK
+
+    def evaluate(self, ctx: TournamentContext) -> RuleOutcome:
+        last = ctx.history.last_recorder(ctx.tournament.id)
+        if last is None or last not in ctx.eligible_user_ids:
+            return RuleOutcome()
+        return RuleOutcome(
+            awards=[
+                Award(
+                    user_id=last,
+                    code=self.code,
+                    level=1,
+                    progress_value=None,
+                    evidence=_clip(f"записал колоду последним: {ctx.deck_name(last) or '—'}"),
+                )
+            ]
+        )
+
+
+class RevengeRule:
+    """🍬 Сладкая месть — обыграл соперника, которому раньше стабильно проигрывал.
+
+    «Стабильно» — не меньше двух встреч до этого дня и отрицательный личный счёт. Из таких
+    берём самого неудобного (худший процент, при равенстве — с кем больше поражений).
+    """
+
+    code = definitions.Codes.REVENGE
+    MIN_MEETINGS = 2
+
+    def evaluate(self, ctx: TournamentContext) -> RuleOutcome:
+        outcome = RuleOutcome()
+        for user_id in sorted(ctx.eligible_user_ids):
+            nemesis = self._nemesis(ctx, user_id)
+            if nemesis is None:
+                continue
+            name, wins, losses = nemesis
+            if name not in ctx.history.beaten_in(ctx.tournament.id, user_id):
+                continue
+            outcome.awards.append(
+                Award(
+                    user_id=user_id,
+                    code=self.code,
+                    level=1,
+                    progress_value=None,
+                    evidence=_clip(f"обыграл {name}, до этого было {wins}-{losses} против него"),
+                )
+            )
+        return outcome
+
+    def _nemesis(self, ctx: TournamentContext, user_id: int) -> Optional[tuple[str, int, int]]:
+        """Самый неудобный соперник на начало турнира. None — таких нет."""
+        history = ctx.history.head_to_head(user_id, until=ctx.played_at, exclude_tournament=ctx.tournament.id)
+        candidates = [
+            (name, wins, losses)
+            for name, (wins, losses) in history.items()
+            if wins + losses >= self.MIN_MEETINGS and losses > wins
+        ]
+        if not candidates:
+            return None
+        return min(candidates, key=lambda item: (item[1] / (item[1] + item[2]), -item[2]))
+
+
 def default_rules() -> list[AchievementRule]:
     """Все правила в порядке показа."""
     return [
@@ -333,4 +455,8 @@ def default_rules() -> list[AchievementRule]:
         LoyalistRule(),
         DeckRule(),
         CollectorRule(),
+        ResilientRule(),
+        ClubTouristRule(),
+        LastDeckRule(),
+        RevengeRule(),
     ]

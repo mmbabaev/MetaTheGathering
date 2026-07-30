@@ -78,6 +78,7 @@ class AchievementHistory:
         self._pairings: dict[int, list[models.RoundPairing]] = {}
         self._participations: dict[int, list[Participation]] = {}
         self._first_recorder: dict[int, Optional[int]] = {}
+        self._recorders: dict[int, list[tuple]] = {}
 
     # ------------------------------------------------------------------ имена
 
@@ -267,26 +268,77 @@ class AchievementHistory:
         Момент записи — ``Participant.created_at`` (регистрация в боте идёт сразу с выбором
         колоды). При совпадении времени берём меньший id — порядок вставки.
         """
-        if tournament_id in self._first_recorder:
-            return self._first_recorder[tournament_id]
+        eligible = self._eligible_recorders(tournament_id)
+        return eligible[0][2] if eligible else None
 
+    def first_recorder_participations(self, user_id: int, *, until: Optional[datetime] = None) -> list[Participation]:
+        """Участия, где игрок записал свою колоду раньше всех."""
+        return [p for p in self.participations(user_id, until=until) if self.first_recorder(p.tournament_id) == user_id]
+
+    def last_recorder(self, tournament_id: int) -> Optional[int]:
+        """Кто из самозаписавшихся записал колоду последним. None — таких нет."""
+        eligible = self._eligible_recorders(tournament_id)
+        return eligible[-1][2] if eligible else None
+
+    def _eligible_recorders(self, tournament_id: int) -> list[tuple]:
+        """[(момент записи, id участия, user_id)] по возрастанию — прошедшие гейт §2.5."""
+        if tournament_id in self._recorders:
+            return self._recorders[tournament_id]
         rows = self.db.execute(
             select(models.Participant, models.User)
             .join(models.User, models.Participant.user_id == models.User.id)
             .where(models.Participant.tournament_id == tournament_id)
         ).all()
-        eligible = [
+        eligible = sorted(
             (participant.created_at, participant.id, participant.user_id)
             for participant, user in rows
             if counts_for_achievements(participant, user) and user.tg_id > 0
-        ]
-        eligible.sort()
-        self._first_recorder[tournament_id] = eligible[0][2] if eligible else None
-        return self._first_recorder[tournament_id]
+        )
+        self._recorders[tournament_id] = eligible
+        return eligible
 
-    def first_recorder_participations(self, user_id: int, *, until: Optional[datetime] = None) -> list[Participation]:
-        """Участия, где игрок записал свою колоду раньше всех."""
-        return [p for p in self.participations(user_id, until=until) if self.first_recorder(p.tournament_id) == user_id]
+    # -------------------------------------------------------------- клубы
+
+    def clubs_played(self, user_id: int, *, until: datetime) -> set[str]:
+        """Клубы, в которых игрок сыграл (по засчитанным участиям)."""
+        return {p.club for p in self.participations(user_id, until=until) if p.club}
+
+    # ---------------------------------------------------------------- H2H
+
+    def head_to_head(self, user_id: int, *, until: datetime, exclude_tournament: Optional[int] = None) -> dict:
+        """{имя соперника: (побед, поражений)} по всем засчитанным турнирам игрока.
+
+        Считаем по парингам своей базы — DataLens для этого не нужен. ``exclude_tournament``
+        убирает текущий турнир, чтобы можно было сравнить «как было до» и «что случилось сегодня».
+        """
+        stats: dict[str, list[int]] = {}
+        for participation in self.participations(user_id, until=until):
+            if participation.tournament_id == exclude_tournament:
+                continue
+            names = [n for n, uid in self.user_ids_by_name(participation.tournament_id).items() if uid == user_id]
+            for pairing in self.pairings(participation.tournament_id):
+                if pairing.player_name not in names or not pairing.opponent_name:
+                    continue
+                if pairing.player_wins is None or pairing.opponent_wins is None:
+                    continue
+                record = stats.setdefault(pairing.opponent_name, [0, 0])
+                if pairing.player_wins > pairing.opponent_wins:
+                    record[0] += 1
+                elif pairing.player_wins < pairing.opponent_wins:
+                    record[1] += 1
+        return {name: (wins, losses) for name, (wins, losses) in stats.items()}
+
+    def beaten_in(self, tournament_id: int, user_id: int) -> set[str]:
+        """Кого игрок обыграл в этом турнире (имена из парингов)."""
+        names = [n for n, uid in self.user_ids_by_name(tournament_id).items() if uid == user_id]
+        beaten = set()
+        for pairing in self.pairings(tournament_id):
+            if pairing.player_name not in names or not pairing.opponent_name:
+                continue
+            if pairing.player_wins is not None and pairing.opponent_wins is not None:
+                if pairing.player_wins > pairing.opponent_wins:
+                    beaten.add(pairing.opponent_name)
+        return beaten
 
     # ------------------------------------------------------------ метаписец
 

@@ -13,13 +13,17 @@ from core.schemas import TournamentCreate
 from services.achievements import AchievementService
 from services.achievements.definitions import Codes
 from services.achievements.rules import (
+    ClubTouristRule,
     CollectorRule,
     DebutRule,
     DeckRule,
     FirstDeckRule,
+    LastDeckRule,
     LoyalistRule,
     MulticlassRule,
     RegularRule,
+    ResilientRule,
+    RevengeRule,
     ScribeRule,
     UndefeatedRule,
 )
@@ -353,3 +357,120 @@ def test_collector_counts_distinct_deck_achievements(db, alice, arch_svc):
 
     assert [p.value for p in outcome.progress] == [3]
     assert [p.threshold for p in outcome.progress] == [5]
+
+
+# ── новые ачивки: стойкость, клубы, последний, месть ─────────────────────────
+
+
+def test_resilient_awarded_for_playing_all_rounds_while_losing(db, alice, archetype_burn):
+    t = _tournament(db, "Pauper 1")
+    _register(db, t, alice, archetype_burn)
+    _rounds(db, t, "Иванова Алиса", [(2, 1), (0, 2), (1, 2), (0, 2)])  # 1-3, но все раунды
+
+    outcome = ResilientRule().evaluate(_ctx(db, t.id))
+
+    assert [a.code for a in outcome.awards] == [Codes.RESILIENT]
+    assert "1-3" in outcome.awards[0].evidence
+
+
+def test_resilient_not_awarded_if_player_dropped(db, alice, archetype_burn):
+    """Снялся после двух поражений — это не «отыграл до конца»."""
+    t = _tournament(db, "Pauper 1")
+    _register(db, t, alice, archetype_burn)
+    _rounds(db, t, "Иванова Алиса", [(0, 2), (0, 2)])
+    db.add(
+        models.RoundPairing(
+            tournament_id=t.id,
+            round_number=3,
+            player_name="Другой Игрок",
+            opponent_name="Opp",
+            player_wins=2,
+            opponent_wins=0,
+        )
+    )
+    db.commit()
+
+    assert ResilientRule().evaluate(_ctx(db, t.id)).awards == []
+
+
+def test_resilient_not_awarded_for_decent_result(db, alice, archetype_burn):
+    t = _tournament(db, "Pauper 1")
+    _register(db, t, alice, archetype_burn)
+    _rounds(db, t, "Иванова Алиса", [(2, 0), (2, 1), (0, 2), (0, 2)])  # 2-2
+
+    assert ResilientRule().evaluate(_ctx(db, t.id)).awards == []
+
+
+def test_club_tourist_needs_both_clubs(db, alice, archetype_burn):
+    first = _tournament(db, "Goldfish 1", club="Goldfish", days_ago=14)
+    _register(db, first, alice, archetype_burn)
+    _rounds(db, first, "Иванова Алиса", [(2, 0)])
+
+    assert ClubTouristRule().evaluate(_ctx(db, first.id)).awards == []
+
+    second = _tournament(db, "Edinorog 1", club="Edinorog", days_ago=7)
+    _register(db, second, alice, archetype_burn)
+    _rounds(db, second, "Иванова Алиса", [(2, 0)])
+
+    outcome = ClubTouristRule().evaluate(_ctx(db, second.id))
+
+    assert [a.code for a in outcome.awards] == [Codes.CLUB_TOURIST]
+
+
+def test_last_hero_goes_to_the_latest_recorder(db, alice, bob, archetype_burn, archetype_affinity):
+    t = _tournament(db, "Pauper 1")
+    _register(db, t, alice, archetype_burn)
+    _register(db, t, bob, archetype_affinity)
+    bob_participant = db.query(models.Participant).filter_by(tournament_id=t.id, user_id=bob.id).one()
+    bob_participant.created_at = models.utc_now() + timedelta(hours=1)
+    db.commit()
+    _rounds(db, t, "Иванова Алиса", [(2, 0)])
+    _rounds(db, t, "Петров Боб", [(0, 2)])
+
+    outcome = LastDeckRule().evaluate(_ctx(db, t.id))
+
+    assert [(a.user_id, a.code) for a in outcome.awards] == [(bob.id, Codes.LAST_DECK)]
+
+
+def _match(db, tournament, player, opponent, pw, ow, rnd=1):
+    db.add(
+        models.RoundPairing(
+            tournament_id=tournament.id,
+            round_number=rnd,
+            player_name=player,
+            opponent_name=opponent,
+            player_wins=pw,
+            opponent_wins=ow,
+        )
+    )
+    db.commit()
+
+
+def test_revenge_awarded_after_beating_the_nemesis(db, alice, archetype_burn):
+    """Дважды проиграл Петрову, на третий раз выиграл — это месть."""
+    for i in range(2):
+        past = _tournament(db, f"Pauper {i}", days_ago=30 - i * 7)
+        _register(db, past, alice, archetype_burn)
+        _match(db, past, "Иванова Алиса", "Петров Боб", 0, 2)
+
+    today = _tournament(db, "Pauper today")
+    _register(db, today, alice, archetype_burn)
+    _match(db, today, "Иванова Алиса", "Петров Боб", 2, 1)
+
+    outcome = RevengeRule().evaluate(_ctx(db, today.id))
+
+    assert [a.code for a in outcome.awards] == [Codes.REVENGE]
+    assert "Петров Боб" in outcome.awards[0].evidence
+
+
+def test_revenge_needs_a_losing_history(db, alice, archetype_burn):
+    """Одна встреча — ещё не «стабильно проигрывал»."""
+    past = _tournament(db, "Pauper 1", days_ago=14)
+    _register(db, past, alice, archetype_burn)
+    _match(db, past, "Иванова Алиса", "Петров Боб", 0, 2)
+
+    today = _tournament(db, "Pauper today")
+    _register(db, today, alice, archetype_burn)
+    _match(db, today, "Иванова Алиса", "Петров Боб", 2, 0)
+
+    assert RevengeRule().evaluate(_ctx(db, today.id)).awards == []

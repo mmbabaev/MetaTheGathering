@@ -10,6 +10,7 @@ from bot.messages import ACHIEVEMENTS_PLAYER_NOT_FOUND, ACHIEVEMENTS_UNAVAILABLE
 from core import models
 from core.schemas import TournamentCreate
 from services.achievements import AchievementService
+from services.achievements.definitions import ACHIEVEMENTS
 from services.feature_flags import FeatureFlags
 from services.tournament import TournamentService
 from services.user import UserService
@@ -106,6 +107,9 @@ def test_deck_achievements_are_shown_as_one_line(handler, db, admin, player, arc
 
 
 def test_shelf_counts_achievements_not_levels(handler, admin):
+    """В шапке — число ачивок, а не уровней: уровней в полтора раза больше."""
+    codes = {d.code for d in ACHIEVEMENTS.values()}
     text = handler.handle_achievements(tg_id=admin.tg_id).text
 
-    assert "из 23" in text  # 8 основных + 15 колодных, а не 38 уровней
+    assert f"из {len(codes)}" in text
+    assert len(codes) < len(ACHIEVEMENTS)
