@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Optional
 
 from bot.features import FeatureService
@@ -21,8 +22,55 @@ from bot.messages import (
     ACHIEVEMENTS_UNAVAILABLE,
     ACHIEVEMENTS_UNLOCKED_TITLE,
 )
+from services.achievement_image import ShelfItem
 from services.achievements import AchievementService, AchievementView
+from services.achievements.definitions import CODE_ORDER
 from services.user import UserService
+
+
+@dataclass(frozen=True)
+class Shelf:
+    """Полка игрока: заголовок + все определения со статусом."""
+
+    title: str
+    views: list[AchievementView]
+
+    def image_items(self) -> list[ShelfItem]:
+        """Ячейки для картинки: по одной на ачивку, а не на каждый уровень.
+
+        Показываем самый высокий открытый уровень (или первый закрытый, если открытых нет),
+        а подписью — путь к следующему: «7/10». Иначе 20 медальонов вместо 7 превращают полку
+        в простыню, где не видно, что у игрока вообще есть.
+        """
+        by_code: dict[str, list[AchievementView]] = {}
+        for view in self.views:
+            by_code.setdefault(view.definition.code, []).append(view)
+
+        items: list[ShelfItem] = []
+        for code in CODE_ORDER:
+            levels = by_code.get(code)
+            if not levels:
+                continue
+            unlocked = [v for v in levels if v.unlocked]
+            current = unlocked[-1] if unlocked else levels[0]
+            items.append(
+                ShelfItem(
+                    definition=current.definition,
+                    unlocked=bool(unlocked),
+                    caption=_shelf_caption(levels, current),
+                )
+            )
+        return items
+
+
+def _shelf_caption(levels: list[AchievementView], current: AchievementView) -> str:
+    """«7/10» до следующего уровня, иначе «открыто» / «закрыто»."""
+    nxt = next((v for v in levels if not v.unlocked), None)
+    if nxt is not None and nxt.progress and nxt.definition.threshold:
+        return f"{nxt.progress}/{nxt.definition.threshold}"
+    if current.unlocked:
+        return "всё открыто" if nxt is None else "открыто"
+    return "закрыто"
 
 
 class AchievementsHandler:
@@ -32,7 +80,18 @@ class AchievementsHandler:
         self.features = features
 
     def handle_achievements(self, tg_id: int, query: Optional[str] = None) -> HandlerResult:
-        """Полка ачивок: своя или (для админов) названного игрока."""
+        """Полка ачивок текстом: своя или (для админов) названного игрока."""
+        shelf = self.shelf(tg_id, query)
+        if isinstance(shelf, HandlerResult):
+            return shelf
+        return HandlerResult(format_shelf(shelf.title, shelf.views))
+
+    def shelf(self, tg_id: int, query: Optional[str] = None) -> "Shelf | HandlerResult":
+        """Данные полки или готовый отказ (нет прав / игрок не найден).
+
+        Отдельно от ``handle_achievements``, чтобы Telegram-слой мог нарисовать картинку
+        по тем же данным, не повторяя проверки доступа.
+        """
         is_admin = self.user_svc.is_admin(tg_id)
         if not is_admin and not self.features.is_achievements_ui_public():
             return HandlerResult(ACHIEVEMENTS_UNAVAILABLE)
@@ -47,8 +106,7 @@ class AchievementsHandler:
                 return HandlerResult(ACHIEVEMENTS_EMPTY)
 
         views = self.svc.list_for_user(user.id)
-        title = self._title(user, own=query is None or not is_admin)
-        return HandlerResult(format_shelf(title, views))
+        return Shelf(title=self._title(user, own=query is None or not is_admin), views=views)
 
     @staticmethod
     def _title(user, *, own: bool) -> str:

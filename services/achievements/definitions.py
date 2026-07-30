@@ -75,12 +75,16 @@ _DEFS: list[AchievementDef] = [
             level=level,
             title="Без поражений",
             icon="🏆",
-            description=f"Прошёл без единого поражения {threshold} турнир(ов)",
+            description=description,
             hint="Пройди турнир без поражений и ничьих",
             rarity=rarity,
             threshold=threshold,
         )
-        for level, threshold, rarity in ((1, 1, Rarity.RARE), (2, 3, Rarity.RARE), (3, 10, Rarity.EPIC))
+        for level, threshold, rarity, description in (
+            (1, 1, Rarity.RARE, "Прошёл турнир без единого поражения"),
+            (2, 3, Rarity.RARE, "Три турнира без единого поражения"),
+            (3, 10, Rarity.EPIC, "Десять турниров без единого поражения"),
+        )
     ),
     *(
         AchievementDef(
@@ -88,16 +92,16 @@ _DEFS: list[AchievementDef] = [
             level=level,
             title="Метаписец",
             icon="🧙",
-            description=f"Записал {threshold} чужих колод",
+            description=description,
             hint="Записывай колоды других игроков — кнопка «Записать оппонентов»",
             rarity=rarity,
             threshold=threshold,
         )
-        for level, threshold, rarity in (
-            (1, 3, Rarity.COMMON),
-            (2, 10, Rarity.COMMON),
-            (3, 25, Rarity.RARE),
-            (4, 50, Rarity.EPIC),
+        for level, threshold, rarity, description in (
+            (1, 3, Rarity.COMMON, "Записал три чужие колоды"),
+            (2, 10, Rarity.COMMON, "Записал десять чужих колод"),
+            (3, 25, Rarity.RARE, "Записал двадцать пять чужих колод"),
+            (4, 50, Rarity.EPIC, "Записал полсотни чужих колод"),
         )
     ),
     *(
@@ -106,12 +110,16 @@ _DEFS: list[AchievementDef] = [
             level=level,
             title="Завсегдатай",
             icon="📅",
-            description=f"{threshold} турнира подряд в одном клубе",
+            description=description,
             hint="Приходи на турниры клуба без пропусков и записывай колоду сам",
             rarity=rarity,
             threshold=threshold,
         )
-        for level, threshold, rarity in ((1, 4, Rarity.COMMON), (2, 8, Rarity.RARE), (3, 16, Rarity.EPIC))
+        for level, threshold, rarity, description in (
+            (1, 4, Rarity.COMMON, "Четыре турнира клуба подряд"),
+            (2, 8, Rarity.RARE, "Восемь турниров клуба подряд"),
+            (3, 16, Rarity.EPIC, "Шестнадцать турниров клуба подряд"),
+        )
     ),
     *(
         AchievementDef(
@@ -119,12 +127,16 @@ _DEFS: list[AchievementDef] = [
             level=level,
             title="Мультикласс",
             icon="🎭",
-            description=f"{threshold} разных колод за 90 дней",
+            description=description,
             hint="Пробуй разные архетипы — считаются последние 90 дней",
             rarity=rarity,
             threshold=threshold,
         )
-        for level, threshold, rarity in ((1, 3, Rarity.COMMON), (2, 5, Rarity.RARE), (3, 8, Rarity.EPIC))
+        for level, threshold, rarity, description in (
+            (1, 3, Rarity.COMMON, "Три разные колоды за 90 дней"),
+            (2, 5, Rarity.RARE, "Пять разных колод за 90 дней"),
+            (3, 8, Rarity.EPIC, "Восемь разных колод за 90 дней"),
+        )
     ),
     *(
         AchievementDef(
@@ -132,12 +144,16 @@ _DEFS: list[AchievementDef] = [
             level=level,
             title="Буду первый",
             icon="⚡",
-            description=f"{threshold} раз(а) записал колоду раньше всех на турнире",
+            description=description,
             hint="Запиши свою колоду первым — быстрее остальных участников",
             rarity=rarity,
             threshold=threshold,
         )
-        for level, threshold, rarity in ((1, 1, Rarity.COMMON), (2, 3, Rarity.RARE), (3, 10, Rarity.EPIC))
+        for level, threshold, rarity, description in (
+            (1, 1, Rarity.COMMON, "Записал колоду раньше всех на турнире"),
+            (2, 3, Rarity.RARE, "Трижды записал колоду раньше всех"),
+            (3, 10, Rarity.EPIC, "Десять раз записал колоду раньше всех"),
+        )
     ),
     *(
         AchievementDef(
@@ -145,12 +161,16 @@ _DEFS: list[AchievementDef] = [
             level=level,
             title="Однолюб",
             icon="💍",
-            description=f"{threshold} турнира подряд на одной и той же колоде",
+            description=description,
             hint="Не меняй архетип от турнира к турниру",
             rarity=rarity,
             threshold=threshold,
         )
-        for level, threshold, rarity in ((1, 3, Rarity.COMMON), (2, 5, Rarity.RARE), (3, 10, Rarity.EPIC))
+        for level, threshold, rarity, description in (
+            (1, 3, Rarity.COMMON, "Три турнира подряд на одной колоде"),
+            (2, 5, Rarity.RARE, "Пять турниров подряд на одной колоде"),
+            (3, 10, Rarity.EPIC, "Десять турниров подряд на одной колоде"),
+        )
     ),
 ]
 
