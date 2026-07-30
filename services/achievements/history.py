@@ -153,8 +153,19 @@ class AchievementHistory:
 
     # ------------------------------------------------------------- участия
 
-    def participations(self, user_id: int) -> list[Participation]:
-        """Все засчитанные участия игрока по возрастанию даты (гейт §2.5 уже применён)."""
+    def participations(self, user_id: int, *, until: Optional[datetime] = None) -> list[Participation]:
+        """Засчитанные участия игрока по возрастанию даты (гейт §2.5 уже применён).
+
+        ``until`` отсекает турниры позже указанной даты. Это важно для бэкафилла: оценивая
+        турнир от 3 марта, правило должно видеть только то, что игрок успел к 3 марта, иначе
+        «Завсегдатай III» выдался бы задним числом в самом первом турнире истории.
+        """
+        items = self._all_participations(user_id)
+        if until is None:
+            return items
+        return [p for p in items if p.played_at <= until]
+
+    def _all_participations(self, user_id: int) -> list[Participation]:
         if user_id in self._participations:
             return self._participations[user_id]
 
@@ -184,11 +195,11 @@ class AchievementHistory:
         self._participations[user_id] = items
         return items
 
-    def undefeated_participations(self, user_id: int) -> list[Participation]:
+    def undefeated_participations(self, user_id: int, *, until: Optional[datetime] = None) -> list[Participation]:
         """Участия, где игрок прошёл турнир X-0 (только завершённые турниры)."""
         return [
             p
-            for p in self.participations(user_id)
+            for p in self.participations(user_id, until=until)
             if self.is_complete(p.tournament_id) and self.is_undefeated(p.tournament_id, user_id)
         ]
 
@@ -214,7 +225,7 @@ class AchievementHistory:
         обнулять серию живому игроку.
         """
         club_tournaments = self._club_tournaments(club, until=until)
-        mine = {p.tournament_id: p for p in self.participations(user_id)}
+        mine = {p.tournament_id: p for p in self.participations(user_id, until=until)}
 
         streak: list[Participation] = []
         for tournament_id in reversed(club_tournaments):
@@ -237,7 +248,7 @@ class AchievementHistory:
         Считаем по его собственным участиям (а не по всем турнирам клуба): пропуск турнира
         верность колоде не рвёт, а вот смена архетипа — рвёт.
         """
-        mine = [p for p in self.participations(user_id) if p.played_at <= until and p.deck_key]
+        mine = [p for p in self.participations(user_id, until=until) if p.deck_key]
         if not mine:
             return []
         last_deck = mine[-1].deck_key
@@ -273,14 +284,16 @@ class AchievementHistory:
         self._first_recorder[tournament_id] = eligible[0][2] if eligible else None
         return self._first_recorder[tournament_id]
 
-    def first_recorder_participations(self, user_id: int) -> list[Participation]:
+    def first_recorder_participations(self, user_id: int, *, until: Optional[datetime] = None) -> list[Participation]:
         """Участия, где игрок записал свою колоду раньше всех."""
-        return [p for p in self.participations(user_id) if self.first_recorder(p.tournament_id) == user_id]
+        return [p for p in self.participations(user_id, until=until) if self.first_recorder(p.tournament_id) == user_id]
 
     # ------------------------------------------------------------ метаписец
 
-    def scribe_count(self, user: models.User) -> int:
-        """Сколько ЧУЖИХ колод записал игрок за всё время."""
+    def scribe_count(self, user: models.User, *, until: Optional[datetime] = None) -> int:
+        """Сколько ЧУЖИХ колод записал игрок. ``until`` — не позже даты этого турнира."""
+        if until is not None:
+            return len(self._scribe_rows(user, until=until))
         rows = (
             self.db.execute(
                 select(models.Participant.user_id).where(
@@ -293,6 +306,19 @@ class AchievementHistory:
             .all()
         )
         return len(rows)
+
+    def _scribe_rows(self, user: models.User, *, until: datetime) -> list[int]:
+        """Чужие колоды, записанные игроком в турнирах не позже ``until``."""
+        rows = self.db.execute(
+            select(models.Participant.id, models.Tournament)
+            .join(models.Tournament, models.Participant.tournament_id == models.Tournament.id)
+            .where(
+                models.Participant.deck_added_by_tg_id == user.tg_id,
+                models.Participant.archetype_id.isnot(None),
+                models.Participant.user_id != user.id,
+            )
+        ).all()
+        return [participant_id for participant_id, tournament in rows if tournament_date(tournament) <= until]
 
     def scribe_names_in(self, tournament_id: int, user: models.User) -> list[str]:
         """Кого игрок записал на конкретном турнире (для причины в отчёте)."""

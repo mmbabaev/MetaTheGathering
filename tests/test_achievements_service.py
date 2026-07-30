@@ -148,3 +148,75 @@ def test_long_report_is_split_into_several_messages(db, user_svc, archetype_burn
 
     assert len(messages) > 1
     assert all(len(m) <= 4096 for m in messages)
+
+
+# ── бэкафилл истории ─────────────────────────────────────────────────────────
+
+
+def _history(db, alice, archetype, *, tournaments: int):
+    """N турниров подряд, все выиграны 2-0 — от старых к новым."""
+    ids = []
+    for i in range(tournaments):
+        t = _tournament(db, f"Pauper {i}", days_ago=60 - i * 7)
+        _play(db, t, alice, archetype, [(2, 0)], name="Иванова Алиса")
+        ids.append(t.id)
+    return ids
+
+
+def test_backfill_dry_run_writes_nothing(db, alice, archetype_burn):
+    _history(db, alice, archetype_burn, tournaments=3)
+    svc = AchievementService(db)
+
+    report = svc.backfill()
+
+    assert report.dry_run is True
+    assert report.tournaments == 3
+    assert report.granted  # что-то выдалось бы
+    assert db.query(models.UserAchievement).count() == 0
+
+
+def test_backfill_apply_grants_and_marks_notified(db, alice, archetype_burn):
+    _history(db, alice, archetype_burn, tournaments=3)
+    svc = AchievementService(db)
+
+    report = svc.backfill(dry_run=False)
+
+    rows = db.query(models.UserAchievement).all()
+    assert rows and len(rows) == len(report.granted)
+    # за прошлые турниры уведомлять некого — иначе первое включение рассылки даст пачку старых
+    assert all(row.notified_at is not None for row in rows)
+
+
+def test_backfill_is_idempotent(db, alice, archetype_burn):
+    _history(db, alice, archetype_burn, tournaments=3)
+    svc = AchievementService(db)
+    svc.backfill(dry_run=False)
+    before = {(r.code, r.level, r.tournament_id) for r in db.query(models.UserAchievement).all()}
+
+    second = svc.backfill(dry_run=False)
+
+    after = {(r.code, r.level, r.tournament_id) for r in db.query(models.UserAchievement).all()}
+    assert second.granted == []
+    assert after == before
+
+
+def test_backfill_attributes_award_to_the_tournament_where_it_was_earned(db, alice, archetype_burn):
+    """«Без поражений II» (3 турнира X-0) должна висеть на третьем турнире, а не на первом."""
+    ids = _history(db, alice, archetype_burn, tournaments=3)
+    AchievementService(db).backfill(dry_run=False)
+
+    level_two = db.query(models.UserAchievement).filter_by(code=Codes.UNDEFEATED, level=2).one()
+    level_one = db.query(models.UserAchievement).filter_by(code=Codes.UNDEFEATED, level=1).one()
+
+    assert level_one.tournament_id == ids[0]
+    assert level_two.tournament_id == ids[2]
+
+
+def test_backfill_can_be_limited_to_one_club(db, alice, archetype_burn):
+    _history(db, alice, archetype_burn, tournaments=2)
+    other = _tournament(db, "Pauper Единорог", club="Edinorog", days_ago=1)
+    _play(db, other, alice, archetype_burn, [(2, 0)], name="Иванова Алиса")
+
+    report = AchievementService(db).backfill(club="Edinorog")
+
+    assert report.tournaments == 1

@@ -18,7 +18,7 @@ from core import models
 from services.achievements import definitions
 from services.achievements.context import SkippedPlayer, TournamentContext, build_context
 from services.achievements.definitions import AchievementDef
-from services.achievements.history import AchievementHistory, display_name
+from services.achievements.history import AchievementHistory, display_name, tournament_date
 from services.achievements.rules import AchievementRule, Award, ProgressUpdate, RuleOutcome, default_rules
 
 logger = logging.getLogger(__name__)
@@ -66,6 +66,30 @@ class AppliedResult:
     @property
     def is_empty(self) -> bool:
         return not self.granted and not self.progress_changes
+
+
+@dataclass
+class BackfillReport:
+    """Итог прогона по истории: что выдалось бы (dry-run) или выдалось (apply)."""
+
+    dry_run: bool
+    tournaments: int = 0  # сколько турниров реально обсчитано
+    skipped: int = 0  # пропущено (нет парингов / не у всех матчей счёт)
+    granted: list[GrantedAchievement] = field(default_factory=list)
+
+    @property
+    def by_code(self) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for item in self.granted:
+            counts[item.definition.code] = counts.get(item.definition.code, 0) + 1
+        return counts
+
+    @property
+    def by_player(self) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for item in self.granted:
+            counts[item.player] = counts.get(item.player, 0) + 1
+        return counts
 
 
 @dataclass(frozen=True)
@@ -220,6 +244,75 @@ class AchievementService:
             return display_name(ctx.users[user_id])
         user = self.db.get(models.User, user_id)
         return display_name(user) if user is not None else f"user#{user_id}"
+
+    # ------------------------------------------------------------ бэкафилл
+
+    def backfill(self, *, club: Optional[str] = None, dry_run: bool = True) -> BackfillReport:
+        """Прогнать движок по всей истории турниров, от старых к новым.
+
+        Идёт в хронологическом порядке, потому что правила смотрят историю «на дату турнира»:
+        так ачивка привязывается к тому турниру, где она реально взята, а не к первому
+        попавшемуся. Выдачи помечаются ``notified_at`` — за прошлые турниры игрокам (и
+        владельцу) писать нечего, иначе первое же включение уведомлений разошлёт пачку старых.
+
+        ``dry_run=True`` (по умолчанию) ничего не пишет — только собирает отчёт.
+        """
+        report = BackfillReport(dry_run=dry_run)
+        seen: set[tuple[int, str, int]] = set()  # (user_id, code, level) — чтобы dry-run не дублировал
+
+        for tournament_id in self._tournaments_in_order(club):
+            ctx, outcome = self.evaluate_for_tournament(tournament_id)
+            if ctx is None:
+                report.skipped += 1
+                continue
+            report.tournaments += 1
+
+            if dry_run:
+                for award in outcome.awards:
+                    key = (award.user_id, award.code, award.level)
+                    if key in seen or self._already_granted(award):
+                        continue
+                    seen.add(key)
+                    definition = definitions.get(award.code, award.level)
+                    if definition is None:
+                        continue
+                    report.granted.append(
+                        GrantedAchievement(
+                            user_id=award.user_id,
+                            player=self._player_name(ctx, award.user_id),
+                            definition=definition,
+                            evidence=award.evidence,
+                            progress_value=award.progress_value,
+                        )
+                    )
+                continue
+
+            applied = self.apply(ctx, outcome, notified=True)
+            report.granted.extend(applied.granted)
+
+        return report
+
+    def _tournaments_in_order(self, club: Optional[str]) -> list[int]:
+        """id турниров по возрастанию даты (started_at, иначе created_at)."""
+        stmt = select(models.Tournament)
+        if club:
+            stmt = stmt.where(models.Tournament.club == club)
+        tournaments = self.db.execute(stmt).scalars().all()
+        dated = [(tournament_date(t), t.id) for t in tournaments]
+        dated.sort()
+        return [tournament_id for _, tournament_id in dated]
+
+    def _already_granted(self, award: Award) -> bool:
+        return (
+            self.db.execute(
+                select(models.UserAchievement.id).where(
+                    models.UserAchievement.user_id == award.user_id,
+                    models.UserAchievement.code == award.code,
+                    models.UserAchievement.level == award.level,
+                )
+            ).scalar_one_or_none()
+            is not None
+        )
 
     # ------------------------------------------------------------- чтение
 

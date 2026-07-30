@@ -139,7 +139,7 @@ class DebutRule:
     def evaluate(self, ctx: TournamentContext) -> RuleOutcome:
         outcome = RuleOutcome()
         for user_id in sorted(ctx.eligible_user_ids):
-            participations = ctx.history.participations(user_id)
+            participations = ctx.history.participations(user_id, until=ctx.played_at)
             if not participations or participations[0].tournament_id != ctx.tournament.id:
                 continue
             deck = ctx.deck_name(user_id) or "—"
@@ -161,7 +161,7 @@ class FirstDeckRule(CounterRule):
     code = definitions.Codes.FIRST_DECK
 
     def value_for(self, ctx: TournamentContext, user_id: int) -> tuple[int, str]:
-        items = ctx.history.first_recorder_participations(user_id)
+        items = ctx.history.first_recorder_participations(user_id, until=ctx.played_at)
         if not items:
             return 0, ""
         was_first_here = any(p.tournament_id == ctx.tournament.id for p in items)
@@ -175,7 +175,7 @@ class UndefeatedRule(CounterRule):
     code = definitions.Codes.UNDEFEATED
 
     def value_for(self, ctx: TournamentContext, user_id: int) -> tuple[int, str]:
-        items = ctx.history.undefeated_participations(user_id)
+        items = ctx.history.undefeated_participations(user_id, until=ctx.played_at)
         if not items:
             return 0, ""
         if user_id in ctx.undefeated_user_ids:
@@ -215,7 +215,7 @@ class ScribeRule(CounterRule):
         user = ctx.users.get(user_id) or ctx.history.db.get(models.User, user_id)
         if user is None:
             return 0, ""
-        total = ctx.history.scribe_count(user)
+        total = ctx.history.scribe_count(user, until=ctx.played_at)
         if total <= 0:
             return 0, ""
         today = ctx.history.scribe_names_in(ctx.tournament.id, user)
