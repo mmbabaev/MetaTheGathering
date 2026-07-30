@@ -51,7 +51,8 @@ async def cmd_achievements(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     try:
         shelf = _handler(db).shelf(tg_id=user.id, query=query)
         if isinstance(shelf, HandlerResult):  # нет прав / игрок не найден
-            await msg.reply_text(shelf.text)
+            if not shelf.silent:
+                await msg.reply_text(shelf.text)
             return
         text = format_shelf(shelf.title, shelf.views)
         png = await _render_shelf(shelf)

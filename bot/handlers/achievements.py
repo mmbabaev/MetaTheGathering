@@ -94,7 +94,9 @@ class AchievementsHandler:
         """
         is_admin = self.user_svc.is_admin(tg_id)
         if not is_admin and not self.features.is_achievements_ui_public():
-            return HandlerResult(ACHIEVEMENTS_UNAVAILABLE)
+            # Теневой режим: для игрока команды как бы нет — молчим, а не отвечаем «недоступна».
+            # Иначе отказ сам по себе сообщает, что фича существует.
+            return HandlerResult(ACHIEVEMENTS_UNAVAILABLE, silent=True)
 
         if query and is_admin:
             user = self.user_svc.find_by_name(query)

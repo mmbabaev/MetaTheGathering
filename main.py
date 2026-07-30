@@ -154,6 +154,7 @@ _ADMIN_COMMANDS = _SCOREKEEPER_COMMANDS + [
     BotCommand("delete_tournament", "Удалить турнир"),
     BotCommand("schedule", "Расписание автозаданий"),
     BotCommand("features", "Feature flags"),
+    BotCommand("achievements", "Ачивки игрока"),
     _POLL_CMD,
 ]
 
