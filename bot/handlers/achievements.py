@@ -14,6 +14,7 @@ from typing import Optional
 from bot.features import FeatureService
 from bot.handlers.base import HandlerResult
 from bot.messages import (
+    ACHIEVEMENTS_DECKS_TITLE,
     ACHIEVEMENTS_EMPTY,
     ACHIEVEMENTS_HEADER,
     ACHIEVEMENTS_LOCKED_TITLE,
@@ -44,6 +45,8 @@ class Shelf:
         """
         by_code: dict[str, list[AchievementView]] = {}
         for view in self.views:
+            if view.definition.family != "core":
+                continue  # колодных 15 штук — в картинку не лезут, они живут в тексте
             by_code.setdefault(view.definition.code, []).append(view)
 
         items: list[ShelfItem] = []
@@ -119,10 +122,22 @@ class AchievementsHandler:
 
 
 def format_shelf(title: str, views: list[AchievementView]) -> str:
-    """Три секции: открытые, в процессе, закрытые."""
-    unlocked = [v for v in views if v.unlocked]
-    lines = [ACHIEVEMENTS_HEADER.format(title=title, unlocked=len(unlocked), total=len(views)), ""]
+    """Полка текстом: основные ачивки секциями, колодные — одной компактной строкой.
 
+    Колодных пятнадцать, и вываливать их в общий список бессмысленно: он перестаёт
+    читаться. Поэтому у них своя строка со счётчиком, открытыми и парой ближайших целей.
+    """
+    core = [v for v in views if v.definition.family == "core"]
+    decks = [v for v in views if v.definition.family == "deck"]
+
+    unlocked_codes = {v.definition.code for v in views if v.unlocked}
+    total_codes = {v.definition.code for v in views}
+    lines = [
+        ACHIEVEMENTS_HEADER.format(title=title, unlocked=len(unlocked_codes), total=len(total_codes)),
+        "",
+    ]
+
+    unlocked = [v for v in core if v.unlocked]
     if unlocked:
         lines.append(ACHIEVEMENTS_UNLOCKED_TITLE)
         for view in unlocked:
@@ -132,7 +147,7 @@ def format_shelf(title: str, views: list[AchievementView]) -> str:
                 lines.append(f"   {view.evidence}")
         lines.append("")
 
-    in_progress = [v for v in views if not v.unlocked and v.progress]
+    in_progress = [v for v in core if not v.unlocked and v.progress]
     if in_progress:
         lines.append(ACHIEVEMENTS_PROGRESS_TITLE)
         for view in _first_level_only(in_progress):
@@ -141,13 +156,35 @@ def format_shelf(title: str, views: list[AchievementView]) -> str:
             lines.append(f"{definition.icon} {definition.title_with_level} — {view.progress}/{threshold}")
         lines.append("")
 
-    locked = [v for v in views if not v.unlocked and not v.progress]
+    if decks:
+        lines.extend(_deck_section(decks))
+        lines.append("")
+
+    locked = [v for v in core if not v.unlocked and not v.progress]
     if locked:
         lines.append(ACHIEVEMENTS_LOCKED_TITLE)
         for view in _first_level_only(locked):
             lines.append(f"{view.definition.icon} {view.definition.title_with_level} — {view.definition.hint}")
 
     return "\n".join(lines).strip()
+
+
+_DECKS_TO_SUGGEST = 3  # сколько закрытых колод показываем как ближайшие цели
+
+
+def _deck_section(decks: list[AchievementView]) -> list[str]:
+    """«Колоды — 3 из 15» + открытые списком + пара оставшихся как подсказка."""
+    opened = [v.definition for v in decks if v.unlocked]
+    closed = [v.definition for v in decks if not v.unlocked]
+
+    lines = [ACHIEVEMENTS_DECKS_TITLE.format(unlocked=len(opened), total=len(decks))]
+    if opened:
+        lines.append(" · ".join(f"{d.icon} {d.title}" for d in opened))
+    if closed:
+        shown = ", ".join(f"{d.icon} {d.title}" for d in closed[:_DECKS_TO_SUGGEST])
+        rest = len(closed) - _DECKS_TO_SUGGEST
+        lines.append(f"Ещё не играл: {shown}" + (f" и ещё {rest}" if rest > 0 else ""))
+    return lines
 
 
 def _first_level_only(views: list[AchievementView]) -> list[AchievementView]:

@@ -18,6 +18,7 @@ from sqlalchemy import select
 from core import models
 from services.achievements import definitions
 from services.achievements.context import TournamentContext
+from services.achievements.decks import deck_codes_for
 from services.achievements.history import Participation
 
 EVIDENCE_MAX = 500  # колонка 512, оставляем запас на многоточие
@@ -270,6 +271,56 @@ class LoyalistRule(CounterRule):
         return len(streak), _clip(f"{deck}: {_date_list(streak)}")
 
 
+class DeckRule:
+    """🃏 «Сыграл на такой-то колоде» — по одной одноразовой ачивке на колоду.
+
+    Смотрит все засчитанные участия игрока (не только сегодняшнее): если игрок раньше играл
+    на Tron, а отметку мы завели позже, ачивка всё равно найдётся при следующем турнире.
+    """
+
+    code = "deck"
+
+    def evaluate(self, ctx: TournamentContext) -> RuleOutcome:
+        outcome = RuleOutcome()
+        for user_id in sorted(ctx.eligible_user_ids):
+            for code, participation in self._decks_of(ctx, user_id).items():
+                outcome.awards.append(
+                    Award(
+                        user_id=user_id,
+                        code=code,
+                        level=1,
+                        progress_value=None,
+                        evidence=_clip(f"{participation.archetype_name or '—'} ({_short_date(participation)})"),
+                    )
+                )
+        return outcome
+
+    @staticmethod
+    def _decks_of(ctx: TournamentContext, user_id: int) -> dict[str, Participation]:
+        """{код деко-ачивки: участие, где она заслужена} — первое по времени."""
+        found: dict[str, Participation] = {}
+        for participation in ctx.history.participations(user_id, until=ctx.played_at):
+            for code in deck_codes_for(participation.archetype_name, participation.deck_key):
+                found.setdefault(code, participation)
+        return found
+
+
+class CollectorRule(CounterRule):
+    """🃏 Коллекционер — сколько разных колод из списка игрок уже сыграл."""
+
+    code = definitions.Codes.COLLECTOR
+
+    def value_for(self, ctx: TournamentContext, user_id: int) -> tuple[int, str]:
+        decks = DeckRule._decks_of(ctx, user_id)
+        if not decks:
+            return 0, ""
+        titles = [definitions.ACHIEVEMENTS[(code, 1)].title for code in decks if (code, 1) in definitions.ACHIEVEMENTS]
+        shown = ", ".join(sorted(titles)[:_EVIDENCE_ITEMS])
+        if len(titles) > _EVIDENCE_ITEMS:
+            shown += "…"
+        return len(decks), _clip(f"колод из списка: {shown}")
+
+
 def default_rules() -> list[AchievementRule]:
     """Все правила в порядке показа."""
     return [
@@ -280,4 +331,6 @@ def default_rules() -> list[AchievementRule]:
         RegularRule(),
         MulticlassRule(),
         LoyalistRule(),
+        DeckRule(),
+        CollectorRule(),
     ]

@@ -13,7 +13,9 @@ from core.schemas import TournamentCreate
 from services.achievements import AchievementService
 from services.achievements.definitions import Codes
 from services.achievements.rules import (
+    CollectorRule,
     DebutRule,
+    DeckRule,
     FirstDeckRule,
     LoyalistRule,
     MulticlassRule,
@@ -292,3 +294,62 @@ def test_first_deck_goes_to_the_earliest_recorder(db, alice, bob, archetype_burn
 
     assert [(a.user_id, a.level) for a in outcome.awards] == [(alice.id, 1)]
     assert "первым записал колоду сегодня" in outcome.awards[0].evidence
+
+
+# ── ачивки по колодам ────────────────────────────────────────────────────────
+
+
+def test_deck_achievement_awarded_for_played_deck(db, alice, arch_svc):
+    tron = arch_svc.get_or_create_by_name("Monster Tron")
+    t = _tournament(db, "Pauper 1")
+    _register(db, t, alice, tron)
+    _rounds(db, t, "Иванова Алиса", [(2, 0)])
+
+    outcome = DeckRule().evaluate(_ctx(db, t.id))
+
+    assert [a.code for a in outcome.awards] == ["deck_tron"]
+    assert "Monster Tron" in outcome.awards[0].evidence
+
+
+def test_deck_achievement_matches_synonyms(db, alice, arch_svc):
+    """«Blue Delver» — это тот же Terror: сопоставляем по общему типу, а не по строке."""
+    delver = arch_svc.get_or_create_by_name("Blue Delver")
+    t = _tournament(db, "Pauper 1")
+    _register(db, t, alice, delver)
+    _rounds(db, t, "Иванова Алиса", [(2, 0)])
+
+    assert [a.code for a in DeckRule().evaluate(_ctx(db, t.id)).awards] == ["deck_terror"]
+
+
+def test_unknown_deck_gives_no_deck_achievement(db, alice, arch_svc):
+    exotic = arch_svc.get_or_create_by_name("Совершенно своя дека")
+    t = _tournament(db, "Pauper 1")
+    _register(db, t, alice, exotic)
+    _rounds(db, t, "Иванова Алиса", [(2, 0)])
+
+    assert DeckRule().evaluate(_ctx(db, t.id)).awards == []
+
+
+def test_deck_achievements_accumulate_across_tournaments(db, alice, arch_svc):
+    for i, name in enumerate(("Tron", "Elves", "Burn")):
+        archetype = arch_svc.get_or_create_by_name(name)
+        t = _tournament(db, f"Pauper {i}", days_ago=20 - i * 7)
+        _register(db, t, alice, archetype)
+        _rounds(db, t, "Иванова Алиса", [(2, 0)])
+
+    outcome = DeckRule().evaluate(_ctx(db, t.id))
+
+    assert {a.code for a in outcome.awards} == {"deck_tron", "deck_elves", "deck_burn"}
+
+
+def test_collector_counts_distinct_deck_achievements(db, alice, arch_svc):
+    for i, name in enumerate(("Tron", "Elves", "Burn")):
+        archetype = arch_svc.get_or_create_by_name(name)
+        t = _tournament(db, f"Pauper {i}", days_ago=20 - i * 7)
+        _register(db, t, alice, archetype)
+        _rounds(db, t, "Иванова Алиса", [(2, 0)])
+
+    outcome = CollectorRule().evaluate(_ctx(db, t.id))
+
+    assert [p.value for p in outcome.progress] == [3]
+    assert [p.threshold for p in outcome.progress] == [5]

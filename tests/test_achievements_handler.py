@@ -91,3 +91,21 @@ def test_unknown_player_reports_clearly(handler, admin):
     result = handler.handle_achievements(tg_id=admin.tg_id, query="Кто-то Неизвестный")
 
     assert result.text == ACHIEVEMENTS_PLAYER_NOT_FOUND.format(query="Кто-то Неизвестный")
+
+
+def test_deck_achievements_are_shown_as_one_line(handler, db, admin, player, archetype_burn):
+    """Колодных пятнадцать — в списке они одной строкой со счётчиком, а не пятнадцатью."""
+    _played(db, player, archetype_burn)
+
+    text = handler.handle_achievements(tg_id=admin.tg_id, query="Иванова Алиса").text
+
+    assert "Колоды — 1 из 15" in text
+    assert "🔥 Пиромант" in text  # Burn открыт
+    assert "Ещё не играл:" in text
+    assert text.count("Сыграл на") == 0  # описания колод в список не сыплются
+
+
+def test_shelf_counts_achievements_not_levels(handler, admin):
+    text = handler.handle_achievements(tg_id=admin.tg_id).text
+
+    assert "из 23" in text  # 8 основных + 15 колодных, а не 38 уровней

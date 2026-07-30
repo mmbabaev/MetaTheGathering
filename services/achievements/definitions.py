@@ -12,6 +12,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
+from services.achievements.decks import DECK_ACHIEVEMENTS
+
 
 class Codes:
     """Коды ачивок. Строкой пользуемся только здесь и в тестах."""
@@ -23,6 +25,7 @@ class Codes:
     MULTICLASS = "multiclass"
     FIRST_DECK = "first_deck"
     LOYALIST = "loyalist"
+    COLLECTOR = "collector"
 
 
 class Rarity:
@@ -43,6 +46,7 @@ class AchievementDef:
     hint: str  # что сделать, чтобы открыть
     rarity: str
     threshold: Optional[int] = None  # порог счётчика; None — одноразовая ачивка без прогресса
+    family: str = "core"  # "core" — основные, "deck" — «сыграл на такой-то колоде»
 
     @property
     def key(self) -> tuple[str, int]:
@@ -172,11 +176,42 @@ _DEFS: list[AchievementDef] = [
             (3, 10, Rarity.EPIC, "Десять турниров подряд на одной колоде"),
         )
     ),
+    *(
+        AchievementDef(
+            code=Codes.COLLECTOR,
+            level=level,
+            title="Коллекционер",
+            icon="🃏",
+            description=description,
+            hint="Играй на разных колодах из списка ниже — каждая даёт свою ачивку",
+            rarity=rarity,
+            threshold=threshold,
+        )
+        for level, threshold, rarity, description in (
+            (1, 5, Rarity.COMMON, "Пять разных колод из списка"),
+            (2, 10, Rarity.RARE, "Десять разных колод из списка"),
+            (3, 15, Rarity.EPIC, "Все колоды из списка"),
+        )
+    ),
+    # «Сыграл на такой-то колоде» — по одной одноразовой ачивке на колоду (services/achievements/decks.py)
+    *(
+        AchievementDef(
+            code=deck.code,
+            level=1,
+            title=deck.title,
+            icon=deck.icon,
+            description=deck.description,
+            hint=deck.description.replace("Сыграл на", "Запиши на турнир"),
+            rarity=Rarity.COMMON,
+            family="deck",
+        )
+        for deck in DECK_ACHIEVEMENTS
+    ),
 ]
 
 ACHIEVEMENTS: dict[tuple[str, int], AchievementDef] = {d.key: d for d in _DEFS}
 
-# Порядок кодов для UI и отчёта.
+# Порядок кодов для UI и отчёта: сначала основные, затем «колодные».
 CODE_ORDER: list[str] = [
     Codes.DEBUT,
     Codes.FIRST_DECK,
@@ -185,7 +220,11 @@ CODE_ORDER: list[str] = [
     Codes.REGULAR,
     Codes.MULTICLASS,
     Codes.LOYALIST,
+    Codes.COLLECTOR,
+    *(deck.code for deck in DECK_ACHIEVEMENTS),
 ]
+
+DECK_CODES: frozenset[str] = frozenset(deck.code for deck in DECK_ACHIEVEMENTS)
 
 
 def get(code: str, level: int) -> Optional[AchievementDef]:

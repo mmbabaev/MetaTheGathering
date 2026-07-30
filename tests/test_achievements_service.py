@@ -63,7 +63,9 @@ def test_process_tournament_grants_and_is_idempotent(db, alice, archetype_burn):
     first = svc.process_tournament(t.id)
     second = svc.process_tournament(t.id)
 
-    assert {g.definition.code for g in first.granted} == {Codes.DEBUT, Codes.UNDEFEATED, Codes.FIRST_DECK}
+    codes = {g.definition.code for g in first.granted}
+    assert {Codes.DEBUT, Codes.UNDEFEATED, Codes.FIRST_DECK} <= codes
+    assert "deck_burn" in codes  # колода Burn — своя деко-ачивка
     assert second.granted == [] and second.progress_changes == []
     assert db.query(models.UserAchievement).count() == len(first.granted)
 
