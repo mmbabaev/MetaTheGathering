@@ -9,7 +9,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 from telegram.error import TelegramError
 from telegram.ext import Application, ContextTypes
@@ -550,13 +550,20 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, char
     - у всех не-бай матчей есть счёт (``is_tournament_complete``);
     - у всех участников заполнена колода (``_all_decks_filled``) — метагейм собран.
 
-    Идемпотентность — флаг ``Tournament.completed_announced_at``: ставим ТОЛЬКО после
-    успешной отправки, поэтому сбой отправки не «съедает» анонс — он повторится при
-    следующем импорте (в т.ч. ночной 09:00-реимпорт — гарантированный бэкап, там >3ч всегда).
+    Идемпотентность — флаг ``Tournament.completed_announced_at``, который **занимается до
+    отправки** атомарным ``UPDATE ... WHERE completed_announced_at IS NULL``. Раньше он
+    ставился после отправки, и это приводило к дублям на следующий день: между проверкой и
+    записью флага код несколько раз уходит в await (рисование картинок, отправка альбома), а
+    сессия у бота одна на поток (``scoped_session``) — соседняя задача успевала её закрыть,
+    и присваивание атрибута коммитилось «в никуда». Отбивка ушла, флаг пуст, утренний
+    реимпорт честно повторял анонс.
+
+    Если доставить не удалось НИ в один чат — бронь снимаем, и анонс повторится на следующем
+    импорте (в т.ч. ночной 09:00-реимпорт — гарантированный бэкап, там >3ч всегда).
 
     Шлём в чат клуба (``tournament.chat_id``, где создан турнир) И владельцу в личку
     (``settings.OWNER_CHAT_ID``), дедуплицированно. Плюс благодарим метаписцев, записавших
-    ≥2 колод. Флаг ставим, если доставили хотя бы в один чат.
+    ≥2 колод.
 
     ``chart_svc`` — шов для тестов, чтобы они не поднимали сервис из глобального конфига.
     """
@@ -588,38 +595,25 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, char
     if not _all_decks_filled(db, tournament_id):
         return
 
-    chart = await build_chart(db, tournament_id, chart_svc)
-    standings = await build_standings(db, tournament_id)
-    total = len(TournamentService(db).list_participants_for_tournament(tournament_id))
-    with_deck = sum(s.count for s in chart.sectors) if chart else _decks_count(db, tournament_id)
-    undefeated = svc.get_undefeated_players(tournament_id)
-    scorekeepers = TournamentService(db).get_deck_recorders(tournament_id, min_count=2)
-    text = format_meta_gather_completed(tournament.title, total, with_deck, undefeated, scorekeepers)
-    images = ([chart] if chart else []) + list(standings)
-
     # Адресаты отбивки: чат клуба (где создан турнир) и владелец в личку — дедуплицированно.
     targets = list(dict.fromkeys(cid for cid in (tournament.chat_id, settings.OWNER_CHAT_ID) if cid))
     if not targets:
         return
+    title = tournament.title  # читаем ДО отправки: за await объект может стать detached
 
-    # 1) В каждый чат — одно сообщение-альбом (картинки + текст подписью к первой); не вошедшие в
-    #    альбом картинки — best-effort. Сбой одного адресата не мешает остальным.
-    delivered = False
-    for chat_id in targets:
-        try:
-            leftover = await _send_announce(bot, chat_id, text, images)
-        except Exception:
-            logger.exception(
-                "maybe_announce_meta_gather_completed: announce to %s failed for #%s", chat_id, tournament_id
-            )
-            continue
-        delivered = True
-        await _send_announce_images(bot, chat_id, leftover)
-    # 2) флаг ставим, только если доставили хотя бы в один чат — иначе повтор на следующем импорте.
-    if not delivered:
+    # 1) Занимаем право на анонс ДО отправки — одним атомарным UPDATE ... WHERE ... IS NULL.
+    if not _reserve_announce(db, tournament_id):
         return
-    tournament.completed_announced_at = models.utc_now()
-    db.commit()
+
+    try:
+        delivered = await _announce_to_targets(bot, db, tournament_id, title, targets, svc, chart_svc)
+    except Exception:
+        _release_announce(db, tournament_id)  # непредвиденный сбой — пусть повторится позже
+        raise
+    # 2) Ни один адресат не получил — снимаем бронь, чтобы анонс повторился на следующем импорте.
+    if not delivered:
+        _release_announce(db, tournament_id)
+        return
     # 3) турнир завершён — закрываем (REGISTRATION → CLOSED). Best-effort: сбой закрытия не должен
     #    ронять уже доставленный анонс; флаг уже стоит, повтора анонса не будет.
     try:
@@ -633,6 +627,63 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, char
     except Exception:
         logger.exception("maybe_announce_meta_gather_completed: achievements failed for #%s", tournament_id)
     logger.info("maybe_announce_meta_gather_completed: announced completion for #%s", tournament_id)
+
+
+def _reserve_announce(db, tournament_id: int) -> bool:
+    """Атомарно занять право на анонс. True — заняли мы, False — уже занято кем-то.
+
+    Одним `UPDATE ... WHERE completed_announced_at IS NULL`, а не мутацией ORM-объекта:
+    это переживает и параллельный вызов из соседней джобы, и закрытие общей сессии
+    (см. docstring `maybe_announce_meta_gather_completed`).
+    """
+    result = db.execute(
+        update(models.Tournament)
+        .where(
+            models.Tournament.id == tournament_id,
+            models.Tournament.completed_announced_at.is_(None),
+        )
+        .values(completed_announced_at=models.utc_now())
+    )
+    db.commit()
+    return bool(result.rowcount)
+
+
+def _release_announce(db, tournament_id: int) -> None:
+    """Снять бронь: анонс не доставлен, пусть повторится на следующем импорте."""
+    db.execute(
+        update(models.Tournament).where(models.Tournament.id == tournament_id).values(completed_announced_at=None)
+    )
+    db.commit()
+    logger.info("maybe_announce_meta_gather_completed: released reservation for #%s", tournament_id)
+
+
+async def _announce_to_targets(bot, db, tournament_id: int, title: str, targets: list, svc, chart_svc) -> bool:
+    """Собрать отбивку и разослать по адресатам. True — доставлено хотя бы в один чат.
+
+    В каждый чат — одно сообщение-альбом (картинки + текст подписью к первой); не вошедшие в
+    альбом картинки — best-effort. Сбой одного адресата не мешает остальным.
+    """
+    chart = await build_chart(db, tournament_id, chart_svc)
+    standings = await build_standings(db, tournament_id)
+    total = len(TournamentService(db).list_participants_for_tournament(tournament_id))
+    with_deck = sum(s.count for s in chart.sectors) if chart else _decks_count(db, tournament_id)
+    undefeated = svc.get_undefeated_players(tournament_id)
+    scorekeepers = TournamentService(db).get_deck_recorders(tournament_id, min_count=2)
+    text = format_meta_gather_completed(title, total, with_deck, undefeated, scorekeepers)
+    images = ([chart] if chart else []) + list(standings)
+
+    delivered = False
+    for chat_id in targets:
+        try:
+            leftover = await _send_announce(bot, chat_id, text, images)
+        except Exception:
+            logger.exception(
+                "maybe_announce_meta_gather_completed: announce to %s failed for #%s", chat_id, tournament_id
+            )
+            continue
+        delivered = True
+        await _send_announce_images(bot, chat_id, leftover)
+    return delivered
 
 
 def _decks_count(db, tournament_id: int) -> int:

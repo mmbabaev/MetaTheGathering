@@ -5,6 +5,7 @@ Completion is detected from imported pairings: when every non-bye match has a sc
 and announce, once, to the owner DM — listing the undefeated (X-0) players and their decks.
 """
 
+import asyncio
 import threading
 from datetime import timedelta
 from types import SimpleNamespace
@@ -22,6 +23,7 @@ from core import models
 from core.config import settings
 from core.schemas import TournamentCreate
 from services.aetherhub_import_service import AetherhubImportService, UndefeatedPlayer
+from services.aetherhub_models import AetherhubPairing, AetherhubRound, AetherhubTournamentData
 from services.tournament import TournamentService
 
 
@@ -443,6 +445,103 @@ async def test_announces_once_last_deck_filled(db, user_svc, arch_svc, monkeypat
     await maybe_announce_meta_gather_completed(bot, db, t.id)
     assert bot.send_media_group.await_count == 2  # клуб + владелец
     assert db.get(models.Tournament, t.id).completed_announced_at is not None
+
+
+# ── повторный анонс на следующий день (регрессия) ────────────────────────────
+
+
+async def test_no_repeat_announce_on_next_day_reimport(db, user_svc, arch_svc, monkeypatch):
+    """Отбивка ушла вечером — утренний реимпорт следующего дня НЕ должен прислать её снова.
+
+    Живой баг: турнир в понедельник, отбивка пришла во вторник в 09:00, а в среду в 09:00
+    те же сообщения пришли повторно.
+    """
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    t = _complete_tournament(db, user_svc, arch_svc)
+    bot = AsyncMock()
+
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+    first_day_calls = bot.send_media_group.await_count + bot.send_message.await_count
+    assert first_day_calls > 0
+    bot.reset_mock()
+
+    # следующее утро: финальный реимпорт снова добирает счёт и дёргает тот же анонс
+    AetherhubImportService(db).import_tournament(t.id, _same_data_as_imported(db, t.id))
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+
+    bot.send_media_group.assert_not_awaited()
+    bot.send_message.assert_not_awaited()
+
+
+async def test_flag_survives_session_close_during_send(db, user_svc, arch_svc, monkeypatch):
+    """Соседняя задача закрыла общую сессию посреди отправки — флаг всё равно должен уцелеть.
+
+    Корень бага: `SessionLocal` — scoped_session, одна на поток. Пока анонс висел в await,
+    другой хендлер вызывал `db.close()`, ORM-объект турнира становился detached, и запись
+    флага после отправки уходила «в никуда» — назавтра дубль.
+    """
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    t = _complete_tournament(db, user_svc, arch_svc)
+    bot = AsyncMock()
+
+    async def close_session_midway(*args, **kwargs):
+        db.close()  # ровно то, что делает finally соседней задачи
+        return None
+
+    bot.send_media_group.side_effect = close_session_midway
+
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+
+    assert db.get(models.Tournament, t.id).completed_announced_at is not None
+    bot.reset_mock()
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+    bot.send_media_group.assert_not_awaited()
+
+
+async def test_concurrent_announces_send_once(db, user_svc, arch_svc, monkeypatch):
+    """Две джобы, стартовавшие одновременно, дают ровно одну отбивку на чат."""
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    t = _complete_tournament(db, user_svc, arch_svc)
+    bot = AsyncMock()
+
+    async def slow_send(*args, **kwargs):
+        await asyncio.sleep(0)  # уступаем управление — второй вызов успевает войти
+        return None
+
+    bot.send_media_group.side_effect = slow_send
+
+    await asyncio.gather(
+        maybe_announce_meta_gather_completed(bot, db, t.id),
+        maybe_announce_meta_gather_completed(bot, db, t.id),
+    )
+
+    chats = [c.kwargs["chat_id"] for c in bot.send_media_group.await_args_list]
+    assert sorted(chats) == [100, 777]  # по одному разу в каждый чат, без дублей
+
+
+def _same_data_as_imported(db, tournament_id):
+    """Данные AetherHub, эквивалентные уже импортированным — как при утреннем реимпорте."""
+    rounds = {}
+    for p in db.query(models.RoundPairing).filter_by(tournament_id=tournament_id).all():
+        rounds.setdefault(p.round_number, []).append(
+            AetherhubPairing(
+                player=p.player_name,
+                opponent=p.opponent_name,
+                table_number=p.table_number,
+                player_wins=p.player_wins,
+                opponent_wins=p.opponent_wins,
+            )
+        )
+    players = sorted({p.player_name for p in db.query(models.RoundPairing).filter_by(tournament_id=tournament_id)})
+    return AetherhubTournamentData(
+        url="https://aetherhub.com/Tourney/RoundTourney/1",
+        players=players,
+        standings=players,
+        rounds=[AetherhubRound(number=n, pairings=ps) for n, ps in sorted(rounds.items())],
+    )
+
+
+# ── ачивки на шве завершения турнира ─────────────────────────────────────────
 
 
 async def test_achievements_are_processed_after_close(db, user_svc, arch_svc, monkeypatch):
