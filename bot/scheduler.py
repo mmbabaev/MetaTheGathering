@@ -17,6 +17,7 @@ from telegram.ext import Application, ContextTypes
 from bot.chart import build_chart, build_standings
 from bot.deeplink import deck_deeplink
 from bot.messages import format_decks_revealed, format_meta_gather_completed
+from bot.telegram.achievements import send_achievements_report
 from bot.telegram.round_notify import send_round_notifications
 from core import models
 from core.clubs import debug_club, default_clubs
@@ -619,6 +620,12 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, char
         TournamentService(db).close_tournament(tournament_id)
     except Exception:
         logger.exception("maybe_announce_meta_gather_completed: close failed for #%s", tournament_id)
+    # 4) ачивки: турнир завершён и полон — считаем и шлём отчёт владельцу (теневой режим).
+    #    Best-effort: движок ачивок не должен ронять уже доставленный анонс.
+    try:
+        await send_achievements_report(bot, db, tournament_id)
+    except Exception:
+        logger.exception("maybe_announce_meta_gather_completed: achievements failed for #%s", tournament_id)
     logger.info("maybe_announce_meta_gather_completed: announced completion for #%s", tournament_id)
 
 

@@ -24,6 +24,10 @@ class FeatureFlagInfo:
 class FeatureFlags:
     RECORD_OPPONENTS = "recordOpponents"
     PAYMENT = "payment"
+    # Ачивки едут в прод теневым режимом: движок считает, игроки не видят (docs/achievements.md §6).
+    ACHIEVEMENTS = "achievements"
+    ACHIEVEMENTS_PUBLIC_UI = "achievementsPublicUi"
+    ACHIEVEMENTS_PLAYER_DM = "achievementsPlayerDm"
 
 
 KNOWN_FLAGS: dict[str, FeatureFlagMeta] = {
@@ -34,6 +38,21 @@ KNOWN_FLAGS: dict[str, FeatureFlagMeta] = {
     ),
     FeatureFlags.PAYMENT: FeatureFlagMeta(
         description="Оплата взноса через бота (ЮKassa)",
+        value_type="bool",
+        default_value="false",
+    ),
+    FeatureFlags.ACHIEVEMENTS: FeatureFlagMeta(
+        description="Ачивки: считать при завершении турнира и слать отчёт владельцу",
+        value_type="bool",
+        default_value="true",
+    ),
+    FeatureFlags.ACHIEVEMENTS_PUBLIC_UI: FeatureFlagMeta(
+        description="Ачивки: команда /achievements доступна всем игрокам",
+        value_type="bool",
+        default_value="false",
+    ),
+    FeatureFlags.ACHIEVEMENTS_PLAYER_DM: FeatureFlagMeta(
+        description="Ачивки: уведомления уходят самим игрокам, а не владельцу",
         value_type="bool",
         default_value="false",
     ),

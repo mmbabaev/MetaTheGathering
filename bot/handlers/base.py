@@ -14,4 +14,5 @@ class HandlerResult:
     tournament_id: Optional[int] = None  # set when result references a specific tournament
     yookassa_id: Optional[str] = None  # set after successful payment creation
     answer_text: Optional[str] = None  # short popup shown via query.answer(show_alert=True)
+    silent: bool = False  # обёртка не отправляет ничего: команда «как будто не существует»
     new_round_numbers: Optional[list[int]] = None  # rounds first seen in this import (opponent DMs)
