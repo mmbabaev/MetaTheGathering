@@ -14,7 +14,7 @@ from sqlalchemy import select
 from cli.db import get_db
 from core import models
 from services.achievements import AchievementService, build_report
-from services.achievements.history import display_name
+from services.achievements.history import AchievementHistory, counts_for_achievements, display_name
 from services.user import UserService
 
 app = typer.Typer(no_args_is_help=True)
@@ -59,6 +59,36 @@ def show(player: str = typer.Argument(..., help="Имя игрока, напр. 
                 mark = "  "
                 tail = ""
             typer.echo(f"{mark} {definition.title_with_level}{tail}")
+
+
+@app.command("audit")
+def audit():
+    """Показать, сколько истории вообще годится для ачивок.
+
+    Ачивка требует трёх вещей разом: паринги со счётом, записанную колоду и отметку «кто
+    записал» (гейт §2.5). Если отметки нет — турнир в зачёт не идёт, и бэкафилл по нему
+    промолчит. Команда отвечает на вопрос «почему выдач так мало», не запуская сам бэкафилл.
+    """
+    with get_db() as db:
+        history = AchievementHistory(db)
+        tournaments = db.execute(select(models.Tournament)).scalars().all()
+        complete = [t for t in tournaments if history.is_complete(t.id)]
+
+        participants = db.execute(select(models.Participant, models.User).join(models.User)).all()
+        with_deck = [p for p, _ in participants if p.archetype_id is not None]
+        eligible = [p for p, u in participants if counts_for_achievements(p, u) and u.tg_id > 0]
+
+        typer.echo(f"Турниров: {len(tournaments)}, со счётом у всех матчей: {len(complete)}")
+        typer.echo(f"Участий: {len(participants)}, с колодой: {len(with_deck)}, в зачёт ачивок: {len(eligible)}")
+
+        if not complete:
+            typer.echo("\n⚠️  Ни один турнир не считается завершённым — нет парингов со счётом.")
+        if with_deck and not eligible:
+            typer.echo(
+                "\n⚠️  Колоды есть, но ни у одного участия не заполнено deck_added_by_tg_id "
+                "(«кто записал»). По таким турнирам ачивки не выдаются — это ожидаемо для\n"
+                "    старых данных, записанных до появления поля."
+            )
 
 
 @app.command("backfill")
