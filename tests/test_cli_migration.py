@@ -3,8 +3,9 @@ from unittest.mock import MagicMock
 
 from typer.testing import CliRunner
 
-from cli.migration import app
+from cli.migration import _write_report, app
 from services.datalens import DataLensTournament, DataLensTournamentError, TournamentPlayer
+from services.tournament_migration import TournamentMigrationItem, TournamentMigrationReport
 
 runner = CliRunner()
 
@@ -77,3 +78,44 @@ def test_aetherhub_command_reports_format_error(monkeypatch):
 
     assert result.exit_code == 1
     assert "Unsupported format" in result.stderr
+
+
+def test_write_report_is_valid_json(tmp_path):
+    report = TournamentMigrationReport(
+        started_at="2026-07-31T00:00:00Z",
+        execute=False,
+        items=[
+            TournamentMigrationItem(
+                date=date(2026, 7, 20),
+                club="Единорог",
+                players=57,
+                status="ready",
+            )
+        ],
+    )
+    path = tmp_path / "report.json"
+
+    _write_report(path, report)
+
+    assert '"status": "ready"' in path.read_text(encoding="utf-8")
+    assert not (tmp_path / "report.json.tmp").exists()
+
+
+def test_all_command_runs_dry_by_default_and_writes_report(monkeypatch, tmp_path):
+    report = TournamentMigrationReport(started_at="2026-07-31T00:00:00Z", execute=False)
+    migrator = MagicMock()
+    migrator.run.return_value = report
+    monkeypatch.setattr("cli.migration.HistoricalTournamentMigrator", lambda *args, **kwargs: migrator)
+    monkeypatch.setattr("cli.migration.DataLensService", MagicMock)
+    monkeypatch.setattr("cli.migration.AetherhubService", MagicMock)
+    monkeypatch.setattr("cli.migration.MagicOculusClient", MagicMock)
+    path = tmp_path / "report.json"
+
+    result = runner.invoke(app, ["all", "--club", "Goldfish", "--report", str(path)])
+
+    assert result.exit_code == 0
+    assert "{}" in result.stdout
+    migrator.run.assert_called_once()
+    kwargs = migrator.run.call_args.kwargs
+    assert kwargs["execute"] is False
+    assert kwargs["clubs"] == {"Goldfish"}

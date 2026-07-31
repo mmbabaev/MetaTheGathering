@@ -30,7 +30,7 @@ class MagicOculusTournament(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    source_tournament_id: int = Field(ge=1)
+    source_tournament_id: int | None = Field(default=None, ge=1)
     date: date
     club: str = Field(min_length=1)
     format: str = "Pauper"
@@ -227,6 +227,30 @@ class MagicOculusClient:
 
     def formats(self) -> list[MagicOculusReference]:
         return [MagicOculusReference.model_validate(row) for row in self._get_json("/api/v1/formats")]
+
+    def existing_daily_keys(self) -> dict[tuple[date, str, str], int]:
+        """Index existing dailies by date, club name and format name."""
+        page = 1
+        result: dict[tuple[date, str, str], int] = {}
+        while True:
+            body = self._get_json(f"/api/v1/tournaments?page={page}")
+            rows = body.get("results", [])
+            for row in rows:
+                if row.get("type") != "daily":
+                    continue
+                try:
+                    key = (
+                        date.fromisoformat(row["date"]),
+                        row["club"]["name"].casefold(),
+                        row["format"]["name"].casefold(),
+                    )
+                    result[key] = int(row["id"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+            if not body.get("next") or not rows:
+                break
+            page += 1
+        return result
 
     @staticmethod
     def _find_reference(rows: list[MagicOculusReference], name: str, kind: str) -> MagicOculusReference:
