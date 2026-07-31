@@ -435,6 +435,40 @@ class TestFindTodaysPauperTournament:
         result = svc.find_todays_pauper_tournament("https://aetherhub.com/User/GoldFish", today=None)
         assert result is None
 
+    def test_find_tournament_url_uses_explicit_date_and_format(self):
+        scraper = MagicMock()
+        scraper.post.return_value.json.return_value = {
+            "recordsFiltered": 1,
+            "model": [
+                {
+                    "id": 100734,
+                    "name": "Паупер 20.07.2026",
+                    "owner": "Edinorog",
+                    "date": "2026-07-20T14:00:00",
+                }
+            ],
+        }
+        result = AetherhubService(scraper=scraper).find_tournament_url(
+            "https://aetherhub.com/User/Edinorog/", date(2026, 7, 20), "Pauper"
+        )
+        assert result == "https://aetherhub.com/Tourney/RoundTourney/100734"
+        scraper.post.assert_called_once()
+
+    def test_find_tournament_url_rejects_other_format(self):
+        with pytest.raises(ValueError, match="Unsupported"):
+            self._svc("<html></html>").find_tournament_url(
+                "https://aetherhub.com/User/GoldFish", date(2026, 4, 24), "Modern"
+            )
+
+    def test_find_tournament_url_does_not_use_relative_age_from_profile_page(self):
+        scraper = MagicMock()
+        scraper.post.return_value.json.return_value = {"recordsFiltered": 0, "model": []}
+        result = AetherhubService(scraper=scraper).find_tournament_url(
+            "https://aetherhub.com/User/Edinorog/", date(2026, 7, 20), "Pauper"
+        )
+        assert result is None
+        scraper.get.assert_not_called()
+
 
 class TestFindTodaysGoldfishStyle:
     """Goldfish: имя — просто дата, «паупер» стоит в подзаголовке «Constructed: Pauper Tourney»."""
