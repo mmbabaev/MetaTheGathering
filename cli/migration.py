@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
+from pathlib import Path
 
 import typer
 
 from core.clubs import ClubIdentity, club_identities
+from core.config import settings
 from services.aetherhub_service import AetherhubService
 from services.datalens import DataLensService, DataLensTournamentError
+from services.magicoculus import MagicOculusClient
+from services.tournament_migration import HistoricalTournamentMigrator, TournamentMigrationReport
 
 app = typer.Typer(no_args_is_help=True)
 
@@ -64,3 +68,53 @@ def aetherhub_url(
         )
         raise typer.Exit(1)
     typer.echo(url)
+
+
+def _write_report(path: Path, report: TournamentMigrationReport) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(report.model_dump_json(indent=2), encoding="utf-8")
+    temporary.replace(path)
+
+
+@app.command("all")
+def migrate_all(
+    club: list[str] = typer.Option([], "--club", help="Ограничить клубами; по умолчанию Рыба и Единорог"),
+    from_date: datetime | None = typer.Option(None, "--from-date", formats=["%Y-%m-%d"]),
+    to_date: datetime | None = typer.Option(None, "--to-date", formats=["%Y-%m-%d"]),
+    report_path: Path = typer.Option(..., "--report", help="JSON checkpoint и итоговый отчёт"),
+    execute: bool = typer.Option(False, "--execute", help="Выполнить реальные POST в Magic Oculus"),
+) -> None:
+    """Проверить или загрузить все доступные DataLens-дейлики."""
+    dates = None
+    if from_date or to_date:
+        batch = DataLensService().all_tournaments()
+        lower = from_date.date() if from_date else min(row.date for row in batch.tournaments)
+        upper = to_date.date() if to_date else max(row.date for row in batch.tournaments)
+        dates = {lower + timedelta(days=offset) for offset in range((upper - lower).days + 1)}
+        datalens = CachedDataLensService(batch)
+    else:
+        datalens = DataLensService()
+    migrator = HistoricalTournamentMigrator(
+        datalens,
+        AetherhubService(),
+        MagicOculusClient(settings.MAGIC_OCULUS_API_URL),
+    )
+    report = migrator.run(
+        execute=execute,
+        clubs=set(club) or None,
+        dates=dates,
+        on_update=lambda current: _write_report(report_path, current),
+    )
+    typer.echo(json.dumps(report.counts(), ensure_ascii=False, sort_keys=True))
+    typer.echo(str(report_path))
+
+
+class CachedDataLensService:
+    """Reuse an already downloaded batch when CLI date bounds are applied."""
+
+    def __init__(self, batch) -> None:
+        self._batch = batch
+
+    def all_tournaments(self):
+        return self._batch

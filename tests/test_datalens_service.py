@@ -281,6 +281,23 @@ def test_tournament_ignores_other_dates_and_clubs_returned_by_api():
     assert [player.player for player in tournament.players] == ["Нужный"]
 
 
+def test_all_tournaments_groups_events_and_reports_invalid_one():
+    client = _tournament_client(
+        [
+            _tournament_row("2026-07-20", 1, "Игрок 1", "Deck 1", "Единорог"),
+            _tournament_row("2026-07-24", 1, "Игрок 2", "Deck 2", "Goldfish"),
+            _tournament_row("2026-07-24", 3, "Игрок 3", "Deck 3", "Goldfish"),
+        ]
+    )
+
+    batch = DataLensService(client).all_tournaments()
+
+    assert [(row.date, row.club) for row in batch.tournaments] == [(date(2026, 7, 20), "Единорог")]
+    assert len(batch.issues) == 1
+    assert batch.issues[0].club == "Goldfish"
+    assert client.run_config.call_args.args[2] == {}
+
+
 # ── DataLensService.player_report ────────────────────────────────────────────
 
 

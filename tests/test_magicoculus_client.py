@@ -65,6 +65,53 @@ def test_maps_bot_club_name_to_magic_oculus_reference():
     assert result == ("moscow", "edinorog_moscow", "pauper")
 
 
+def test_existing_daily_keys_reads_all_pages_and_skips_bad_rows():
+    session = MagicMock()
+    session.get.side_effect = [
+        _response(
+            {
+                "next": "page-2",
+                "results": [
+                    {
+                        "id": 145,
+                        "date": "2026-07-20",
+                        "type": "daily",
+                        "club": {"name": "Единорог"},
+                        "format": {"name": "Pauper"},
+                    },
+                    {"id": 999, "type": "tournament"},
+                ],
+            }
+        ),
+        _response(
+            {
+                "next": None,
+                "results": [
+                    {
+                        "id": 146,
+                        "date": "2026-07-24",
+                        "type": "daily",
+                        "club": {"name": "Goldfish"},
+                        "format": {"name": "Pauper"},
+                    },
+                    {"id": "bad", "date": "bad", "type": "daily", "club": {}, "format": {}},
+                ],
+            }
+        ),
+    ]
+
+    result = MagicOculusClient("https://magic.example", session=session).existing_daily_keys()
+
+    assert result == {
+        (date(2026, 7, 20), "единорог", "pauper"): 145,
+        (date(2026, 7, 24), "goldfish", "pauper"): 146,
+    }
+    assert session.get.call_args_list == [
+        call("https://magic.example/api/v1/tournaments?page=1", timeout=30),
+        call("https://magic.example/api/v1/tournaments?page=2", timeout=30),
+    ]
+
+
 def test_reference_must_have_exactly_one_match():
     session = MagicMock()
     session.get.return_value = _response([])
