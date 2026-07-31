@@ -9,6 +9,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from core import models
+from core.clubs import club_identities
+from services.aetherhub_service import AetherhubService
 from services.names import format_participant_name
 
 
@@ -45,8 +47,30 @@ class MagicOculusCollectionError(ValueError):
 class MagicOculusTournamentCollector:
     """Собирает импортируемый дейлик из уже проверенных данных БД бота."""
 
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, aetherhub_service: AetherhubService | None = None) -> None:
         self.db = db
+        self._aetherhub = aetherhub_service or AetherhubService()
+
+    def _resolve_aetherhub_url(self, tournament: models.Tournament, event_date: date) -> str:
+        if tournament.aetherhub_url:
+            return tournament.aetherhub_url
+        identity = next(
+            (row for row in club_identities() if row.name.casefold() == (tournament.club or "").casefold()),
+            None,
+        )
+        if identity is None or not identity.aetherhub_url:
+            raise MagicOculusCollectionError(f'Для клуба "{tournament.club}" не настроена страница AetherHub')
+        try:
+            url = self._aetherhub.find_todays_pauper_tournament(identity.aetherhub_url, today=event_date)
+        except Exception as exc:
+            raise MagicOculusCollectionError(
+                f"Не удалось найти AetherHub URL для {tournament.club} за {event_date.isoformat()}: {exc}"
+            ) from exc
+        if not url:
+            raise MagicOculusCollectionError(
+                f"На странице клуба {tournament.club} не найден Pauper-турнир за {event_date.isoformat()}"
+            )
+        return url
 
     def collect(self, tournament_id: int) -> MagicOculusTournament:
         tournament = (
@@ -65,8 +89,8 @@ class MagicOculusTournamentCollector:
             raise MagicOculusCollectionError(f"Турнир #{tournament_id} не найден")
         if not tournament.club:
             raise MagicOculusCollectionError(f"У турнира #{tournament_id} не указан клуб")
-        if not tournament.aetherhub_url:
-            raise MagicOculusCollectionError(f"У турнира #{tournament_id} нет AetherHub URL")
+        event_date = (tournament.started_at or tournament.created_at).date()
+        aetherhub_url = self._resolve_aetherhub_url(tournament, event_date)
 
         rows: list[MagicOculusPlayerDeck] = []
         missing_names: list[str] = []
@@ -105,13 +129,12 @@ class MagicOculusTournamentCollector:
         if not rows:
             raise MagicOculusCollectionError(f"У турнира #{tournament_id} нет участников")
 
-        event_date = (tournament.started_at or tournament.created_at).date()
         try:
             return MagicOculusTournament(
                 source_tournament_id=tournament.id,
                 date=event_date,
                 club=tournament.club,
-                aetherhub_url=tournament.aetherhub_url,
+                aetherhub_url=aetherhub_url,
                 player_decks=rows,
             )
         except ValueError as exc:

@@ -1,4 +1,5 @@
 from datetime import datetime
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -50,7 +51,6 @@ def test_collects_complete_tournament(db, svc, user_svc, arch_svc):
     ("club", "url", "message"),
     [
         (None, "https://aetherhub.com/Tourney/RoundTourney/42", "не указан клуб"),
-        ("Goldfish", None, "нет AetherHub URL"),
     ],
 )
 def test_requires_tournament_metadata(db, svc, club, url, message):
@@ -58,6 +58,31 @@ def test_requires_tournament_metadata(db, svc, club, url, message):
 
     with pytest.raises(MagicOculusCollectionError, match=message):
         MagicOculusTournamentCollector(db).collect(tournament.id)
+
+
+def test_finds_historical_aetherhub_url_by_club_and_date(db, svc, user_svc, arch_svc):
+    tournament = _tournament(svc, db, club="Goldfish", url=None)
+    player = user_svc.get_or_create(tg_id=1, username="alice", first_name="Алиса", last_name="Иванова")
+    deck = arch_svc.get_or_create_by_name("Elves")
+    _participant(db, tournament, player, deck, place=1)
+    aetherhub = MagicMock()
+    aetherhub.find_todays_pauper_tournament.return_value = "https://aetherhub.com/Tourney/RoundTourney/20260724"
+
+    result = MagicOculusTournamentCollector(db, aetherhub).collect(tournament.id)
+
+    assert str(result.aetherhub_url).endswith("/20260724")
+    aetherhub.find_todays_pauper_tournament.assert_called_once_with(
+        "https://aetherhub.com/User/GoldFish", today=result.date
+    )
+
+
+def test_reports_missing_historical_aetherhub_tournament(db, svc):
+    tournament = _tournament(svc, db, club="Goldfish", url=None)
+    aetherhub = MagicMock()
+    aetherhub.find_todays_pauper_tournament.return_value = None
+
+    with pytest.raises(MagicOculusCollectionError, match="не найден Pauper-турнир"):
+        MagicOculusTournamentCollector(db, aetherhub).collect(tournament.id)
 
 
 def test_reports_every_player_without_deck(db, svc, user_svc):
