@@ -10,6 +10,7 @@ from services.datalens import (
     Chart,
     DataLensClient,
     DataLensService,
+    DataLensTournamentError,
     Period,
     StatRow,
     _parse_row,
@@ -154,6 +155,130 @@ def test_service_missing_data_key_returns_empty_list():
     service = DataLensService(client)
 
     assert service.player_decks("Кто-то") == []
+
+
+def _tournament_client(rows):
+    client = MagicMock(spec=DataLensClient)
+    client.public_entry.return_value = {"data": {"shared": '{"datasetsIds":["hkp5eiu66low4"]}'}}
+    client.run_config.return_value = {"data": {"rows": rows}}
+    return client
+
+
+def _tournament_row(event_date, place, player, deck, club="Единорог"):
+    values = [
+        ("turniry_cr5j", event_date),
+        ("mesto_z8fl", place),
+        ("uchastnik_0zyi", player),
+        ("koloda_q1gh", deck),
+        ("klub_a9uu", club),
+    ]
+    return {"cells": [{"fieldId": field_id, "value": value} for field_id, value in values]}
+
+
+def test_tournament_returns_players_in_final_place_order():
+    client = _tournament_client(
+        [
+            _tournament_row("2026-07-20", 2, "Игрок 2", "Blue Terror"),
+            _tournament_row("2026-07-20", 1, "Игрок 1", "White Heroic"),
+        ]
+    )
+
+    tournament = DataLensService(client).tournament(date(2026, 7, 20), club="единорог")
+
+    assert tournament.club == "Единорог"
+    assert tournament.format == "Pauper"
+    assert [player.place for player in tournament.players] == [1, 2]
+    assert [player.deck for player in tournament.players] == ["White Heroic", "Blue Terror"]
+    _, shared, params = client.run_config.call_args.args
+    assert shared["visualization"]["id"] == "flatTable"
+    assert params == {"turniry_cr5j": "2026-07-20"}
+
+
+def test_tournament_requires_club_when_date_has_multiple_clubs():
+    client = _tournament_client(
+        [
+            _tournament_row("2026-07-20", 1, "Игрок 1", "Deck 1", "Единорог"),
+            _tournament_row("2026-07-20", 1, "Игрок 2", "Deck 2", "Goldfish"),
+        ]
+    )
+
+    with pytest.raises(DataLensTournamentError, match="несколько клубов"):
+        DataLensService(client).tournament(date(2026, 7, 20))
+
+
+def test_tournament_rejects_missing_final_places():
+    client = _tournament_client(
+        [
+            _tournament_row("2026-07-20", 1, "Игрок 1", "Deck 1"),
+            _tournament_row("2026-07-20", 3, "Игрок 2", "Deck 2"),
+        ]
+    )
+
+    with pytest.raises(DataLensTournamentError, match="Некорректные итоговые места"):
+        DataLensService(client).tournament(date(2026, 7, 20), club="Единорог")
+
+
+def test_client_public_entry_posts_anonymous_entry_request():
+    session = MagicMock()
+    session.post.return_value.json.return_value = {"data": {"shared": "{}"}}
+    client = DataLensClient(session=session)
+
+    assert client.public_entry("chart-id") == {"data": {"shared": "{}"}}
+    _, kwargs = session.post.call_args
+    assert kwargs["json"] == {"entryId": "chart-id"}
+    session.post.return_value.raise_for_status.assert_called_once_with()
+
+
+def test_client_run_config_sends_unsaved_wizard_config():
+    session = MagicMock()
+    session.post.return_value.json.return_value = {"data": {"rows": []}}
+    client = DataLensClient(session=session)
+
+    client.run_config("chart-id", {"visualization": {"id": "flatTable"}}, {"date": "2026-07-20"})
+
+    _, kwargs = session.post.call_args
+    assert kwargs["json"]["id"] == "chart-id"
+    assert kwargs["json"]["params"] == {"date": "2026-07-20"}
+    assert '"flatTable"' in kwargs["json"]["config"]["data"]["shared"]
+    session.post.return_value.raise_for_status.assert_called_once_with()
+
+
+def test_tournament_rejects_invalid_public_chart_config():
+    client = MagicMock(spec=DataLensClient)
+    client.public_entry.return_value = {"data": {"shared": "not-json"}}
+
+    with pytest.raises(DataLensTournamentError, match="конфигурацию"):
+        DataLensService(client).tournament(date(2026, 7, 20), club="Единорог")
+
+
+def test_tournament_rejects_empty_result():
+    client = _tournament_client([])
+
+    with pytest.raises(DataLensTournamentError, match="нет турнира"):
+        DataLensService(client).tournament(date(2026, 7, 20), club="Единорог")
+
+
+def test_tournament_rejects_row_without_deck():
+    row = _tournament_row("2026-07-20", 1, "Игрок", "Deck")
+    row["cells"] = [cell for cell in row["cells"] if cell["fieldId"] != "koloda_q1gh"]
+    client = _tournament_client([row])
+
+    with pytest.raises(DataLensTournamentError, match="отсутствует"):
+        DataLensService(client).tournament(date(2026, 7, 20), club="Единорог")
+
+
+def test_tournament_ignores_other_dates_and_clubs_returned_by_api():
+    client = _tournament_client(
+        [
+            _tournament_row("2026-07-19", 1, "Старый", "Deck", "Единорог"),
+            _tournament_row("2026-07-20", 1, "Другой клуб", "Deck", "Goldfish"),
+            _tournament_row("2026-07-20", 1, "Нужный", "White Heroic", "Единорог"),
+        ]
+    )
+
+    tournament = DataLensService(client).tournament(date(2026, 7, 20), club="Единорог")
+
+    assert [player.player for player in tournament.players] == ["Нужный"]
 
 
 # ── DataLensService.player_report ────────────────────────────────────────────

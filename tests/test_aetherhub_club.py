@@ -435,6 +435,121 @@ class TestFindTodaysPauperTournament:
         result = svc.find_todays_pauper_tournament("https://aetherhub.com/User/GoldFish", today=None)
         assert result is None
 
+    def test_find_tournament_url_uses_explicit_date_and_format(self):
+        scraper = MagicMock()
+        scraper.post.return_value.json.return_value = {
+            "recordsFiltered": 1,
+            "model": [
+                {
+                    "id": 100734,
+                    "name": "Паупер 20.07.2026",
+                    "owner": "Edinorog",
+                    "date": "2026-07-20T14:00:00",
+                }
+            ],
+        }
+        result = AetherhubService(scraper=scraper).find_tournament_url(
+            "https://aetherhub.com/User/Edinorog/", date(2026, 7, 20), "Pauper"
+        )
+        assert result == "https://aetherhub.com/Tourney/RoundTourney/100734"
+        scraper.post.assert_called_once()
+
+    def test_find_tournament_url_rejects_other_format(self):
+        with pytest.raises(ValueError, match="Unsupported"):
+            self._svc("<html></html>").find_tournament_url(
+                "https://aetherhub.com/User/GoldFish", date(2026, 4, 24), "Modern"
+            )
+
+    def test_find_tournament_url_does_not_use_relative_age_from_profile_page(self):
+        scraper = MagicMock()
+        scraper.post.return_value.json.return_value = {"recordsFiltered": 0, "model": []}
+        result = AetherhubService(scraper=scraper).find_tournament_url(
+            "https://aetherhub.com/User/Edinorog/", date(2026, 7, 20), "Pauper"
+        )
+        assert result is None
+        scraper.get.assert_not_called()
+
+    def test_find_tournament_url_rejects_non_user_url(self):
+        with pytest.raises(ValueError, match="owner"):
+            AetherhubService(scraper=MagicMock()).find_tournament_url(
+                "https://aetherhub.com/Tourney/", date(2026, 7, 20), "Pauper"
+            )
+
+    def test_find_tournament_url_paginates_public_list(self):
+        scraper = MagicMock()
+        first = {
+            "recordsFiltered": 2,
+            "model": [
+                {
+                    "id": 1,
+                    "name": "Паупер 21.07.2026",
+                    "owner": "Edinorog",
+                    "date": "2026-07-21T14:00:00",
+                }
+            ],
+        }
+        second = {
+            "recordsFiltered": 2,
+            "model": [
+                {
+                    "id": 2,
+                    "name": "Паупер 20.07.2026",
+                    "owner": "Edinorog",
+                    "date": "2026-07-20T14:00:00",
+                }
+            ],
+        }
+        scraper.post.return_value.json.side_effect = [first, second]
+
+        result = AetherhubService(scraper=scraper).find_tournament_url(
+            "https://aetherhub.com/User/Edinorog/", date(2026, 7, 20), "Pauper"
+        )
+
+        assert result == "https://aetherhub.com/Tourney/RoundTourney/2"
+        assert scraper.post.call_count == 2
+
+    def test_find_tournament_url_rejects_ambiguous_result(self):
+        scraper = MagicMock()
+        scraper.post.return_value.json.return_value = {
+            "recordsFiltered": 2,
+            "model": [
+                {
+                    "id": tournament_id,
+                    "name": "Паупер 20.07.2026",
+                    "owner": "Edinorog",
+                    "date": "2026-07-20T14:00:00",
+                }
+                for tournament_id in (1, 2)
+            ],
+        }
+
+        with pytest.raises(ValueError, match="Multiple"):
+            AetherhubService(scraper=scraper).find_tournament_url(
+                "https://aetherhub.com/User/Edinorog/", date(2026, 7, 20), "Pauper"
+            )
+
+    def test_find_tournament_url_ignores_malformed_rows_and_stops_after_older_page(self):
+        scraper = MagicMock()
+        scraper.post.return_value.json.return_value = {
+            "recordsFiltered": 200,
+            "model": [
+                {"id": 1, "name": "Паупер", "owner": "Edinorog", "date": "bad-date"},
+                {
+                    "id": 2,
+                    "name": "Паупер 19.07.2026",
+                    "owner": "Edinorog",
+                    "date": "2026-07-19T14:00:00",
+                },
+            ],
+        }
+
+        result = AetherhubService(scraper=scraper).find_tournament_url(
+            "https://aetherhub.com/User/Edinorog/", date(2026, 7, 20), "Pauper"
+        )
+
+        assert result is None
+        scraper.post.assert_called_once()
+
 
 class TestFindTodaysGoldfishStyle:
     """Goldfish: имя — просто дата, «паупер» стоит в подзаголовке «Constructed: Pauper Tourney»."""
