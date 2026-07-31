@@ -95,7 +95,7 @@ def test_imports_multipart_and_verifies_detail():
     assert result.detail["standings"][0]["place"] == 1
     files = session.post.call_args.kwargs["files"]
     assert files["date"] == (None, "2026-07-24")
-    assert files["playerDecksText"] == (None, "Иванов Иван - Elves")
+    assert files["playerDecksText"] == (None, "Elves")
     session.get.assert_called_once_with("https://magic.example/api/v1/tournaments/145", timeout=30)
 
 
