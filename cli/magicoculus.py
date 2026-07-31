@@ -35,7 +35,8 @@ def preview(tournament_id: int = typer.Argument(..., help="ID турнира Met
         "tournamentType": tournament.tournament_type,
         "aetherhubUrl": str(tournament.aetherhub_url),
         "players": len(tournament.player_decks),
-        "playerDecksText": tournament.player_decks_text,
+        "playerDecksText": tournament.positional_player_decks_text,
+        "playerDecksNamedPreview": tournament.player_decks_text,
     }
     typer.echo(json.dumps(payload, ensure_ascii=False, indent=2))
 

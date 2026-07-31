@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from unittest.mock import MagicMock
 
 import pytest
@@ -6,7 +6,12 @@ import pytest
 from core import models
 from core.schemas import TournamentCreate
 from services.aetherhub_models import AetherhubTournamentData
-from services.magicoculus import MagicOculusCollectionError, MagicOculusTournamentCollector
+from services.magicoculus import (
+    MagicOculusCollectionError,
+    MagicOculusPlayerDeck,
+    MagicOculusTournament,
+    MagicOculusTournamentCollector,
+)
 
 
 def _tournament(svc, db, *, club="Goldfish", url="https://aetherhub.com/Tourney/RoundTourney/42"):
@@ -127,3 +132,30 @@ def test_validates_player_count_against_aetherhub(db, svc, user_svc, arch_svc):
 
     with pytest.raises(MagicOculusCollectionError, match="MetaGatherer 1 колод.*AetherHub 2"):
         MagicOculusTournamentCollector(db, aetherhub).collect(tournament.id, validate_aetherhub=True)
+
+
+def test_positional_text_uses_final_place_and_ignores_names(db, svc, user_svc, arch_svc):
+    tournament = _tournament(svc, db)
+    alice = user_svc.get_or_create(tg_id=1, username="alice", first_name="Алиса", last_name="Иванова")
+    bob = user_svc.get_or_create(tg_id=2, username="bob", first_name="Боб", last_name="Петров")
+    burn = arch_svc.get_or_create_by_name("Burn")
+    elves = arch_svc.get_or_create_by_name("Elves")
+    _participant(db, tournament, alice, burn, place=2)
+    _participant(db, tournament, bob, elves, place=1)
+
+    result = MagicOculusTournamentCollector(db).collect(tournament.id)
+
+    assert result.positional_player_decks_text == "Elves\nBurn"
+
+
+def test_positional_text_requires_complete_places():
+    tournament = MagicOculusTournament(
+        source_tournament_id=1,
+        date=date(2026, 7, 24),
+        club="Goldfish",
+        aetherhub_url="https://aetherhub.com/Tourney/RoundTourney/1",
+        player_decks=[MagicOculusPlayerDeck(player="Иванов Иван", deck="Elves")],
+    )
+
+    with pytest.raises(MagicOculusCollectionError, match="места должны идти"):
+        _ = tournament.positional_player_decks_text

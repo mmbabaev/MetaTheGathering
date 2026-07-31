@@ -42,6 +42,17 @@ class MagicOculusTournament(BaseModel):
     def player_decks_text(self) -> str:
         return "\n".join(f"{row.player} - {row.deck}" for row in self.player_decks)
 
+    @property
+    def positional_player_decks_text(self) -> str:
+        """Колоды по местам AetherHub; имена не участвуют в matching Magic Oculus."""
+        places = [row.final_place for row in self.player_decks]
+        expected = list(range(1, len(self.player_decks) + 1))
+        if places != expected:
+            raise MagicOculusCollectionError(
+                f"Для позиционного импорта места должны идти 1..{len(self.player_decks)}, получено: {places}"
+            )
+        return "\n".join(row.deck for row in self.player_decks)
+
 
 class MagicOculusCollectionError(ValueError):
     pass
@@ -246,7 +257,8 @@ class MagicOculusClient:
             "tournamentType": (None, tournament.tournament_type),
             "formatId": (None, format_id),
             "aetherhubUrl": (None, str(tournament.aetherhub_url)),
-            "playerDecksText": (None, tournament.player_decks_text),
+            # Позиционный режим намеренно не использует имена AetherHub: источник колод и мест — бот.
+            "playerDecksText": (None, tournament.positional_player_decks_text),
         }
         response = self._session.post(
             f"{self._base_url}/api/v1/admin/tournaments/import",
