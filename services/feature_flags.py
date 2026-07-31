@@ -60,7 +60,7 @@ KNOWN_FLAGS: dict[str, FeatureFlagMeta] = {
     FeatureFlags.MAGIC_OCULUS_IMPORT: FeatureFlagMeta(
         description="Magic Oculus: импортировать полный турнир после штатного закрытия",
         value_type="bool",
-        default_value="false",
+        default_value="true",
     ),
 }
 
@@ -81,6 +81,12 @@ class FeatureFlagService:
                         default_value=meta.default_value,
                     )
                 )
+            else:
+                # Код — источник истины для описания и дефолта. Явно выбранное
+                # администратором current_value при этом не перезаписываем.
+                existing.description = meta.description
+                existing.value_type = meta.value_type
+                existing.default_value = meta.default_value
         self.db.commit()
 
     def _get_row(self, name: str) -> models.FeatureFlag | None:

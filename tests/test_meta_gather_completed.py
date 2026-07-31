@@ -28,6 +28,12 @@ from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.tournament import TournamentService
 
 
+@pytest.fixture(autouse=True)
+def _disable_magicoculus_by_default(db):
+    """Tests unrelated to Oculus must not start a real worker/network request."""
+    FeatureFlagService(db).toggle(FeatureFlags.MAGIC_OCULUS_IMPORT)
+
+
 def _pairing(db, t_id, rnd, player, opponent, pw, ow):
     db.add(
         models.RoundPairing(
@@ -596,8 +602,73 @@ async def test_magicoculus_failure_does_not_break_close(db, user_svc, arch_svc, 
     FeatureFlagService(db).toggle(FeatureFlags.MAGIC_OCULUS_IMPORT)
     monkeypatch.setattr("bot.scheduler.asyncio.to_thread", AsyncMock(side_effect=RuntimeError("API failed")))
     monkeypatch.setattr("bot.scheduler._announce_to_targets", AsyncMock(return_value=True))
+    monkeypatch.setattr("bot.scheduler.send_achievements_report", AsyncMock())
+    t = _complete_tournament(db, user_svc, arch_svc)
+    bot = AsyncMock()
+
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+
+    assert db.get(models.Tournament, t.id).status == models.TournamentStatus.CLOSED
+    bot.send_message.assert_awaited_once()
+    call = bot.send_message.await_args.kwargs
+    assert call["chat_id"] == 777
+    assert "Magic Oculus" in call["text"]
+    assert "API failed" in call["text"]
+
+
+async def test_magicoculus_import_can_be_disabled(db, user_svc, arch_svc, monkeypatch):
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    to_thread = AsyncMock()
+    monkeypatch.setattr("bot.scheduler.asyncio.to_thread", to_thread)
+    monkeypatch.setattr("bot.scheduler._announce_to_targets", AsyncMock(return_value=True))
     t = _complete_tournament(db, user_svc, arch_svc)
 
     await maybe_announce_meta_gather_completed(AsyncMock(), db, t.id)
 
+    to_thread.assert_not_awaited()
+    assert db.get(models.Tournament, t.id).status == models.TournamentStatus.CLOSED
+
+
+async def test_magicoculus_import_starts_only_after_tournament_is_closed(db, user_svc, arch_svc, monkeypatch):
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    FeatureFlagService(db).toggle(FeatureFlags.MAGIC_OCULUS_IMPORT)
+    t = _complete_tournament(db, user_svc, arch_svc)
+
+    async def verify_closed(*args):
+        assert db.get(models.Tournament, t.id).status == models.TournamentStatus.CLOSED
+
+    monkeypatch.setattr("bot.scheduler.asyncio.to_thread", AsyncMock(side_effect=verify_closed))
+    monkeypatch.setattr("bot.scheduler._announce_to_targets", AsyncMock(return_value=True))
+
+    await maybe_announce_meta_gather_completed(AsyncMock(), db, t.id)
+
+
+async def test_magicoculus_error_dm_failure_does_not_break_close(db, user_svc, arch_svc, monkeypatch):
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    FeatureFlagService(db).toggle(FeatureFlags.MAGIC_OCULUS_IMPORT)
+    monkeypatch.setattr("bot.scheduler.asyncio.to_thread", AsyncMock(side_effect=RuntimeError("API failed")))
+    monkeypatch.setattr("bot.scheduler._announce_to_targets", AsyncMock(return_value=True))
+    monkeypatch.setattr("bot.scheduler.send_achievements_report", AsyncMock())
+    t = _complete_tournament(db, user_svc, arch_svc)
+    bot = AsyncMock()
+    bot.send_message.side_effect = TelegramError("DM unavailable")
+
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+
+    bot.send_message.assert_awaited_once()
+    assert db.get(models.Tournament, t.id).status == models.TournamentStatus.CLOSED
+
+
+async def test_magicoculus_error_is_not_sent_to_club_when_owner_missing(db, user_svc, arch_svc, monkeypatch):
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", None)
+    FeatureFlagService(db).toggle(FeatureFlags.MAGIC_OCULUS_IMPORT)
+    monkeypatch.setattr("bot.scheduler.asyncio.to_thread", AsyncMock(side_effect=RuntimeError("API failed")))
+    monkeypatch.setattr("bot.scheduler._announce_to_targets", AsyncMock(return_value=True))
+    monkeypatch.setattr("bot.scheduler.send_achievements_report", AsyncMock())
+    t = _complete_tournament(db, user_svc, arch_svc)
+    bot = AsyncMock()
+
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+
+    bot.send_message.assert_not_awaited()
     assert db.get(models.Tournament, t.id).status == models.TournamentStatus.CLOSED

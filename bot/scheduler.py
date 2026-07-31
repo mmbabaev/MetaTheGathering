@@ -634,8 +634,9 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, char
     if FeatureFlagService(db).is_enabled(FeatureFlags.MAGIC_OCULUS_IMPORT):
         try:
             await asyncio.to_thread(import_closed_tournament_to_magicoculus, tournament_id)
-        except Exception:
+        except Exception as exc:
             logger.exception("maybe_announce_meta_gather_completed: Magic Oculus import failed for #%s", tournament_id)
+            await _notify_magicoculus_import_error(bot, tournament_id, title, exc)
     logger.info("maybe_announce_meta_gather_completed: announced completion for #%s", tournament_id)
 
 
@@ -648,6 +649,25 @@ def import_closed_tournament_to_magicoculus(tournament_id: int) -> None:
         MagicOculusImporter(db, client).import_once(tournament, city="Москва")
     finally:
         db.close()
+
+
+async def _notify_magicoculus_import_error(bot, tournament_id: int, title: str, exc: Exception) -> None:
+    """Best-effort DM владельцу; никогда не рассылает ошибку участникам или в клуб."""
+    if bot is None or not settings.OWNER_CHAT_ID:
+        return
+    error = f"{type(exc).__name__}: {exc}".strip()
+    # Telegram ограничивает сообщение 4096 символами; оставляем запас под заголовок.
+    error = error[:3500]
+    text = (
+        f"⚠️ Не удалось загрузить турнир в Magic Oculus\n\nТурнир: {title}\nID в боте: #{tournament_id}\nОшибка: {error}"
+    )
+    try:
+        await bot.send_message(chat_id=settings.OWNER_CHAT_ID, text=text)
+    except Exception:  # noqa: BLE001 — Telegram не должен откатывать уже закрытый турнир
+        logger.exception(
+            "maybe_announce_meta_gather_completed: Magic Oculus error DM failed for #%s",
+            tournament_id,
+        )
 
 
 def _reserve_announce(db, tournament_id: int) -> bool:
