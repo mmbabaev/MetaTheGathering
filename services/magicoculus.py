@@ -102,7 +102,7 @@ class MagicOculusTournamentCollector:
             )
         return url
 
-    def collect(self, tournament_id: int) -> MagicOculusTournament:
+    def collect(self, tournament_id: int, *, validate_aetherhub: bool = False) -> MagicOculusTournament:
         tournament = (
             self.db.execute(
                 select(models.Tournament)
@@ -160,7 +160,7 @@ class MagicOculusTournamentCollector:
             raise MagicOculusCollectionError(f"У турнира #{tournament_id} нет участников")
 
         try:
-            return MagicOculusTournament(
+            result = MagicOculusTournament(
                 source_tournament_id=tournament.id,
                 date=event_date,
                 club=tournament.club,
@@ -169,6 +169,23 @@ class MagicOculusTournamentCollector:
             )
         except ValueError as exc:
             raise MagicOculusCollectionError(str(exc)) from exc
+        if validate_aetherhub:
+            self.validate_aetherhub_players(result)
+        return result
+
+    def validate_aetherhub_players(self, tournament: MagicOculusTournament) -> None:
+        try:
+            source = self._aetherhub.fetch_tournament(str(tournament.aetherhub_url))
+        except Exception as exc:
+            raise MagicOculusCollectionError(f"Не удалось проверить состав AetherHub: {exc}") from exc
+        aetherhub_players = source.standings or source.players
+        if not aetherhub_players:
+            raise MagicOculusCollectionError("AetherHub не вернул ни standings, ни игроков")
+        if len(aetherhub_players) != len(tournament.player_decks):
+            raise MagicOculusCollectionError(
+                f"Состав не совпадает: в MetaGatherer {len(tournament.player_decks)} колод, "
+                f"в AetherHub {len(aetherhub_players)} игроков"
+            )
 
 
 class MagicOculusClient:
@@ -209,7 +226,8 @@ class MagicOculusClient:
 
     def resolve_reference_ids(self, *, city: str, club: str, format_name: str) -> tuple[str, str, str]:
         city_ref = self._find_reference(self.cities(), city, "Город")
-        club_ref = self._find_reference(self.clubs(city_ref.id), club, "Клуб")
+        magicoculus_club = {"edinorog": "Единорог"}.get(club.casefold(), club)
+        club_ref = self._find_reference(self.clubs(city_ref.id), magicoculus_club, "Клуб")
         format_ref = self._find_reference(self.formats(), format_name, "Формат")
         return city_ref.id, club_ref.id, format_ref.id
 

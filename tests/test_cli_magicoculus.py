@@ -36,6 +36,7 @@ def test_preview_prints_json(monkeypatch):
     assert result.exit_code == 0
     assert '"sourceTournamentId": 42' in result.stdout
     assert '"playerDecksText": "Иванов Иван - Elves"' in result.stdout
+    collector.return_value.collect.assert_called_once_with(42, validate_aetherhub=True)
 
 
 def test_preview_reports_collection_error(monkeypatch):

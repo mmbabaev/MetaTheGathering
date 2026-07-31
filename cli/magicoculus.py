@@ -22,7 +22,7 @@ def preview(tournament_id: int = typer.Argument(..., help="ID турнира Met
     """Собрать и показать один импорт без отправки в Magic Oculus."""
     try:
         with get_db() as db:
-            tournament = MagicOculusTournamentCollector(db).collect(tournament_id)
+            tournament = MagicOculusTournamentCollector(db).collect(tournament_id, validate_aetherhub=True)
     except MagicOculusCollectionError as exc:
         typer.echo(f"Ошибка: {exc}", err=True)
         raise typer.Exit(1) from exc
@@ -52,7 +52,7 @@ def send(
         raise typer.Exit(2)
     try:
         with get_db() as db:
-            tournament = MagicOculusTournamentCollector(db).collect(tournament_id)
+            tournament = MagicOculusTournamentCollector(db).collect(tournament_id, validate_aetherhub=True)
             client = MagicOculusClient(settings.MAGIC_OCULUS_API_URL)
             result = MagicOculusImporter(db, client).import_once(tournament, city=city)
     except (MagicOculusCollectionError, MagicOculusApiError) as exc:

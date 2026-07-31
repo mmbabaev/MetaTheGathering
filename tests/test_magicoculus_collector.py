@@ -5,6 +5,7 @@ import pytest
 
 from core import models
 from core.schemas import TournamentCreate
+from services.aetherhub_models import AetherhubTournamentData
 from services.magicoculus import MagicOculusCollectionError, MagicOculusTournamentCollector
 
 
@@ -109,3 +110,20 @@ def test_rejects_duplicate_display_names(db, svc, user_svc, arch_svc):
 
     with pytest.raises(MagicOculusCollectionError, match="встречается несколько раз"):
         MagicOculusTournamentCollector(db).collect(tournament.id)
+
+
+def test_validates_player_count_against_aetherhub(db, svc, user_svc, arch_svc):
+    tournament = _tournament(svc, db)
+    player = user_svc.get_or_create(tg_id=1, username="alice", first_name="Алиса", last_name="Иванова")
+    deck = arch_svc.get_or_create_by_name("Elves")
+    _participant(db, tournament, player, deck, place=1)
+    aetherhub = MagicMock()
+    aetherhub.fetch_tournament.return_value = AetherhubTournamentData(
+        url=tournament.aetherhub_url,
+        players=[],
+        rounds=[],
+        standings=["Иванова Алиса", "Лишний Игрок"],
+    )
+
+    with pytest.raises(MagicOculusCollectionError, match="MetaGatherer 1 колод.*AetherHub 2"):
+        MagicOculusTournamentCollector(db, aetherhub).collect(tournament.id, validate_aetherhub=True)

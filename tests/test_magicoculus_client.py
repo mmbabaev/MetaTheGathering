@@ -50,6 +50,21 @@ def test_resolves_current_reference_ids():
     ]
 
 
+def test_maps_bot_club_name_to_magic_oculus_reference():
+    session = MagicMock()
+    session.get.side_effect = [
+        _response([{"id": "moscow", "name": "Москва"}]),
+        _response([{"id": "edinorog_moscow", "name": "Единорог"}]),
+        _response([{"id": "pauper", "name": "Pauper"}]),
+    ]
+
+    result = MagicOculusClient("https://magic.example", session=session).resolve_reference_ids(
+        city="Москва", club="Edinorog", format_name="Pauper"
+    )
+
+    assert result == ("moscow", "edinorog_moscow", "pauper")
+
+
 def test_reference_must_have_exactly_one_match():
     session = MagicMock()
     session.get.return_value = _response([])
