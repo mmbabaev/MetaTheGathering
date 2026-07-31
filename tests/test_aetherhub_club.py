@@ -528,10 +528,10 @@ class TestFindTodaysPauperTournament:
                 "https://aetherhub.com/User/Edinorog/", date(2026, 7, 20), "Pauper"
             )
 
-    def test_find_tournament_url_ignores_malformed_rows_and_stops_after_older_page(self):
+    def test_find_tournament_url_ignores_malformed_rows(self):
         scraper = MagicMock()
         scraper.post.return_value.json.return_value = {
-            "recordsFiltered": 200,
+            "recordsFiltered": 2,
             "model": [
                 {"id": 1, "name": "Паупер", "owner": "Edinorog", "date": "bad-date"},
                 {
@@ -549,6 +549,26 @@ class TestFindTodaysPauperTournament:
 
         assert result is None
         scraper.post.assert_called_once()
+
+    def test_goldfish_date_only_name_is_pauper(self):
+        scraper = MagicMock()
+        scraper.post.return_value.json.return_value = {
+            "recordsFiltered": 1,
+            "model": [
+                {
+                    "id": 100796,
+                    "name": "24.07",
+                    "owner": "GoldFish",
+                    "date": "2026-07-24T16:00:00",
+                }
+            ],
+        }
+
+        result = AetherhubService(scraper=scraper).find_tournament_url(
+            "https://aetherhub.com/User/GoldFish", date(2026, 7, 24), "Pauper"
+        )
+
+        assert result == "https://aetherhub.com/Tourney/RoundTourney/100796"
 
 
 class TestFindTodaysGoldfishStyle:

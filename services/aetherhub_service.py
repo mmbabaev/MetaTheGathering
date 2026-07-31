@@ -311,6 +311,14 @@ class AetherhubService:
         The current migration is intentionally Pauper-only. Keeping the format in the
         interface prevents callers from silently attaching a Legacy/Modern URL.
         """
+        by_date = self.tournament_urls_by_date(club_url, tournament_format)
+        matches = by_date.get(event_date, [])
+        if len(matches) > 1:
+            raise ValueError(f"Multiple AetherHub Pauper tournaments found on {event_date.isoformat()}: {matches}")
+        return matches[0] if matches else None
+
+    def tournament_urls_by_date(self, club_url: str, tournament_format: str) -> dict[date, list[str]]:
+        """Load the organizer's public tournament history once and index it by date."""
         if not PAUPER_RE.fullmatch(tournament_format.strip()):
             raise ValueError(f"Unsupported AetherHub tournament format: {tournament_format}")
         owner_match = re.search(r"/User/([^/?#]+)", club_url, re.IGNORECASE)
@@ -319,7 +327,7 @@ class AetherhubService:
         owner = owner_match.group(1)
         start = 0
         page_size = 100
-        matches: list[str] = []
+        by_date: dict[date, list[str]] = {}
         while True:
             payload = {
                 "draw": 1,
@@ -347,29 +355,16 @@ class AetherhubService:
                     row_date = datetime.fromisoformat(row["date"]).date()
                 except (KeyError, TypeError, ValueError):
                     continue
-                if (
-                    row_date == event_date
-                    and str(row.get("owner", "")).casefold() == owner.casefold()
-                    and PAUPER_RE.search(str(row.get("name", "")))
-                ):
-                    matches.append(f"https://aetherhub.com/Tourney/RoundTourney/{int(row['id'])}")
+                same_owner = str(row.get("owner", "")).casefold() == owner.casefold()
+                # Goldfish is a dedicated Pauper organizer and uses date-only names.
+                requested_format = owner.casefold() == "goldfish" or PAUPER_RE.search(str(row.get("name", "")))
+                if same_owner and requested_format:
+                    url = f"https://aetherhub.com/Tourney/RoundTourney/{int(row['id'])}"
+                    by_date.setdefault(row_date, []).append(url)
             start += len(rows)
             if not rows or start >= int(body.get("recordsFiltered", start)):
                 break
-            dated_rows = []
-            for row in rows:
-                try:
-                    dated_rows.append(datetime.fromisoformat(row["date"]).date())
-                except (KeyError, TypeError, ValueError):
-                    pass
-            if dated_rows and min(dated_rows) < event_date:
-                break
-        matches = list(dict.fromkeys(matches))
-        if len(matches) > 1:
-            raise ValueError(
-                f"Multiple AetherHub Pauper tournaments found for {owner} on {event_date.isoformat()}: {matches}"
-            )
-        return matches[0] if matches else None
+        return {event_date: list(dict.fromkeys(urls)) for event_date, urls in by_date.items()}
 
     def _pairings_url(self, tourney_id: str, round_num: int) -> str:
         return f"https://aetherhub.com/Tourney/RoundTourneyPublicPairings?id={tourney_id}&p={round_num}"

@@ -139,6 +139,17 @@ class DataLensTournament(BaseModel):
     players: list[TournamentPlayer]
 
 
+class DataLensTournamentIssue(BaseModel):
+    date: date
+    club: str
+    message: str
+
+
+class DataLensTournamentBatch(BaseModel):
+    tournaments: list[DataLensTournament]
+    issues: list[DataLensTournamentIssue]
+
+
 class DataLensTournamentError(ValueError):
     pass
 
@@ -360,6 +371,34 @@ class DataLensService:
 
     def tournament(self, event_date: date, *, club: str | None = None) -> DataLensTournament:
         """Return final places and decks for one Pauper daily from DataLens."""
+        batch = self._tournament_batch({TOURNAMENT_FIELDS["date"][0]: event_date.isoformat()})
+        tournaments = [
+            tournament
+            for tournament in batch.tournaments
+            if tournament.date == event_date and (club is None or tournament.club.casefold() == club.casefold())
+        ]
+        matching_issues = [
+            issue
+            for issue in batch.issues
+            if issue.date == event_date and (club is None or issue.club.casefold() == club.casefold())
+        ]
+        if matching_issues:
+            raise DataLensTournamentError(matching_issues[0].message)
+        if not tournaments:
+            suffix = f' для клуба "{club}"' if club else ""
+            raise DataLensTournamentError(f"В DataLens нет турнира {event_date.isoformat()}{suffix}")
+        if len(tournaments) != 1:
+            clubs = ", ".join(sorted(tournament.club for tournament in tournaments))
+            raise DataLensTournamentError(
+                f"На {event_date.isoformat()} найдено несколько клубов: {clubs}; укажите --club"
+            )
+        return tournaments[0]
+
+    def all_tournaments(self) -> DataLensTournamentBatch:
+        """Bulk-read every daily in one DataLens chart request."""
+        return self._tournament_batch({})
+
+    def _tournament_batch(self, params: dict[str, str]) -> DataLensTournamentBatch:
         entry = self._client.public_entry(TOURNAMENT_CHART_ID)
         try:
             shared = json.loads(entry["data"]["shared"])
@@ -369,16 +408,19 @@ class DataLensService:
         response = self._client.run_config(
             TOURNAMENT_CHART_ID,
             self._tournament_table_config(shared),
-            {TOURNAMENT_FIELDS["date"][0]: event_date.isoformat()},
+            params,
         )
         rows = response.get("data", {}).get("rows", [])
-        parsed: list[tuple[str, TournamentPlayer]] = []
+        grouped: dict[tuple[date, str], list[TournamentPlayer]] = {}
+        issues: list[DataLensTournamentIssue] = []
         for row in rows:
             values = {cell.get("fieldId"): cell.get("value") for cell in row.get("cells", [])}
-            if values.get(TOURNAMENT_FIELDS["date"][0]) != event_date.isoformat():
+            try:
+                event_date = date.fromisoformat(str(values[TOURNAMENT_FIELDS["date"][0]]))
+            except (KeyError, ValueError):
                 continue
             row_club = str(values.get(TOURNAMENT_FIELDS["club"][0]) or "").strip()
-            if club and row_club.casefold() != club.casefold():
+            if not row_club:
                 continue
             try:
                 player = TournamentPlayer(
@@ -386,21 +428,30 @@ class DataLensService:
                     player=values[TOURNAMENT_FIELDS["player"][0]],
                     deck=values[TOURNAMENT_FIELDS["deck"][0]],
                 )
-            except (KeyError, ValueError) as exc:
-                raise DataLensTournamentError("В строке DataLens отсутствует место, игрок или колода") from exc
-            parsed.append((row_club, player))
+            except (KeyError, ValueError):
+                issues.append(
+                    DataLensTournamentIssue(
+                        date=event_date,
+                        club=row_club,
+                        message="В строке DataLens отсутствует место, игрок или колода",
+                    )
+                )
+                continue
+            grouped.setdefault((event_date, row_club), []).append(player)
 
-        if not parsed:
-            suffix = f' для клуба "{club}"' if club else ""
-            raise DataLensTournamentError(f"В DataLens нет турнира {event_date.isoformat()}{suffix}")
-        clubs = {row_club for row_club, _ in parsed}
-        if len(clubs) != 1:
-            raise DataLensTournamentError(
-                f"На {event_date.isoformat()} найдено несколько клубов: {', '.join(sorted(clubs))}; укажите --club"
-            )
-        players = sorted((player for _, player in parsed), key=lambda player: player.place)
-        places = [player.place for player in players]
-        expected = list(range(1, len(players) + 1))
-        if places != expected:
-            raise DataLensTournamentError(f"Некорректные итоговые места DataLens: {places}; ожидались {expected}")
-        return DataLensTournament(date=event_date, club=next(iter(clubs)), players=players)
+        tournaments: list[DataLensTournament] = []
+        for (event_date, club), unsorted_players in sorted(grouped.items()):
+            players = sorted(unsorted_players, key=lambda player: player.place)
+            places = [player.place for player in players]
+            expected = list(range(1, len(players) + 1))
+            if places != expected:
+                issues.append(
+                    DataLensTournamentIssue(
+                        date=event_date,
+                        club=club,
+                        message=f"Некорректные итоговые места DataLens: {places}; ожидались {expected}",
+                    )
+                )
+                continue
+            tournaments.append(DataLensTournament(date=event_date, club=club, players=players))
+        return DataLensTournamentBatch(tournaments=tournaments, issues=issues)
