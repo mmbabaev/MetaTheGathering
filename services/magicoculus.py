@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from core import models
 from core.clubs import club_identities
+from services.aetherhub_import_service import AetherhubImportService
 from services.aetherhub_service import AetherhubService
 from services.names import format_participant_name
 
@@ -170,10 +171,11 @@ class MagicOculusTournamentCollector:
         except ValueError as exc:
             raise MagicOculusCollectionError(str(exc)) from exc
         if validate_aetherhub:
-            self.validate_aetherhub_players(result)
+            result = result.model_copy(update={"player_decks": self.canonicalize_aetherhub_players(result)})
         return result
 
-    def validate_aetherhub_players(self, tournament: MagicOculusTournament) -> None:
+    def canonicalize_aetherhub_players(self, tournament: MagicOculusTournament) -> list[MagicOculusPlayerDeck]:
+        """Сверить состав 1:1 и вернуть строки с точными именами из standings."""
         try:
             source = self._aetherhub.fetch_tournament(str(tournament.aetherhub_url))
         except Exception as exc:
@@ -186,6 +188,45 @@ class MagicOculusTournamentCollector:
                 f"Состав не совпадает: в MetaGatherer {len(tournament.player_decks)} колод, "
                 f"в AetherHub {len(aetherhub_players)} игроков"
             )
+        participants = {
+            participant.user_id: participant
+            for participant in self.db.execute(
+                select(models.Participant)
+                .where(models.Participant.tournament_id == tournament.source_tournament_id)
+                .options(joinedload(models.Participant.user), joinedload(models.Participant.archetype))
+            ).scalars()
+        }
+        matcher = AetherhubImportService(self.db)
+        matched_user_ids: set[int] = set()
+        rows: list[MagicOculusPlayerDeck] = []
+        unmatched: list[str] = []
+        for place, aetherhub_name in enumerate(aetherhub_players, start=1):
+            user = matcher.find_user_by_name(aetherhub_name)
+            participant = participants.get(user.id) if user else None
+            if participant is None or participant.archetype is None or user.id in matched_user_ids:
+                unmatched.append(aetherhub_name)
+                continue
+            matched_user_ids.add(user.id)
+            rows.append(
+                MagicOculusPlayerDeck(
+                    player=aetherhub_name.strip(),
+                    deck=participant.archetype.name.strip(),
+                    final_place=participant.final_place or place,
+                )
+            )
+        missing_participants = [
+            format_participant_name(row.user.first_name, row.user.last_name)
+            for user_id, row in participants.items()
+            if user_id not in matched_user_ids
+        ]
+        if unmatched or missing_participants:
+            details = []
+            if unmatched:
+                details.append("не найдены в MetaGatherer: " + ", ".join(unmatched))
+            if missing_participants:
+                details.append("не найдены в AetherHub: " + ", ".join(missing_participants))
+            raise MagicOculusCollectionError("Состав не сопоставлен 1:1; " + "; ".join(details))
+        return rows
 
 
 class MagicOculusClient:

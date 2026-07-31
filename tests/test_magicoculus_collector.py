@@ -127,3 +127,39 @@ def test_validates_player_count_against_aetherhub(db, svc, user_svc, arch_svc):
 
     with pytest.raises(MagicOculusCollectionError, match="MetaGatherer 1 колод.*AetherHub 2"):
         MagicOculusTournamentCollector(db, aetherhub).collect(tournament.id, validate_aetherhub=True)
+
+
+def test_uses_canonical_aetherhub_name_for_swapped_db_fields(db, svc, user_svc, arch_svc):
+    tournament = _tournament(svc, db)
+    # Реальный legacy-случай: значения first_name/last_name сохранены наоборот.
+    player = user_svc.get_or_create(tg_id=1, username="anton", first_name="Амелин", last_name="Антон")
+    deck = arch_svc.get_or_create_by_name("Blue Terror")
+    _participant(db, tournament, player, deck, place=1)
+    aetherhub = MagicMock()
+    aetherhub.fetch_tournament.return_value = AetherhubTournamentData(
+        url=tournament.aetherhub_url,
+        players=[],
+        rounds=[],
+        standings=["Амелин Антон"],
+    )
+
+    result = MagicOculusTournamentCollector(db, aetherhub).collect(tournament.id, validate_aetherhub=True)
+
+    assert result.player_decks_text == "Амелин Антон - Blue Terror"
+
+
+def test_rejects_same_count_when_names_do_not_match(db, svc, user_svc, arch_svc):
+    tournament = _tournament(svc, db)
+    player = user_svc.get_or_create(tg_id=1, username="alice", first_name="Алиса", last_name="Иванова")
+    deck = arch_svc.get_or_create_by_name("Elves")
+    _participant(db, tournament, player, deck, place=1)
+    aetherhub = MagicMock()
+    aetherhub.fetch_tournament.return_value = AetherhubTournamentData(
+        url=tournament.aetherhub_url,
+        players=[],
+        rounds=[],
+        standings=["Совсем Другой"],
+    )
+
+    with pytest.raises(MagicOculusCollectionError, match="Состав не сопоставлен 1:1"):
+        MagicOculusTournamentCollector(db, aetherhub).collect(tournament.id, validate_aetherhub=True)
