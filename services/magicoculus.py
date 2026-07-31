@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date
 from typing import Any
 
@@ -251,3 +252,64 @@ class MagicOculusClient:
         warnings = [MagicOculusFeedback.model_validate(row) for row in body.get("warnings") or []]
         detail = self._get_json(f"/api/v1/tournaments/{tournament_id}")
         return MagicOculusImportResult(tournament_id=tournament_id, warnings=warnings, detail=detail)
+
+
+class MagicOculusImporter:
+    """Оркестратор one-shot импорта с durable guard до сетевого POST."""
+
+    def __init__(self, db: Session, client: MagicOculusClient) -> None:
+        self.db = db
+        self.client = client
+
+    def import_once(self, tournament: MagicOculusTournament, *, city: str) -> MagicOculusImportResult:
+        existing = (
+            self.db.execute(
+                select(models.MagicOculusImport).where(
+                    (models.MagicOculusImport.tournament_id == tournament.source_tournament_id)
+                    | (models.MagicOculusImport.aetherhub_url == str(tournament.aetherhub_url))
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if existing is not None:
+            raise MagicOculusApiError(
+                f"Импорт уже зафиксирован в журнале #{existing.id} со статусом {existing.status}; "
+                "автоматический повтор запрещён"
+            )
+
+        journal = models.MagicOculusImport(
+            tournament_id=tournament.source_tournament_id,
+            aetherhub_url=str(tournament.aetherhub_url),
+            status="pending",
+        )
+        self.db.add(journal)
+        self.db.commit()  # guard обязан попасть в БД до запроса, который мог фактически сработать перед timeout
+
+        try:
+            city_id, club_id, format_id = self.client.resolve_reference_ids(
+                city=city,
+                club=tournament.club,
+                format_name=tournament.format,
+            )
+            result = self.client.import_tournament(
+                tournament,
+                city_id=city_id,
+                club_id=club_id,
+                format_id=format_id,
+            )
+        except Exception as exc:
+            journal.status = "error"
+            journal.error_json = json.dumps({"type": type(exc).__name__, "message": str(exc)}, ensure_ascii=False)
+            self.db.commit()
+            raise
+
+        journal.status = "imported"
+        journal.magicoculus_tournament_id = result.tournament_id
+        journal.warnings_json = json.dumps(
+            [warning.model_dump(mode="json") for warning in result.warnings], ensure_ascii=False
+        )
+        journal.error_json = None
+        journal.imported_at = models.utc_now()
+        self.db.commit()
+        return result
