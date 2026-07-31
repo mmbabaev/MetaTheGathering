@@ -65,6 +65,11 @@ class HistoricalTournamentMigrator:
     }
     KNOWN_AETHERHUB_URLS = {
         ("единорог", date(2025, 3, 22)): "https://aetherhub.com/Tourney/RoundTourney/37996",
+        ("goldfish", date(2025, 2, 13)): "https://aetherhub.com/Tourney/RoundTourney/37066",
+        ("goldfish", date(2025, 4, 3)): "https://aetherhub.com/Tourney/RoundTourney/38304",
+        ("goldfish", date(2026, 3, 26)): "https://aetherhub.com/Tourney/RoundTourney/98477",
+        ("goldfish", date(2026, 6, 4)): "https://aetherhub.com/Tourney/RoundTourney/99921",
+        ("goldfish", date(2026, 6, 11)): "https://aetherhub.com/Tourney/RoundTourney/100058",
     }
 
     def __init__(
@@ -147,12 +152,6 @@ class HistoricalTournamentMigrator:
                 indexes[identity.name] = {
                     event_date: list(dict.fromkeys(urls)) for event_date, urls in club_index.items()
                 }
-        for tournament in tournaments:
-            identity = self._identity(tournament.club)
-            known_url = self.KNOWN_AETHERHUB_URLS.get((tournament.club.casefold(), tournament.date))
-            if identity and known_url:
-                indexes.setdefault(identity.name, {}).setdefault(tournament.date, []).append(known_url)
-
         existing = self._oculus.existing_daily_keys()
         reference_ids: dict[str, tuple[str, str, str]] = {}
         consecutive_system_errors = 0
@@ -160,7 +159,8 @@ class HistoricalTournamentMigrator:
         for position, tournament in enumerate(tournaments):
             identity = self._identity(tournament.club)
             club_index = indexes.get(identity.name, {}) if identity else {}
-            urls = list(club_index.get(tournament.date, []))
+            known_url = self.KNOWN_AETHERHUB_URLS.get((tournament.club.casefold(), tournament.date))
+            urls = [known_url] if known_url else list(club_index.get(tournament.date, []))
             used_adjacent_date = False
             if not urls:
                 used_adjacent_date = True
@@ -191,7 +191,11 @@ class HistoricalTournamentMigrator:
                 except Exception as exc:
                     fetch_errors.append((candidate_url, str(exc)))
             matching_urls = [url for url, count in checked if count == len(tournament.players)]
-            resolution_warnings = []
+            resolution_warnings = (
+                ["AETHERHUB_VERIFIED_OVERRIDE: URL подтверждён ручной сверкой публичного каталога и DataLens"]
+                if known_url
+                else []
+            )
             if not used_adjacent_date and len(urls) == 1 and checked:
                 selected_url, roster_count = checked[0]
                 matching_urls = [selected_url]

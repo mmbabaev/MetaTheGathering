@@ -190,9 +190,9 @@ def test_adjacent_date_candidate_is_selected_only_by_exact_roster():
 
 
 def test_adjacent_date_candidate_with_wrong_roster_is_not_selected():
-    tournament = _tournament(date(2026, 6, 4), "Goldfish", 15)
+    tournament = _tournament(date(2026, 6, 18), "Goldfish", 15)
     batch = DataLensTournamentBatch(tournaments=[tournament], issues=[])
-    indexes = {"Edinorog": {}, "Goldfish": {date(2026, 6, 5): [_url(1)]}}
+    indexes = {"Edinorog": {}, "Goldfish": {date(2026, 6, 19): [_url(1)]}}
     migrator, _ = _migrator(batch, indexes, fetched={_url(1): _source(16)})
 
     report = migrator.run(execute=False)
@@ -216,7 +216,7 @@ def test_unique_exact_date_url_is_kept_when_aetherhub_roster_is_incomplete():
 
 
 def test_multiple_same_date_candidates_are_disambiguated_by_roster():
-    tournament = _tournament(date(2026, 3, 26), "Goldfish", 14)
+    tournament = _tournament(date(2026, 3, 19), "Goldfish", 14)
     batch = DataLensTournamentBatch(tournaments=[tournament], issues=[])
     indexes = {"Edinorog": {}, "Goldfish": {tournament.date: [_url(1), _url(2)]}}
     migrator, _ = _migrator(
@@ -255,6 +255,25 @@ def test_verified_one_off_tournament_url_is_used():
 
     assert report.counts() == {"ready": 1}
     assert report.items[0].aetherhub_url == _url(37996)
+    assert report.items[0].warnings == [
+        "AETHERHUB_VERIFIED_OVERRIDE: URL подтверждён ручной сверкой публичного каталога и DataLens"
+    ]
+
+
+def test_verified_override_resolves_ambiguous_date_and_incomplete_roster():
+    tournament = _tournament(date(2026, 3, 26), "Goldfish", 14)
+    batch = DataLensTournamentBatch(tournaments=[tournament], issues=[])
+    indexes = {"Goldfish": {tournament.date: [_url(98477), _url(98476)]}}
+    migrator, _ = _migrator(batch, indexes, fetched={_url(98477): _source(15)})
+
+    report = migrator.run(execute=False)
+
+    assert report.counts() == {"ready": 1}
+    assert report.items[0].aetherhub_url == _url(98477)
+    assert report.items[0].warnings == [
+        "AETHERHUB_VERIFIED_OVERRIDE: URL подтверждён ручной сверкой публичного каталога и DataLens",
+        "AETHERHUB_ROSTER_MISMATCH_IGNORED: точный URL выбран по клубу, формату и дате; DataLens=14, AetherHub=15",
+    ]
 
 
 def test_callback_receives_checkpoint_updates():
