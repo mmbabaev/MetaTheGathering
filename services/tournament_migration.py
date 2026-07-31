@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 
 import requests
@@ -59,6 +59,18 @@ class HistoricalTournamentMigrator:
     """Bulk DataLens → AetherHub URL → Magic Oculus migration with per-event isolation."""
 
     CLUB_ALIASES = {"единорог": "edinorog", "goldfish": "goldfish"}
+    LEGACY_AETHERHUB_OWNERS = {
+        "edinorog": ("https://aetherhub.com/User/Rog",),
+        "goldfish": (),
+    }
+    KNOWN_AETHERHUB_URLS = {
+        ("единорог", date(2025, 3, 22)): "https://aetherhub.com/Tourney/RoundTourney/37996",
+        ("goldfish", date(2025, 2, 13)): "https://aetherhub.com/Tourney/RoundTourney/37066",
+        ("goldfish", date(2025, 4, 3)): "https://aetherhub.com/Tourney/RoundTourney/38304",
+        ("goldfish", date(2026, 3, 26)): "https://aetherhub.com/Tourney/RoundTourney/98477",
+        ("goldfish", date(2026, 6, 4)): "https://aetherhub.com/Tourney/RoundTourney/99921",
+        ("goldfish", date(2026, 6, 11)): "https://aetherhub.com/Tourney/RoundTourney/100058",
+    }
 
     def __init__(
         self,
@@ -132,15 +144,29 @@ class HistoricalTournamentMigrator:
         for tournament in tournaments:
             identity = self._identity(tournament.club)
             if identity and identity.aetherhub_url and identity.name not in indexes:
-                indexes[identity.name] = self._aetherhub.tournament_urls_by_date(identity.aetherhub_url, "Pauper")
-
+                club_index = self._aetherhub.tournament_urls_by_date(identity.aetherhub_url, "Pauper")
+                for legacy_url in self.LEGACY_AETHERHUB_OWNERS.get(identity.name.casefold(), ()):
+                    legacy_index = self._aetherhub.tournament_urls_by_date(legacy_url, "Pauper")
+                    for event_date, urls in legacy_index.items():
+                        club_index.setdefault(event_date, []).extend(urls)
+                indexes[identity.name] = {
+                    event_date: list(dict.fromkeys(urls)) for event_date, urls in club_index.items()
+                }
         existing = self._oculus.existing_daily_keys()
         reference_ids: dict[str, tuple[str, str, str]] = {}
         consecutive_system_errors = 0
 
         for position, tournament in enumerate(tournaments):
             identity = self._identity(tournament.club)
-            urls = indexes.get(identity.name, {}).get(tournament.date, []) if identity else []
+            club_index = indexes.get(identity.name, {}) if identity else {}
+            known_url = self.KNOWN_AETHERHUB_URLS.get((tournament.club.casefold(), tournament.date))
+            urls = [known_url] if known_url else list(club_index.get(tournament.date, []))
+            used_adjacent_date = False
+            if not urls:
+                used_adjacent_date = True
+                for offset in (-1, 1):
+                    urls.extend(club_index.get(tournament.date + timedelta(days=offset), []))
+                urls = list(dict.fromkeys(urls))
             base = dict(date=tournament.date, club=tournament.club, players=len(tournament.players))
             if self._key(tournament) in existing:
                 report.items.append(
@@ -156,39 +182,78 @@ class HistoricalTournamentMigrator:
                 report.items.append(TournamentMigrationItem(**base, status="missing_aetherhub"))
                 self._notify(report, on_update)
                 continue
-            if len(urls) > 1:
+            checked: list[tuple[str, int]] = []
+            fetch_errors: list[tuple[str, str]] = []
+            for candidate_url in urls:
+                try:
+                    source = self._aetherhub_factory().fetch_tournament(candidate_url)
+                    checked.append((candidate_url, len(source.standings or source.players)))
+                except Exception as exc:
+                    fetch_errors.append((candidate_url, str(exc)))
+            matching_urls = [url for url, count in checked if count == len(tournament.players)]
+            resolution_warnings = (
+                ["AETHERHUB_VERIFIED_OVERRIDE: URL подтверждён ручной сверкой публичного каталога и DataLens"]
+                if known_url
+                else []
+            )
+            if not used_adjacent_date and len(urls) == 1 and checked:
+                selected_url, roster_count = checked[0]
+                matching_urls = [selected_url]
+                if roster_count != len(tournament.players):
+                    resolution_warnings.append(
+                        "AETHERHUB_ROSTER_MISMATCH_IGNORED: точный URL выбран по клубу, формату и дате; "
+                        f"DataLens={len(tournament.players)}, AetherHub={roster_count}"
+                    )
+            if len(matching_urls) > 1:
                 report.items.append(
                     TournamentMigrationItem(
                         **base,
                         status="ambiguous_aetherhub",
-                        error=f"Найдено несколько URL: {urls}",
+                        error=f"Несколько URL совпали по roster: {matching_urls}",
                     )
                 )
                 self._notify(report, on_update)
                 continue
-            url = urls[0]
-            try:
-                source = self._aetherhub_factory().fetch_tournament(url)
-                aetherhub_players = source.standings or source.players
-            except Exception as exc:
-                report.items.append(
-                    TournamentMigrationItem(**base, status="aetherhub_error", aetherhub_url=url, error=str(exc))
-                )
-                self._notify(report, on_update)
-                continue
-            if len(aetherhub_players) != len(tournament.players):
+            if not matching_urls and checked:
                 report.items.append(
                     TournamentMigrationItem(
                         **base,
                         status="roster_mismatch",
-                        aetherhub_url=url,
-                        error=f"DataLens: {len(tournament.players)}, AetherHub: {len(aetherhub_players)}",
+                        aetherhub_url=checked[0][0] if len(checked) == 1 else None,
+                        error=f"DataLens: {len(tournament.players)}, кандидаты AetherHub: {checked}",
                     )
                 )
                 self._notify(report, on_update)
                 continue
+            if not matching_urls:
+                report.items.append(
+                    TournamentMigrationItem(
+                        **base,
+                        status="aetherhub_error",
+                        aetherhub_url=urls[0] if len(urls) == 1 else None,
+                        error=f"Не удалось проверить кандидатов: {fetch_errors}",
+                    )
+                )
+                self._notify(report, on_update)
+                continue
+            url = matching_urls[0]
+            if used_adjacent_date:
+                resolution_warnings.append(
+                    "AETHERHUB_ADJACENT_DATE: URL найден на соседней API-дате и подтверждён точным roster"
+                )
+            elif len(urls) > 1:
+                resolution_warnings.append(
+                    "AETHERHUB_ROSTER_DISAMBIGUATED: URL выбран из нескольких кандидатов по точному roster"
+                )
             if not execute:
-                report.items.append(TournamentMigrationItem(**base, status="ready", aetherhub_url=url))
+                report.items.append(
+                    TournamentMigrationItem(
+                        **base,
+                        status="ready",
+                        aetherhub_url=url,
+                        warnings=resolution_warnings,
+                    )
+                )
                 self._notify(report, on_update)
                 continue
 
@@ -212,7 +277,8 @@ class HistoricalTournamentMigrator:
                         status="imported",
                         aetherhub_url=url,
                         magicoculus_tournament_id=result.tournament_id,
-                        warnings=[f"{warning.code}: {warning.message}" for warning in result.warnings],
+                        warnings=resolution_warnings
+                        + [f"{warning.code}: {warning.message}" for warning in result.warnings],
                     )
                 )
             except Exception as exc:
