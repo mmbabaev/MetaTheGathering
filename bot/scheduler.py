@@ -4,6 +4,7 @@
 `docs/scheduler.md` — это полный перечень автоматических действий по времени и событиям.
 """
 
+import asyncio
 import io
 import logging
 from datetime import datetime, timedelta, timezone
@@ -27,6 +28,8 @@ from core.schemas import TournamentCreate
 from services.aetherhub_import_service import MIN_TOURNAMENT_DURATION, AetherhubImportService
 from services.aetherhub_service import AetherhubService
 from services.datalens import DataLensService
+from services.feature_flags import FeatureFlags, FeatureFlagService
+from services.magicoculus import MagicOculusClient, MagicOculusImporter, MagicOculusTournamentCollector
 from services.schedule import ScheduleService
 from services.stats import StatsService
 from services.tournament import TournamentService
@@ -626,7 +629,25 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, char
         await send_achievements_report(bot, db, tournament_id)
     except Exception:
         logger.exception("maybe_announce_meta_gather_completed: achievements failed for #%s", tournament_id)
+    # 5) Magic Oculus: отдельная сессия и worker thread, чтобы HTTP не блокировал Telegram loop.
+    #    Флаг по умолчанию выключен; ошибка внешнего API не откатывает закрытый турнир.
+    if FeatureFlagService(db).is_enabled(FeatureFlags.MAGIC_OCULUS_IMPORT):
+        try:
+            await asyncio.to_thread(import_closed_tournament_to_magicoculus, tournament_id)
+        except Exception:
+            logger.exception("maybe_announce_meta_gather_completed: Magic Oculus import failed for #%s", tournament_id)
     logger.info("maybe_announce_meta_gather_completed: announced completion for #%s", tournament_id)
+
+
+def import_closed_tournament_to_magicoculus(tournament_id: int) -> None:
+    """Синхронный worker: собрать, проверить и one-shot импортировать закрытый турнир."""
+    db = SessionLocal()
+    try:
+        tournament = MagicOculusTournamentCollector(db).collect(tournament_id, validate_aetherhub=True)
+        client = MagicOculusClient(settings.MAGIC_OCULUS_API_URL)
+        MagicOculusImporter(db, client).import_once(tournament, city="Москва")
+    finally:
+        db.close()
 
 
 def _reserve_announce(db, tournament_id: int) -> bool:

@@ -455,3 +455,24 @@ class RoundPairing(Base):
     opponent_wins = Column(Integer, nullable=True)  # победы соперника в матче; NULL = счёт неизвестен
 
     __table_args__ = (UniqueConstraint("tournament_id", "round_number", "player_name", name="uq_round_pairing"),)
+
+
+class MagicOculusImport(Base):
+    """Состояние передачи одного турнира в Magic Oculus; защита от повторного POST."""
+
+    __tablename__ = "magicoculus_imports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tournament_id = Column(
+        Integer, ForeignKey("tournaments.id", ondelete="CASCADE"), nullable=False, unique=True, index=True
+    )
+    aetherhub_url = Column(String(512), nullable=False, unique=True)
+    status = Column(String(16), nullable=False, default="pending", server_default="pending")
+    magicoculus_tournament_id = Column(Integer, nullable=True, unique=True)
+    warnings_json = Column(String, nullable=True)
+    error_json = Column(String, nullable=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+    imported_at = Column(DateTime, nullable=True)
+
+    tournament = relationship("Tournament")

@@ -24,6 +24,7 @@ from core.config import settings
 from core.schemas import TournamentCreate
 from services.aetherhub_import_service import AetherhubImportService, UndefeatedPlayer
 from services.aetherhub_models import AetherhubPairing, AetherhubRound, AetherhubTournamentData
+from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.tournament import TournamentService
 
 
@@ -573,4 +574,30 @@ async def test_achievements_failure_does_not_break_announce(db, user_svc, arch_s
     await maybe_announce_meta_gather_completed(bot, db, t.id)
 
     assert db.get(models.Tournament, t.id).completed_announced_at is not None
+    assert db.get(models.Tournament, t.id).status == models.TournamentStatus.CLOSED
+
+
+async def test_magicoculus_import_runs_after_close_when_enabled(db, user_svc, arch_svc, monkeypatch):
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    FeatureFlagService(db).toggle(FeatureFlags.MAGIC_OCULUS_IMPORT)
+    to_thread = AsyncMock()
+    monkeypatch.setattr("bot.scheduler.asyncio.to_thread", to_thread)
+    monkeypatch.setattr("bot.scheduler._announce_to_targets", AsyncMock(return_value=True))
+    t = _complete_tournament(db, user_svc, arch_svc)
+
+    await maybe_announce_meta_gather_completed(AsyncMock(), db, t.id)
+
+    to_thread.assert_awaited_once_with(scheduler.import_closed_tournament_to_magicoculus, t.id)
+    assert db.get(models.Tournament, t.id).status == models.TournamentStatus.CLOSED
+
+
+async def test_magicoculus_failure_does_not_break_close(db, user_svc, arch_svc, monkeypatch):
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    FeatureFlagService(db).toggle(FeatureFlags.MAGIC_OCULUS_IMPORT)
+    monkeypatch.setattr("bot.scheduler.asyncio.to_thread", AsyncMock(side_effect=RuntimeError("API failed")))
+    monkeypatch.setattr("bot.scheduler._announce_to_targets", AsyncMock(return_value=True))
+    t = _complete_tournament(db, user_svc, arch_svc)
+
+    await maybe_announce_meta_gather_completed(AsyncMock(), db, t.id)
+
     assert db.get(models.Tournament, t.id).status == models.TournamentStatus.CLOSED

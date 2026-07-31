@@ -28,6 +28,7 @@ class FeatureFlags:
     ACHIEVEMENTS = "achievements"
     ACHIEVEMENTS_PUBLIC_UI = "achievementsPublicUi"
     ACHIEVEMENTS_PLAYER_DM = "achievementsPlayerDm"
+    MAGIC_OCULUS_IMPORT = "magicOculusImport"
 
 
 KNOWN_FLAGS: dict[str, FeatureFlagMeta] = {
@@ -53,6 +54,11 @@ KNOWN_FLAGS: dict[str, FeatureFlagMeta] = {
     ),
     FeatureFlags.ACHIEVEMENTS_PLAYER_DM: FeatureFlagMeta(
         description="Ачивки: уведомления уходят самим игрокам, а не владельцу",
+        value_type="bool",
+        default_value="false",
+    ),
+    FeatureFlags.MAGIC_OCULUS_IMPORT: FeatureFlagMeta(
+        description="Magic Oculus: импортировать полный турнир после штатного закрытия",
         value_type="bool",
         default_value="false",
     ),
