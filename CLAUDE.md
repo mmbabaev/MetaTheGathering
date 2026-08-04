@@ -117,10 +117,10 @@ main.py  →  bot/telegram/  →  bot/handlers/  →  services/  →  core/model
 
 ### Tournament state machine
 
-`REGISTRATION → ONGOING → VOTING → CLOSED`
+`REGISTRATION → ONGOING → CLOSED`
 
 - `register_participant()` only allowed in `REGISTRATION`
-- `cast_vote()` only allowed in `VOTING`
+- Legacy `cast_vote()` is only allowed in `ONGOING`
 - `ensure_tournament_status()` in `services/utils.py` raises `TournamentInvalidState` on mismatch
 - One active (non-CLOSED) tournament per `chat_id`
 

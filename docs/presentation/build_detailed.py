@@ -278,16 +278,15 @@ def build_pptx():
     states = [
         ("REGISTRATION", "запись и колоды", BLUE),
         ("ONGOING", "раунды и пары", CYAN),
-        ("VOTING", "проверка данных", GOLD),
         ("CLOSED", "итоги и экспорт", GREEN),
     ]
     for i, (h, b, c) in enumerate(states):
-        x = 0.75 + i * 3.12
-        box(s, x, 2.35, 2.75, 1.52, PANEL, line=c)
-        txt(s, h, x + 0.12, 2.7, 2.5, 0.28, 13, c, True, align=PP_ALIGN.CENTER)
-        txt(s, b, x + 0.12, 3.22, 2.5, 0.25, 11, WHITE, align=PP_ALIGN.CENTER)
-        if i < 3:
-            txt(s, "→", x + 2.8, 2.88, 0.28, 0.3, 18, "738094", True)
+        x = 1.35 + i * 4.0
+        box(s, x, 2.35, 3.2, 1.52, PANEL, line=c)
+        txt(s, h, x + 0.12, 2.7, 2.96, 0.28, 13, c, True, align=PP_ALIGN.CENTER)
+        txt(s, b, x + 0.12, 3.22, 2.96, 0.25, 11, WHITE, align=PP_ALIGN.CENTER)
+        if i < 2:
+            txt(s, "→", x + 3.35, 2.88, 0.28, 0.3, 18, "738094", True)
     rules = [
         ("Инвариант", "один активный турнир на чат"),
         ("Гейты", "действия разрешены только в нужной стадии"),

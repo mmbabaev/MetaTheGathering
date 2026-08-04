@@ -50,18 +50,20 @@ class TestTournamentLifecycle:
     def test_full_lifecycle(self, svc, tournament):
         t = svc.start_tournament(tournament.id)
         assert t.status == TournamentStatus.ONGOING
-
-        t = svc.open_voting(t.id)
-        assert t.status == TournamentStatus.VOTING
+        assert t.started_at is not None
 
         t = svc.close_tournament(t.id)
         assert t.status == TournamentStatus.CLOSED
         assert t.ended_at is not None
 
-    def test_open_voting_from_registration(self, svc, tournament):
-        # Можно перейти в VOTING прямо из REGISTRATION (пропустив ONGOING)
-        t = svc.open_voting(tournament.id)
-        assert t.status == TournamentStatus.VOTING
+    def test_close_directly_from_registration(self, svc, tournament):
+        t = svc.close_tournament(tournament.id)
+        assert t.status == TournamentStatus.CLOSED
+
+    def test_start_from_ongoing_raises(self, svc, tournament):
+        svc.start_tournament(tournament.id)
+        with pytest.raises(TournamentInvalidState):
+            svc.start_tournament(tournament.id)
 
     def test_invalid_transition_raises(self, svc, tournament):
         svc.close_tournament(tournament.id)
@@ -117,7 +119,7 @@ class TestSetParticipantArchetype:
         svc.register_participant(tournament_id=tournament.id, user_id=user_bob.id, archetype_id=archetype_affinity.id)
 
         # Открываем голосование и голосуем
-        svc.open_voting(tournament.id)
+        svc.start_tournament(tournament.id)
         svc.cast_vote(
             tournament_id=tournament.id, participant_id=p_alice.id, voter_user_id=user_bob.id, vote_type=VoteType.UP
         )
@@ -142,7 +144,7 @@ class TestCastVote:
         self.p_bob = svc.register_participant(
             tournament_id=tournament.id, user_id=user_bob.id, archetype_id=archetype_affinity.id
         )
-        svc.open_voting(tournament.id)
+        svc.start_tournament(tournament.id)
 
     def test_upvote_increments_counter(self, svc, tournament, user_bob):
         svc.cast_vote(
@@ -175,10 +177,22 @@ class TestCastVote:
                 vote_type=VoteType.UP,
             )
 
-    def test_vote_outside_voting_phase_raises(self, svc, db, tournament, user_bob):
-        # Закрываем турнир — голосование недоступно
+    def test_vote_outside_ongoing_tournament_raises(self, svc, db, tournament, user_bob):
+        # Закрываем турнир — legacy-голосование недоступно
         t_orm = db.get(Tournament, tournament.id)
         t_orm.status = TournamentStatus.CLOSED
+        db.commit()
+        with pytest.raises(TournamentInvalidState):
+            svc.cast_vote(
+                tournament_id=tournament.id,
+                participant_id=self.p_alice.id,
+                voter_user_id=user_bob.id,
+                vote_type=VoteType.UP,
+            )
+
+    def test_vote_during_registration_raises(self, svc, db, tournament, user_bob):
+        t_orm = db.get(Tournament, tournament.id)
+        t_orm.status = TournamentStatus.REGISTRATION
         db.commit()
         with pytest.raises(TournamentInvalidState):
             svc.cast_vote(
@@ -263,7 +277,7 @@ class TestConfirmationThreshold:
     def test_confirmed_after_enough_upvotes(self, svc, user_svc, arch_svc, db, tournament, user_alice, archetype_burn):
         p = svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
         voters = self._make_voters(svc, user_svc, arch_svc, tournament, CONFIRM_THRESHOLD)
-        svc.open_voting(tournament.id)
+        svc.start_tournament(tournament.id)
 
         for v in voters:
             svc.cast_vote(tournament_id=tournament.id, participant_id=p.id, voter_user_id=v.id, vote_type=VoteType.UP)
@@ -274,7 +288,7 @@ class TestConfirmationThreshold:
     def test_not_confirmed_below_threshold(self, svc, user_svc, arch_svc, db, tournament, user_alice, archetype_burn):
         p = svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
         voters = self._make_voters(svc, user_svc, arch_svc, tournament, CONFIRM_THRESHOLD - 1)
-        svc.open_voting(tournament.id)
+        svc.start_tournament(tournament.id)
 
         for v in voters:
             svc.cast_vote(tournament_id=tournament.id, participant_id=p.id, voter_user_id=v.id, vote_type=VoteType.UP)
@@ -285,7 +299,7 @@ class TestConfirmationThreshold:
     def test_rejected_after_enough_downvotes(self, svc, user_svc, arch_svc, db, tournament, user_alice, archetype_burn):
         p = svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
         voters = self._make_voters(svc, user_svc, arch_svc, tournament, REJECT_THRESHOLD)
-        svc.open_voting(tournament.id)
+        svc.start_tournament(tournament.id)
 
         for v in voters:
             svc.cast_vote(tournament_id=tournament.id, participant_id=p.id, voter_user_id=v.id, vote_type=VoteType.DOWN)
@@ -351,7 +365,7 @@ class TestResetVotes:
             tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id
         )
         svc.register_participant(tournament_id=tournament.id, user_id=user_bob.id, archetype_id=archetype_affinity.id)
-        svc.open_voting(tournament.id)
+        svc.start_tournament(tournament.id)
         svc.cast_vote(
             tournament_id=tournament.id, participant_id=p_alice.id, voter_user_id=user_bob.id, vote_type=VoteType.UP
         )
@@ -555,16 +569,16 @@ class TestGetParticipantNotFound:
 class TestCastVoteEdgeCases:
     @pytest.fixture
     def voting_setup(self, svc, user_svc, arch_svc):
-        """Two chats each with their own tournament in VOTING state."""
+        """Two chats each with their own ongoing tournament."""
         t1 = svc.create_tournament(TournamentCreate(title="T1", chat_id=400, slug="t1"))
         t2 = svc.create_tournament(TournamentCreate(title="T2", chat_id=401, slug="t2"))
         ua = user_svc.get_or_create(tg_id=4001, username="ua", first_name="UA")
         ub = user_svc.get_or_create(tg_id=4002, username="ub", first_name="UB")
         arch = arch_svc.get_or_create_by_name("Burn")
-        # Register participant before opening voting
+        # Register participant before starting tournaments
         p = svc.register_participant(tournament_id=t1.id, user_id=ua.id, archetype_id=arch.id)
-        svc.open_voting(t1.id)
-        svc.open_voting(t2.id)
+        svc.start_tournament(t1.id)
+        svc.start_tournament(t2.id)
         return t1, t2, ua, ub, arch, p
 
     def test_participant_in_wrong_tournament_raises(self, svc, voting_setup):

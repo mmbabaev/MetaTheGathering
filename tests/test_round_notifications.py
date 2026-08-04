@@ -224,13 +224,6 @@ class TestClosedTournamentSuppressesNotifications:
 
         assert len(notif_svc.build_for_rounds(t.id, [1])) == 2
 
-    def test_voting_tournament_still_notifies(self, db, svc, user_svc, notif_svc):
-        t = self._setup_pairing(db, svc, user_svc)
-        self._set_status(db, t, models.TournamentStatus.VOTING)
-
-        assert len(notif_svc.build_for_rounds(t.id, [1])) == 2
-
-
 class TestDisplayName:
     def test_full_name(self, db, user_svc):
         u = user_svc.get_or_create(tg_id=1, first_name="Иван", last_name="Иванов")

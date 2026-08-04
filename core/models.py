@@ -26,7 +26,6 @@ def utc_now() -> datetime:
 class TournamentStatus(str, enum.Enum):
     REGISTRATION = "registration"
     ONGOING = "ongoing"
-    VOTING = "voting"
     CLOSED = "closed"
 
     @property
@@ -34,7 +33,6 @@ class TournamentStatus(str, enum.Enum):
         return {
             TournamentStatus.REGISTRATION: "Регистрация",
             TournamentStatus.ONGOING: "Идёт",
-            TournamentStatus.VOTING: "Голосование",
             TournamentStatus.CLOSED: "Завершён",
         }.get(self, self.value)
 
