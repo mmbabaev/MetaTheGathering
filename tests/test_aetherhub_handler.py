@@ -136,3 +136,46 @@ class TestPreviewMessage:
         h = _handler(fetch_data=data)
         result = h.handle_fetch_preview(data.url, header="📥 Импорт AetherHub")
         assert "Points" not in result.preview_text
+
+
+class TestConfirmImportMessage:
+    def test_reports_fetched_and_changed_data(self):
+        import_service = MagicMock()
+        import_service.import_tournament.return_value = MagicMock(
+            players_received=11,
+            registered=0,
+            already_registered=11,
+            rounds_received=4,
+            pairings_received=44,
+            pairings_changed=0,
+            standings_received=11,
+            scores_complete=True,
+            created_names=[],
+            new_round_numbers=[],
+        )
+        handler = AetherhubHandler(MagicMock(), import_service, MagicMock())
+        text = handler.handle_confirm_import(1, "https://example.invalid/tournament", _make_tournament_data()).text
+        assert "Участники: получено 11" in text
+        assert "Парингов получено: 44" in text
+        assert "Добавлено или изменено: 0" in text
+        assert "Итоговые стендинги: получены (11 мест)" in text
+        assert "Счёт матчей: полный" in text
+
+    def test_reports_missing_standings_and_incomplete_scores(self):
+        import_service = MagicMock()
+        import_service.import_tournament.return_value = MagicMock(
+            players_received=2,
+            registered=0,
+            already_registered=2,
+            rounds_received=1,
+            pairings_received=2,
+            pairings_changed=0,
+            standings_received=0,
+            scores_complete=False,
+            created_names=[],
+            new_round_numbers=[],
+        )
+        handler = AetherhubHandler(MagicMock(), import_service, MagicMock())
+        text = handler.handle_confirm_import(1, "https://example.invalid/tournament", _make_tournament_data()).text
+        assert "Итоговые стендинги: ещё не опубликованы" in text
+        assert "Счёт матчей: неполный" in text

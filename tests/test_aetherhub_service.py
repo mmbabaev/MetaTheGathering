@@ -834,6 +834,21 @@ class TestImportFinalPlace:
         p = self._participant(db, tournament.id, user_alice.id)
         assert p.final_place == 1
 
+    def test_final_place_updated_for_closed_tournament(self, import_svc, svc, db, tournament, user_alice):
+        svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id)
+        svc.close_tournament(tournament.id)
+        data = _make_data(players=["Alice"], rounds_pairings=[], standings=["Alice"])
+        import_svc.import_tournament(tournament.id, data)
+        assert self._participant(db, tournament.id, user_alice.id).final_place == 1
+
+    def test_empty_standings_do_not_clear_existing_place(self, import_svc, svc, db, tournament, user_alice):
+        participant = svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id)
+        db.get(models.Participant, participant.id).final_place = 4
+        db.commit()
+        data = _make_data(players=["Alice"], rounds_pairings=[], standings=[])
+        import_svc.import_tournament(tournament.id, data)
+        assert self._participant(db, tournament.id, user_alice.id).final_place == 4
+
     def test_bye_not_counted_in_place_numbering(self, import_svc, db, tournament, user_alice, user_bob):
         data = _make_data(
             players=["Alice", "Bob"],
