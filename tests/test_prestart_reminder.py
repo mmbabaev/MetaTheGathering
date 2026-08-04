@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from telegram.error import TelegramError
 
 from bot.scheduler import PreStartReminderJob, get_clubs, send_registration_open
+from core import models
 from core.config import Club, ClubSchedule
 from core.schemas import TournamentCreate
 from services.tournament import TournamentService
@@ -18,6 +19,7 @@ TUESDAY = datetime(2026, 7, 14, 19, 25, tzinfo=ZoneInfo("Europe/Moscow"))
 def _bot():
     bot = AsyncMock()
     bot.get_me.return_value = MagicMock(username="TestBot")
+    bot.send_message.return_value = MagicMock(message_id=123)
     return bot
 
 
@@ -26,21 +28,24 @@ class TestSendRegistrationOpen:
         monkeypatch.setattr("bot.scheduler.settings.OWNER_CHAT_ID", 777)
         club = Club(name="Edinorog", chat_id=-100, schedules=[])
         bot = _bot()
+        tournament = TournamentService(db).create_tournament(TournamentCreate(title="Pauper", chat_id=-100))
 
-        await send_registration_open(bot, club, tournament_id=42, text="Регистрация открыта")
+        await send_registration_open(bot, db, club, tournament_id=tournament.id, base_text="Регистрация открыта")
 
         # ушло и в чат клуба, и владельцу
         chats = {c.kwargs["chat_id"] for c in bot.send_message.call_args_list}
         assert chats == {-100, 777}
         button = bot.send_message.call_args_list[0].kwargs["reply_markup"].inline_keyboard[0][0]
-        assert button.url == "https://t.me/TestBot?start=deck_42"
+        assert button.url == f"https://t.me/TestBot?start=deck_{tournament.id}"
+        assert all("Записалось: 0" in c.kwargs["text"] for c in bot.send_message.call_args_list)
+        assert db.query(models.TournamentRegistrationMessage).count() == 2
 
     async def test_skips_missing_chat_ids(self, db, monkeypatch):
         monkeypatch.setattr("bot.scheduler.settings.OWNER_CHAT_ID", None)
         club = Club(name="Edinorog", chat_id=0, schedules=[])  # нет ни группы, ни владельца
         bot = _bot()
 
-        await send_registration_open(bot, club, tournament_id=1, text="x")
+        await send_registration_open(bot, db, club, tournament_id=1, base_text="x")
 
         bot.send_message.assert_not_awaited()
         bot.get_me.assert_not_awaited()  # без адресатов даже get_me не зовём
@@ -51,8 +56,9 @@ class TestSendRegistrationOpen:
         club = Club(name="Edinorog", chat_id=-100, schedules=[])
         bot = _bot()
         bot.get_me.side_effect = TelegramError("boom")
+        tournament = TournamentService(db).create_tournament(TournamentCreate(title="Pauper", chat_id=-100))
 
-        await send_registration_open(bot, club, tournament_id=42, text="Регистрация открыта")
+        await send_registration_open(bot, db, club, tournament_id=tournament.id, base_text="Регистрация открыта")
 
         assert bot.send_message.await_count == 2
         assert all(c.kwargs.get("reply_markup") is None for c in bot.send_message.call_args_list)
