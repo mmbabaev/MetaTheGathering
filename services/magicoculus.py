@@ -17,6 +17,11 @@ from services.aetherhub_service import AetherhubService
 from services.names import format_participant_name
 
 
+def _roster_name_key(name: str) -> tuple[str, ...]:
+    """Order-independent full-name key shared by MetaGatherer and AetherHub rosters."""
+    return tuple(sorted(name.strip().casefold().replace("ё", "е").split()))
+
+
 class MagicOculusPlayerDeck(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -132,6 +137,8 @@ class MagicOculusTournamentCollector:
             raise MagicOculusCollectionError(f"У турнира #{tournament_id} не указан клуб")
         event_date = (tournament.started_at or tournament.created_at).date()
         aetherhub_url = self._resolve_aetherhub_url(tournament, event_date)
+        aetherhub_players = self._fetch_aetherhub_players(aetherhub_url) if validate_aetherhub else None
+        aetherhub_keys = {_roster_name_key(name) for name in aetherhub_players} if aetherhub_players else None
 
         rows: list[MagicOculusPlayerDeck] = []
         missing_names: list[str] = []
@@ -145,6 +152,10 @@ class MagicOculusTournamentCollector:
             player = format_participant_name(participant.user.first_name, participant.user.last_name).strip()
             if not player:
                 missing_names.append(f"participant:{participant.id}")
+                continue
+            # Players who registered but did not actually play are absent from the authoritative
+            # AetherHub roster and must not block/export into Magic Oculus.
+            if aetherhub_keys is not None and _roster_name_key(player) not in aetherhub_keys:
                 continue
             if player.casefold() in seen_names:
                 raise MagicOculusCollectionError(f'Имя игрока "{player}" встречается несколько раз')
@@ -181,21 +192,32 @@ class MagicOculusTournamentCollector:
         except ValueError as exc:
             raise MagicOculusCollectionError(str(exc)) from exc
         if validate_aetherhub:
-            self.validate_aetherhub_players(result)
+            self.validate_aetherhub_players(result, aetherhub_players=aetherhub_players)
         return result
 
-    def validate_aetherhub_players(self, tournament: MagicOculusTournament) -> None:
+    def _fetch_aetherhub_players(self, url: str) -> list[str]:
         try:
-            source = self._aetherhub.fetch_tournament(str(tournament.aetherhub_url))
+            source = self._aetherhub.fetch_tournament(url)
         except Exception as exc:
             raise MagicOculusCollectionError(f"Не удалось проверить состав AetherHub: {exc}") from exc
         aetherhub_players = source.standings or source.players
         if not aetherhub_players:
             raise MagicOculusCollectionError("AetherHub не вернул ни standings, ни игроков")
-        if len(aetherhub_players) != len(tournament.player_decks):
+        return [name for name in aetherhub_players if name.upper() != "BYE"]
+
+    def validate_aetherhub_players(
+        self,
+        tournament: MagicOculusTournament,
+        *,
+        aetherhub_players: list[str] | None = None,
+    ) -> None:
+        players = aetherhub_players or self._fetch_aetherhub_players(str(tournament.aetherhub_url))
+        aetherhub_keys = {_roster_name_key(name) for name in players}
+        metagatherer_keys = {_roster_name_key(row.player) for row in tournament.player_decks}
+        if aetherhub_keys != metagatherer_keys or len(players) != len(tournament.player_decks):
             raise MagicOculusCollectionError(
                 f"Состав не совпадает: в MetaGatherer {len(tournament.player_decks)} колод, "
-                f"в AetherHub {len(aetherhub_players)} игроков"
+                f"в AetherHub {len(players)} игроков"
             )
 
 
