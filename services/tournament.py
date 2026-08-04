@@ -217,25 +217,13 @@ class TournamentService:
         tournament = get_tournament(self.db, tournament_id)
         ensure_tournament_status(
             tournament,
-            allowed=[models.TournamentStatus.REGISTRATION, models.TournamentStatus.VOTING],
+            allowed=[models.TournamentStatus.REGISTRATION],
         )
 
         tournament.status = models.TournamentStatus.ONGOING
         if not tournament.started_at:
             tournament.started_at = models.utc_now()
 
-        self.db.commit()
-        self.db.refresh(tournament)
-        return TournamentRead.model_validate(tournament)
-
-    def open_voting(self, tournament_id: int) -> TournamentRead:
-        tournament = get_tournament(self.db, tournament_id)
-        ensure_tournament_status(
-            tournament,
-            allowed=[models.TournamentStatus.REGISTRATION, models.TournamentStatus.ONGOING],
-        )
-
-        tournament.status = models.TournamentStatus.VOTING
         self.db.commit()
         self.db.refresh(tournament)
         return TournamentRead.model_validate(tournament)
@@ -247,7 +235,6 @@ class TournamentService:
             allowed=[
                 models.TournamentStatus.REGISTRATION,
                 models.TournamentStatus.ONGOING,
-                models.TournamentStatus.VOTING,
             ],
         )
 
@@ -467,7 +454,7 @@ class TournamentService:
         apply_cooldown: bool = True,
     ) -> VoteRead:
         tournament = get_tournament(self.db, tournament_id)
-        ensure_tournament_status(tournament, allowed=[models.TournamentStatus.VOTING])
+        ensure_tournament_status(tournament, allowed=[models.TournamentStatus.ONGOING])
 
         participant = self._get_participant(participant_id)
 
