@@ -77,10 +77,22 @@ class AetherhubHandler:
         result = self._import.import_tournament(tournament_id, data)
         self._tournament.set_aetherhub_url(tournament_id, url)
         lines = [
-            "✅ Импорт завершён",
-            f"Зарегистрировано новых: {result.registered}",
+            "✅ AetherHub обновлён",
+            "",
+            f"Участники: получено {result.players_received}",
+            f"Новых в боте: {result.registered}",
             f"Уже были: {result.already_registered}",
-            f"Паринги сохранены: {result.pairings_saved}",
+            "",
+            f"Раунды: {result.rounds_received}",
+            f"Парингов получено: {result.pairings_received}",
+            f"Добавлено или изменено: {result.pairings_changed}",
+            "",
+            (
+                f"Итоговые стендинги: получены ({result.standings_received} мест)"
+                if result.standings_received
+                else "Итоговые стендинги: ещё не опубликованы"
+            ),
+            f"Счёт матчей: {'полный' if result.scores_complete else 'неполный'}",
         ]
         if result.created_names:
             names_str = ", ".join(result.created_names[:5])

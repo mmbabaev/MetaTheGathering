@@ -286,22 +286,26 @@ class AetherhubImportJob:
                 except Exception:
                     logger.exception(f"AetherhubImportJob: round notifications failed for #{tournament_id}")
 
+            if tournament.aetherhub_url != url:
+                db_url = SessionLocal()
+                try:
+                    TournamentService(db_url).set_aetherhub_url(tournament_id, url)
+                except Exception:
+                    logger.exception(f"AetherhubImportJob: failed to save aetherhub_url for #{tournament_id}")
+                    return
+                finally:
+                    db_url.close()
+
+            db_completion = SessionLocal()
             try:
-                await maybe_announce_meta_gather_completed(bot, db, tournament_id)
+                await maybe_announce_meta_gather_completed(bot, db_completion, tournament_id)
             except Exception:
                 logger.exception(f"AetherhubImportJob: completion announce failed for #{tournament_id}")
+            finally:
+                db_completion.close()
         finally:
             if close_db:
                 db.close()
-
-        if tournament_id and url:
-            db2 = SessionLocal()
-            try:
-                TournamentService(db2).set_aetherhub_url(tournament_id, url)
-            except Exception:
-                logger.exception(f"AetherhubImportJob: failed to save aetherhub_url for #{tournament_id}")
-            finally:
-                db2.close()
 
 
 # ---------------------------------------------------------------------------
@@ -409,14 +413,12 @@ class AetherhubTimedImportJob:
             db2.close()
 
 
-FINAL_REIMPORT_TIME = (
-    "09:00"  # утро следующего дня — добрать финальный счёт (не в 6 утра: анонс мог бы уйти слишком рано)
-)
+FINAL_REIMPORT_TIMES = ("09:00", "12:00", "18:00")
 FINAL_REIMPORT_WINDOW_DAYS = 2  # окно «недавних» турниров для повторного импорта
 
 
 class AetherhubFinalReimportJob:
-    """Раз в сутки утром перезатягивает недавние турниры, чтобы добрать финальный счёт.
+    """Несколько раз в сутки перезатягивает незавершённые турниры с AetherHub.
 
     Счёт матчей на AetherHub публично появляется только ПОСЛЕ завершения турнира
     (формат страницы меняется js → edinorog, см. docs/aetherhub_formats.md). Импорт
@@ -437,6 +439,8 @@ class AetherhubFinalReimportJob:
             stmt = select(models.Tournament).where(
                 models.Tournament.aetherhub_url.isnot(None),
                 models.Tournament.created_at >= cutoff,
+                models.Tournament.status != models.TournamentStatus.CLOSED,
+                models.Tournament.completed_announced_at.is_(None),
             )
             tournaments = db.execute(stmt).scalars().all()
         finally:
@@ -837,15 +841,19 @@ def setup_scheduler(app: Application) -> None:
     logger.info("Scheduler: AetherhubTimedImportJob registered (every 60s)")
 
     final_job = AetherhubFinalReimportJob(AetherhubService())
-    final_time = datetime.strptime(FINAL_REIMPORT_TIME, "%H:%M").time().replace(tzinfo=tz)
 
-    async def _final_reimport(context: ContextTypes.DEFAULT_TYPE) -> None:
-        tz_ = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
-        await final_job.run(now=datetime.now(tz_), bot=context.bot)
+    def _make_final_reimport(time_str: str):
+        async def _final_reimport(context: ContextTypes.DEFAULT_TYPE) -> None:
+            tz_ = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
+            await final_job.run(now=datetime.now(tz_), bot=context.bot)
 
-    _final_reimport.__name__ = "aetherhub_final_reimport"
-    app.job_queue.run_daily(_final_reimport, time=final_time)
-    logger.info(f"Scheduler: AetherhubFinalReimportJob registered (daily {FINAL_REIMPORT_TIME})")
+        _final_reimport.__name__ = f"aetherhub_final_reimport[{time_str}]"
+        return _final_reimport
+
+    for time_str in FINAL_REIMPORT_TIMES:
+        final_time = datetime.strptime(time_str, "%H:%M").time().replace(tzinfo=tz)
+        app.job_queue.run_daily(_make_final_reimport(time_str), time=final_time)
+    logger.info("Scheduler: AetherhubFinalReimportJob registered (daily %s)", ", ".join(FINAL_REIMPORT_TIMES))
 
     reveal_job = AutoRevealDecksJob()
     reveal_time = datetime.strptime(REVEAL_DECKS_TIME, "%H:%M").time().replace(tzinfo=tz)

@@ -90,6 +90,24 @@ async def test_skips_tournaments_without_url(db, use_test_db):
     mock.fetch_tournament.assert_not_called()
 
 
+async def test_skips_closed_tournaments(db, use_test_db):
+    tournament = _tournament(db)
+    tournament.status = models.TournamentStatus.CLOSED
+    db.commit()
+    mock = _aetherhub_mock(_scored_data())
+    await AetherhubFinalReimportJob(mock).run(now=datetime.now(timezone.utc), db=db)
+    mock.fetch_tournament.assert_not_called()
+
+
+async def test_skips_already_announced_tournaments(db, use_test_db):
+    tournament = _tournament(db)
+    tournament.completed_announced_at = models.utc_now()
+    db.commit()
+    mock = _aetherhub_mock(_scored_data())
+    await AetherhubFinalReimportJob(mock).run(now=datetime.now(timezone.utc), db=db)
+    mock.fetch_tournament.assert_not_called()
+
+
 async def test_no_tournaments_no_fetch(db, use_test_db):
     mock = _aetherhub_mock(_scored_data())
     await AetherhubFinalReimportJob(mock).run(now=datetime.now(timezone.utc), db=db)

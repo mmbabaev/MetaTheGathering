@@ -9,7 +9,7 @@ from telegram.ext import ContextTypes
 from bot.handlers.aetherhub import AetherhubHandler
 from bot.keyboards import aetherhub_confirm_keyboard
 from bot.scheduler import get_clubs
-from bot.telegram.common import parse_callback_ints
+from bot.telegram.common import announce_completion_if_ready, parse_callback_ints
 from bot.telegram.player import _player_handler
 from bot.telegram.round_notify import send_round_notifications
 from core.database import SessionLocal
@@ -211,6 +211,12 @@ async def callback_aetherhub_confirm(update: Update, context: ContextTypes.DEFAU
             )
         finally:
             db_notify.close()
+
+    db_completion = SessionLocal()
+    try:
+        await announce_completion_if_ready(context.bot, db_completion, tournament_id)
+    finally:
+        db_completion.close()
 
     db2 = SessionLocal()
     try:
