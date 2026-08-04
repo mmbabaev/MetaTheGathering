@@ -16,6 +16,18 @@ def _normalize_name(s: str) -> str:
     return s.strip().lower().replace("ё", "е")
 
 
+def _name_variants(first_name: str, last_name: Optional[str]) -> set[tuple[str, str]]:
+    """Comparable full-name forms, including Telegram's one-field display names."""
+    first = _normalize_name(first_name)
+    last = _normalize_name(last_name or "")
+    if last:
+        return {(first, last), (last, first)}
+    words = first.split()
+    if len(words) == 2:
+        return {(words[0], words[1]), (words[1], words[0])}
+    return {(first, "")}
+
+
 class UserService:
     def __init__(self, db: Session) -> None:
         self.db = db
@@ -83,22 +95,33 @@ class UserService:
         Работает на Python-уровне (fetches all users). Допустимо при небольшом
         числе пользователей (~500).
         """
-        fn = _normalize_name(first_name)
-        ln = _normalize_name(last_name) if last_name else None
+        query_variants = _name_variants(first_name, last_name)
 
         candidates: list[models.User] = []
         for user in self.db.execute(select(models.User)).scalars().all():
-            ufn = _normalize_name(user.first_name or "")
-            uln = _normalize_name(user.last_name or "")
-
-            # Прямой порядок: first_name совпадает с first_name
-            direct = (ufn == fn) and (uln == (ln or ""))
-            # Обратный порядок: ввели «Имя Фамилия», а в БД «Фамилия Имя»
-            swapped = ln is not None and (ufn == ln) and (uln == fn)
-
-            if direct or swapped:
+            if query_variants & _name_variants(user.first_name or "", user.last_name):
                 candidates.append(user)
         return candidates
+
+    def resolve_and_merge_import_name(self, query: str) -> Optional[models.User]:
+        """Resolve an imported full name and merge only an unambiguous placeholder duplicate.
+
+        Automatic merging is deliberately limited to exactly one real Telegram account plus
+        one or more placeholder accounts with the same normalized two-part name. If several
+        real accounts share the name, no destructive choice is made.
+        """
+        parts = query.strip().split(None, 1)
+        first = parts[0]
+        last = parts[1] if len(parts) > 1 else None
+        candidates = self._find_name_candidates(first, last)
+        real = [user for user in candidates if user.tg_id > 0]
+        placeholders = [user for user in candidates if user.tg_id < 0]
+        if len(real) == 1 and placeholders:
+            target_id = real[0].id
+            for placeholder in placeholders:
+                self.merge_users_by_id(placeholder.id, target_id, adopt_name=False)
+            return self.get_by_id(target_id)
+        return self._find_user_flexible(first, last)
 
     def _find_user_flexible(self, first_name: str, last_name: Optional[str]) -> Optional[models.User]:
         """Гибкий поиск пользователя по имени:

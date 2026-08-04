@@ -48,6 +48,46 @@ def _svc(html_by_url: dict[str, str]) -> AetherhubService:
     return AetherhubService(scraper=_mock_scraper(html_by_url))
 
 
+def test_import_merges_safe_real_and_placeholder_duplicate(db, svc, arch_svc):
+    """A split AetherHub name must collapse an existing one-field Telegram duplicate."""
+    tournament = svc.create_tournament(TournamentCreate(title="Duplicate roster", chat_id=184))
+    real = UserService(db).get_or_create(tg_id=184001, first_name="Антон Ильин")
+    placeholder = models.User(tg_id=-184001, first_name="Антон", last_name="Ильин")
+    deck = arch_svc.get_or_create_by_name("Burn")
+    db.add(placeholder)
+    db.flush()
+    db.add(models.Participant(tournament_id=tournament.id, user_id=real.id))
+    db.add(models.Participant(tournament_id=tournament.id, user_id=placeholder.id, archetype_id=deck.id))
+    db.commit()
+
+    data = _make_data(players=["Антон Ильин"], rounds_pairings=[], standings=["Антон Ильин"])
+    AetherhubImportService(db).import_tournament(tournament.id, data)
+
+    participants = db.execute(
+        select(models.Participant).where(models.Participant.tournament_id == tournament.id)
+    ).scalars().all()
+    assert len(participants) == 1
+    assert participants[0].user_id == real.id
+    assert participants[0].archetype_id == deck.id
+    assert participants[0].final_place == 1
+    assert db.get(models.User, placeholder.id) is None
+
+
+def test_import_does_not_auto_merge_when_multiple_real_users_share_name(db):
+    first = UserService(db).get_or_create(tg_id=185001, first_name="Иван Иванов")
+    second = UserService(db).get_or_create(tg_id=185002, first_name="Иван", last_name="Иванов")
+    placeholder = models.User(tg_id=-185001, first_name="Иван", last_name="Иванов")
+    db.add(placeholder)
+    db.commit()
+
+    resolved = UserService(db).resolve_and_merge_import_name("Иван Иванов")
+
+    assert resolved.id in {first.id, second.id, placeholder.id}
+    assert db.get(models.User, first.id) is not None
+    assert db.get(models.User, second.id) is not None
+    assert db.get(models.User, placeholder.id) is not None
+
+
 # ── Sample HTML fixtures ─────────────────────────────────────────────────────
 
 # Main tournament page: standings table + navigation links

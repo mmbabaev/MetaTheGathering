@@ -56,6 +56,14 @@ class TestMergePlaceholderByName:
         merged = svc.merge_placeholder_by_name(REAL_TG_ID, "Крипков", "Сергей")
         assert merged is True
 
+    def test_full_name_in_single_telegram_field_matches_split_placeholder(self, db, placeholder):
+        real = models.User(tg_id=REAL_TG_ID, first_name="Сергей Крипков", last_name=None)
+        db.add(real)
+        db.commit()
+        merged = UserService(db).merge_placeholder_by_name(REAL_TG_ID, "Сергей Крипков", None)
+        assert merged is True
+        assert db.get(models.User, placeholder.id) is None
+
     def test_swapped_name_adopts_canonical_form(self, db, placeholder, real_user):
         """Если пользователь ввёл имя в обратном порядке (Имя Фамилия вместо Фамилия Имя),
         после слияния его имя исправляется по плейсхолдеру."""

@@ -779,6 +779,14 @@ class TestGetOrCreateByName:
         assert created is False
         assert u1.id == u2.id
 
+    def test_two_word_first_name_matches_split_aetherhub_name(self, user_svc, db):
+        """Telegram may put the whole display name into first_name and leave last_name empty."""
+        real = user_svc.get_or_create(tg_id=12345, first_name="Антон Ильин")
+        found, created = user_svc.get_or_create_by_name("Антон", "Ильин")
+        db.commit()
+        assert created is False
+        assert found.id == real.id
+
     def test_prefers_user_with_deck_history(self, user_svc, db, svc, arch_svc):
         """Когда два совпадения — возвращает того, у кого есть история колод."""
         # Два пользователя с одинаковыми именами (разный порядок слов)

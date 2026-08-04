@@ -119,7 +119,7 @@ class AetherhubImportService:
         full_name = self._normalize_import_name(full_name)
         if not full_name:
             return None
-        return self._user_svc.find_by_name(full_name)
+        return self._user_svc.resolve_and_merge_import_name(full_name)
 
     def get_unfilled_opponents(
         self, tournament_id: int, user_id: int, participants: list
