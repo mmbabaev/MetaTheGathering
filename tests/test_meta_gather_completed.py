@@ -18,7 +18,7 @@ from telegram.error import TelegramError
 from bot import chart as chart_mod
 from bot import scheduler  # noqa: F401
 from bot.messages import format_meta_gather_completed
-from bot.scheduler import maybe_announce_meta_gather_completed
+from bot.scheduler import _aetherhub_no_show_names, maybe_announce_meta_gather_completed
 from core import models
 from core.config import settings
 from core.schemas import TournamentCreate
@@ -217,6 +217,32 @@ async def test_announces_to_owner_once(db, user_svc, arch_svc, monkeypatch):
     # idempotent — a second import must not re-announce
     await maybe_announce_meta_gather_completed(bot, db, t.id)
     assert bot.send_media_group.await_count == 2
+
+
+def test_no_show_names_require_published_standings(db, user_svc, arch_svc):
+    t = TournamentService(db).create_tournament(TournamentCreate(title="No standings", chat_id=100))
+    deck = arch_svc.get_or_create_by_name("Burn")
+    _register(db, user_svc, t.id, 1, "Alice", archetype=deck)
+    _register(db, user_svc, t.id, 2, "Bob", archetype=deck)
+    db.commit()
+
+    assert _aetherhub_no_show_names(db, t.id) == []
+
+
+async def test_owner_only_receives_registered_aetherhub_no_shows(db, user_svc, arch_svc, monkeypatch):
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    t = _complete_tournament(db, user_svc, arch_svc)
+    deck = arch_svc.get_or_create_by_name("Burn")
+    _register(db, user_svc, t.id, 5, "No Show", archetype=deck)
+    db.commit()
+    bot = AsyncMock()
+
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+
+    calls = {call.kwargs["chat_id"]: call.kwargs["media"][0].caption for call in bot.send_media_group.call_args_list}
+    assert "No Show" in calls[777]
+    assert "отсутствуют в итоговых стендингах AetherHub (1)" in calls[777]
+    assert "No Show" not in calls[100]
 
 
 async def test_chart_is_rendered_off_the_event_loop_without_db(db, user_svc, arch_svc, monkeypatch):

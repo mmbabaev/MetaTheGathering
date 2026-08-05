@@ -30,6 +30,7 @@ from services.aetherhub_service import AetherhubService
 from services.datalens import DataLensService
 from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.magicoculus import MagicOculusClient, MagicOculusImporter, MagicOculusTournamentCollector
+from services.names import format_participant_name
 from services.schedule import ScheduleService
 from services.stats import StatsService
 from services.tournament import TournamentService
@@ -715,12 +716,20 @@ async def _announce_to_targets(bot, db, tournament_id: int, title: str, targets:
     undefeated = svc.get_undefeated_players(tournament_id)
     scorekeepers = TournamentService(db).get_deck_recorders(tournament_id, min_count=2)
     text = format_meta_gather_completed(title, total, with_deck, undefeated, scorekeepers)
+    no_show_names = _aetherhub_no_show_names(db, tournament_id)
     images = ([chart] if chart else []) + list(standings)
 
     delivered = False
     for chat_id in targets:
+        target_text = text
+        if chat_id == settings.OWNER_CHAT_ID and no_show_names:
+            names = "\n".join(f"• {name}" for name in no_show_names)
+            target_text += (
+                f"\n\n⚠️ Зарегистрировались в боте, но отсутствуют "
+                f"в итоговых стендингах AetherHub ({len(no_show_names)}):\n{names}"
+            )
         try:
-            leftover = await _send_announce(bot, chat_id, text, images)
+            leftover = await _send_announce(bot, chat_id, target_text, images)
         except Exception:
             logger.exception(
                 "maybe_announce_meta_gather_completed: announce to %s failed for #%s", chat_id, tournament_id
@@ -729,6 +738,28 @@ async def _announce_to_targets(bot, db, tournament_id: int, title: str, targets:
         delivered = True
         await _send_announce_images(bot, chat_id, leftover)
     return delivered
+
+
+def _aetherhub_no_show_names(db, tournament_id: int) -> list[str]:
+    """Players registered in the bot but absent from published AetherHub standings.
+
+    ``final_place`` is assigned from standings during AetherHub import. We only report missing
+    places when at least one participant has a place, so a temporarily absent standings response
+    never labels the whole tournament as no-shows.
+    """
+    participants = db.execute(
+        select(models.Participant)
+        .where(models.Participant.tournament_id == tournament_id)
+        .order_by(models.Participant.id)
+    ).scalars().all()
+    if not any(participant.final_place is not None for participant in participants):
+        return []
+    names = {
+        format_participant_name(participant.user.first_name, participant.user.last_name).strip()
+        for participant in participants
+        if participant.final_place is None
+    }
+    return sorted((name for name in names if name), key=str.casefold)
 
 
 def _decks_count(db, tournament_id: int) -> int:
