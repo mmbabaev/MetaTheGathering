@@ -33,6 +33,15 @@ class ImportResult:
         return self.pairings_changed
 
 
+def expected_swiss_rounds(player_count: int) -> int:
+    """Return the usual Swiss round count for the number of players.
+
+    The ranges are powers of two: 5–8 players need 3 rounds, 9–16 need 4,
+    17–32 need 5, and so on.
+    """
+    return (player_count - 1).bit_length() if player_count > 1 else 0
+
+
 @dataclass
 class OpponentInfo:
     round_number: int

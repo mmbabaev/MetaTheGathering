@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from bot.handlers.base import HandlerResult
-from services.aetherhub_import_service import AetherhubImportService
+from services.aetherhub_import_service import AetherhubImportService, expected_swiss_rounds
 from services.aetherhub_models import AetherhubTournamentData
 from services.aetherhub_service import AetherhubService
 from services.tournament import TournamentService
@@ -76,6 +76,27 @@ class AetherhubHandler:
     def handle_confirm_import(self, tournament_id: int, url: str, data: AetherhubTournamentData) -> HandlerResult:
         result = self._import.import_tournament(tournament_id, data)
         self._tournament.set_aetherhub_url(tournament_id, url)
+        expected_rounds = expected_swiss_rounds(result.players_received)
+        standings_are_final = (
+            result.players_received > 0
+            and result.standings_received >= result.players_received
+            and result.rounds_received >= expected_rounds
+        )
+        if result.standings_received:
+            standings_status = "финальные" if standings_are_final else "промежуточные"
+            standings_line = (
+                f"Стендинги: {standings_status} ({result.standings_received} мест, "
+                f"{result.rounds_received} из {expected_rounds} раундов)"
+            )
+        else:
+            standings_line = "Стендинги: ещё не опубликованы"
+
+        if result.scores_complete:
+            scores_line = "Счёт матчей: опубликован полностью"
+        elif standings_are_final:
+            scores_line = "Счёт матчей: не опубликован AetherHub (стендинги уже финальные)"
+        else:
+            scores_line = "Счёт матчей: опубликован не полностью"
         lines = [
             "✅ AetherHub обновлён",
             "",
@@ -87,12 +108,8 @@ class AetherhubHandler:
             f"Парингов получено: {result.pairings_received}",
             f"Добавлено или изменено: {result.pairings_changed}",
             "",
-            (
-                f"Итоговые стендинги: получены ({result.standings_received} мест)"
-                if result.standings_received
-                else "Итоговые стендинги: ещё не опубликованы"
-            ),
-            f"Счёт матчей: {'полный' if result.scores_complete else 'неполный'}",
+            standings_line,
+            scores_line,
         ]
         if result.created_names:
             names_str = ", ".join(result.created_names[:5])
