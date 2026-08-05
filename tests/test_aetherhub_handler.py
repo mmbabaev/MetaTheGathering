@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from bot.handlers.aetherhub import AetherhubFetchResult, AetherhubHandler
+from services.aetherhub_import_service import expected_swiss_rounds
 from services.aetherhub_models import AetherhubTournamentData, ClubTournamentLink
 
 
@@ -158,8 +159,46 @@ class TestConfirmImportMessage:
         assert "Участники: получено 11" in text
         assert "Парингов получено: 44" in text
         assert "Добавлено или изменено: 0" in text
-        assert "Итоговые стендинги: получены (11 мест)" in text
-        assert "Счёт матчей: полный" in text
+        assert "Стендинги: финальные (11 мест, 4 из 4 раундов)" in text
+        assert "Счёт матчей: опубликован полностью" in text
+
+    def test_final_standings_do_not_depend_on_match_scores(self):
+        import_service = MagicMock()
+        import_service.import_tournament.return_value = MagicMock(
+            players_received=11,
+            registered=0,
+            already_registered=11,
+            rounds_received=4,
+            pairings_received=41,
+            pairings_changed=0,
+            standings_received=11,
+            scores_complete=False,
+            created_names=[],
+            new_round_numbers=[],
+        )
+        handler = AetherhubHandler(MagicMock(), import_service, MagicMock())
+        text = handler.handle_confirm_import(1, "https://example.invalid/tournament", _make_tournament_data()).text
+        assert "Стендинги: финальные (11 мест, 4 из 4 раундов)" in text
+        assert "Счёт матчей: не опубликован AetherHub (стендинги уже финальные)" in text
+
+    def test_standings_are_intermediate_before_expected_round(self):
+        import_service = MagicMock()
+        import_service.import_tournament.return_value = MagicMock(
+            players_received=11,
+            registered=0,
+            already_registered=11,
+            rounds_received=3,
+            pairings_received=33,
+            pairings_changed=0,
+            standings_received=11,
+            scores_complete=False,
+            created_names=[],
+            new_round_numbers=[],
+        )
+        handler = AetherhubHandler(MagicMock(), import_service, MagicMock())
+        text = handler.handle_confirm_import(1, "https://example.invalid/tournament", _make_tournament_data()).text
+        assert "Стендинги: промежуточные (11 мест, 3 из 4 раундов)" in text
+        assert "Счёт матчей: опубликован не полностью" in text
 
     def test_reports_missing_standings_and_incomplete_scores(self):
         import_service = MagicMock()
@@ -177,5 +216,13 @@ class TestConfirmImportMessage:
         )
         handler = AetherhubHandler(MagicMock(), import_service, MagicMock())
         text = handler.handle_confirm_import(1, "https://example.invalid/tournament", _make_tournament_data()).text
-        assert "Итоговые стендинги: ещё не опубликованы" in text
-        assert "Счёт матчей: неполный" in text
+        assert "Стендинги: ещё не опубликованы" in text
+        assert "Счёт матчей: опубликован не полностью" in text
+
+
+@pytest.mark.parametrize(
+    ("players", "rounds"),
+    [(8, 3), (9, 4), (11, 4), (16, 4), (17, 5)],
+)
+def test_expected_swiss_rounds(players, rounds):
+    assert expected_swiss_rounds(players) == rounds
