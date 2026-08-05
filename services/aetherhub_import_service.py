@@ -34,12 +34,14 @@ class ImportResult:
 
 
 def expected_swiss_rounds(player_count: int) -> int:
-    """Return the usual Swiss round count for the number of players.
+    """Return the tournament's expected Swiss round count.
 
-    The ranges are powers of two: 5–8 players need 3 rounds, 9–16 need 4,
-    17–32 need 5, and so on.
+    Up to eight players use the usual power-of-two ranges. Larger tournaments
+    in this bot always run exactly four rounds, regardless of player count.
     """
-    return (player_count - 1).bit_length() if player_count > 1 else 0
+    if player_count <= 1:
+        return 0
+    return min((player_count - 1).bit_length(), 4)
 
 
 @dataclass
