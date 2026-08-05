@@ -222,7 +222,7 @@ class TestConfirmImportMessage:
 
 @pytest.mark.parametrize(
     ("players", "rounds"),
-    [(8, 3), (9, 4), (11, 4), (16, 4), (17, 5)],
+    [(8, 3), (9, 4), (11, 4), (16, 4), (17, 4), (64, 4)],
 )
 def test_expected_swiss_rounds(players, rounds):
     assert expected_swiss_rounds(players) == rounds
