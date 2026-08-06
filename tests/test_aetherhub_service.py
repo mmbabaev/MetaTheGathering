@@ -533,6 +533,40 @@ class TestImportTournament:
         assert result.players_received == 2
         assert result.registered == 2
 
+    def test_registers_player_present_only_in_later_round_pairings(
+        self, import_svc, db, tournament, user_svc
+    ):
+        """Tournament #65: the missing player first appeared in round two, not `players`."""
+        missing = user_svc.get_or_create(
+            tg_id=396,
+            first_name="Владимир",
+            last_name="Вуйцицкий",
+        )
+        data = AetherhubTournamentData(
+            url="x",
+            players=["Гасанлы Фарид"],
+            rounds=[
+                AetherhubRound(
+                    number=2,
+                    pairings=[
+                        AetherhubPairing(player="Гасанлы Фарид", opponent="Вуйцицкий Владимир"),
+                        AetherhubPairing(player="Вуйцицкий Владимир", opponent="Гасанлы Фарид"),
+                    ],
+                )
+            ],
+            standings=[],
+        )
+
+        result = import_svc.import_tournament(tournament.id, data)
+
+        participant = db.query(models.Participant).filter_by(
+            tournament_id=tournament.id,
+            user_id=missing.id,
+        ).one()
+        assert participant.final_place is None
+        assert result.players_received == 2
+        assert result.registered == 2
+
     def test_players_and_standings_name_order_does_not_double_count(
         self, import_svc, tournament, user_svc
     ):

@@ -231,13 +231,33 @@ class AetherhubImportService:
                 participant.final_place = direct.get(name) or normalized.get(self._normalize_import_name(name))
         self.db.commit()
 
-    @staticmethod
-    def _received_counts(data: AetherhubTournamentData) -> tuple[int, int, int, int]:
+    def _registration_names(self, data: AetherhubTournamentData) -> list[str]:
+        """All player identities observed anywhere in an AetherHub tournament response."""
+        candidates = list(data.players)
+        for round_data in data.rounds:
+            for pairing in round_data.pairings:
+                candidates.append(pairing.player)
+                if pairing.opponent:
+                    candidates.append(pairing.opponent)
+        candidates.extend(data.standings)
+
+        result: list[str] = []
+        seen: set[tuple[str, ...]] = set()
+        for name in candidates:
+            if not name or name.upper() == "BYE":
+                continue
+            key = tuple(
+                sorted(self._normalize_import_name(name).casefold().replace("ё", "е").split())
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            result.append(name)
+        return result
+
+    def _received_counts(self, data: AetherhubTournamentData) -> tuple[int, int, int, int]:
         return (
-            max(
-                sum(name.upper() != "BYE" for name in data.players),
-                sum(name.upper() != "BYE" for name in data.standings),
-            ),
+            len(self._registration_names(data)),
             sum(bool(r.pairings) for r in data.rounds),
             sum(len(r.pairings) for r in data.rounds),
             sum(name.upper() != "BYE" for name in data.standings),
@@ -310,13 +330,10 @@ class AetherhubImportService:
         place_map, normalized_place_map = self._build_place_maps(data.standings)
 
         # Round-one players are normally the registration roster, but AetherHub can omit a
-        # player there while still publishing them in final standings (issue #184, tournament
-        # #65). Include both sources; de-duplicate after flexible name resolution because the
-        # two pages may use opposite "first last" / "last first" ordering.
+        # player there while still publishing them in later rounds and final standings (issue
+        # #184, tournament #65). Include all sources and de-duplicate opposite name orderings.
         processed_user_ids: set[int] = set()
-        for name in [*data.players, *data.standings]:
-            if name.upper() == "BYE":
-                continue
+        for name in self._registration_names(data):
             place = place_map.get(name) or normalized_place_map.get(self._normalize_import_name(name))
             user = self.find_user_by_name(name)
             was_created = False
