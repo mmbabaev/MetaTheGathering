@@ -32,6 +32,51 @@ def _make_data(players, rounds_pairings, standings=None):
     )
 
 
+def _late_entry_data(*, standings=None):
+    """Вуйцицкий опоздал ко второму раунду и вошёл в турнир с техническим поражением."""
+    return AetherhubTournamentData(
+        url="x",
+        players=["Гасанлы Фарид", "Хрипков Сергей"],
+        rounds=[
+            AetherhubRound(
+                number=1,
+                pairings=[
+                    AetherhubPairing(
+                        player="Гасанлы Фарид",
+                        opponent="Хрипков Сергей",
+                        player_wins=0,
+                        opponent_wins=2,
+                    ),
+                    AetherhubPairing(
+                        player="Хрипков Сергей",
+                        opponent="Гасанлы Фарид",
+                        player_wins=2,
+                        opponent_wins=0,
+                    ),
+                ],
+            ),
+            AetherhubRound(
+                number=2,
+                pairings=[
+                    AetherhubPairing(
+                        player="Гасанлы Фарид",
+                        opponent="Вуйцицкий Владимир",
+                        player_wins=2,
+                        opponent_wins=0,
+                    ),
+                    AetherhubPairing(
+                        player="Вуйцицкий Владимир",
+                        opponent="Гасанлы Фарид",
+                        player_wins=0,
+                        opponent_wins=2,
+                    ),
+                ],
+            ),
+        ],
+        standings=standings or [],
+    )
+
+
 def _mock_scraper(html_by_url: dict[str, str]):
     scraper = MagicMock()
 
@@ -46,6 +91,46 @@ def _mock_scraper(html_by_url: dict[str, str]):
 
 def _svc(html_by_url: dict[str, str]) -> AetherhubService:
     return AetherhubService(scraper=_mock_scraper(html_by_url))
+
+
+def test_import_merges_safe_real_and_placeholder_duplicate(db, svc, arch_svc):
+    """A split AetherHub name must collapse an existing one-field Telegram duplicate."""
+    tournament = svc.create_tournament(TournamentCreate(title="Duplicate roster", chat_id=184))
+    real = UserService(db).get_or_create(tg_id=184001, first_name="Антон Ильин")
+    placeholder = models.User(tg_id=-184001, first_name="Антон", last_name="Ильин")
+    deck = arch_svc.get_or_create_by_name("Burn")
+    db.add(placeholder)
+    db.flush()
+    db.add(models.Participant(tournament_id=tournament.id, user_id=real.id))
+    db.add(models.Participant(tournament_id=tournament.id, user_id=placeholder.id, archetype_id=deck.id))
+    db.commit()
+
+    data = _make_data(players=["Антон Ильин"], rounds_pairings=[], standings=["Антон Ильин"])
+    AetherhubImportService(db).import_tournament(tournament.id, data)
+
+    participants = db.execute(
+        select(models.Participant).where(models.Participant.tournament_id == tournament.id)
+    ).scalars().all()
+    assert len(participants) == 1
+    assert participants[0].user_id == real.id
+    assert participants[0].archetype_id == deck.id
+    assert participants[0].final_place == 1
+    assert db.get(models.User, placeholder.id) is None
+
+
+def test_import_does_not_auto_merge_when_multiple_real_users_share_name(db):
+    first = UserService(db).get_or_create(tg_id=185001, first_name="Иван Иванов")
+    second = UserService(db).get_or_create(tg_id=185002, first_name="Иван", last_name="Иванов")
+    placeholder = models.User(tg_id=-185001, first_name="Иван", last_name="Иванов")
+    db.add(placeholder)
+    db.commit()
+
+    resolved = UserService(db).resolve_and_merge_import_name("Иван Иванов")
+
+    assert resolved.id in {first.id, second.id, placeholder.id}
+    assert db.get(models.User, first.id) is not None
+    assert db.get(models.User, second.id) is not None
+    assert db.get(models.User, placeholder.id) is not None
 
 
 # ── Sample HTML fixtures ─────────────────────────────────────────────────────
@@ -466,6 +551,100 @@ class TestImportTournament:
         result = import_svc.import_tournament(tournament.id, data)
         assert result.registered == 1
         assert "Ghost User" in result.created_names
+
+    def test_registers_player_present_only_in_final_standings(
+        self, import_svc, db, tournament, user_svc
+    ):
+        """Issue #184: round-one roster had 23 names while final standings had 24."""
+        missing = user_svc.get_or_create(
+            tg_id=396,
+            first_name="Владимир",
+            last_name="Вуйцицкий",
+        )
+        data = AetherhubTournamentData(
+            url="x",
+            players=["Хрипков Сергей"],
+            rounds=[],
+            standings=["Хрипков Сергей", "Вуйцицкий Владимир"],
+        )
+
+        result = import_svc.import_tournament(tournament.id, data)
+
+        participant = db.query(models.Participant).filter_by(
+            tournament_id=tournament.id,
+            user_id=missing.id,
+        ).one()
+        assert participant.final_place == 2
+        assert result.players_received == 2
+        assert result.registered == 2
+
+    def test_registers_late_entry_from_second_round_with_loss(
+        self, import_svc, db, tournament, user_svc
+    ):
+        """#65: опоздун отсутствует в roster/R1 и впервые появляется в R2 со счётом 0:2."""
+        missing = user_svc.get_or_create(
+            tg_id=396,
+            first_name="Владимир",
+            last_name="Вуйцицкий",
+        )
+        result = import_svc.import_tournament(tournament.id, _late_entry_data())
+
+        participant = db.query(models.Participant).filter_by(
+            tournament_id=tournament.id,
+            user_id=missing.id,
+        ).one()
+        assert participant.final_place is None
+        assert result.players_received == 3
+        assert result.registered == 3
+        assert db.query(models.Participant).filter_by(tournament_id=tournament.id).count() == 3
+        pairing = db.query(models.RoundPairing).filter_by(
+            tournament_id=tournament.id,
+            round_number=2,
+            player_name="Вуйцицкий Владимир",
+        ).one()
+        assert (pairing.player_wins, pairing.opponent_wins) == (0, 2)
+
+    def test_final_standings_update_same_late_entry_without_duplicate(
+        self, import_svc, db, tournament, user_svc
+    ):
+        missing = user_svc.get_or_create(
+            tg_id=396,
+            first_name="Владимир",
+            last_name="Вуйцицкий",
+        )
+        import_svc.import_tournament(tournament.id, _late_entry_data())
+
+        result = import_svc.import_tournament(
+            tournament.id,
+            _late_entry_data(
+                standings=["Хрипков Сергей", "Вуйцицкий Владимир", "Гасанлы Фарид"]
+            ),
+        )
+
+        participants = db.query(models.Participant).filter_by(
+            tournament_id=tournament.id,
+            user_id=missing.id,
+        ).all()
+        assert len(participants) == 1
+        assert participants[0].final_place == 2
+        assert result.registered == 0
+        assert result.already_registered == 3
+
+    def test_players_and_standings_name_order_does_not_double_count(
+        self, import_svc, tournament, user_svc
+    ):
+        user_svc.get_or_create(tg_id=396, first_name="Владимир", last_name="Вуйцицкий")
+        data = AetherhubTournamentData(
+            url="x",
+            players=["Владимир Вуйцицкий"],
+            rounds=[],
+            standings=["Вуйцицкий Владимир"],
+        )
+
+        result = import_svc.import_tournament(tournament.id, data)
+
+        assert result.registered == 1
+        assert result.already_registered == 0
 
     def test_already_registered_counted_separately(self, import_svc, svc, tournament, user_alice):
         svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id)

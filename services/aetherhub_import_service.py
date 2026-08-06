@@ -140,7 +140,7 @@ class AetherhubImportService:
         full_name = self._normalize_import_name(full_name)
         if not full_name:
             return None
-        return self._user_svc.find_by_name(full_name)
+        return self._user_svc.resolve_and_merge_import_name(full_name)
 
     def get_unfilled_opponents(
         self, tournament_id: int, user_id: int, participants: list
@@ -231,10 +231,33 @@ class AetherhubImportService:
                 participant.final_place = direct.get(name) or normalized.get(self._normalize_import_name(name))
         self.db.commit()
 
-    @staticmethod
-    def _received_counts(data: AetherhubTournamentData) -> tuple[int, int, int, int]:
+    def _registration_names(self, data: AetherhubTournamentData) -> list[str]:
+        """All player identities observed anywhere in an AetherHub tournament response."""
+        candidates = list(data.players)
+        for round_data in data.rounds:
+            for pairing in round_data.pairings:
+                candidates.append(pairing.player)
+                if pairing.opponent:
+                    candidates.append(pairing.opponent)
+        candidates.extend(data.standings)
+
+        result: list[str] = []
+        seen: set[tuple[str, ...]] = set()
+        for name in candidates:
+            if not name or name.upper() == "BYE":
+                continue
+            key = tuple(
+                sorted(self._normalize_import_name(name).casefold().replace("ё", "е").split())
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            result.append(name)
+        return result
+
+    def _received_counts(self, data: AetherhubTournamentData) -> tuple[int, int, int, int]:
         return (
-            sum(name.upper() != "BYE" for name in data.players),
+            len(self._registration_names(data)),
             sum(bool(r.pairings) for r in data.rounds),
             sum(len(r.pairings) for r in data.rounds),
             sum(name.upper() != "BYE" for name in data.standings),
@@ -306,15 +329,22 @@ class AetherhubImportService:
 
         place_map, normalized_place_map = self._build_place_maps(data.standings)
 
-        for name in data.players:
-            if name.upper() == "BYE":
-                continue
+        # Round-one players are normally the registration roster, but AetherHub can omit a
+        # player there while still publishing them in later rounds and final standings (issue
+        # #184, tournament #65). Include all sources and de-duplicate opposite name orderings.
+        processed_user_ids: set[int] = set()
+        for name in self._registration_names(data):
             place = place_map.get(name) or normalized_place_map.get(self._normalize_import_name(name))
             user = self.find_user_by_name(name)
             was_created = False
             if user is None:
                 user, was_created = self._get_or_create_user_by_name(name)
             existing = self._get_participant(tournament_id, user.id)
+            if user.id in processed_user_ids:
+                if existing is not None and place is not None:
+                    existing.final_place = place
+                continue
+            processed_user_ids.add(user.id)
             if existing is not None:
                 already_registered += 1
                 if place is not None:
