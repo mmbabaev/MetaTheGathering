@@ -826,8 +826,8 @@ def setup_scheduler(app: Application) -> None:
         await registration_refresh_job.run(context.bot)
 
     _refresh_registration_messages.__name__ = "registration_message_refresh"
-    app.job_queue.run_repeating(_refresh_registration_messages, interval=15, first=15)
-    logger.info("Scheduler: RegistrationMessageRefreshJob registered (every 15s)")
+    app.job_queue.run_repeating(_refresh_registration_messages, interval=60, first=60)
+    logger.info("Scheduler: RegistrationMessageRefreshJob registered (every 60s)")
 
     final_job = AetherhubFinalReimportJob(AetherhubService())
 
