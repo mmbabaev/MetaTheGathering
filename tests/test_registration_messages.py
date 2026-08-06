@@ -138,7 +138,7 @@ async def test_message_not_modified_marks_count_rendered(db, user_alice):
     assert row.rendered_participant_count == 1
 
 
-async def test_disabled_flag_does_not_edit_stale_message(db, user_alice):
+async def test_disabled_flag_removes_current_counter(db, user_alice):
     tournament = _tournament(db)
     service = RegistrationMessageService(db)
     service.upsert_last(
@@ -150,6 +150,49 @@ async def test_disabled_flag_does_not_edit_stale_message(db, user_alice):
         participant_count=0,
     )
     TournamentService(db).register_participant(tournament_id=tournament.id, user_id=user_alice.id)
+
+    bot = AsyncMock()
+    await RegistrationMessageRefreshJob().run(bot, db=db)
+
+    bot.edit_message_text.assert_awaited_once()
+    assert bot.edit_message_text.call_args.kwargs["text"] == "Регистрация"
+    row = db.query(models.TournamentRegistrationMessage).one()
+    assert row.rendered_participant_count == -1
+
+
+async def test_enabling_flag_restores_current_counter(db, user_alice):
+    tournament = _tournament(db)
+    service = RegistrationMessageService(db)
+    row = service.upsert_last(
+        tournament_id=tournament.id,
+        chat_id=100,
+        message_id=10,
+        base_text="Регистрация",
+        button_url=None,
+        participant_count=-1,
+    )
+    TournamentService(db).register_participant(tournament_id=tournament.id, user_id=user_alice.id)
+    FeatureFlagService(db).toggle(FeatureFlags.LIVE_REGISTRATION_COUNT)
+
+    bot = AsyncMock()
+    await RegistrationMessageRefreshJob().run(bot, db=db)
+
+    bot.edit_message_text.assert_awaited_once()
+    assert bot.edit_message_text.call_args.kwargs["text"] == "Регистрация\n\nЗаписалось: 1"
+    db.refresh(row)
+    assert row.rendered_participant_count == 1
+
+
+async def test_disabled_hidden_message_is_not_edited_again(db):
+    tournament = _tournament(db)
+    RegistrationMessageService(db).upsert_last(
+        tournament_id=tournament.id,
+        chat_id=100,
+        message_id=10,
+        base_text="Регистрация",
+        button_url=None,
+        participant_count=-1,
+    )
 
     bot = AsyncMock()
     await RegistrationMessageRefreshJob().run(bot, db=db)

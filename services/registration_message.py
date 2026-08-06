@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 
 from core import models
 
+HIDDEN_PARTICIPANT_COUNT = -1
+
 
 def format_registration_message(base_text: str, participant_count: int) -> str:
     return f"{base_text.rstrip()}\n\nЗаписалось: {participant_count}"
@@ -54,6 +56,13 @@ class RegistrationMessageService:
         return row
 
     def list_stale_active(self) -> list[tuple[models.TournamentRegistrationMessage, int]]:
+        return self._list_active(show_count=True)
+
+    def list_counted_active(self) -> list[tuple[models.TournamentRegistrationMessage, int]]:
+        """Active messages currently showing a counter and therefore needing it removed."""
+        return self._list_active(show_count=False)
+
+    def _list_active(self, *, show_count: bool) -> list[tuple[models.TournamentRegistrationMessage, int]]:
         counts = (
             select(
                 models.Participant.tournament_id.label("tournament_id"),
@@ -63,6 +72,11 @@ class RegistrationMessageService:
             .subquery()
         )
         actual_count = func.coalesce(counts.c.participant_count, 0)
+        extra_condition = (
+            models.TournamentRegistrationMessage.rendered_participant_count != actual_count
+            if show_count
+            else models.TournamentRegistrationMessage.rendered_participant_count != HIDDEN_PARTICIPANT_COUNT
+        )
         stmt = (
             select(models.TournamentRegistrationMessage, actual_count)
             .join(models.Tournament, models.Tournament.id == models.TournamentRegistrationMessage.tournament_id)
@@ -70,7 +84,7 @@ class RegistrationMessageService:
             .where(
                 models.Tournament.status != models.TournamentStatus.CLOSED,
                 models.TournamentRegistrationMessage.edit_disabled_at.is_(None),
-                models.TournamentRegistrationMessage.rendered_participant_count != actual_count,
+                extra_condition,
             )
         )
         return [(row, int(count)) for row, count in self.db.execute(stmt).all()]

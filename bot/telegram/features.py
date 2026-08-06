@@ -2,8 +2,9 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from bot.handlers.features import FeaturesHandler
+from bot.registration_messages import RegistrationMessageRefreshJob
 from core.database import SessionLocal
-from services.feature_flags import KNOWN_FLAGS, FeatureFlagService
+from services.feature_flags import KNOWN_FLAGS, FeatureFlags, FeatureFlagService
 from services.user import UserService
 
 
@@ -48,5 +49,7 @@ async def callback_feature_toggle(update: Update, context: ContextTypes.DEFAULT_
             return
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
+        if flag_name == FeatureFlags.LIVE_REGISTRATION_COUNT:
+            await RegistrationMessageRefreshJob().run(context.bot, db=db)
     finally:
         db.close()
