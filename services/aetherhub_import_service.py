@@ -234,7 +234,10 @@ class AetherhubImportService:
     @staticmethod
     def _received_counts(data: AetherhubTournamentData) -> tuple[int, int, int, int]:
         return (
-            sum(name.upper() != "BYE" for name in data.players),
+            max(
+                sum(name.upper() != "BYE" for name in data.players),
+                sum(name.upper() != "BYE" for name in data.standings),
+            ),
             sum(bool(r.pairings) for r in data.rounds),
             sum(len(r.pairings) for r in data.rounds),
             sum(name.upper() != "BYE" for name in data.standings),
@@ -306,7 +309,12 @@ class AetherhubImportService:
 
         place_map, normalized_place_map = self._build_place_maps(data.standings)
 
-        for name in data.players:
+        # Round-one players are normally the registration roster, but AetherHub can omit a
+        # player there while still publishing them in final standings (issue #184, tournament
+        # #65). Include both sources; de-duplicate after flexible name resolution because the
+        # two pages may use opposite "first last" / "last first" ordering.
+        processed_user_ids: set[int] = set()
+        for name in [*data.players, *data.standings]:
             if name.upper() == "BYE":
                 continue
             place = place_map.get(name) or normalized_place_map.get(self._normalize_import_name(name))
@@ -315,6 +323,11 @@ class AetherhubImportService:
             if user is None:
                 user, was_created = self._get_or_create_user_by_name(name)
             existing = self._get_participant(tournament_id, user.id)
+            if user.id in processed_user_ids:
+                if existing is not None and place is not None:
+                    existing.final_place = place
+                continue
+            processed_user_ids.add(user.id)
             if existing is not None:
                 already_registered += 1
                 if place is not None:

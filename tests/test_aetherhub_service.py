@@ -507,6 +507,48 @@ class TestImportTournament:
         assert result.registered == 1
         assert "Ghost User" in result.created_names
 
+    def test_registers_player_present_only_in_final_standings(
+        self, import_svc, db, tournament, user_svc
+    ):
+        """Issue #184: round-one roster had 23 names while final standings had 24."""
+        missing = user_svc.get_or_create(
+            tg_id=396,
+            first_name="Владимир",
+            last_name="Вуйцицкий",
+        )
+        data = AetherhubTournamentData(
+            url="x",
+            players=["Хрипков Сергей"],
+            rounds=[],
+            standings=["Хрипков Сергей", "Вуйцицкий Владимир"],
+        )
+
+        result = import_svc.import_tournament(tournament.id, data)
+
+        participant = db.query(models.Participant).filter_by(
+            tournament_id=tournament.id,
+            user_id=missing.id,
+        ).one()
+        assert participant.final_place == 2
+        assert result.players_received == 2
+        assert result.registered == 2
+
+    def test_players_and_standings_name_order_does_not_double_count(
+        self, import_svc, tournament, user_svc
+    ):
+        user_svc.get_or_create(tg_id=396, first_name="Владимир", last_name="Вуйцицкий")
+        data = AetherhubTournamentData(
+            url="x",
+            players=["Владимир Вуйцицкий"],
+            rounds=[],
+            standings=["Вуйцицкий Владимир"],
+        )
+
+        result = import_svc.import_tournament(tournament.id, data)
+
+        assert result.registered == 1
+        assert result.already_registered == 0
+
     def test_already_registered_counted_separately(self, import_svc, svc, tournament, user_alice):
         svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id)
         data = _make_data(players=["Alice"], rounds_pairings=[[("Alice", None)]])
