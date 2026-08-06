@@ -11,6 +11,7 @@ from core import models
 from core.config import Club, ClubSchedule
 from core.schemas import TournamentCreate
 from services.tournament import TournamentService
+from services.feature_flags import FeatureFlags, FeatureFlagService
 
 MONDAY = datetime(2026, 7, 13, 19, 25, tzinfo=ZoneInfo("Europe/Moscow"))  # понедельник
 TUESDAY = datetime(2026, 7, 14, 19, 25, tzinfo=ZoneInfo("Europe/Moscow"))
@@ -25,6 +26,7 @@ def _bot():
 
 class TestSendRegistrationOpen:
     async def test_button_is_a_deck_deeplink(self, db, monkeypatch):
+        FeatureFlagService(db).toggle(FeatureFlags.LIVE_REGISTRATION_COUNT)
         monkeypatch.setattr("bot.scheduler.settings.OWNER_CHAT_ID", 777)
         club = Club(name="Edinorog", chat_id=-100, schedules=[])
         bot = _bot()
@@ -39,6 +41,19 @@ class TestSendRegistrationOpen:
         assert button.url == f"https://t.me/TestBot?start=deck_{tournament.id}"
         assert all("Записалось: 0" in c.kwargs["text"] for c in bot.send_message.call_args_list)
         assert db.query(models.TournamentRegistrationMessage).count() == 2
+
+    async def test_disabled_flag_sends_plain_message_and_tracks_it_for_future_enable(self, db, monkeypatch):
+        monkeypatch.setattr("bot.scheduler.settings.OWNER_CHAT_ID", 777)
+        club = Club(name="Edinorog", chat_id=-100, schedules=[])
+        bot = _bot()
+        tournament = TournamentService(db).create_tournament(TournamentCreate(title="Pauper", chat_id=-100))
+
+        await send_registration_open(bot, db, club, tournament_id=tournament.id, base_text="Регистрация открыта")
+
+        assert all(c.kwargs["text"] == "Регистрация открыта" for c in bot.send_message.call_args_list)
+        rows = db.query(models.TournamentRegistrationMessage).all()
+        assert len(rows) == 2
+        assert all(row.rendered_participant_count == -1 for row in rows)
 
     async def test_skips_missing_chat_ids(self, db, monkeypatch):
         monkeypatch.setattr("bot.scheduler.settings.OWNER_CHAT_ID", None)

@@ -8,7 +8,12 @@ from telegram.error import BadRequest, Forbidden, TelegramError
 from bot.deeplink import deck_deeplink
 from core.config import Club
 from core.database import SessionLocal
-from services.registration_message import RegistrationMessageService, format_registration_message
+from services.feature_flags import FeatureFlags, FeatureFlagService
+from services.registration_message import (
+    HIDDEN_PARTICIPANT_COUNT,
+    RegistrationMessageService,
+    format_registration_message,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +40,10 @@ async def send_registration_open(
     except TelegramError:
         logger.exception("send_registration_open: get_me failed for #%s — шлём без кнопки", tournament_id)
 
+    live_count_enabled = FeatureFlagService(db).is_enabled(FeatureFlags.LIVE_REGISTRATION_COUNT)
     service = RegistrationMessageService(db)
     participant_count = service.participant_count(tournament_id)
-    text = format_registration_message(base_text, participant_count)
+    text = format_registration_message(base_text, participant_count) if live_count_enabled else base_text
     for chat_id in targets:
         try:
             message = await bot.send_message(chat_id=chat_id, text=text, reply_markup=_markup(button_url))
@@ -49,7 +55,7 @@ async def send_registration_open(
                 message_id=message.message_id,
                 base_text=base_text,
                 button_url=button_url,
-                participant_count=participant_count,
+                participant_count=(participant_count if live_count_enabled else HIDDEN_PARTICIPANT_COUNT),
             )
         except TelegramError:
             logger.exception("send_registration_open: send to %s failed for #%s", chat_id, tournament_id)
@@ -64,9 +70,12 @@ class RegistrationMessageRefreshJob:
         if close_db:
             db = SessionLocal()
         try:
+            live_count_enabled = FeatureFlagService(db).is_enabled(FeatureFlags.LIVE_REGISTRATION_COUNT)
             service = RegistrationMessageService(db)
-            for row, participant_count in service.list_stale_active():
-                text = format_registration_message(row.base_text, participant_count)
+            rows = service.list_stale_active() if live_count_enabled else service.list_counted_active()
+            for row, participant_count in rows:
+                rendered_count = participant_count if live_count_enabled else HIDDEN_PARTICIPANT_COUNT
+                text = format_registration_message(row.base_text, participant_count) if live_count_enabled else row.base_text
                 try:
                     await bot.edit_message_text(
                         chat_id=row.chat_id,
@@ -77,7 +86,7 @@ class RegistrationMessageRefreshJob:
                 except BadRequest as exc:
                     message = str(exc).lower()
                     if "message is not modified" in message:
-                        service.mark_rendered(row.id, row.message_id, participant_count)
+                        service.mark_rendered(row.id, row.message_id, rendered_count)
                     elif "message to edit not found" in message or "message can't be edited" in message:
                         service.disable(row.id, row.message_id)
                     else:
@@ -89,7 +98,7 @@ class RegistrationMessageRefreshJob:
                 except Exception:
                     logger.exception("registration message refresh failed for row %s", row.id)
                 else:
-                    service.mark_rendered(row.id, row.message_id, participant_count)
+                    service.mark_rendered(row.id, row.message_id, rendered_count)
         finally:
             if close_db:
                 db.close()
