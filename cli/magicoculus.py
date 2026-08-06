@@ -61,6 +61,6 @@ def send(
         raise typer.Exit(1) from exc
 
     typer.echo(f"✓ Magic Oculus tournament #{result.tournament_id}")
-    typer.echo(f"  {settings.MAGIC_OCULUS_API_URL}/tournaments/{result.tournament_id}")
+    typer.echo(f"  {settings.MAGIC_OCULUS_PUBLIC_URL.rstrip('/')}/tournaments/{result.tournament_id}")
     for warning in result.warnings:
         typer.echo(f"  WARNING {warning.code}: {warning.message}")

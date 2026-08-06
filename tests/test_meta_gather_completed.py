@@ -18,13 +18,14 @@ from telegram.error import TelegramError
 from bot import chart as chart_mod
 from bot import scheduler  # noqa: F401
 from bot.messages import format_meta_gather_completed
-from bot.scheduler import _aetherhub_no_show_names, maybe_announce_meta_gather_completed
+from bot.scheduler import AnnouncementDelivery, _aetherhub_no_show_names, maybe_announce_meta_gather_completed
 from core import models
 from core.config import settings
 from core.schemas import TournamentCreate
 from services.aetherhub_import_service import AetherhubImportService, UndefeatedPlayer
 from services.aetherhub_models import AetherhubPairing, AetherhubRound, AetherhubTournamentData
 from services.feature_flags import FeatureFlags, FeatureFlagService
+from services.magicoculus import MagicOculusImportResult
 from services.tournament import TournamentService
 
 
@@ -613,21 +614,37 @@ async def test_magicoculus_import_runs_after_close_when_enabled(db, user_svc, ar
     monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
     FeatureFlagService(db).toggle(FeatureFlags.MAGIC_OCULUS_IMPORT)
     to_thread = AsyncMock()
+    to_thread.return_value = MagicOculusImportResult(tournament_id=145, detail={})
     monkeypatch.setattr("bot.scheduler.asyncio.to_thread", to_thread)
-    monkeypatch.setattr("bot.scheduler._announce_to_targets", AsyncMock(return_value=True))
+    monkeypatch.setattr(
+        "bot.scheduler._announce_to_targets",
+        AsyncMock(return_value=[AnnouncementDelivery(chat_id=100, message_id=321)]),
+    )
     t = _complete_tournament(db, user_svc, arch_svc)
 
-    await maybe_announce_meta_gather_completed(AsyncMock(), db, t.id)
+    bot = AsyncMock()
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
 
     to_thread.assert_awaited_once_with(scheduler.import_closed_tournament_to_magicoculus, t.id)
     assert db.get(models.Tournament, t.id).status == models.TournamentStatus.CLOSED
+    bot.send_message.assert_not_awaited()
+    bot.edit_message_reply_markup.assert_awaited_once()
+    call = bot.edit_message_reply_markup.await_args.kwargs
+    assert call["chat_id"] == t.chat_id
+    assert call["message_id"] == 321
+    button = call["reply_markup"].inline_keyboard[0][0]
+    assert button.text == "👁 Открыть в Magic Oculus"
+    assert button.url == "https://magicoculus.ru/tournaments/145"
 
 
 async def test_magicoculus_failure_does_not_break_close(db, user_svc, arch_svc, monkeypatch):
     monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
     FeatureFlagService(db).toggle(FeatureFlags.MAGIC_OCULUS_IMPORT)
     monkeypatch.setattr("bot.scheduler.asyncio.to_thread", AsyncMock(side_effect=RuntimeError("API failed")))
-    monkeypatch.setattr("bot.scheduler._announce_to_targets", AsyncMock(return_value=True))
+    monkeypatch.setattr(
+        "bot.scheduler._announce_to_targets",
+        AsyncMock(return_value=[AnnouncementDelivery(chat_id=100, message_id=321)]),
+    )
     monkeypatch.setattr("bot.scheduler.send_achievements_report", AsyncMock())
     t = _complete_tournament(db, user_svc, arch_svc)
     bot = AsyncMock()
@@ -662,11 +679,37 @@ async def test_magicoculus_import_starts_only_after_tournament_is_closed(db, use
 
     async def verify_closed(*args):
         assert db.get(models.Tournament, t.id).status == models.TournamentStatus.CLOSED
+        return MagicOculusImportResult(tournament_id=145, detail={})
 
     monkeypatch.setattr("bot.scheduler.asyncio.to_thread", AsyncMock(side_effect=verify_closed))
-    monkeypatch.setattr("bot.scheduler._announce_to_targets", AsyncMock(return_value=True))
+    monkeypatch.setattr(
+        "bot.scheduler._announce_to_targets",
+        AsyncMock(return_value=[AnnouncementDelivery(chat_id=100, message_id=321)]),
+    )
 
     await maybe_announce_meta_gather_completed(AsyncMock(), db, t.id)
+
+
+async def test_magicoculus_button_edit_failure_does_not_break_import(
+    db, user_svc, arch_svc, monkeypatch
+):
+    FeatureFlagService(db).toggle(FeatureFlags.MAGIC_OCULUS_IMPORT)
+    monkeypatch.setattr(
+        "bot.scheduler.asyncio.to_thread",
+        AsyncMock(return_value=MagicOculusImportResult(tournament_id=145, detail={})),
+    )
+    monkeypatch.setattr(
+        "bot.scheduler._announce_to_targets",
+        AsyncMock(return_value=[AnnouncementDelivery(chat_id=100, message_id=321)]),
+    )
+    monkeypatch.setattr("bot.scheduler.send_achievements_report", AsyncMock())
+    t = _complete_tournament(db, user_svc, arch_svc)
+    bot = AsyncMock()
+    bot.edit_message_reply_markup.side_effect = TelegramError("message unavailable")
+
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+
+    assert db.get(models.Tournament, t.id).status == models.TournamentStatus.CLOSED
 
 
 async def test_magicoculus_error_dm_failure_does_not_break_close(db, user_svc, arch_svc, monkeypatch):

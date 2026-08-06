@@ -7,11 +7,12 @@
 import asyncio
 import io
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select, update
-from telegram import InputMediaPhoto
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 from telegram.ext import Application, ContextTypes
 
 from bot.chart import build_chart, build_standings
@@ -29,13 +30,24 @@ from services.aetherhub_import_service import MIN_TOURNAMENT_DURATION, Aetherhub
 from services.aetherhub_service import AetherhubService
 from services.datalens import DataLensService
 from services.feature_flags import FeatureFlags, FeatureFlagService
-from services.magicoculus import MagicOculusClient, MagicOculusImporter, MagicOculusTournamentCollector
+from services.magicoculus import (
+    MagicOculusClient,
+    MagicOculusImporter,
+    MagicOculusImportResult,
+    MagicOculusTournamentCollector,
+)
 from services.names import format_participant_name
 from services.schedule import ScheduleService
 from services.stats import StatsService
 from services.tournament import TournamentService
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class AnnouncementDelivery:
+    chat_id: int
+    message_id: int | None
 
 DAYS = {
     "monday": 0,
@@ -594,12 +606,12 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, char
         return
 
     try:
-        delivered = await _announce_to_targets(bot, db, tournament_id, title, targets, svc, chart_svc)
+        deliveries = await _announce_to_targets(bot, db, tournament_id, title, targets, svc, chart_svc)
     except Exception:
         _release_announce(db, tournament_id)  # непредвиденный сбой — пусть повторится позже
         raise
     # 2) Ни один адресат не получил — снимаем бронь, чтобы анонс повторился на следующем импорте.
-    if not delivered:
+    if not deliveries:
         _release_announce(db, tournament_id)
         return
     # 3) турнир завершён — закрываем (REGISTRATION → CLOSED). Best-effort: сбой закрытия не должен
@@ -618,22 +630,58 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, char
     #    Флаг по умолчанию выключен; ошибка внешнего API не откатывает закрытый турнир.
     if FeatureFlagService(db).is_enabled(FeatureFlags.MAGIC_OCULUS_IMPORT):
         try:
-            await asyncio.to_thread(import_closed_tournament_to_magicoculus, tournament_id)
+            oculus_result = await asyncio.to_thread(import_closed_tournament_to_magicoculus, tournament_id)
         except Exception as exc:
             logger.exception("maybe_announce_meta_gather_completed: Magic Oculus import failed for #%s", tournament_id)
             await _notify_magicoculus_import_error(bot, tournament_id, title, exc)
+        else:
+            await _attach_magicoculus_button(
+                bot,
+                tournament.chat_id,
+                deliveries,
+                oculus_result.tournament_id,
+            )
     logger.info("maybe_announce_meta_gather_completed: announced completion for #%s", tournament_id)
 
 
-def import_closed_tournament_to_magicoculus(tournament_id: int) -> None:
+def import_closed_tournament_to_magicoculus(tournament_id: int) -> MagicOculusImportResult:
     """Синхронный worker: собрать, проверить и one-shot импортировать закрытый турнир."""
     db = SessionLocal()
     try:
         tournament = MagicOculusTournamentCollector(db).collect(tournament_id, validate_aetherhub=True)
         client = MagicOculusClient(settings.MAGIC_OCULUS_API_URL)
-        MagicOculusImporter(db, client).import_once(tournament, city="Москва")
+        return MagicOculusImporter(db, client).import_once(tournament, city="Москва")
     finally:
         db.close()
+
+
+async def _attach_magicoculus_button(
+    bot,
+    chat_id: int | None,
+    deliveries: list[AnnouncementDelivery],
+    magicoculus_tournament_id: int,
+) -> None:
+    """Attach Oculus URL to the existing club completion message without a new notification."""
+    if bot is None or not chat_id:
+        return
+    delivery = next((item for item in deliveries if item.chat_id == chat_id), None)
+    if delivery is None or delivery.message_id is None:
+        return
+    url = f"{settings.MAGIC_OCULUS_PUBLIC_URL.rstrip('/')}/tournaments/{magicoculus_tournament_id}"
+    keyboard = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("👁 Открыть в Magic Oculus", url=url)]]
+    )
+    try:
+        await bot.edit_message_reply_markup(
+            chat_id=delivery.chat_id,
+            message_id=delivery.message_id,
+            reply_markup=keyboard,
+        )
+    except Exception:  # noqa: BLE001 — уведомление не должно откатывать успешный импорт
+        logger.exception(
+            "maybe_announce_meta_gather_completed: Magic Oculus button edit failed for #%s",
+            magicoculus_tournament_id,
+        )
 
 
 async def _notify_magicoculus_import_error(bot, tournament_id: int, title: str, exc: Exception) -> None:
@@ -683,8 +731,10 @@ def _release_announce(db, tournament_id: int) -> None:
     logger.info("maybe_announce_meta_gather_completed: released reservation for #%s", tournament_id)
 
 
-async def _announce_to_targets(bot, db, tournament_id: int, title: str, targets: list, svc, chart_svc) -> bool:
-    """Собрать отбивку и разослать по адресатам. True — доставлено хотя бы в один чат.
+async def _announce_to_targets(
+    bot, db, tournament_id: int, title: str, targets: list, svc, chart_svc
+) -> list[AnnouncementDelivery]:
+    """Собрать отбивку и вернуть Telegram IDs доставленных основных сообщений.
 
     В каждый чат — одно сообщение-альбом (картинки + текст подписью к первой); не вошедшие в
     альбом картинки — best-effort. Сбой одного адресата не мешает остальным.
@@ -699,7 +749,7 @@ async def _announce_to_targets(bot, db, tournament_id: int, title: str, targets:
     no_show_names = _aetherhub_no_show_names(db, tournament_id)
     images = ([chart] if chart else []) + list(standings)
 
-    delivered = False
+    deliveries: list[AnnouncementDelivery] = []
     for chat_id in targets:
         target_text = text
         if chat_id == settings.OWNER_CHAT_ID and no_show_names:
@@ -709,15 +759,15 @@ async def _announce_to_targets(bot, db, tournament_id: int, title: str, targets:
                 f"в итоговых стендингах AetherHub ({len(no_show_names)}):\n{names}"
             )
         try:
-            leftover = await _send_announce(bot, chat_id, target_text, images)
+            leftover, message_id = await _send_announce(bot, chat_id, target_text, images)
         except Exception:
             logger.exception(
                 "maybe_announce_meta_gather_completed: announce to %s failed for #%s", chat_id, tournament_id
             )
             continue
-        delivered = True
+        deliveries.append(AnnouncementDelivery(chat_id=chat_id, message_id=message_id))
         await _send_announce_images(bot, chat_id, leftover)
-    return delivered
+    return deliveries
 
 
 def _aetherhub_no_show_names(db, tournament_id: int) -> list[str]:
@@ -761,26 +811,30 @@ _TG_CAPTION_LIMIT = 1024  # максимум символов в подписи 
 _TG_ALBUM_LIMIT = 10  # максимум элементов в media group
 
 
-async def _send_announce(bot, chat_id: int, text: str, images: list) -> list:
+async def _send_announce(bot, chat_id: int, text: str, images: list) -> tuple[list, int | None]:
     """Отправить отбивку в один чат одним сообщением: картинки альбомом, текст — подписью к первой.
 
-    Возвращает картинки, не поместившиеся в альбом (для best-effort дослать отдельно).
+    Возвращает остаток картинок и ID основного сообщения, к которому можно добавить кнопку.
     Если картинок нет или текст длиннее подписи — шлём текст отдельным сообщением и возвращаем
     все картинки как «остаток». Сбой альбома → фолбэк на текст (анонс важнее картинок).
     """
     if not images or len(text) > _TG_CAPTION_LIMIT:
-        await bot.send_message(chat_id=chat_id, text=text)
-        return images
+        message = await bot.send_message(chat_id=chat_id, text=text)
+        message_id = getattr(message, "message_id", None)
+        return images, message_id if isinstance(message_id, int) else None
 
     album = images[:_TG_ALBUM_LIMIT]
     media = [InputMediaPhoto(io.BytesIO(img.png), caption=text if i == 0 else None) for i, img in enumerate(album)]
     try:
-        await bot.send_media_group(chat_id=chat_id, media=media)
+        messages = await bot.send_media_group(chat_id=chat_id, media=media)
     except Exception:
         logger.exception("maybe_announce_meta_gather_completed: media group failed — шлём текстом")
-        await bot.send_message(chat_id=chat_id, text=text)
-        return images
-    return images[_TG_ALBUM_LIMIT:]
+        message = await bot.send_message(chat_id=chat_id, text=text)
+        message_id = getattr(message, "message_id", None)
+        return images, message_id if isinstance(message_id, int) else None
+    first_message = messages[0] if messages else None
+    message_id = getattr(first_message, "message_id", None)
+    return images[_TG_ALBUM_LIMIT:], message_id if isinstance(message_id, int) else None
 
 
 async def _send_announce_images(bot, chat_id: int, images: list) -> None:

@@ -80,4 +80,5 @@ def test_send_uses_guarded_importer(monkeypatch):
 
     assert result.exit_code == 0
     assert "#145" in result.output
+    assert "https://magicoculus.ru/tournaments/145" in result.output
     importer.return_value.import_once.assert_called_once_with(tournament, city="Москва")
