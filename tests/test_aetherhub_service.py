@@ -32,6 +32,51 @@ def _make_data(players, rounds_pairings, standings=None):
     )
 
 
+def _late_entry_data(*, standings=None):
+    """Вуйцицкий опоздал ко второму раунду и вошёл в турнир с техническим поражением."""
+    return AetherhubTournamentData(
+        url="x",
+        players=["Гасанлы Фарид", "Хрипков Сергей"],
+        rounds=[
+            AetherhubRound(
+                number=1,
+                pairings=[
+                    AetherhubPairing(
+                        player="Гасанлы Фарид",
+                        opponent="Хрипков Сергей",
+                        player_wins=0,
+                        opponent_wins=2,
+                    ),
+                    AetherhubPairing(
+                        player="Хрипков Сергей",
+                        opponent="Гасанлы Фарид",
+                        player_wins=2,
+                        opponent_wins=0,
+                    ),
+                ],
+            ),
+            AetherhubRound(
+                number=2,
+                pairings=[
+                    AetherhubPairing(
+                        player="Гасанлы Фарид",
+                        opponent="Вуйцицкий Владимир",
+                        player_wins=2,
+                        opponent_wins=0,
+                    ),
+                    AetherhubPairing(
+                        player="Вуйцицкий Владимир",
+                        opponent="Гасанлы Фарид",
+                        player_wins=0,
+                        opponent_wins=2,
+                    ),
+                ],
+            ),
+        ],
+        standings=standings or [],
+    )
+
+
 def _mock_scraper(html_by_url: dict[str, str]):
     scraper = MagicMock()
 
@@ -533,39 +578,57 @@ class TestImportTournament:
         assert result.players_received == 2
         assert result.registered == 2
 
-    def test_registers_player_present_only_in_later_round_pairings(
+    def test_registers_late_entry_from_second_round_with_loss(
         self, import_svc, db, tournament, user_svc
     ):
-        """Tournament #65: the missing player first appeared in round two, not `players`."""
+        """#65: опоздун отсутствует в roster/R1 и впервые появляется в R2 со счётом 0:2."""
         missing = user_svc.get_or_create(
             tg_id=396,
             first_name="Владимир",
             last_name="Вуйцицкий",
         )
-        data = AetherhubTournamentData(
-            url="x",
-            players=["Гасанлы Фарид"],
-            rounds=[
-                AetherhubRound(
-                    number=2,
-                    pairings=[
-                        AetherhubPairing(player="Гасанлы Фарид", opponent="Вуйцицкий Владимир"),
-                        AetherhubPairing(player="Вуйцицкий Владимир", opponent="Гасанлы Фарид"),
-                    ],
-                )
-            ],
-            standings=[],
-        )
-
-        result = import_svc.import_tournament(tournament.id, data)
+        result = import_svc.import_tournament(tournament.id, _late_entry_data())
 
         participant = db.query(models.Participant).filter_by(
             tournament_id=tournament.id,
             user_id=missing.id,
         ).one()
         assert participant.final_place is None
-        assert result.players_received == 2
-        assert result.registered == 2
+        assert result.players_received == 3
+        assert result.registered == 3
+        assert db.query(models.Participant).filter_by(tournament_id=tournament.id).count() == 3
+        pairing = db.query(models.RoundPairing).filter_by(
+            tournament_id=tournament.id,
+            round_number=2,
+            player_name="Вуйцицкий Владимир",
+        ).one()
+        assert (pairing.player_wins, pairing.opponent_wins) == (0, 2)
+
+    def test_final_standings_update_same_late_entry_without_duplicate(
+        self, import_svc, db, tournament, user_svc
+    ):
+        missing = user_svc.get_or_create(
+            tg_id=396,
+            first_name="Владимир",
+            last_name="Вуйцицкий",
+        )
+        import_svc.import_tournament(tournament.id, _late_entry_data())
+
+        result = import_svc.import_tournament(
+            tournament.id,
+            _late_entry_data(
+                standings=["Хрипков Сергей", "Вуйцицкий Владимир", "Гасанлы Фарид"]
+            ),
+        )
+
+        participants = db.query(models.Participant).filter_by(
+            tournament_id=tournament.id,
+            user_id=missing.id,
+        ).all()
+        assert len(participants) == 1
+        assert participants[0].final_place == 2
+        assert result.registered == 0
+        assert result.already_registered == 3
 
     def test_players_and_standings_name_order_does_not_double_count(
         self, import_svc, tournament, user_svc
