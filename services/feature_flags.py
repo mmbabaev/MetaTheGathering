@@ -29,6 +29,7 @@ class FeatureFlags:
     ACHIEVEMENTS_PUBLIC_UI = "achievementsPublicUi"
     ACHIEVEMENTS_PLAYER_DM = "achievementsPlayerDm"
     MAGIC_OCULUS_IMPORT = "magicOculusImport"
+    LIVE_REGISTRATION_COUNT = "liveRegistrationCount"
 
 
 KNOWN_FLAGS: dict[str, FeatureFlagMeta] = {
@@ -61,6 +62,11 @@ KNOWN_FLAGS: dict[str, FeatureFlagMeta] = {
         description="Magic Oculus: импортировать полный турнир после штатного закрытия",
         value_type="bool",
         default_value="true",
+    ),
+    FeatureFlags.LIVE_REGISTRATION_COUNT: FeatureFlagMeta(
+        description="Счётчик записавшихся с редактированием сообщения о регистрации",
+        value_type="bool",
+        default_value="false",
     ),
 }
 
