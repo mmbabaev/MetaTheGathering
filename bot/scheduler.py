@@ -11,13 +11,13 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select, update
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
-from telegram.error import TelegramError
+from telegram import InputMediaPhoto
 from telegram.ext import Application, ContextTypes
 
 from bot.chart import build_chart, build_standings
-from bot.deeplink import deck_deeplink
 from bot.messages import format_decks_revealed, format_meta_gather_completed
+from bot.registration_messages import RegistrationMessageRefreshJob
+from bot.registration_messages import send_registration_open as _send_registration_open
 from bot.telegram.achievements import send_achievements_report
 from bot.telegram.round_notify import send_round_notifications
 from core import models
@@ -56,35 +56,15 @@ def _ptb_day(weekday: str) -> int:
     return (DAYS[weekday] + 1) % 7
 
 
-async def send_registration_open(bot, club: Club, tournament_id: int, text: str) -> None:
-    """Сообщение с кнопкой-диплинком «Записать колоду» в чат клуба и владельцу (issue #136).
-
-    Диплинк ведёт игрока сразу в запись колоды. Адресаты — групповой чат клуба (если задан)
-    и владелец, дедуплицированно; отсутствующие пропускаем. Best-effort: сбой одной отправки
-    (или get_me) не роняет джобу.
-    """
-    if bot is None:
-        return
-    targets = {cid for cid in (club.chat_id, settings.OWNER_CHAT_ID) if cid}
-    if not targets:
-        return
-
-    # Кнопка требует username бота. Если get_me отвалился — не глушим анонс целиком,
-    # а шлём текст без кнопки: сообщение о старте регистрации важнее диплинка.
-    markup = None
-    try:
-        me = await bot.get_me()
-        markup = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("📝 Записать колоду", url=deck_deeplink(me.username, tournament_id))]]
-        )
-    except TelegramError:
-        logger.exception("send_registration_open: get_me failed for #%s — шлём без кнопки", tournament_id)
-
-    for chat_id in targets:
-        try:
-            await bot.send_message(chat_id=chat_id, text=text, reply_markup=markup)
-        except TelegramError:
-            logger.exception("send_registration_open: send to %s failed for #%s", chat_id, tournament_id)
+async def send_registration_open(bot, db, club: Club, tournament_id: int, base_text: str) -> None:
+    await _send_registration_open(
+        bot,
+        db,
+        club,
+        tournament_id,
+        base_text,
+        owner_chat_id=settings.OWNER_CHAT_ID,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -170,7 +150,7 @@ class CreateTournamentJob:
                         f"🏆 {self.club.name} Pauper — сегодня в {self.schedule.game_time}\n"
                         f"Турнир создан. Регистрация открыта."
                     )
-                    await send_registration_open(bot, self.club, new_t.id, text)
+                    await send_registration_open(bot, db, self.club, new_t.id, text)
             except Exception as e:
                 logger.error(f"CreateTournamentJob error for '{self.club.name}': {e}", exc_info=True)
         finally:
@@ -200,7 +180,7 @@ class PreStartReminderJob:
                 f"⏰ {self.club.name} Pauper начинается в {self.schedule.game_time}!\n"
                 f"Ещё не записали колоду? Успейте — жмите кнопку ниже."
             )
-            await send_registration_open(bot, self.club, active.id, text)
+            await send_registration_open(bot, db, self.club, active.id, text)
         except Exception:
             logger.exception("PreStartReminderJob error for '%s'", self.club.name)
         finally:
@@ -839,6 +819,15 @@ def setup_scheduler(app: Application) -> None:
 
     app.job_queue.run_repeating(_timed_import, interval=60, first=10)
     logger.info("Scheduler: AetherhubTimedImportJob registered (every 60s)")
+
+    registration_refresh_job = RegistrationMessageRefreshJob()
+
+    async def _refresh_registration_messages(context: ContextTypes.DEFAULT_TYPE) -> None:
+        await registration_refresh_job.run(context.bot)
+
+    _refresh_registration_messages.__name__ = "registration_message_refresh"
+    app.job_queue.run_repeating(_refresh_registration_messages, interval=15, first=15)
+    logger.info("Scheduler: RegistrationMessageRefreshJob registered (every 15s)")
 
     final_job = AetherhubFinalReimportJob(AetherhubService())
 
