@@ -549,9 +549,9 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, char
     Если доставить не удалось НИ в один чат — бронь снимаем, и анонс повторится на следующем
     импорте (в т.ч. ночной 09:00-реимпорт — гарантированный бэкап, там >3ч всегда).
 
-    Шлём в чат клуба (``tournament.chat_id``, где создан турнир) И владельцу в личку
-    (``settings.OWNER_CHAT_ID``), дедуплицированно. Плюс благодарим метаписцев, записавших
-    ≥2 колод.
+    Полную отбивку с картинками шлём только в чат клуба (``tournament.chat_id``), где создан
+    турнир. Владельцу в личку уходит только дополнительная информация о no-show игроках —
+    без повторения отбивки и картинок. Плюс благодарим метаписцев, записавших ≥2 колод.
 
     ``chart_svc`` — шов для тестов, чтобы они не поднимали сервис из глобального конфига.
     """
@@ -583,8 +583,9 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, char
     if not _all_decks_filled(db, tournament_id):
         return
 
-    # Адресаты отбивки: чат клуба (где создан турнир) и владелец в личку — дедуплицированно.
-    targets = list(dict.fromkeys(cid for cid in (tournament.chat_id, settings.OWNER_CHAT_ID) if cid))
+    # Полная отбивка предназначена чату клуба. OWNER_CHAT_ID используется ниже только для
+    # короткой дополнительной DM о no-show, иначе owner получает дубликат всех картинок (#185).
+    targets = [tournament.chat_id] if tournament.chat_id else []
     if not targets:
         return
     title = tournament.title  # читаем ДО отправки: за await объект может стать detached
@@ -602,6 +603,7 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, char
     if not delivered:
         _release_announce(db, tournament_id)
         return
+    await _notify_owner_no_shows(bot, db, tournament_id, title, tournament.chat_id)
     # 3) турнир завершён — закрываем (REGISTRATION → CLOSED). Best-effort: сбой закрытия не должен
     #    ронять уже доставленный анонс; флаг уже стоит, повтора анонса не будет.
     try:
@@ -696,20 +698,12 @@ async def _announce_to_targets(bot, db, tournament_id: int, title: str, targets:
     undefeated = svc.get_undefeated_players(tournament_id)
     scorekeepers = TournamentService(db).get_deck_recorders(tournament_id, min_count=2)
     text = format_meta_gather_completed(title, total, with_deck, undefeated, scorekeepers)
-    no_show_names = _aetherhub_no_show_names(db, tournament_id)
     images = ([chart] if chart else []) + list(standings)
 
     delivered = False
     for chat_id in targets:
-        target_text = text
-        if chat_id == settings.OWNER_CHAT_ID and no_show_names:
-            names = "\n".join(f"• {name}" for name in no_show_names)
-            target_text += (
-                f"\n\n⚠️ Зарегистрировались в боте, но отсутствуют "
-                f"в итоговых стендингах AetherHub ({len(no_show_names)}):\n{names}"
-            )
         try:
-            leftover = await _send_announce(bot, chat_id, target_text, images)
+            leftover = await _send_announce(bot, chat_id, text, images)
         except Exception:
             logger.exception(
                 "maybe_announce_meta_gather_completed: announce to %s failed for #%s", chat_id, tournament_id
@@ -718,6 +712,26 @@ async def _announce_to_targets(bot, db, tournament_id: int, title: str, targets:
         delivered = True
         await _send_announce_images(bot, chat_id, leftover)
     return delivered
+
+
+async def _notify_owner_no_shows(bot, db, tournament_id: int, title: str, club_chat_id: int | None) -> None:
+    """Send owner only the extra no-show details, without duplicating the completion album."""
+    owner_chat_id = settings.OWNER_CHAT_ID
+    if not owner_chat_id or owner_chat_id == club_chat_id:
+        return
+    no_show_names = _aetherhub_no_show_names(db, tournament_id)
+    if not no_show_names:
+        return
+    names = "\n".join(f"• {name}" for name in no_show_names)
+    text = (
+        f"⚠️ No-show после завершения турнира — {title}\n\n"
+        f"Зарегистрировались в боте, но отсутствуют в итоговых стендингах "
+        f"AetherHub ({len(no_show_names)}):\n{names}"
+    )
+    try:
+        await bot.send_message(chat_id=owner_chat_id, text=text)
+    except Exception:  # noqa: BLE001 — дополнительная DM не должна ломать завершение турнира
+        logger.exception("maybe_announce_meta_gather_completed: owner no-show DM failed for #%s", tournament_id)
 
 
 def _aetherhub_no_show_names(db, tournament_id: int) -> list[str]:

@@ -2,7 +2,7 @@
 
 Completion is detected from imported pairings: when every non-bye match has a score
 (AetherHub publishes scores only AFTER the event) we treat the tournament as finished
-and announce, once, to the owner DM — listing the undefeated (X-0) players and their decks.
+and announce once in the club chat. The owner DM contains only extra no-show details.
 """
 
 import asyncio
@@ -193,17 +193,17 @@ def test_format_meta_gather_completed_no_scorekeepers():
 # ── scheduler announce helper ───────────────────────────────────────────────
 
 
-async def test_announces_to_owner_once(db, user_svc, arch_svc, monkeypatch):
+async def test_announces_full_album_only_to_club(db, user_svc, arch_svc, monkeypatch):
     monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
     t = _complete_tournament(db, user_svc, arch_svc)
     bot = AsyncMock()
 
     await maybe_announce_meta_gather_completed(bot, db, t.id)
 
-    # альбом уходит и в чат клуба (100), и владельцу (777); текст — подписью к первой картинке
-    assert bot.send_media_group.await_count == 2
+    # Полная отбивка с картинками уходит только в чат клуба; owner не получает дубль (#185).
+    assert bot.send_media_group.await_count == 1
     chats = {c.kwargs["chat_id"] for c in bot.send_media_group.call_args_list}
-    assert chats == {100, 777}  # club chat + owner DM
+    assert chats == {100}
     media = bot.send_media_group.call_args_list[0].kwargs["media"]
     assert len(media) >= 2  # график + минимум одна страница стендингов
     assert "Сбор метагейма завершён" in (media[0].caption or "")
@@ -216,7 +216,7 @@ async def test_announces_to_owner_once(db, user_svc, arch_svc, monkeypatch):
 
     # idempotent — a second import must not re-announce
     await maybe_announce_meta_gather_completed(bot, db, t.id)
-    assert bot.send_media_group.await_count == 2
+    assert bot.send_media_group.await_count == 1
 
 
 def test_no_show_names_require_published_standings(db, user_svc, arch_svc):
@@ -239,10 +239,13 @@ async def test_owner_only_receives_registered_aetherhub_no_shows(db, user_svc, a
 
     await maybe_announce_meta_gather_completed(bot, db, t.id)
 
-    calls = {call.kwargs["chat_id"]: call.kwargs["media"][0].caption for call in bot.send_media_group.call_args_list}
-    assert "No Show" in calls[777]
-    assert "отсутствуют в итоговых стендингах AetherHub (1)" in calls[777]
-    assert "No Show" not in calls[100]
+    assert bot.send_media_group.await_count == 1
+    assert bot.send_media_group.call_args.kwargs["chat_id"] == 100
+    assert "No Show" not in bot.send_media_group.call_args.kwargs["media"][0].caption
+    bot.send_message.assert_awaited_once()
+    assert bot.send_message.call_args.kwargs["chat_id"] == 777
+    assert "No Show" in bot.send_message.call_args.kwargs["text"]
+    assert "отсутствуют в итоговых стендингах AetherHub (1)" in bot.send_message.call_args.kwargs["text"]
 
 
 async def test_chart_is_rendered_off_the_event_loop_without_db(db, user_svc, arch_svc, monkeypatch):
@@ -287,7 +290,7 @@ async def test_announce_text_delivered_when_all_images_fail_to_build(db, user_sv
 
     await maybe_announce_meta_gather_completed(bot, db, t.id)
 
-    assert bot.send_message.await_count == 2  # текстом в оба чата (клуб + владелец)
+    assert bot.send_message.await_count == 1  # полная отбивка только в чат клуба
     assert "Сбор метагейма завершён" in bot.send_message.call_args.kwargs["text"]
     bot.send_photo.assert_not_awaited()
     assert db.get(models.Tournament, t.id).completed_announced_at is not None
@@ -316,7 +319,7 @@ async def test_media_group_failure_falls_back_to_text(db, user_svc, arch_svc, mo
 
     await maybe_announce_meta_gather_completed(bot, db, t.id)
 
-    assert bot.send_message.await_count == 2  # фолбэк — текст в оба чата
+    assert bot.send_message.await_count == 1  # фолбэк — текст только в чат клуба
     assert "Сбор метагейма завершён" in bot.send_message.call_args.kwargs["text"]
     assert db.get(models.Tournament, t.id).completed_announced_at is not None
 
@@ -330,7 +333,7 @@ async def test_flag_set_even_if_media_group_errors_unexpectedly(db, user_svc, ar
 
     await maybe_announce_meta_gather_completed(bot, db, t.id)
 
-    assert bot.send_message.await_count == 2
+    assert bot.send_message.await_count == 1
     assert db.get(models.Tournament, t.id).completed_announced_at is not None
 
 
@@ -364,7 +367,7 @@ async def test_db_error_while_building_images_still_sets_flag(db, user_svc, arch
 
     await maybe_announce_meta_gather_completed(bot, db, t.id)
 
-    assert bot.send_message.await_count == 2  # обе картинки отвалились — анонс ушёл текстом в оба чата
+    assert bot.send_message.await_count == 1  # картинки отвалились — анонс ушёл текстом в чат клуба
     assert db.get(models.Tournament, t.id).completed_announced_at is not None  # и флаг сохранился
 
 
@@ -476,7 +479,7 @@ async def test_announces_once_last_deck_filled(db, user_svc, arch_svc, monkeypat
     db.commit()
 
     await maybe_announce_meta_gather_completed(bot, db, t.id)
-    assert bot.send_media_group.await_count == 2  # клуб + владелец
+    assert bot.send_media_group.await_count == 1  # только чат клуба
     assert db.get(models.Tournament, t.id).completed_announced_at is not None
 
 
@@ -549,7 +552,7 @@ async def test_concurrent_announces_send_once(db, user_svc, arch_svc, monkeypatc
     )
 
     chats = [c.kwargs["chat_id"] for c in bot.send_media_group.await_args_list]
-    assert sorted(chats) == [100, 777]  # по одному разу в каждый чат, без дублей
+    assert chats == [100]  # одна полная отбивка только в чат клуба
 
 
 def _same_data_as_imported(db, tournament_id):
