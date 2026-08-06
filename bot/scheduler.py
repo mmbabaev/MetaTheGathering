@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select, update
-from telegram import InputMediaPhoto
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 from telegram.ext import Application, ContextTypes
 
 from bot.chart import build_chart, build_standings
@@ -29,7 +29,12 @@ from services.aetherhub_import_service import MIN_TOURNAMENT_DURATION, Aetherhub
 from services.aetherhub_service import AetherhubService
 from services.datalens import DataLensService
 from services.feature_flags import FeatureFlags, FeatureFlagService
-from services.magicoculus import MagicOculusClient, MagicOculusImporter, MagicOculusTournamentCollector
+from services.magicoculus import (
+    MagicOculusClient,
+    MagicOculusImporter,
+    MagicOculusImportResult,
+    MagicOculusTournamentCollector,
+)
 from services.names import format_participant_name
 from services.schedule import ScheduleService
 from services.stats import StatsService
@@ -618,22 +623,52 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, char
     #    Флаг по умолчанию выключен; ошибка внешнего API не откатывает закрытый турнир.
     if FeatureFlagService(db).is_enabled(FeatureFlags.MAGIC_OCULUS_IMPORT):
         try:
-            await asyncio.to_thread(import_closed_tournament_to_magicoculus, tournament_id)
+            oculus_result = await asyncio.to_thread(import_closed_tournament_to_magicoculus, tournament_id)
         except Exception as exc:
             logger.exception("maybe_announce_meta_gather_completed: Magic Oculus import failed for #%s", tournament_id)
             await _notify_magicoculus_import_error(bot, tournament_id, title, exc)
+        else:
+            await _notify_magicoculus_import_success(
+                bot,
+                tournament.chat_id,
+                title,
+                oculus_result.tournament_id,
+            )
     logger.info("maybe_announce_meta_gather_completed: announced completion for #%s", tournament_id)
 
 
-def import_closed_tournament_to_magicoculus(tournament_id: int) -> None:
+def import_closed_tournament_to_magicoculus(tournament_id: int) -> MagicOculusImportResult:
     """Синхронный worker: собрать, проверить и one-shot импортировать закрытый турнир."""
     db = SessionLocal()
     try:
         tournament = MagicOculusTournamentCollector(db).collect(tournament_id, validate_aetherhub=True)
         client = MagicOculusClient(settings.MAGIC_OCULUS_API_URL)
-        MagicOculusImporter(db, client).import_once(tournament, city="Москва")
+        return MagicOculusImporter(db, client).import_once(tournament, city="Москва")
     finally:
         db.close()
+
+
+async def _notify_magicoculus_import_success(
+    bot, chat_id: int | None, title: str, magicoculus_tournament_id: int
+) -> None:
+    """Best-effort success message to the tournament's club chat, never a player DM fan-out."""
+    if bot is None or not chat_id:
+        return
+    url = f"{settings.MAGIC_OCULUS_PUBLIC_URL.rstrip('/')}/tournaments/{magicoculus_tournament_id}"
+    keyboard = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("👁 Открыть в Magic Oculus", url=url)]]
+    )
+    try:
+        await bot.send_message(
+            chat_id=chat_id,
+            text=f"✅ Турнир загружен в Magic Oculus\n\n{title}",
+            reply_markup=keyboard,
+        )
+    except Exception:  # noqa: BLE001 — уведомление не должно откатывать успешный импорт
+        logger.exception(
+            "maybe_announce_meta_gather_completed: Magic Oculus success message failed for #%s",
+            magicoculus_tournament_id,
+        )
 
 
 async def _notify_magicoculus_import_error(bot, tournament_id: int, title: str, exc: Exception) -> None:
