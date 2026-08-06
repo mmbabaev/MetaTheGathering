@@ -20,6 +20,15 @@ erDiagram
         string aetherhub_url
     }
 
+    TournamentRegistrationMessage {
+        int id PK
+        int tournament_id FK
+        bigint chat_id
+        bigint message_id
+        int rendered_participant_count
+        datetime edit_disabled_at
+    }
+
     Archetype {
         int id PK
         string name UK
@@ -104,6 +113,7 @@ erDiagram
     Tournament ||--o{ Vote : "голоса"
     Tournament ||--o| TournamentPoll : "опрос"
     Tournament ||--o{ RoundPairing : "паринги"
+    Tournament ||--o{ TournamentRegistrationMessage : "сообщения регистрации"
 
     User ||--o{ Participant : "регистрируется"
     User ||--o{ Vote : "голосует"
