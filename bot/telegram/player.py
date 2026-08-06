@@ -381,6 +381,7 @@ async def _handle_pending_meta_import(msg, user, text, context) -> bool:
             return True
         _log("meta_import_table", user, tournament_id=tournament_id)
         await msg.reply_text(result.text, reply_markup=result.keyboard, parse_mode=result.parse_mode)
+        await announce_completion_if_ready(context.bot, db, tournament_id)
     finally:
         db.close()
     return True

@@ -11,6 +11,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
@@ -26,7 +27,6 @@ def utc_now() -> datetime:
 class TournamentStatus(str, enum.Enum):
     REGISTRATION = "registration"
     ONGOING = "ongoing"
-    VOTING = "voting"
     CLOSED = "closed"
 
     @property
@@ -34,7 +34,6 @@ class TournamentStatus(str, enum.Enum):
         return {
             TournamentStatus.REGISTRATION: "Регистрация",
             TournamentStatus.ONGOING: "Идёт",
-            TournamentStatus.VOTING: "Голосование",
             TournamentStatus.CLOSED: "Завершён",
         }.get(self, self.value)
 
@@ -131,6 +130,32 @@ class Tournament(Base):
     participants = relationship("Participant", back_populates="tournament", cascade="all, delete-orphan")
     votes = relationship("Vote", back_populates="tournament", cascade="all, delete-orphan")
     poll = relationship("TournamentPoll", back_populates="tournament", uselist=False, cascade="all, delete-orphan")
+    registration_messages = relationship(
+        "TournamentRegistrationMessage", back_populates="tournament", cascade="all, delete-orphan"
+    )
+
+
+class TournamentRegistrationMessage(Base):
+    """Latest registration announcement for a tournament and target chat."""
+
+    __tablename__ = "tournament_registration_messages"
+
+    id = Column(Integer, primary_key=True)
+    tournament_id = Column(Integer, ForeignKey("tournaments.id", ondelete="CASCADE"), nullable=False, index=True)
+    chat_id = Column(BigInteger, nullable=False)
+    message_id = Column(BigInteger, nullable=False)
+    base_text = Column(Text, nullable=False)
+    button_url = Column(String(512), nullable=True)
+    rendered_participant_count = Column(Integer, nullable=False)
+    edit_disabled_at = Column(DateTime, nullable=True, index=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, nullable=False)
+
+    tournament = relationship("Tournament", back_populates="registration_messages")
+
+    __table_args__ = (
+        UniqueConstraint("tournament_id", "chat_id", name="uq_tournament_registration_message_target"),
+    )
 
 
 class Archetype(Base):
@@ -396,6 +421,50 @@ class Payment(Base):
     updated_at = Column(DateTime, default=utc_now, nullable=False)
 
 
+class UserAchievement(Base):
+    """Выданная игроку ачивка. Одна строка = (игрок, код, уровень) навсегда.
+
+    Уникальный ключ (user_id, code, level) — он же механизм идемпотентности: движок
+    переоценивает турниры сколько угодно раз, дубля не будет. ``notified_at`` — когда
+    про ачивку сообщили (в теневом режиме — владельцу, см. docs/achievements.md §6).
+    """
+
+    __tablename__ = "user_achievements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    code = Column(String(32), nullable=False)  # "undefeated"
+    level = Column(Integer, nullable=False, default=1)  # 1/2/3 у многоуровневых
+    tournament_id = Column(Integer, ForeignKey("tournaments.id", ondelete="SET NULL"), nullable=True)
+    progress_value = Column(Integer, nullable=True)  # значение счётчика на момент выдачи
+    evidence = Column(String(512), nullable=True)  # причина: «4-0 на Elves», «серия 03.07…24.07»
+    awarded_at = Column(DateTime, default=utc_now, nullable=False)
+    notified_at = Column(DateTime, nullable=True)  # NULL = ещё не сообщили
+
+    __table_args__ = (UniqueConstraint("user_id", "code", "level", name="uq_user_achievement"),)
+
+
+class UserAchievementProgress(Base):
+    """Текущее значение счётчика ачивки у игрока. Одна строка = (игрок, код).
+
+    Величина производная: правило всегда пересчитывает её из первичных данных, а таблица
+    хранит последний снапшот. Нужна только чтобы показать дельту («стало 2/3, +1 за этот
+    турнир») — её можно снести и пересобрать бэкафиллом, рассинхрон невозможен.
+    """
+
+    __tablename__ = "user_achievement_progress"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    code = Column(String(32), nullable=False)
+    value = Column(Integer, nullable=False, default=0)  # 2 деки, 7 колод, серия 3
+    tournament_id = Column(Integer, ForeignKey("tournaments.id", ondelete="SET NULL"), nullable=True)
+    evidence = Column(String(512), nullable=True)  # из чего сложилось (для сообщения)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+    __table_args__ = (UniqueConstraint("user_id", "code", name="uq_user_achievement_progress"),)
+
+
 class RoundPairing(Base):
     """Паринг одного игрока в конкретном раунде турнира (импорт из AetherHub)."""
 
@@ -411,3 +480,24 @@ class RoundPairing(Base):
     opponent_wins = Column(Integer, nullable=True)  # победы соперника в матче; NULL = счёт неизвестен
 
     __table_args__ = (UniqueConstraint("tournament_id", "round_number", "player_name", name="uq_round_pairing"),)
+
+
+class MagicOculusImport(Base):
+    """Состояние передачи одного турнира в Magic Oculus; защита от повторного POST."""
+
+    __tablename__ = "magicoculus_imports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tournament_id = Column(
+        Integer, ForeignKey("tournaments.id", ondelete="CASCADE"), nullable=False, unique=True, index=True
+    )
+    aetherhub_url = Column(String(512), nullable=False, unique=True)
+    status = Column(String(16), nullable=False, default="pending", server_default="pending")
+    magicoculus_tournament_id = Column(Integer, nullable=True, unique=True)
+    warnings_json = Column(String, nullable=True)
+    error_json = Column(String, nullable=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+    imported_at = Column(DateTime, nullable=True)
+
+    tournament = relationship("Tournament")

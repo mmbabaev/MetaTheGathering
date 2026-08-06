@@ -31,7 +31,7 @@ Telegram-пользователь. Создаётся автоматически
 | `title` | string | Название, напр. `Goldfish Pauper 2026-04-24` |
 | `chat_id` | bigint | ID группового чата в Telegram |
 | `slug` | string | URL-идентификатор, напр. `2026-04-24-goldfish-pauper` |
-| `status` | enum | `REGISTRATION → ONGOING → VOTING → CLOSED` |
+| `status` | enum | `REGISTRATION → ONGOING → CLOSED` |
 | `club` | string | `Goldfish` / `Edinorog` / null |
 | `aetherhub_url` | string | Ссылка на турнир в AetherHub |
 | `decks_hidden` | bool | Скрывать архетипы до конца турнира |
@@ -39,8 +39,16 @@ Telegram-пользователь. Создаётся автоматически
 **Статусы:**
 - `REGISTRATION` — открыта запись игроков
 - `ONGOING` — турнир идёт
-- `VOTING` — голосование за архетипы
 - `CLOSED` — завершён
+
+---
+
+## TournamentRegistrationMessage
+
+Последнее сообщение об открытой регистрации для каждой пары «турнир + чат». Хранит Telegram
+`message_id`, базовый текст, URL кнопки и уже показанное число участников. Периодическая job
+редактирует только устаревшие сообщения; недоступные для редактирования помечаются через
+`edit_disabled_at`.
 
 ---
 

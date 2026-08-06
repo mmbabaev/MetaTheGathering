@@ -1,0 +1,4 @@
+interface:
+  display_name: "Debug Magic Oculus Import"
+  short_description: "Диагностика загрузки турниров в Oculus"
+  default_prompt: "Use $debug-magic-oculus-import to diagnose a failed Magic Oculus tournament import safely."

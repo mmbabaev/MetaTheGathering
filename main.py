@@ -93,6 +93,7 @@ from bot.keyboards import (
     CB_TSTATUS,
 )
 from bot.scheduler import setup_scheduler
+from bot.telegram import achievements as achievements_handler
 from bot.telegram import admin, common, player
 from bot.telegram import aetherhub as aetherhub_handler
 from bot.telegram import app_stats as app_stats_handler
@@ -153,6 +154,7 @@ _ADMIN_COMMANDS = _SCOREKEEPER_COMMANDS + [
     BotCommand("delete_tournament", "Удалить турнир"),
     BotCommand("schedule", "Расписание автозаданий"),
     BotCommand("features", "Feature flags"),
+    BotCommand("achievements", "Ачивки игрока"),
     _POLL_CMD,
 ]
 
@@ -276,6 +278,7 @@ def main() -> None:
     app.add_handler(CommandHandler("settings", settings_handler.cmd_settings, filters=private))
     app.add_handler(CommandHandler("poll", poll_handler.cmd_poll, filters=private))
     app.add_handler(CommandHandler("app_statistics", app_stats_handler.cmd_app_statistics, filters=private))
+    app.add_handler(CommandHandler("achievements", achievements_handler.cmd_achievements, filters=private))
 
     app.add_handler(CommandHandler("add_players", admin.cmd_add_players, filters=private))
     app.add_handler(CommandHandler("tournament_status", admin.cmd_tournament_status, filters=private))

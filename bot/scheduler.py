@@ -4,19 +4,22 @@
 `docs/scheduler.md` — это полный перечень автоматических действий по времени и событиям.
 """
 
+import asyncio
 import io
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
-from telegram.error import TelegramError
 from telegram.ext import Application, ContextTypes
 
 from bot.chart import build_chart, build_standings
-from bot.deeplink import deck_deeplink
 from bot.messages import format_decks_revealed, format_meta_gather_completed
+from bot.registration_messages import RegistrationMessageRefreshJob
+from bot.registration_messages import send_registration_open as _send_registration_open
+from bot.telegram.achievements import send_achievements_report
 from bot.telegram.round_notify import send_round_notifications
 from core import models
 from core.clubs import debug_club, default_clubs
@@ -26,11 +29,25 @@ from core.schemas import TournamentCreate
 from services.aetherhub_import_service import MIN_TOURNAMENT_DURATION, AetherhubImportService
 from services.aetherhub_service import AetherhubService
 from services.datalens import DataLensService
+from services.feature_flags import FeatureFlags, FeatureFlagService
+from services.magicoculus import (
+    MagicOculusClient,
+    MagicOculusImporter,
+    MagicOculusImportResult,
+    MagicOculusTournamentCollector,
+)
+from services.names import format_participant_name
 from services.schedule import ScheduleService
 from services.stats import StatsService
 from services.tournament import TournamentService
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class AnnouncementDelivery:
+    chat_id: int
+    message_id: int | None
 
 DAYS = {
     "monday": 0,
@@ -52,35 +69,15 @@ def _ptb_day(weekday: str) -> int:
     return (DAYS[weekday] + 1) % 7
 
 
-async def send_registration_open(bot, club: Club, tournament_id: int, text: str) -> None:
-    """Сообщение с кнопкой-диплинком «Записать колоду» в чат клуба и владельцу (issue #136).
-
-    Диплинк ведёт игрока сразу в запись колоды. Адресаты — групповой чат клуба (если задан)
-    и владелец, дедуплицированно; отсутствующие пропускаем. Best-effort: сбой одной отправки
-    (или get_me) не роняет джобу.
-    """
-    if bot is None:
-        return
-    targets = {cid for cid in (club.chat_id, settings.OWNER_CHAT_ID) if cid}
-    if not targets:
-        return
-
-    # Кнопка требует username бота. Если get_me отвалился — не глушим анонс целиком,
-    # а шлём текст без кнопки: сообщение о старте регистрации важнее диплинка.
-    markup = None
-    try:
-        me = await bot.get_me()
-        markup = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("📝 Записать колоду", url=deck_deeplink(me.username, tournament_id))]]
-        )
-    except TelegramError:
-        logger.exception("send_registration_open: get_me failed for #%s — шлём без кнопки", tournament_id)
-
-    for chat_id in targets:
-        try:
-            await bot.send_message(chat_id=chat_id, text=text, reply_markup=markup)
-        except TelegramError:
-            logger.exception("send_registration_open: send to %s failed for #%s", chat_id, tournament_id)
+async def send_registration_open(bot, db, club: Club, tournament_id: int, base_text: str) -> None:
+    await _send_registration_open(
+        bot,
+        db,
+        club,
+        tournament_id,
+        base_text,
+        owner_chat_id=settings.OWNER_CHAT_ID,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -166,7 +163,7 @@ class CreateTournamentJob:
                         f"🏆 {self.club.name} Pauper — сегодня в {self.schedule.game_time}\n"
                         f"Турнир создан. Регистрация открыта."
                     )
-                    await send_registration_open(bot, self.club, new_t.id, text)
+                    await send_registration_open(bot, db, self.club, new_t.id, text)
             except Exception as e:
                 logger.error(f"CreateTournamentJob error for '{self.club.name}': {e}", exc_info=True)
         finally:
@@ -196,7 +193,7 @@ class PreStartReminderJob:
                 f"⏰ {self.club.name} Pauper начинается в {self.schedule.game_time}!\n"
                 f"Ещё не записали колоду? Успейте — жмите кнопку ниже."
             )
-            await send_registration_open(bot, self.club, active.id, text)
+            await send_registration_open(bot, db, self.club, active.id, text)
         except Exception:
             logger.exception("PreStartReminderJob error for '%s'", self.club.name)
         finally:
@@ -282,22 +279,26 @@ class AetherhubImportJob:
                 except Exception:
                     logger.exception(f"AetherhubImportJob: round notifications failed for #{tournament_id}")
 
+            if tournament.aetherhub_url != url:
+                db_url = SessionLocal()
+                try:
+                    TournamentService(db_url).set_aetherhub_url(tournament_id, url)
+                except Exception:
+                    logger.exception(f"AetherhubImportJob: failed to save aetherhub_url for #{tournament_id}")
+                    return
+                finally:
+                    db_url.close()
+
+            db_completion = SessionLocal()
             try:
-                await maybe_announce_meta_gather_completed(bot, db, tournament_id)
+                await maybe_announce_meta_gather_completed(bot, db_completion, tournament_id)
             except Exception:
                 logger.exception(f"AetherhubImportJob: completion announce failed for #{tournament_id}")
+            finally:
+                db_completion.close()
         finally:
             if close_db:
                 db.close()
-
-        if tournament_id and url:
-            db2 = SessionLocal()
-            try:
-                TournamentService(db2).set_aetherhub_url(tournament_id, url)
-            except Exception:
-                logger.exception(f"AetherhubImportJob: failed to save aetherhub_url for #{tournament_id}")
-            finally:
-                db2.close()
 
 
 # ---------------------------------------------------------------------------
@@ -405,14 +406,12 @@ class AetherhubTimedImportJob:
             db2.close()
 
 
-FINAL_REIMPORT_TIME = (
-    "09:00"  # утро следующего дня — добрать финальный счёт (не в 6 утра: анонс мог бы уйти слишком рано)
-)
+FINAL_REIMPORT_TIMES = ("09:00", "12:00", "18:00")
 FINAL_REIMPORT_WINDOW_DAYS = 2  # окно «недавних» турниров для повторного импорта
 
 
 class AetherhubFinalReimportJob:
-    """Раз в сутки утром перезатягивает недавние турниры, чтобы добрать финальный счёт.
+    """Несколько раз в сутки перезатягивает незавершённые турниры с AetherHub.
 
     Счёт матчей на AetherHub публично появляется только ПОСЛЕ завершения турнира
     (формат страницы меняется js → edinorog, см. docs/aetherhub_formats.md). Импорт
@@ -433,6 +432,8 @@ class AetherhubFinalReimportJob:
             stmt = select(models.Tournament).where(
                 models.Tournament.aetherhub_url.isnot(None),
                 models.Tournament.created_at >= cutoff,
+                models.Tournament.status != models.TournamentStatus.CLOSED,
+                models.Tournament.completed_announced_at.is_(None),
             )
             tournaments = db.execute(stmt).scalars().all()
         finally:
@@ -549,13 +550,20 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, char
     - у всех не-бай матчей есть счёт (``is_tournament_complete``);
     - у всех участников заполнена колода (``_all_decks_filled``) — метагейм собран.
 
-    Идемпотентность — флаг ``Tournament.completed_announced_at``: ставим ТОЛЬКО после
-    успешной отправки, поэтому сбой отправки не «съедает» анонс — он повторится при
-    следующем импорте (в т.ч. ночной 09:00-реимпорт — гарантированный бэкап, там >3ч всегда).
+    Идемпотентность — флаг ``Tournament.completed_announced_at``, который **занимается до
+    отправки** атомарным ``UPDATE ... WHERE completed_announced_at IS NULL``. Раньше он
+    ставился после отправки, и это приводило к дублям на следующий день: между проверкой и
+    записью флага код несколько раз уходит в await (рисование картинок, отправка альбома), а
+    сессия у бота одна на поток (``scoped_session``) — соседняя задача успевала её закрыть,
+    и присваивание атрибута коммитилось «в никуда». Отбивка ушла, флаг пуст, утренний
+    реимпорт честно повторял анонс.
+
+    Если доставить не удалось НИ в один чат — бронь снимаем, и анонс повторится на следующем
+    импорте (в т.ч. ночной 09:00-реимпорт — гарантированный бэкап, там >3ч всегда).
 
     Шлём в чат клуба (``tournament.chat_id``, где создан турнир) И владельцу в личку
     (``settings.OWNER_CHAT_ID``), дедуплицированно. Плюс благодарим метаписцев, записавших
-    ≥2 колод. Флаг ставим, если доставили хотя бы в один чат.
+    ≥2 колод.
 
     ``chart_svc`` — шов для тестов, чтобы они не поднимали сервис из глобального конфига.
     """
@@ -587,45 +595,201 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, char
     if not _all_decks_filled(db, tournament_id):
         return
 
-    chart = await build_chart(db, tournament_id, chart_svc)
-    standings = await build_standings(db, tournament_id)
-    total = len(TournamentService(db).list_participants_for_tournament(tournament_id))
-    with_deck = sum(s.count for s in chart.sectors) if chart else _decks_count(db, tournament_id)
-    undefeated = svc.get_undefeated_players(tournament_id)
-    scorekeepers = TournamentService(db).get_deck_recorders(tournament_id, min_count=2)
-    text = format_meta_gather_completed(tournament.title, total, with_deck, undefeated, scorekeepers)
-    images = ([chart] if chart else []) + list(standings)
-
     # Адресаты отбивки: чат клуба (где создан турнир) и владелец в личку — дедуплицированно.
     targets = list(dict.fromkeys(cid for cid in (tournament.chat_id, settings.OWNER_CHAT_ID) if cid))
     if not targets:
         return
+    title = tournament.title  # читаем ДО отправки: за await объект может стать detached
 
-    # 1) В каждый чат — одно сообщение-альбом (картинки + текст подписью к первой); не вошедшие в
-    #    альбом картинки — best-effort. Сбой одного адресата не мешает остальным.
-    delivered = False
-    for chat_id in targets:
-        try:
-            leftover = await _send_announce(bot, chat_id, text, images)
-        except Exception:
-            logger.exception(
-                "maybe_announce_meta_gather_completed: announce to %s failed for #%s", chat_id, tournament_id
-            )
-            continue
-        delivered = True
-        await _send_announce_images(bot, chat_id, leftover)
-    # 2) флаг ставим, только если доставили хотя бы в один чат — иначе повтор на следующем импорте.
-    if not delivered:
+    # 1) Занимаем право на анонс ДО отправки — одним атомарным UPDATE ... WHERE ... IS NULL.
+    if not _reserve_announce(db, tournament_id):
         return
-    tournament.completed_announced_at = models.utc_now()
-    db.commit()
+
+    try:
+        deliveries = await _announce_to_targets(bot, db, tournament_id, title, targets, svc, chart_svc)
+    except Exception:
+        _release_announce(db, tournament_id)  # непредвиденный сбой — пусть повторится позже
+        raise
+    # 2) Ни один адресат не получил — снимаем бронь, чтобы анонс повторился на следующем импорте.
+    if not deliveries:
+        _release_announce(db, tournament_id)
+        return
     # 3) турнир завершён — закрываем (REGISTRATION → CLOSED). Best-effort: сбой закрытия не должен
     #    ронять уже доставленный анонс; флаг уже стоит, повтора анонса не будет.
     try:
         TournamentService(db).close_tournament(tournament_id)
     except Exception:
         logger.exception("maybe_announce_meta_gather_completed: close failed for #%s", tournament_id)
+    # 4) ачивки: турнир завершён и полон — считаем и шлём отчёт владельцу (теневой режим).
+    #    Best-effort: движок ачивок не должен ронять уже доставленный анонс.
+    try:
+        await send_achievements_report(bot, db, tournament_id)
+    except Exception:
+        logger.exception("maybe_announce_meta_gather_completed: achievements failed for #%s", tournament_id)
+    # 5) Magic Oculus: отдельная сессия и worker thread, чтобы HTTP не блокировал Telegram loop.
+    #    Флаг по умолчанию выключен; ошибка внешнего API не откатывает закрытый турнир.
+    if FeatureFlagService(db).is_enabled(FeatureFlags.MAGIC_OCULUS_IMPORT):
+        try:
+            oculus_result = await asyncio.to_thread(import_closed_tournament_to_magicoculus, tournament_id)
+        except Exception as exc:
+            logger.exception("maybe_announce_meta_gather_completed: Magic Oculus import failed for #%s", tournament_id)
+            await _notify_magicoculus_import_error(bot, tournament_id, title, exc)
+        else:
+            await _attach_magicoculus_button(
+                bot,
+                tournament.chat_id,
+                deliveries,
+                oculus_result.tournament_id,
+            )
     logger.info("maybe_announce_meta_gather_completed: announced completion for #%s", tournament_id)
+
+
+def import_closed_tournament_to_magicoculus(tournament_id: int) -> MagicOculusImportResult:
+    """Синхронный worker: собрать, проверить и one-shot импортировать закрытый турнир."""
+    db = SessionLocal()
+    try:
+        tournament = MagicOculusTournamentCollector(db).collect(tournament_id, validate_aetherhub=True)
+        client = MagicOculusClient(settings.MAGIC_OCULUS_API_URL)
+        return MagicOculusImporter(db, client).import_once(tournament, city="Москва")
+    finally:
+        db.close()
+
+
+async def _attach_magicoculus_button(
+    bot,
+    chat_id: int | None,
+    deliveries: list[AnnouncementDelivery],
+    magicoculus_tournament_id: int,
+) -> None:
+    """Attach Oculus URL to the existing club completion message without a new notification."""
+    if bot is None or not chat_id:
+        return
+    delivery = next((item for item in deliveries if item.chat_id == chat_id), None)
+    if delivery is None or delivery.message_id is None:
+        return
+    url = f"{settings.MAGIC_OCULUS_PUBLIC_URL.rstrip('/')}/tournaments/{magicoculus_tournament_id}"
+    keyboard = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("👁 Открыть в Magic Oculus", url=url)]]
+    )
+    try:
+        await bot.edit_message_reply_markup(
+            chat_id=delivery.chat_id,
+            message_id=delivery.message_id,
+            reply_markup=keyboard,
+        )
+    except Exception:  # noqa: BLE001 — уведомление не должно откатывать успешный импорт
+        logger.exception(
+            "maybe_announce_meta_gather_completed: Magic Oculus button edit failed for #%s",
+            magicoculus_tournament_id,
+        )
+
+
+async def _notify_magicoculus_import_error(bot, tournament_id: int, title: str, exc: Exception) -> None:
+    """Best-effort DM владельцу; никогда не рассылает ошибку участникам или в клуб."""
+    if bot is None or not settings.OWNER_CHAT_ID:
+        return
+    error = f"{type(exc).__name__}: {exc}".strip()
+    # Telegram ограничивает сообщение 4096 символами; оставляем запас под заголовок.
+    error = error[:3500]
+    text = (
+        f"⚠️ Не удалось загрузить турнир в Magic Oculus\n\nТурнир: {title}\nID в боте: #{tournament_id}\nОшибка: {error}"
+    )
+    try:
+        await bot.send_message(chat_id=settings.OWNER_CHAT_ID, text=text)
+    except Exception:  # noqa: BLE001 — Telegram не должен откатывать уже закрытый турнир
+        logger.exception(
+            "maybe_announce_meta_gather_completed: Magic Oculus error DM failed for #%s",
+            tournament_id,
+        )
+
+
+def _reserve_announce(db, tournament_id: int) -> bool:
+    """Атомарно занять право на анонс. True — заняли мы, False — уже занято кем-то.
+
+    Одним `UPDATE ... WHERE completed_announced_at IS NULL`, а не мутацией ORM-объекта:
+    это переживает и параллельный вызов из соседней джобы, и закрытие общей сессии
+    (см. docstring `maybe_announce_meta_gather_completed`).
+    """
+    result = db.execute(
+        update(models.Tournament)
+        .where(
+            models.Tournament.id == tournament_id,
+            models.Tournament.completed_announced_at.is_(None),
+        )
+        .values(completed_announced_at=models.utc_now())
+    )
+    db.commit()
+    return bool(result.rowcount)
+
+
+def _release_announce(db, tournament_id: int) -> None:
+    """Снять бронь: анонс не доставлен, пусть повторится на следующем импорте."""
+    db.execute(
+        update(models.Tournament).where(models.Tournament.id == tournament_id).values(completed_announced_at=None)
+    )
+    db.commit()
+    logger.info("maybe_announce_meta_gather_completed: released reservation for #%s", tournament_id)
+
+
+async def _announce_to_targets(
+    bot, db, tournament_id: int, title: str, targets: list, svc, chart_svc
+) -> list[AnnouncementDelivery]:
+    """Собрать отбивку и вернуть Telegram IDs доставленных основных сообщений.
+
+    В каждый чат — одно сообщение-альбом (картинки + текст подписью к первой); не вошедшие в
+    альбом картинки — best-effort. Сбой одного адресата не мешает остальным.
+    """
+    chart = await build_chart(db, tournament_id, chart_svc)
+    standings = await build_standings(db, tournament_id)
+    total = len(TournamentService(db).list_participants_for_tournament(tournament_id))
+    with_deck = sum(s.count for s in chart.sectors) if chart else _decks_count(db, tournament_id)
+    undefeated = svc.get_undefeated_players(tournament_id)
+    scorekeepers = TournamentService(db).get_deck_recorders(tournament_id, min_count=2)
+    text = format_meta_gather_completed(title, total, with_deck, undefeated, scorekeepers)
+    no_show_names = _aetherhub_no_show_names(db, tournament_id)
+    images = ([chart] if chart else []) + list(standings)
+
+    deliveries: list[AnnouncementDelivery] = []
+    for chat_id in targets:
+        target_text = text
+        if chat_id == settings.OWNER_CHAT_ID and no_show_names:
+            names = "\n".join(f"• {name}" for name in no_show_names)
+            target_text += (
+                f"\n\n⚠️ Зарегистрировались в боте, но отсутствуют "
+                f"в итоговых стендингах AetherHub ({len(no_show_names)}):\n{names}"
+            )
+        try:
+            leftover, message_id = await _send_announce(bot, chat_id, target_text, images)
+        except Exception:
+            logger.exception(
+                "maybe_announce_meta_gather_completed: announce to %s failed for #%s", chat_id, tournament_id
+            )
+            continue
+        deliveries.append(AnnouncementDelivery(chat_id=chat_id, message_id=message_id))
+        await _send_announce_images(bot, chat_id, leftover)
+    return deliveries
+
+
+def _aetherhub_no_show_names(db, tournament_id: int) -> list[str]:
+    """Players registered in the bot but absent from published AetherHub standings.
+
+    ``final_place`` is assigned from standings during AetherHub import. We only report missing
+    places when at least one participant has a place, so a temporarily absent standings response
+    never labels the whole tournament as no-shows.
+    """
+    participants = db.execute(
+        select(models.Participant)
+        .where(models.Participant.tournament_id == tournament_id)
+        .order_by(models.Participant.id)
+    ).scalars().all()
+    if not any(participant.final_place is not None for participant in participants):
+        return []
+    names = {
+        format_participant_name(participant.user.first_name, participant.user.last_name).strip()
+        for participant in participants
+        if participant.final_place is None
+    }
+    return sorted((name for name in names if name), key=str.casefold)
 
 
 def _decks_count(db, tournament_id: int) -> int:
@@ -647,26 +811,30 @@ _TG_CAPTION_LIMIT = 1024  # максимум символов в подписи 
 _TG_ALBUM_LIMIT = 10  # максимум элементов в media group
 
 
-async def _send_announce(bot, chat_id: int, text: str, images: list) -> list:
+async def _send_announce(bot, chat_id: int, text: str, images: list) -> tuple[list, int | None]:
     """Отправить отбивку в один чат одним сообщением: картинки альбомом, текст — подписью к первой.
 
-    Возвращает картинки, не поместившиеся в альбом (для best-effort дослать отдельно).
+    Возвращает остаток картинок и ID основного сообщения, к которому можно добавить кнопку.
     Если картинок нет или текст длиннее подписи — шлём текст отдельным сообщением и возвращаем
     все картинки как «остаток». Сбой альбома → фолбэк на текст (анонс важнее картинок).
     """
     if not images or len(text) > _TG_CAPTION_LIMIT:
-        await bot.send_message(chat_id=chat_id, text=text)
-        return images
+        message = await bot.send_message(chat_id=chat_id, text=text)
+        message_id = getattr(message, "message_id", None)
+        return images, message_id if isinstance(message_id, int) else None
 
     album = images[:_TG_ALBUM_LIMIT]
     media = [InputMediaPhoto(io.BytesIO(img.png), caption=text if i == 0 else None) for i, img in enumerate(album)]
     try:
-        await bot.send_media_group(chat_id=chat_id, media=media)
+        messages = await bot.send_media_group(chat_id=chat_id, media=media)
     except Exception:
         logger.exception("maybe_announce_meta_gather_completed: media group failed — шлём текстом")
-        await bot.send_message(chat_id=chat_id, text=text)
-        return images
-    return images[_TG_ALBUM_LIMIT:]
+        message = await bot.send_message(chat_id=chat_id, text=text)
+        message_id = getattr(message, "message_id", None)
+        return images, message_id if isinstance(message_id, int) else None
+    first_message = messages[0] if messages else None
+    message_id = getattr(first_message, "message_id", None)
+    return images[_TG_ALBUM_LIMIT:], message_id if isinstance(message_id, int) else None
 
 
 async def _send_announce_images(bot, chat_id: int, images: list) -> None:
@@ -737,16 +905,29 @@ def setup_scheduler(app: Application) -> None:
     app.job_queue.run_repeating(_timed_import, interval=60, first=10)
     logger.info("Scheduler: AetherhubTimedImportJob registered (every 60s)")
 
+    registration_refresh_job = RegistrationMessageRefreshJob()
+
+    async def _refresh_registration_messages(context: ContextTypes.DEFAULT_TYPE) -> None:
+        await registration_refresh_job.run(context.bot)
+
+    _refresh_registration_messages.__name__ = "registration_message_refresh"
+    app.job_queue.run_repeating(_refresh_registration_messages, interval=60, first=60)
+    logger.info("Scheduler: RegistrationMessageRefreshJob registered (every 60s)")
+
     final_job = AetherhubFinalReimportJob(AetherhubService())
-    final_time = datetime.strptime(FINAL_REIMPORT_TIME, "%H:%M").time().replace(tzinfo=tz)
 
-    async def _final_reimport(context: ContextTypes.DEFAULT_TYPE) -> None:
-        tz_ = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
-        await final_job.run(now=datetime.now(tz_), bot=context.bot)
+    def _make_final_reimport(time_str: str):
+        async def _final_reimport(context: ContextTypes.DEFAULT_TYPE) -> None:
+            tz_ = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
+            await final_job.run(now=datetime.now(tz_), bot=context.bot)
 
-    _final_reimport.__name__ = "aetherhub_final_reimport"
-    app.job_queue.run_daily(_final_reimport, time=final_time)
-    logger.info(f"Scheduler: AetherhubFinalReimportJob registered (daily {FINAL_REIMPORT_TIME})")
+        _final_reimport.__name__ = f"aetherhub_final_reimport[{time_str}]"
+        return _final_reimport
+
+    for time_str in FINAL_REIMPORT_TIMES:
+        final_time = datetime.strptime(time_str, "%H:%M").time().replace(tzinfo=tz)
+        app.job_queue.run_daily(_make_final_reimport(time_str), time=final_time)
+    logger.info("Scheduler: AetherhubFinalReimportJob registered (daily %s)", ", ".join(FINAL_REIMPORT_TIMES))
 
     reveal_job = AutoRevealDecksJob()
     reveal_time = datetime.strptime(REVEAL_DECKS_TIME, "%H:%M").time().replace(tzinfo=tz)

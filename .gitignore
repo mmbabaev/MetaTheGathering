@@ -15,4 +15,5 @@ scripts/telegram_parser/session.session-journal
 .coverage
 
 # Mac OS
-*.DS_Store
+.DS_Store
+**/.DS_Store

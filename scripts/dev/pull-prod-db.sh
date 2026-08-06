@@ -17,11 +17,11 @@ REMOTE_SSH_KEY="${SSH_KEY:-$HOME/.ssh/ssh-key-kara}"
 
 REMOTE_DB="meta_the_gathering_prod"
 REMOTE_DB_USER="mbabaev"
-REMOTE_DB_PASS="metagatherer"
+REMOTE_DB_PASS="${REMOTE_DB_PASS:?Set REMOTE_DB_PASS in the environment}"
 
 LOCAL_DB="meta_the_gathering_debug"
 LOCAL_DB_USER="mbabaev"
-LOCAL_DB_PASS="metagatherer"
+LOCAL_DB_PASS="${LOCAL_DB_PASS:?Set LOCAL_DB_PASS in the environment}"
 
 GREEN='\033[0;32m'; RED='\033[0;31m'; NC='\033[0m'
 info()  { echo -e "${GREEN}[pull-prod-db]${NC} $1"; }

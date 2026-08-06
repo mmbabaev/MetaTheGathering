@@ -61,6 +61,11 @@ class Settings(BaseSettings):
     MONIUM_PROJECT: str = ""
     MONIUM_API_KEY: str = ""
 
+    # Публичный backend Magic Oculus; несекретно, можно переопределить для debug/staging.
+    MAGIC_OCULUS_API_URL: str = "https://bbani33dmiqrgjm2k8fa.containers.yandexcloud.net"
+    # Пользовательский frontend для ссылок в Telegram и CLI.
+    MAGIC_OCULUS_PUBLIC_URL: str = "https://magicoculus.ru"
+
     YOOKASSA_SHOP_ID: str = ""
     YOOKASSA_SECRET_KEY: str = ""
     PAYMENT_AMOUNT: str = "525.00"

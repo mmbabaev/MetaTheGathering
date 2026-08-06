@@ -3,6 +3,7 @@ import pytest
 from bot.handlers.features import FeaturesHandler
 from bot.keyboards import features_keyboard
 from bot.messages import NOT_ADMIN
+from core import models
 from services.feature_flags import KNOWN_FLAGS, FeatureFlags, FeatureFlagService
 from services.user import UserService
 
@@ -42,6 +43,32 @@ class TestFeatureFlagService:
         flags = ff_svc.list_flags()
         record = next(f for f in flags if f.name == FeatureFlags.RECORD_OPPONENTS)
         assert record.enabled is True
+
+    def test_magicoculus_import_is_enabled_by_default(self, ff_svc):
+        assert ff_svc.is_enabled(FeatureFlags.MAGIC_OCULUS_IMPORT) is True
+
+    def test_live_registration_count_is_disabled_by_default(self, ff_svc):
+        assert ff_svc.is_enabled(FeatureFlags.LIVE_REGISTRATION_COUNT) is False
+
+    def test_ensure_defaults_updates_stale_metadata_but_preserves_override(self, ff_svc, db):
+        db.add(
+            models.FeatureFlag(
+                name=FeatureFlags.MAGIC_OCULUS_IMPORT,
+                description="old",
+                value_type="old",
+                default_value="false",
+                current_value="false",
+            )
+        )
+        db.commit()
+
+        ff_svc.ensure_defaults()
+
+        row = db.query(models.FeatureFlag).filter_by(name=FeatureFlags.MAGIC_OCULUS_IMPORT).one()
+        assert row.description == KNOWN_FLAGS[FeatureFlags.MAGIC_OCULUS_IMPORT].description
+        assert row.value_type == "bool"
+        assert row.default_value == "true"
+        assert row.current_value == "false"
 
     def test_toggle_disables_flag(self, ff_svc):
         result = ff_svc.toggle(FeatureFlags.RECORD_OPPONENTS)

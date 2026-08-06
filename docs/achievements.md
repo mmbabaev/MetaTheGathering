@@ -1,8 +1,8 @@
-# Система ачивок — детальный план
+# Система ачивок — план и текущее состояние
 
-Дизайн-документ. Ничего из описанного ещё не реализовано. Цель — довести ачивки от «идеи» до
-пошагового плана, где первые фазы проверены на техническую исполнимость по фактическому коду, а
-дальние — обозначены как направление.
+**Статус: фазы 1–3 реализованы** (движок, 8 ачивок, теневой режим, `/achievements` для владельца и
+админов, CLI, бэкафилл истории, картинки). Фазы 4–6 — план. Разделы ниже описывают и то, что уже работает, и то, что впереди;
+где это неочевидно, состояние помечено.
 
 Контекст и каталог идей (зачем это вообще): [`ideas_engagement.md`](ideas_engagement.md) и
 [`ideas_engagement_v2.md`](ideas_engagement_v2.md).
@@ -99,9 +99,9 @@ def counts_for_achievements(participant: models.Participant, user: models.User) 
 
 ---
 
-## 3. Первые 5 ачивок
+## 3. Ачивки первой фазы (8 штук, 20 уровней) ✅ реализовано
 
-Все пять считаются **только по собственной БД**. Общие правила выдачи:
+Все считаются **только по собственной БД**. Общие правила выдачи:
 
 - получатель — только реальный аккаунт (`User.tg_id > 0`); плейсхолдеры импорта пропускаем;
 - турнир учитывается, только если завершён и полон (`is_tournament_complete()`) — иначе
@@ -129,14 +129,15 @@ def counts_for_achievements(participant: models.Participant, user: models.User) 
   в чате нельзя, иначе игрок увидит себя в списке X-0 без ачивки.
 - Причина: «4-0 на Elves; всего X-0 турниров: 3 (17.07 Burn, 10.07 Elves)».
 
-### 3.3. 🧙 Метаписец (`scribe`, уровни I/II/III)
+### 3.3. 🧙 Метаписец (`scribe`, уровни I–IV)
 
-**Правило:** записал N **чужих** колод суммарно за всё время. Уровни: 10 / 25 / 50.
+**Правило:** записал N **чужих** колод суммарно за всё время. Уровни: 3 / 10 / 25 / 50.
 
 - Источник: `Participant.deck_added_by_tg_id == user.tg_id AND Participant.user_id != user.id`.
-- Рядом есть `RatingService.count_decks_added_by()` — считает и свои, нужен вариант с фильтром.
+- Аудитория правила шире остальных: в неё попадают все, кто записывал колоды на этом турнире,
+  даже если сам в нём не играл.
 - Прогресс = число записанных чужих колод.
-- Причина: «+3 колоды на этом турнире (Иванов, Петров, Сидоров), всего 14».
+- Причина: «записал сегодня: Иванов, Петров, Сидоров».
 
 ### 3.4. 📅 Завсегдатай (`regular`, уровни I/II/III)
 
@@ -165,6 +166,27 @@ def counts_for_achievements(participant: models.Participant, user: models.User) 
 > расчёта актуального топа (сид `Archetype.meta_rank` от апреля 2026 не обновляется, ачивка на нём
 > со временем начала бы врать). «Мультикласс» даёт тот же эффект — разнообразие — но считается
 > одним `GROUP BY` без нового сервиса. «Еретик» остаётся кандидатом на будущее (§11).
+
+### 3.6. ⚡ Буду первый (`first_deck`, уровни I/II/III)
+
+**Правило:** записал свою колоду на турнир раньше всех остальных. Уровни: 1 / 3 / 10 раз.
+
+- Источник: минимальный `Participant.created_at` среди прошедших гейт §2.5 участников турнира
+  (регистрация в боте идёт сразу с выбором колоды). При совпадении времени — меньший id.
+- Прогресс = сколько раз игрок был первым.
+- Причина: «первым записал колоду сегодня: 03.07 · 17.07 · 24.07».
+- Зачем: гонка за ранней записью — ровно то поведение, которого мы хотим от игроков.
+
+### 3.7. 💍 Однолюб (`loyalist`, уровни I/II/III)
+
+**Правило:** N турниров подряд на одной и той же колоде. Уровни: 3 / 5 / 10.
+
+- Источник: цепочка **собственных участий** игрока (не всех турниров клуба): пропуск турнира
+  верность колоде не рвёт, смена архетипа — рвёт. Дека сравнивается по `general_name`.
+- Прогресс = длина текущей серии.
+- Причина: «Burn: 10.07 · 17.07 · 24.07».
+- Ограничение: деклистов у бота нет, поэтому «без изменений в мейне» проверить нельзя — трактуем
+  как «тот же архетип».
 
 ---
 
@@ -220,10 +242,8 @@ class UserAchievementProgress(Base):
 таблица хранит последний посчитанный снапшот. Значит, её можно в любой момент снести и пересобрать
 бэкафиллом; рассинхрон невозможен по построению.
 
-**Миграция:** одна на обе таблицы. `down_revision` = текущий head (на момент написания
-`7c178567f22c` — перед генерацией проверить: `DATABASE_URL="sqlite:///:memory:" python3 -m alembic heads`).
-Revision id генерировать: `python3 -c "import uuid; print(uuid.uuid4().hex[:12])"` — плейсхолдеры
-вроде `a1b2c3d4e5f6` переиспользовать нельзя (`tests/test_migrations.py` это ловит).
+**Миграция:** `alembic/versions/2c906a8d5c01_add_achievements.py` — обе таблицы разом,
+`down_revision = 7c178567f22c`.
 
 ---
 
@@ -233,12 +253,17 @@ Revision id генерировать: `python3 -c "import uuid; print(uuid.uuid4
 
 ```
 services/achievements/
-    __init__.py        # публичный экспорт: AchievementService, ACHIEVEMENTS
+    __init__.py        # публичный экспорт: AchievementService, ACHIEVEMENTS, build_report
     definitions.py     # реестр AchievementDef (код, название, описание, уровни, редкость)
+    history.py         # AchievementHistory — история игрока с кэшами на прогон + гейт §2.5
     context.py         # TournamentContext — данные турнира, загруженные один раз
     rules.py           # правила: класс на ачивку, evaluate(ctx) -> RuleOutcome
-    service.py         # AchievementService: оценка, выдача, прогресс, чтение, бэкафилл
+    service.py         # AchievementService: оценка, выдача, прогресс, чтение
     report.py          # сборка агрегированного отчёта (§6.2)
+
+bot/handlers/achievements.py   # /achievements — чистая логика (полка игрока)
+bot/telegram/achievements.py   # команда + доставка отчёта; ЗДЕСЬ выбирается получатель
+cli/achievements.py            # process / show / list на debug-базе
 ```
 
 Сервисы — классами с зависимостями в `__init__` (как `RoundNotificationService`,
@@ -261,8 +286,8 @@ class AchievementDef:
 ACHIEVEMENTS: dict[tuple[str, int], AchievementDef] = {...}
 ```
 
-Итого 13 определений: `debut` (1) + `undefeated` (3) + `scribe` (3) + `regular` (3) +
-`multiclass` (3).
+Итого 20 определений: `debut` (1) + `first_deck` (3) + `undefeated` (3) + `scribe` (4) +
+`regular` (3) + `multiclass` (3) + `loyalist` (3).
 
 ### 5.3. Контекст оценки
 
@@ -274,15 +299,18 @@ ACHIEVEMENTS: dict[tuple[str, int], AchievementDef] = {...}
 @dataclass
 class TournamentContext:
     tournament: models.Tournament
+    history: AchievementHistory                   # история игроков с кэшами на прогон
     participants: dict[int, models.Participant]   # user_id -> participant (все, включая чужие записи)
+    users: dict[int, models.User]
     eligible_user_ids: set[int]                   # прошли гейт §2.5 — только они получают прогресс
     records: dict[int, PlayerRecord]              # user_id -> wins/losses/draws/rounds
     undefeated_user_ids: set[int]
+    skipped: list[SkippedPlayer]                  # кто и почему не в зачёте — идёт в отчёт
 ```
 
-Собирается один раз в `AchievementService.evaluate_for_tournament()`: имена из `_player_records()`
-→ `find_user_by_name()` с кэшом name→user → `user_id`. Правила получают готовый контекст и ходят в
-БД только за своей исторической агрегацией (счётчик колод, серия посещений, деки за 90 дней).
+Собирается один раз в `build_context()`: имена из парингов → `find_user_by_name()` с кэшом
+name→user → `user_id`. Правила получают готовый контекст и ходят в БД только через
+`AchievementHistory` (счётчик колод, серия посещений, деки за 90 дней) — там тоже кэш на прогон.
 
 ### 5.4. Правила
 
@@ -302,9 +330,8 @@ class Award:
 class ProgressUpdate:
     user_id: int
     code: str
-    value: int                    # стало
-    previous: int                 # было (для дельты)
-    threshold: int                # до следующего уровня
+    value: int                    # стало (previous читается из БД при записи)
+    threshold: int                # порог следующего уровня
     next_level: int
     evidence: str                 # «Mono Red Madness (17.07), Elves (24.07)»
 
@@ -318,45 +345,52 @@ class AchievementRule(Protocol):
     def evaluate(self, ctx: TournamentContext) -> RuleOutcome: ...
 ```
 
-Пять классов: `DebutRule`, `UndefeatedRule`, `ScribeRule`, `RegularRule`, `MulticlassRule`. Каждый —
-чистая логика от контекста и БД, тестируется без Telegram.
+Семь классов: `DebutRule`, `FirstDeckRule`, `UndefeatedRule`, `ScribeRule`, `RegularRule`,
+`MulticlassRule`, `LoyalistRule`. Все счётчики наследуют `CounterRule` — она превращает значение в
+взятые уровни и прогресс до следующего. Каждое правило — чистая логика от контекста и БД,
+тестируется без Telegram.
 
 ### 5.5. Сервис
 
 ```python
 class AchievementService:
-    def __init__(self, db: Session, rules: list[AchievementRule] | None = None) -> None: ...
+    def __init__(self, db, rules=None, history=None) -> None: ...
 
-    def evaluate_for_tournament(self, tournament_id: int) -> RuleOutcome:
-        """Прогнать все правила по завершённому турниру. В БД ничего не пишет."""
+    def evaluate_for_tournament(self, tournament_id: int) -> tuple[TournamentContext | None, RuleOutcome]:
+        """Прогнать все правила по завершённому турниру. В БД ничего не пишет.
+        None вместо контекста — турнира нет или он ещё не полон."""
 
-    def apply(self, outcome: RuleOutcome, *, notified: bool = False) -> AppliedResult:
+    def apply(self, ctx, outcome, *, notified: bool = False) -> AppliedResult:
         """Идемпотентно записать выдачи и обновить прогресс.
         Возвращает ТОЛЬКО реальные изменения: новые ачивки и прогресс, значение которого сдвинулось."""
 
-    def process_tournament(self, tournament_id: int, *, notified: bool = False) -> AppliedResult:
-        """evaluate + apply. Безопасно вызывать повторно: второй раз вернёт пустой результат."""
+    def process_tournament(self, tournament_id: int, *, notified: bool = False) -> AppliedResult | None:
+        """evaluate + apply. Безопасно вызывать повторно: второй раз результат пустой."""
 
-    def list_for_user(self, user_id: int) -> list[UserAchievementView]:
+    def list_for_user(self, user_id: int) -> list[AchievementView]:
         """Все определения + получено/в процессе/закрыто + прогресс — для UI."""
 
-    def backfill(self, *, club: str | None = None, dry_run: bool = True) -> BackfillReport:
-        """Прогнать по всем завершённым турнирам истории (выдачи помечаются notified=True)."""
+    def unnotified_for_tournament(self, tournament_id: int) -> list[models.UserAchievement]
+    def mark_notified(self, achievements: list[models.UserAchievement]) -> None
 ```
 
-`AppliedResult` — то, из чего строится отчёт владельцу: `new_awards`, `progress_changes`,
-`skipped_not_self_registered` (кто играл, но колоду вписал не он — это полезно видеть).
+`AppliedResult` — то, из чего строится отчёт владельцу: `granted`, `progress_changes`, `skipped`
+(кто играл, но в зачёт не попал — это полезно видеть).
+
+Сбой одного правила логируется и не роняет остальные: ачивки не должны стоить нам турнира.
+
+`backfill()` — фаза 2, ещё не реализован.
 
 ### 5.6. Точки вызова
 
-1. **Основная:** `bot/scheduler.py:maybe_announce_meta_gather_completed()` — сразу после успешного
-   `close_tournament()` (строка ~625). Там турнир гарантированно завершён, полон и все колоды
-   записаны. Вызов best-effort в `try/except` — падение ачивок не должно ронять анонс.
+1. **Основная:** `bot/scheduler.py:maybe_announce_meta_gather_completed()` — шаг 4, сразу после
+   `close_tournament()`. Там турнир гарантированно завершён, полон и все колоды записаны. Вызов
+   best-effort в `try/except` — падение ачивок не роняет анонс (тест на это есть).
 2. **Ручная:** CLI `python3 cli.py achievements process <tournament_id>` — перевыдача после правок
    правил.
-3. **Бэкафилл:** CLI, см. фазу 2.
+3. **Бэкафилл:** CLI, см. фазу 2 (не реализовано).
 
-Все три идемпотентны, порядок вызовов значения не имеет.
+Все идемпотентны, порядок вызовов значения не имеет.
 
 ---
 
@@ -382,20 +416,12 @@ class FeatureFlags:
     ACHIEVEMENTS_PLAYER_DM = "achievementsPlayerDm"     # уведомления уходят самим игрокам
 ```
 
-Маршрутизация получателя — **одна функция**, в которой и произойдёт будущее переключение:
-
-```python
-def resolve_recipients(applied: AppliedResult, db: Session) -> list[OutgoingReport]:
-    """Кому и что отправить по итогам турнира.
-
-    shadow/beta: один OutgoingReport владельцу со ВСЕМИ игроками (агрегат).
-    public:      по одному OutgoingReport на игрока — только его ачивки, с opt-in и гейтом.
-    """
-```
-
-Пока `ACHIEVEMENTS_PLAYER_DM` выключен, бот физически не может написать игроку про ачивки:
-в цикле отправки один адресат — `settings.OWNER_CHAT_ID`. Это ровно та развилка, которую
-потом меняем «за один вечер», не переписывая движок.
+Маршрутизация получателя — **одно место**: `send_achievements_report()` в
+`bot/telegram/achievements.py`. Сейчас там единственный адресат — `settings.OWNER_CHAT_ID`;
+именно сюда добавится ветка «по сообщению на игрока» в фазе 5. Флаг `achievementsPlayerDm`
+уже заведён, но пока он **только логирует предупреждение и всё равно шлёт владельцу** — чтобы
+случайное включение флага не разослало DM реальным игрокам раньше, чем появится код с opt-in
+и гейтом (тест на это есть).
 
 > ⚠️ Включение `ACHIEVEMENTS_PLAYER_DM` = новый путь массовой рассылки DM реальным людям. По
 > правилам проекта (`CLAUDE.md`, notification safety) оно требует **явного подтверждения
@@ -428,7 +454,7 @@ def resolve_recipients(applied: AppliedResult, db: Session) -> list[OutgoingRepo
    10.07 · 17.07 · 24.07
 
 НЕ В ЗАЧЁТ
-Кузнецов Алексей — колоду записал не он (admin)
+Кузнецов Алексей — колоду записал не он
 Смирнов Олег — колода не записана
 ```
 
@@ -464,30 +490,36 @@ def resolve_recipients(applied: AppliedResult, db: Session) -> list[OutgoingRepo
 
 ## 7. UI
 
-### 7.1. Текстовый (фаза 1, видит только владелец/админы)
+### 7.1. Текстовый ✅ реализовано
 
 Команда `/achievements`:
 
 ```
-🏅 Твои ачивки — 3 из 13
+🏅 Твои ачивки — 3 из 20
 
 Открыто
-🎖 Дебют — записал свою первую колоду
-🏆 Без поражений I — прошёл турнир без поражений
-🧙 Метаписец I — записал 10 чужих колод
+🎖 Дебют — Записал свою первую колоду
+   первая своя колода: Mono Red Madness
+🏆 Без поражений I — Прошёл без единого поражения 1 турнир(ов)
+   4-0 на Elves; всего X-0: 1 (24.07)
+🧙 Метаписец I — Записал 3 чужих колод
 
 В процессе
-🧙 Метаписец II — 14/25 колод
-🎭 Мультикласс I — 2/3 деки за 90 дней
-📅 Завсегдатай I — 3/4 турнира подряд
+🧙 Метаписец II — 7/10
+🎭 Мультикласс I — 2/3
+📅 Завсегдатай I — 3/4
 
 Закрыто
-🏆 Без поражений II — пройди без поражений 3 турнира
+⚡ Буду первый — Запиши свою колоду первым — быстрее остальных участников
+💍 Однолюб — Не меняй архетип от турнира к турниру
 ```
 
-В режиме shadow команда не показывается в `/help` и отвечает «неизвестная команда» всем, кроме
-владельца и админов. Плюс админский вид `/achievements <игрок>` — посмотреть чужую полку, чтобы
-проверять корректность выдачи до публичного запуска.
+В теневом режиме (флаг `achievementsPublicUi` выключен) команда отвечает «Команда пока
+недоступна» всем, кроме владельца и админов, и не значится в игроцком `/help`. Админский вид
+`/achievements <игрок>` показывает чужую полку — основной способ сверить выдачу с историей.
+
+Отладка на debug-базе — CLI: `python3 cli.py achievements process <id>` (пересчитать турнир и
+показать отчёт), `achievements show <игрок>`, `achievements list`.
 
 Реализация по слоям проекта: `bot/handlers/achievements.py` (чистая логика → `HandlerResult`,
 покрыта тестами) + `bot/telegram/achievements.py` (тонкая обёртка) + строки в `bot/messages/`.
@@ -529,50 +561,59 @@ def resolve_recipients(applied: AppliedResult, db: Session) -> list[OutgoingRepo
 
 Каждая фаза — отдельная ветка от свежего `main` и отдельный PR.
 
-### Фаза 1 — движок, 5 ачивок, теневой режим (размер: L)
+### Фаза 1 — движок, 8 ачивок, теневой режим ✅ сделано
 
 **Цель:** на каждом завершённом турнире ачивки и прогресс считаются и пишутся в БД, владельцу
 приходит один агрегированный отчёт. Игроки не видят ничего.
 
-- [ ] Модели `UserAchievement` + `UserAchievementProgress` + миграция (свежий revision id, один head)
-- [ ] `definitions.py` — реестр 13 определений
-- [ ] Гейт §2.5 (`counts_for_achievements`) + `TournamentContext` (один проход имя→`user_id`)
-- [ ] `DebutRule` + тесты
-- [ ] `UndefeatedRule` (поверх `get_undefeated_players`) + тесты
-- [ ] `ScribeRule` (+ фильтр «чужие колоды» в `RatingService`) + тесты
-- [ ] `RegularRule` (серии по клубу, разрывы, несколько клубов) + тесты
-- [ ] `MulticlassRule` (разные `general_name` за 90 дней) + тесты
-- [ ] `AchievementService.evaluate / apply / process_tournament` + тест идемпотентности
+- [x] Модели `UserAchievement` + `UserAchievementProgress` + миграция `2c906a8d5c01`
+- [x] `definitions.py` — реестр 20 определений (8 ачивок с уровнями)
+- [x] Гейт §2.5 (`counts_for_achievements`) + `AchievementHistory` + `TournamentContext`
+- [x] Правила: `DebutRule`, `FirstDeckRule`, `UndefeatedRule`, `ScribeRule`, `RegularRule`,
+      `MulticlassRule`, `LoyalistRule` — каждое с тестами
+- [x] `AchievementService.evaluate / apply / process_tournament` + тест идемпотентности
       (двойной прогон → пустой результат, ноль новых строк)
-- [ ] Сборка агрегированного отчёта (`report.py`) + тесты формата, включая разрез по 4096 символов
-- [ ] Отправка отчёта владельцу (`settings.OWNER_CHAT_ID`), best-effort, `notified_at` после успеха
-- [ ] Вызов из `maybe_announce_meta_gather_completed` после `close_tournament` + тест, что падение
+- [x] Агрегированный отчёт (`report.py`) + тесты формата, включая разрез по лимиту 4096
+- [x] Отправка отчёта владельцу (`settings.OWNER_CHAT_ID`), best-effort, `notified_at` после успеха
+- [x] Вызов из `maybe_announce_meta_gather_completed` после `close_tournament` + тест, что падение
       движка не ломает анонс
-- [ ] Feature flags `achievements` (по умолчанию on в debug, off в prod) и `achievementsPublicUi`,
-      `achievementsPlayerDm` (оба off)
-- [ ] `/achievements` — только владелец и админы; `/achievements <игрок>` для проверки
-- [ ] CLI: `achievements process <tournament_id>`, `achievements show <player>`
+- [x] Feature flags `achievements` (on), `achievementsPublicUi` / `achievementsPlayerDm` (off)
+- [x] `/achievements` — владелец и админы; `/achievements <игрок>` для проверки
+- [x] CLI: `achievements process | show | list`
 
-**DoD:** на debug-базе прогнать по 2–3 реальным турнирам, глазами сверить отчёт со стендингами.
+**DoD:** прогнать на debug-базе по 2–3 реальным турнирам и глазами сверить отчёт со стендингами.
 
-### Фаза 2 — бэкафилл истории (размер: M)
+### Фаза 2 — бэкафилл истории ✅ сделано
 
 Обязательно **до** публичного запуска: иначе у активных игроков ачивки начнутся «с нуля», а
 первое же включение рассылок пришлёт им пачку старых.
 
-- [ ] `backfill(dry_run=True)` — отчёт «кому что выдалось бы», без записи
-- [ ] CLI `achievements backfill [--club X] [--apply]`
-- [ ] Исторические выдачи с `notified_at = awarded_at`
-- [ ] Dry-run на копии прод-базы, проверить топ-20 на вменяемость (нет ли «Завсегдатая III» у
-      человека с двумя турнирами)
-- [ ] Тест: повторный бэкафилл не создаёт дублей и не меняет прогресс
+- [x] `backfill(club=None, dry_run=True)` — отчёт «кому что выдалось бы», без записи
+- [x] CLI `achievements backfill [--club X] [--apply] [--top N]`
+- [x] Исторические выдачи с проставленным `notified_at`
+- [x] Правила ограничены датой турнира — ачивка привязывается к тому турниру, где взята
+- [x] Тесты: dry-run ничего не пишет, повторный бэкафилл не создаёт дублей, уровень II висит
+      на третьем турнире, а не на первом
+- [ ] Прогон dry-run на копии прод-базы и проверка топ-20 на вменяемость — за владельцем
 
-### Фаза 3 — картинки (размер: M)
+**Порядок обхода:** турниры идут от старых к новым, и каждое правило видит историю **на дату
+турнира** (`participations(user_id, until=...)`). Без этого «Завсегдатай III» выдался бы задним
+числом в самом первом турнире истории — правило считало бы всю историю целиком.
 
-- [ ] `services/achievement_image.py`: генеративный бейдж (вариант A) + карточка ачивки
-- [ ] Полка ачивок картинкой (текст остаётся фолбэком)
-- [ ] Картинки в отчёте владельцу — по одной на новую ачивку, альбомом
-- [ ] Тесты рендера
+### Фаза 3 — картинки ✅ сделано
+
+- [x] `services/achievement_image.py`: генеративный бейдж (вариант A) + карточка ачивки
+- [x] Полка ачивок картинкой; текст остаётся фолбэком, если рендер не удался
+- [x] Картинки в отчёте владельцу — по одной на новую ачивку, альбомом (≤10)
+- [x] Тесты рендера: валидный PNG, длинные тексты, пустая полка, рост высоты по рядам
+
+**Полка схлопывает уровни:** одна ячейка на ачивку — самый высокий открытый уровень (или
+первый закрытый), подписью путь к следующему («14/25»). Иначе 20 медальонов превращают полку
+в простыню, где не видно, что у игрока есть. Схлопывание живёт в `Shelf.image_items()`
+(чистая логика в хендлере), рендер решает только как рисовать.
+
+**Рисование — в потоке** (`asyncio.to_thread`), как график меты и стендинги: это ~100 мс CPU,
+на event loop его оставлять нельзя.
 
 ### Фаза 4 — публичный UI (размер: S)
 
@@ -590,6 +631,9 @@ def resolve_recipients(applied: AppliedResult, db: Session) -> list[OutgoingRepo
 - [ ] Тесты: opt-out не получает, повтор не дублирует, чужие ачивки не уходят
 - [ ] Выкатка: debug-окружение (три id) → prod под флагом
 
+> Пока фаза не сделана, включение флага `achievementsPlayerDm` ничего игрокам не разошлёт —
+> отчёт всё равно уйдёт владельцу с предупреждением в логе.
+
 ### Фаза 6 — прогресс и «почти получил» (размер: S)
 
 - [ ] «Тебе не хватило одной победы до X» в пост-турнирном сообщении
@@ -600,7 +644,11 @@ def resolve_recipients(applied: AppliedResult, db: Session) -> list[OutgoingRepo
 
 ## 9. Тесты
 
-Стиль проекта: SQLite in-memory, без Telegram-моков, тестируем `handle_*` и сервисы.
+Стиль проекта: SQLite in-memory, без Telegram-моков, тестируем `handle_*` и сервисы. Что уже
+покрыто: `tests/test_achievements_rules.py` (правила), `test_achievements_service.py` (движок,
+идемпотентность, отчёт), `test_achievements_handler.py` (полка и гейт видимости),
+`test_achievements_notify.py` (доставка и адресат), `test_telegram_achievements.py` (обёртка),
+плюс два теста в `test_meta_gather_completed.py` (интеграция со швом завершения турнира).
 
 - юнит на каждое правило — минимум 3 кейса: выдаётся, не выдаётся, краевой;
 - гейт §2.5: колоду записал админ → ни выдачи, ни прогресса, игрок попал в «не в зачёт»;

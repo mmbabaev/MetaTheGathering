@@ -24,6 +24,12 @@ class FeatureFlagInfo:
 class FeatureFlags:
     RECORD_OPPONENTS = "recordOpponents"
     PAYMENT = "payment"
+    # Ачивки едут в прод теневым режимом: движок считает, игроки не видят (docs/achievements.md §6).
+    ACHIEVEMENTS = "achievements"
+    ACHIEVEMENTS_PUBLIC_UI = "achievementsPublicUi"
+    ACHIEVEMENTS_PLAYER_DM = "achievementsPlayerDm"
+    MAGIC_OCULUS_IMPORT = "magicOculusImport"
+    LIVE_REGISTRATION_COUNT = "liveRegistrationCount"
 
 
 KNOWN_FLAGS: dict[str, FeatureFlagMeta] = {
@@ -34,6 +40,31 @@ KNOWN_FLAGS: dict[str, FeatureFlagMeta] = {
     ),
     FeatureFlags.PAYMENT: FeatureFlagMeta(
         description="Оплата взноса через бота (ЮKassa)",
+        value_type="bool",
+        default_value="false",
+    ),
+    FeatureFlags.ACHIEVEMENTS: FeatureFlagMeta(
+        description="Ачивки: считать при завершении турнира и слать отчёт владельцу",
+        value_type="bool",
+        default_value="true",
+    ),
+    FeatureFlags.ACHIEVEMENTS_PUBLIC_UI: FeatureFlagMeta(
+        description="Ачивки: команда /achievements доступна всем игрокам",
+        value_type="bool",
+        default_value="false",
+    ),
+    FeatureFlags.ACHIEVEMENTS_PLAYER_DM: FeatureFlagMeta(
+        description="Ачивки: уведомления уходят самим игрокам, а не владельцу",
+        value_type="bool",
+        default_value="false",
+    ),
+    FeatureFlags.MAGIC_OCULUS_IMPORT: FeatureFlagMeta(
+        description="Magic Oculus: импортировать полный турнир после штатного закрытия",
+        value_type="bool",
+        default_value="true",
+    ),
+    FeatureFlags.LIVE_REGISTRATION_COUNT: FeatureFlagMeta(
+        description="Счётчик записавшихся с редактированием сообщения о регистрации",
         value_type="bool",
         default_value="false",
     ),
@@ -56,6 +87,12 @@ class FeatureFlagService:
                         default_value=meta.default_value,
                     )
                 )
+            else:
+                # Код — источник истины для описания и дефолта. Явно выбранное
+                # администратором current_value при этом не перезаписываем.
+                existing.description = meta.description
+                existing.value_type = meta.value_type
+                existing.default_value = meta.default_value
         self.db.commit()
 
     def _get_row(self, name: str) -> models.FeatureFlag | None:

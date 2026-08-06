@@ -5,6 +5,7 @@ Completion is detected from imported pairings: when every non-bye match has a sc
 and announce, once, to the owner DM — listing the undefeated (X-0) players and their decks.
 """
 
+import asyncio
 import threading
 from datetime import timedelta
 from types import SimpleNamespace
@@ -17,12 +18,21 @@ from telegram.error import TelegramError
 from bot import chart as chart_mod
 from bot import scheduler  # noqa: F401
 from bot.messages import format_meta_gather_completed
-from bot.scheduler import maybe_announce_meta_gather_completed
+from bot.scheduler import AnnouncementDelivery, _aetherhub_no_show_names, maybe_announce_meta_gather_completed
 from core import models
 from core.config import settings
 from core.schemas import TournamentCreate
 from services.aetherhub_import_service import AetherhubImportService, UndefeatedPlayer
+from services.aetherhub_models import AetherhubPairing, AetherhubRound, AetherhubTournamentData
+from services.feature_flags import FeatureFlags, FeatureFlagService
+from services.magicoculus import MagicOculusImportResult
 from services.tournament import TournamentService
+
+
+@pytest.fixture(autouse=True)
+def _disable_magicoculus_by_default(db):
+    """Tests unrelated to Oculus must not start a real worker/network request."""
+    FeatureFlagService(db).toggle(FeatureFlags.MAGIC_OCULUS_IMPORT)
 
 
 def _pairing(db, t_id, rnd, player, opponent, pw, ow):
@@ -208,6 +218,32 @@ async def test_announces_to_owner_once(db, user_svc, arch_svc, monkeypatch):
     # idempotent — a second import must not re-announce
     await maybe_announce_meta_gather_completed(bot, db, t.id)
     assert bot.send_media_group.await_count == 2
+
+
+def test_no_show_names_require_published_standings(db, user_svc, arch_svc):
+    t = TournamentService(db).create_tournament(TournamentCreate(title="No standings", chat_id=100))
+    deck = arch_svc.get_or_create_by_name("Burn")
+    _register(db, user_svc, t.id, 1, "Alice", archetype=deck)
+    _register(db, user_svc, t.id, 2, "Bob", archetype=deck)
+    db.commit()
+
+    assert _aetherhub_no_show_names(db, t.id) == []
+
+
+async def test_owner_only_receives_registered_aetherhub_no_shows(db, user_svc, arch_svc, monkeypatch):
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    t = _complete_tournament(db, user_svc, arch_svc)
+    deck = arch_svc.get_or_create_by_name("Burn")
+    _register(db, user_svc, t.id, 5, "No Show", archetype=deck)
+    db.commit()
+    bot = AsyncMock()
+
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+
+    calls = {call.kwargs["chat_id"]: call.kwargs["media"][0].caption for call in bot.send_media_group.call_args_list}
+    assert "No Show" in calls[777]
+    assert "отсутствуют в итоговых стендингах AetherHub (1)" in calls[777]
+    assert "No Show" not in calls[100]
 
 
 async def test_chart_is_rendered_off_the_event_loop_without_db(db, user_svc, arch_svc, monkeypatch):
@@ -443,3 +479,265 @@ async def test_announces_once_last_deck_filled(db, user_svc, arch_svc, monkeypat
     await maybe_announce_meta_gather_completed(bot, db, t.id)
     assert bot.send_media_group.await_count == 2  # клуб + владелец
     assert db.get(models.Tournament, t.id).completed_announced_at is not None
+
+
+# ── повторный анонс на следующий день (регрессия) ────────────────────────────
+
+
+async def test_no_repeat_announce_on_next_day_reimport(db, user_svc, arch_svc, monkeypatch):
+    """Отбивка ушла вечером — утренний реимпорт следующего дня НЕ должен прислать её снова.
+
+    Живой баг: турнир в понедельник, отбивка пришла во вторник в 09:00, а в среду в 09:00
+    те же сообщения пришли повторно.
+    """
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    t = _complete_tournament(db, user_svc, arch_svc)
+    bot = AsyncMock()
+
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+    first_day_calls = bot.send_media_group.await_count + bot.send_message.await_count
+    assert first_day_calls > 0
+    bot.reset_mock()
+
+    # следующее утро: финальный реимпорт снова добирает счёт и дёргает тот же анонс
+    AetherhubImportService(db).import_tournament(t.id, _same_data_as_imported(db, t.id))
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+
+    bot.send_media_group.assert_not_awaited()
+    bot.send_message.assert_not_awaited()
+
+
+async def test_flag_survives_session_close_during_send(db, user_svc, arch_svc, monkeypatch):
+    """Соседняя задача закрыла общую сессию посреди отправки — флаг всё равно должен уцелеть.
+
+    Корень бага: `SessionLocal` — scoped_session, одна на поток. Пока анонс висел в await,
+    другой хендлер вызывал `db.close()`, ORM-объект турнира становился detached, и запись
+    флага после отправки уходила «в никуда» — назавтра дубль.
+    """
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    t = _complete_tournament(db, user_svc, arch_svc)
+    bot = AsyncMock()
+
+    async def close_session_midway(*args, **kwargs):
+        db.close()  # ровно то, что делает finally соседней задачи
+        return None
+
+    bot.send_media_group.side_effect = close_session_midway
+
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+
+    assert db.get(models.Tournament, t.id).completed_announced_at is not None
+    bot.reset_mock()
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+    bot.send_media_group.assert_not_awaited()
+
+
+async def test_concurrent_announces_send_once(db, user_svc, arch_svc, monkeypatch):
+    """Две джобы, стартовавшие одновременно, дают ровно одну отбивку на чат."""
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    t = _complete_tournament(db, user_svc, arch_svc)
+    bot = AsyncMock()
+
+    async def slow_send(*args, **kwargs):
+        await asyncio.sleep(0)  # уступаем управление — второй вызов успевает войти
+        return None
+
+    bot.send_media_group.side_effect = slow_send
+
+    await asyncio.gather(
+        maybe_announce_meta_gather_completed(bot, db, t.id),
+        maybe_announce_meta_gather_completed(bot, db, t.id),
+    )
+
+    chats = [c.kwargs["chat_id"] for c in bot.send_media_group.await_args_list]
+    assert sorted(chats) == [100, 777]  # по одному разу в каждый чат, без дублей
+
+
+def _same_data_as_imported(db, tournament_id):
+    """Данные AetherHub, эквивалентные уже импортированным — как при утреннем реимпорте."""
+    rounds = {}
+    for p in db.query(models.RoundPairing).filter_by(tournament_id=tournament_id).all():
+        rounds.setdefault(p.round_number, []).append(
+            AetherhubPairing(
+                player=p.player_name,
+                opponent=p.opponent_name,
+                table_number=p.table_number,
+                player_wins=p.player_wins,
+                opponent_wins=p.opponent_wins,
+            )
+        )
+    players = sorted({p.player_name for p in db.query(models.RoundPairing).filter_by(tournament_id=tournament_id)})
+    return AetherhubTournamentData(
+        url="https://aetherhub.com/Tourney/RoundTourney/1",
+        players=players,
+        standings=players,
+        rounds=[AetherhubRound(number=n, pairings=ps) for n, ps in sorted(rounds.items())],
+    )
+
+
+# ── ачивки на шве завершения турнира ─────────────────────────────────────────
+
+
+async def test_achievements_are_processed_after_close(db, user_svc, arch_svc, monkeypatch):
+    """Ачивки считаются на том же шве, что и закрытие турнира."""
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    t = _complete_tournament(db, user_svc, arch_svc)
+    # Alice записала свою колоду сама → турнир идёт ей в зачёт ачивок
+    alice = db.query(models.User).filter_by(tg_id=1).one()
+    db.query(models.Participant).filter_by(tournament_id=t.id, user_id=alice.id).one().deck_added_by_tg_id = alice.tg_id
+    db.commit()
+
+    await maybe_announce_meta_gather_completed(AsyncMock(), db, t.id)
+
+    codes = {a.code for a in db.query(models.UserAchievement).filter_by(user_id=alice.id).all()}
+    assert {"debut", "undefeated"} <= codes
+
+
+async def test_achievements_failure_does_not_break_announce(db, user_svc, arch_svc, monkeypatch):
+    """Падение движка ачивок не должно отменять уже доставленный анонс и закрытие турнира."""
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+
+    async def boom(*args, **kwargs):
+        raise RuntimeError("achievements exploded")
+
+    monkeypatch.setattr("bot.scheduler.send_achievements_report", boom)
+    t = _complete_tournament(db, user_svc, arch_svc)
+    bot = AsyncMock()
+
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+
+    assert db.get(models.Tournament, t.id).completed_announced_at is not None
+    assert db.get(models.Tournament, t.id).status == models.TournamentStatus.CLOSED
+
+
+async def test_magicoculus_import_runs_after_close_when_enabled(db, user_svc, arch_svc, monkeypatch):
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    FeatureFlagService(db).toggle(FeatureFlags.MAGIC_OCULUS_IMPORT)
+    to_thread = AsyncMock()
+    to_thread.return_value = MagicOculusImportResult(tournament_id=145, detail={})
+    monkeypatch.setattr("bot.scheduler.asyncio.to_thread", to_thread)
+    monkeypatch.setattr(
+        "bot.scheduler._announce_to_targets",
+        AsyncMock(return_value=[AnnouncementDelivery(chat_id=100, message_id=321)]),
+    )
+    t = _complete_tournament(db, user_svc, arch_svc)
+
+    bot = AsyncMock()
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+
+    to_thread.assert_awaited_once_with(scheduler.import_closed_tournament_to_magicoculus, t.id)
+    assert db.get(models.Tournament, t.id).status == models.TournamentStatus.CLOSED
+    bot.send_message.assert_not_awaited()
+    bot.edit_message_reply_markup.assert_awaited_once()
+    call = bot.edit_message_reply_markup.await_args.kwargs
+    assert call["chat_id"] == t.chat_id
+    assert call["message_id"] == 321
+    button = call["reply_markup"].inline_keyboard[0][0]
+    assert button.text == "👁 Открыть в Magic Oculus"
+    assert button.url == "https://magicoculus.ru/tournaments/145"
+
+
+async def test_magicoculus_failure_does_not_break_close(db, user_svc, arch_svc, monkeypatch):
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    FeatureFlagService(db).toggle(FeatureFlags.MAGIC_OCULUS_IMPORT)
+    monkeypatch.setattr("bot.scheduler.asyncio.to_thread", AsyncMock(side_effect=RuntimeError("API failed")))
+    monkeypatch.setattr(
+        "bot.scheduler._announce_to_targets",
+        AsyncMock(return_value=[AnnouncementDelivery(chat_id=100, message_id=321)]),
+    )
+    monkeypatch.setattr("bot.scheduler.send_achievements_report", AsyncMock())
+    t = _complete_tournament(db, user_svc, arch_svc)
+    bot = AsyncMock()
+
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+
+    assert db.get(models.Tournament, t.id).status == models.TournamentStatus.CLOSED
+    bot.send_message.assert_awaited_once()
+    call = bot.send_message.await_args.kwargs
+    assert call["chat_id"] == 777
+    assert "Magic Oculus" in call["text"]
+    assert "API failed" in call["text"]
+
+
+async def test_magicoculus_import_can_be_disabled(db, user_svc, arch_svc, monkeypatch):
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    to_thread = AsyncMock()
+    monkeypatch.setattr("bot.scheduler.asyncio.to_thread", to_thread)
+    monkeypatch.setattr("bot.scheduler._announce_to_targets", AsyncMock(return_value=True))
+    t = _complete_tournament(db, user_svc, arch_svc)
+
+    await maybe_announce_meta_gather_completed(AsyncMock(), db, t.id)
+
+    to_thread.assert_not_awaited()
+    assert db.get(models.Tournament, t.id).status == models.TournamentStatus.CLOSED
+
+
+async def test_magicoculus_import_starts_only_after_tournament_is_closed(db, user_svc, arch_svc, monkeypatch):
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    FeatureFlagService(db).toggle(FeatureFlags.MAGIC_OCULUS_IMPORT)
+    t = _complete_tournament(db, user_svc, arch_svc)
+
+    async def verify_closed(*args):
+        assert db.get(models.Tournament, t.id).status == models.TournamentStatus.CLOSED
+        return MagicOculusImportResult(tournament_id=145, detail={})
+
+    monkeypatch.setattr("bot.scheduler.asyncio.to_thread", AsyncMock(side_effect=verify_closed))
+    monkeypatch.setattr(
+        "bot.scheduler._announce_to_targets",
+        AsyncMock(return_value=[AnnouncementDelivery(chat_id=100, message_id=321)]),
+    )
+
+    await maybe_announce_meta_gather_completed(AsyncMock(), db, t.id)
+
+
+async def test_magicoculus_button_edit_failure_does_not_break_import(
+    db, user_svc, arch_svc, monkeypatch
+):
+    FeatureFlagService(db).toggle(FeatureFlags.MAGIC_OCULUS_IMPORT)
+    monkeypatch.setattr(
+        "bot.scheduler.asyncio.to_thread",
+        AsyncMock(return_value=MagicOculusImportResult(tournament_id=145, detail={})),
+    )
+    monkeypatch.setattr(
+        "bot.scheduler._announce_to_targets",
+        AsyncMock(return_value=[AnnouncementDelivery(chat_id=100, message_id=321)]),
+    )
+    monkeypatch.setattr("bot.scheduler.send_achievements_report", AsyncMock())
+    t = _complete_tournament(db, user_svc, arch_svc)
+    bot = AsyncMock()
+    bot.edit_message_reply_markup.side_effect = TelegramError("message unavailable")
+
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+
+    assert db.get(models.Tournament, t.id).status == models.TournamentStatus.CLOSED
+
+
+async def test_magicoculus_error_dm_failure_does_not_break_close(db, user_svc, arch_svc, monkeypatch):
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    FeatureFlagService(db).toggle(FeatureFlags.MAGIC_OCULUS_IMPORT)
+    monkeypatch.setattr("bot.scheduler.asyncio.to_thread", AsyncMock(side_effect=RuntimeError("API failed")))
+    monkeypatch.setattr("bot.scheduler._announce_to_targets", AsyncMock(return_value=True))
+    monkeypatch.setattr("bot.scheduler.send_achievements_report", AsyncMock())
+    t = _complete_tournament(db, user_svc, arch_svc)
+    bot = AsyncMock()
+    bot.send_message.side_effect = TelegramError("DM unavailable")
+
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+
+    bot.send_message.assert_awaited_once()
+    assert db.get(models.Tournament, t.id).status == models.TournamentStatus.CLOSED
+
+
+async def test_magicoculus_error_is_not_sent_to_club_when_owner_missing(db, user_svc, arch_svc, monkeypatch):
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", None)
+    FeatureFlagService(db).toggle(FeatureFlags.MAGIC_OCULUS_IMPORT)
+    monkeypatch.setattr("bot.scheduler.asyncio.to_thread", AsyncMock(side_effect=RuntimeError("API failed")))
+    monkeypatch.setattr("bot.scheduler._announce_to_targets", AsyncMock(return_value=True))
+    monkeypatch.setattr("bot.scheduler.send_achievements_report", AsyncMock())
+    t = _complete_tournament(db, user_svc, arch_svc)
+    bot = AsyncMock()
+
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+
+    bot.send_message.assert_not_awaited()
+    assert db.get(models.Tournament, t.id).status == models.TournamentStatus.CLOSED
