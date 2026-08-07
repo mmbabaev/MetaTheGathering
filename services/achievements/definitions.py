@@ -188,6 +188,15 @@ CODE_ORDER: list[str] = [
 ]
 
 
+def all_definitions() -> tuple[AchievementDef, ...]:
+    """Все определения без потери возможных дублей ключей.
+
+    Публичный read-only view нужен валидатору реестра: словарь ``ACHIEVEMENTS`` сам
+    схлопнул бы два определения с одинаковыми ``code + level`` и скрыл ошибку.
+    """
+    return tuple(_DEFS)
+
+
 def get(code: str, level: int) -> Optional[AchievementDef]:
     return ACHIEVEMENTS.get((code, level))
 

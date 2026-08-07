@@ -19,6 +19,7 @@ from core import models
 from services.achievements import definitions
 from services.achievements.context import TournamentContext
 from services.achievements.history import Participation
+from services.achievements.registry import validate_registry
 
 EVIDENCE_MAX = 500  # колонка 512, оставляем запас на многоточие
 _EVIDENCE_ITEMS = 4  # сколько фактов перечисляем, дальше «…»
@@ -272,7 +273,7 @@ class LoyalistRule(CounterRule):
 
 def default_rules() -> list[AchievementRule]:
     """Все правила в порядке показа."""
-    return [
+    rules: list[AchievementRule] = [
         DebutRule(),
         FirstDeckRule(),
         UndefeatedRule(),
@@ -281,3 +282,6 @@ def default_rules() -> list[AchievementRule]:
         MulticlassRule(),
         LoyalistRule(),
     ]
+    # Выполняется до чтения/записи турнирных данных.
+    validate_registry(definitions.all_definitions(), definitions.CODE_ORDER, rules)
+    return rules
