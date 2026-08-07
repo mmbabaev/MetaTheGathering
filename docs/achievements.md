@@ -521,6 +521,36 @@ class FeatureFlags:
 Отладка на debug-базе — CLI: `python3 cli.py achievements process <id>` (пересчитать турнир и
 показать отчёт), `achievements show <игрок>`, `achievements list`.
 
+#### Журнал финальных отчётов
+
+Каждый непустой owner-отчёт до отправки в Telegram атомарно записывается отдельным JSON-файлом:
+
+```text
+logs/achievements/tournament-<id>-<UTC timestamp>.json
+```
+
+Каталог на production/debug отдельный для каждого deployment working directory, игнорируется git
+и сохраняется между штатными deploy: архив распаковывается поверх текущей директории без её
+очистки. Путь можно переопределить через `ACHIEVEMENT_LOG_DIR`; пустая строка отключает запись.
+
+Файл содержит точные Telegram-сообщения и структурированные секции `granted`,
+`progress_changes`, `skipped`: `user_id`, код/уровень, старое и новое значение, порог,
+evidence и причину пропуска. Ошибка файловой записи логируется, но не блокирует owner-отчёт.
+
+Послетурнирная проверка выполняется read-only:
+
+1. Найти JSON по `tournament_id` и зафиксировать все строки выдач/прогресса/пропусков.
+2. Сверить `granted` с `user_achievements` по `(user_id, code, level, tournament_id)`, включая
+   `evidence` и `notified_at`.
+3. Сверить `progress_changes` с `user_achievement_progress` по `(user_id, code)`: `value`,
+   `tournament_id`, `evidence`.
+4. Для `skipped` проверить участника, реальный `tg_id`, записанную колоду и
+   `deck_added_by_tg_id`: причины должны совпадать с гейтом зачёта.
+5. Перепроверить паринги и исторические турниры, от которых зависит конкретное правило.
+
+На production во время аудита не вызывать `process_tournament()`/CLI `process`: они записывают
+результат. Использовать SQL/ORM-чтение и чистую оценку правил, если требуется пересчёт ожидания.
+
 Реализация по слоям проекта: `bot/handlers/achievements.py` (чистая логика → `HandlerResult`,
 покрыта тестами) + `bot/telegram/achievements.py` (тонкая обёртка) + строки в `bot/messages/`.
 

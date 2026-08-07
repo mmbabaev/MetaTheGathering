@@ -4,6 +4,7 @@
 пишет, пока не включён флаг и не сделана фаза 5 (docs/achievements.md §6).
 """
 
+import json
 from datetime import timedelta
 from unittest.mock import AsyncMock
 
@@ -122,3 +123,77 @@ async def test_send_failure_does_not_crash(db, played, owner_chat):
     sent = await send_achievements_report(bot, db, tournament.id)
 
     assert sent == 0
+
+
+@pytest.mark.asyncio
+async def test_report_is_written_to_separate_structured_log(
+    db, played, owner_chat, monkeypatch, tmp_path
+):
+    tournament, _ = played
+    log_dir = tmp_path / "logs" / "achievements"
+    monkeypatch.setattr(settings, "ACHIEVEMENT_LOG_DIR", str(log_dir))
+    bot = AsyncMock()
+
+    await send_achievements_report(bot, db, tournament.id)
+
+    files = list(log_dir.glob(f"tournament-{tournament.id}-*.json"))
+    assert len(files) == 1
+    assert list(log_dir.glob("*.tmp")) == []
+    payload = json.loads(files[0].read_text(encoding="utf-8"))
+    assert payload["version"] == 1
+    assert payload["tournament"] == {
+        "id": tournament.id,
+        "title": tournament.title,
+        "club": tournament.club,
+    }
+    assert payload["messages"] == [call.kwargs["text"] for call in bot.send_message.await_args_list]
+    assert payload["summary"]["messages"] == len(payload["messages"])
+    assert payload["summary"]["granted"] == len(payload["granted"])
+    assert payload["summary"]["progress_changes"] == len(payload["progress_changes"])
+    assert all("user_id" in item and "code" in item and "evidence" in item for item in payload["granted"])
+
+
+@pytest.mark.asyncio
+async def test_report_is_logged_even_when_owner_chat_is_missing(db, played, monkeypatch, tmp_path):
+    tournament, _ = played
+    log_dir = tmp_path / "achievement-logs"
+    monkeypatch.setattr(settings, "ACHIEVEMENT_LOG_DIR", str(log_dir))
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", None)
+    bot = AsyncMock()
+
+    sent = await send_achievements_report(bot, db, tournament.id)
+
+    assert sent == 0
+    assert len(list(log_dir.glob(f"tournament-{tournament.id}-*.json"))) == 1
+    bot.send_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_log_failure_does_not_block_owner_report(db, played, owner_chat, monkeypatch):
+    tournament, _ = played
+    monkeypatch.setattr(settings, "ACHIEVEMENT_LOG_DIR", "/not-used")
+
+    def fail(*_args, **_kwargs):
+        raise OSError("disk unavailable")
+
+    monkeypatch.setattr("bot.telegram.achievements.write_achievement_report_log", fail)
+    bot = AsyncMock()
+
+    sent = await send_achievements_report(bot, db, tournament.id)
+
+    assert sent == 1
+    bot.send_message.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_idempotent_second_run_does_not_create_another_log(
+    db, played, owner_chat, monkeypatch, tmp_path
+):
+    tournament, _ = played
+    log_dir = tmp_path / "achievement-logs"
+    monkeypatch.setattr(settings, "ACHIEVEMENT_LOG_DIR", str(log_dir))
+
+    await send_achievements_report(AsyncMock(), db, tournament.id)
+    await send_achievements_report(AsyncMock(), db, tournament.id)
+
+    assert len(list(log_dir.glob(f"tournament-{tournament.id}-*.json"))) == 1

@@ -8,6 +8,7 @@ __pycache__/
 server.log
 .server.pid
 events.jsonl
+logs/achievements/
 scripts/telegram_parser/session.session
 scripts/telegram_parser/session.session-journal
 

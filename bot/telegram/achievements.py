@@ -22,6 +22,7 @@ from bot.handlers.base import HandlerResult
 from core.config import settings
 from core.database import SessionLocal
 from services.achievement_image import render_achievement_card, render_shelf
+from services.achievement_report_log import write_achievement_report_log
 from services.achievements import AchievementService, build_report
 from services.feature_flags import FeatureFlagService
 from services.user import UserService
@@ -117,6 +118,13 @@ async def send_achievements_report(bot, db, tournament_id: int) -> int:
     if not messages:
         logger.info("[achievements] tournament #%s: nothing new", tournament_id)
         return 0
+
+    if settings.ACHIEVEMENT_LOG_DIR:
+        try:
+            path = write_achievement_report_log(result, messages, settings.ACHIEVEMENT_LOG_DIR)
+            logger.info("[achievements] tournament #%s: report logged to %s", tournament_id, path)
+        except Exception:  # noqa: BLE001 — файловый лог не должен блокировать owner-отчёт
+            logger.exception("[achievements] could not write report log for #%s", tournament_id)
 
     if features.are_achievement_dms_enabled():
         # Путь «уведомления игрокам» ещё не реализован (фаза 5). Пока флаг включён по ошибке —
