@@ -5,8 +5,8 @@ from telegram.error import BadRequest
 from bot.registration_messages import RegistrationMessageRefreshJob
 from core import models
 from core.schemas import TournamentCreate
-from services.registration_message import RegistrationMessageService, format_registration_message
 from services.feature_flags import FeatureFlags, FeatureFlagService
+from services.registration_message import RegistrationMessageService, format_registration_message
 from services.tournament import TournamentService
 
 
