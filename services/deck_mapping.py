@@ -31,6 +31,7 @@ _GUILD2 = {
     "dimir": "UB",
     "rakdos": "BR",
     "golgari": "BG",
+    "golgary": "BG",  # частая турнирная опечатка
     "gruul": "RG",
     "boros": "WR",
     "orzhov": "WB",
