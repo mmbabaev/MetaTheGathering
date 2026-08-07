@@ -72,6 +72,37 @@ def admin_handler(svc, user_svc, arch_svc, keyboards, features):
     return AdminHandler(svc, user_svc, arch_svc, keyboards, features)
 
 
+class TestCustomArchetypeMatching:
+    def test_typo_uses_existing_public_archetype(self, arch_svc):
+        affinity = arch_svc.get_or_create_by_name("Grixis Affinity")
+
+        matched = arch_svc.get_or_create_by_name("Grixis Afvinoty", is_custom=True)
+
+        assert matched.id == affinity.id
+        assert arch_svc.db.query(models.Archetype).count() == 1
+
+    def test_normalized_exact_name_uses_existing_public_archetype(self, arch_svc):
+        tron = arch_svc.get_or_create_by_name("Flicker Tron")
+
+        matched = arch_svc.get_or_create_by_name("flicker-tron", is_custom=True)
+
+        assert matched.id == tron.id
+
+    def test_weak_similarity_keeps_new_custom_archetype(self, arch_svc):
+        affinity = arch_svc.get_or_create_by_name("Grixis Affinity")
+
+        created = arch_svc.get_or_create_by_name("Grixis Control", is_custom=True)
+
+        assert created.id != affinity.id
+        assert created.is_custom is True
+
+    def test_non_custom_creation_is_never_fuzzy_merged(self, arch_svc):
+        first = arch_svc.get_or_create_by_name("Deck Alpha")
+        second = arch_svc.get_or_create_by_name("Deck Alphb")
+
+        assert first.id != second.id
+
+
 # ---------------------------------------------------------------------------
 # 1. list_top_archetypes
 # ---------------------------------------------------------------------------
