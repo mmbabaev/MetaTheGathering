@@ -269,6 +269,11 @@ def macro_archetype(general_name: str | None) -> str | None:
     if not general_name:
         return None
     name = general_name.casefold().strip()
+    # Для механически однозначных семейств ключевое слово сильнее цветов и подтипа.
+    if "affinity" in name:
+        return "Affinity"
+    if re.search(r"\btron\b", name):
+        return "Tron"
     if name in {"bg gardens", "bg pestilence"}:
         return "BG Control"
     if name in {"mono red", "red madness", "red rally", "red burn", "br madness"}:
