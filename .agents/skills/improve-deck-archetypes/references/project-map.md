@@ -18,7 +18,7 @@
 ## Слои и файлы
 
 - `core/models.py` — колонки `Archetype` и связи.
-- `services/archetype.py` — сохранение свободного пользовательского ввода и привязка к существующему публичному архетипу/алиасам.
+- `services/archetype.py` — сохранение свободного пользовательского ввода как отдельного архетипа; классификация не должна подменять его ID.
 - `services/deck_mapping.py` — `general_archetype()`, `macro_archetype()` и пересчёт кэша.
 - `services/deck_book.py` — подтверждённые названия, алиасы и цвета; источник истины сильнее эвристик.
 - `services/deck_colors.py` — эвристическое определение WUBRG и кэш `color_identity`.
@@ -31,8 +31,8 @@
 ## Тесты
 
 - `tests/test_deck_mapping.py` — исходное имя → general/macro.
-- `tests/test_archetype_menu.py` — fuzzy-порог, алиасы, неоднозначность и создание custom.
-- `tests/test_player_actions.py` — пользовательский ввод → реальный `Participant.archetype_id`.
+- `tests/test_archetype_menu.py` — исходный custom остаётся отдельным, а general/macro заполняются независимо.
+- `tests/test_player_actions.py` — пользовательский ввод → собственный `Participant.archetype_id` плюс отдельные поля классификации.
 - `tests/test_deck_colors.py` — WUBRG.
 - `tests/test_meta_gather_completed.py` — owner-only финальный срез и отсутствие блока в клубном чате.
 - `tests/test_migrations.py` — единственная валидная цепочка миграций.

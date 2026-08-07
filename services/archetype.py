@@ -2,20 +2,15 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from difflib import SequenceMatcher
 from typing import List
 
 from sqlalchemy import func, nulls_last, select
 from sqlalchemy.orm import Session
 
 from core import models
-from services.deck_book import normalize_deck_name
 from services.deck_mapping import general_archetype, macro_archetype
 
 logger = logging.getLogger(__name__)
-
-CUSTOM_ARCHETYPE_MATCH_THRESHOLD = 0.86
-CUSTOM_ARCHETYPE_MATCH_MARGIN = 0.04
 
 
 @dataclass
@@ -162,21 +157,12 @@ class ArchetypeService:
         return (recent + rest)[:total]
 
     def get_or_create_by_name(self, name: str, is_custom: bool = False) -> models.Archetype:
-        """Найти архетип по имени или создать новый.
-
-        Свободный пользовательский ввод (``is_custom=True``) с высокой уверенностью
-        привязываем к существующему публичному архетипу. Это не даёт опечаткам создавать
-        отдельные варианты, но неоднозначные совпадения остаются custom-архетипами.
-        """
+        """Найти архетип по точному имени или создать новый, сохраняя ввод пользователя."""
         name = name.strip()
         stmt = select(models.Archetype).where(models.Archetype.name == name)
         archetype = self.db.execute(stmt).scalar_one_or_none()
         if archetype:
             return archetype
-        if is_custom:
-            archetype = self._find_close_public_archetype(name)
-            if archetype is not None:
-                return archetype
         general_name = general_archetype(name)
         archetype = models.Archetype(
             name=name.strip(),
@@ -188,41 +174,3 @@ class ArchetypeService:
         self.db.commit()
         self.db.refresh(archetype)
         return archetype
-
-    def _find_close_public_archetype(self, name: str) -> models.Archetype | None:
-        """Однозначный близкий публичный архетип или None при слабом/спорном совпадении."""
-        needle = normalize_deck_name(name)
-        candidates = self.db.execute(
-            select(models.Archetype).where(models.Archetype.is_custom.is_(False))
-        ).scalars().all()
-        # Канонизатор умеет безопасно распознавать синонимы и короткие специальные
-        # названия (например, ``trno`` → Tron), где общий процент сходства ненадёжен.
-        general = general_archetype(name)
-        same_general = [
-            candidate
-            for candidate in candidates
-            if general is not None
-            and (candidate.general_name or general_archetype(candidate.name)) == general
-        ]
-        if len(same_general) == 1:
-            return same_general[0]
-        if len(needle) < 5:
-            return None
-        scored: list[tuple[float, models.Archetype]] = []
-        for candidate in candidates:
-            variants = [candidate.name, *(alias.alias for alias in candidate.aliases)]
-            score = max(
-                SequenceMatcher(None, needle, normalize_deck_name(variant)).ratio()
-                for variant in variants
-            )
-            scored.append((score, candidate))
-        if not scored:
-            return None
-        scored.sort(key=lambda item: (-item[0], item[1].id))
-        best_score, best = scored[0]
-        second_score = scored[1][0] if len(scored) > 1 else 0.0
-        if best_score < CUSTOM_ARCHETYPE_MATCH_THRESHOLD:
-            return None
-        if best_score - second_score < CUSTOM_ARCHETYPE_MATCH_MARGIN:
-            return None
-        return best
