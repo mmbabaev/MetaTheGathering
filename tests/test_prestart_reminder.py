@@ -10,8 +10,8 @@ from bot.scheduler import PreStartReminderJob, get_clubs, send_registration_open
 from core import models
 from core.config import Club, ClubSchedule
 from core.schemas import TournamentCreate
-from services.tournament import TournamentService
 from services.feature_flags import FeatureFlags, FeatureFlagService
+from services.tournament import TournamentService
 
 MONDAY = datetime(2026, 7, 13, 19, 25, tzinfo=ZoneInfo("Europe/Moscow"))  # понедельник
 TUESDAY = datetime(2026, 7, 14, 19, 25, tzinfo=ZoneInfo("Europe/Moscow"))
