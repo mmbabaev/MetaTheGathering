@@ -123,6 +123,75 @@ async def test_send_failure_does_not_crash(db, played, owner_chat):
     sent = await send_achievements_report(bot, db, tournament.id)
 
     assert sent == 0
+    delivery = db.query(models.AchievementReportDelivery).one()
+    assert delivery.status == "pending"
+    assert delivery.attempts == 1
+    assert delivery.last_error == "RuntimeError"
+    assert AchievementService(db).unnotified_for_tournament(tournament.id)
+
+
+@pytest.mark.asyncio
+async def test_failed_report_is_retried_without_reprocessing_achievements(db, played, owner_chat):
+    tournament, _ = played
+    failed_bot = AsyncMock()
+    failed_bot.send_message.side_effect = RuntimeError("telegram is down")
+    await send_achievements_report(failed_bot, db, tournament.id)
+    achievement_count = db.query(models.UserAchievement).count()
+
+    retry_bot = AsyncMock()
+    sent = await send_achievements_report(retry_bot, db, tournament.id)
+
+    assert sent == 1
+    retry_bot.send_message.assert_awaited_once()
+    delivery = db.query(models.AchievementReportDelivery).one()
+    assert delivery.status == "sent"
+    assert delivery.attempts == 2
+    assert delivery.sent_at is not None
+    assert db.query(models.UserAchievement).count() == achievement_count
+    assert AchievementService(db).unnotified_for_tournament(tournament.id) == []
+
+
+@pytest.mark.asyncio
+async def test_partial_report_retry_skips_already_delivered_messages(
+    db, played, owner_chat, monkeypatch
+):
+    tournament, _ = played
+    monkeypatch.setattr("bot.telegram.achievements.build_report", lambda _result: ["part one", "part two"])
+    first_bot = AsyncMock()
+    first_bot.send_message.side_effect = [None, RuntimeError("second part failed")]
+
+    first_sent = await send_achievements_report(first_bot, db, tournament.id)
+
+    assert first_sent == 1
+    rows = db.query(models.AchievementReportDelivery).order_by(models.AchievementReportDelivery.message_index).all()
+    assert [row.status for row in rows] == ["sent", "pending"]
+    assert AchievementService(db).unnotified_for_tournament(tournament.id)
+
+    retry_bot = AsyncMock()
+    retry_sent = await send_achievements_report(retry_bot, db, tournament.id)
+
+    assert retry_sent == 1
+    retry_bot.send_message.assert_awaited_once_with(chat_id=OWNER, text="part two")
+    assert [row.status for row in rows] == ["sent", "sent"]
+    assert AchievementService(db).unnotified_for_tournament(tournament.id) == []
+
+
+@pytest.mark.asyncio
+async def test_report_created_without_owner_is_delivered_after_configuration(
+    db, played, monkeypatch
+):
+    tournament, _ = played
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", None)
+    bot = AsyncMock()
+
+    assert await send_achievements_report(bot, db, tournament.id) == 0
+    delivery = db.query(models.AchievementReportDelivery).one()
+    assert delivery.chat_id is None and delivery.status == "pending"
+
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", OWNER)
+    assert await send_achievements_report(bot, db, tournament.id) == 1
+    bot.send_message.assert_awaited_once_with(chat_id=OWNER, text=delivery.payload)
+    assert delivery.chat_id == OWNER and delivery.status == "sent"
 
 
 @pytest.mark.asyncio

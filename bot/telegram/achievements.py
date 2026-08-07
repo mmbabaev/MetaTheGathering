@@ -19,8 +19,14 @@ from telegram.ext import ContextTypes
 from bot.features import FeatureService
 from bot.handlers.achievements import AchievementsHandler, format_shelf
 from bot.handlers.base import HandlerResult
+from core import models
 from core.config import settings
 from core.database import SessionLocal
+from services.achievement_delivery import (
+    STATUS_SENT,
+    create_owner_deliveries,
+    pending_owner_deliveries,
+)
 from services.achievement_image import render_achievement_card, render_shelf
 from services.achievement_report_log import write_achievement_report_log
 from services.achievements import AchievementService, build_report
@@ -97,6 +103,35 @@ async def _render_cards(granted: list, subtitle: str) -> list[bytes]:
     return cards
 
 
+async def _deliver_pending_owner_reports(bot, db, tournament_id: int) -> tuple[int, bool]:
+    """Отправить недоставленные части по порядку; успешно отправленные больше не повторять."""
+    sent = 0
+    for delivery in pending_owner_deliveries(db, tournament_id):
+        if delivery.chat_id is None:
+            if not settings.OWNER_CHAT_ID:
+                logger.warning("[achievements] OWNER_CHAT_ID is not set — report remains pending")
+                return sent, False
+            delivery.chat_id = settings.OWNER_CHAT_ID
+
+        delivery.attempts += 1
+        try:
+            await bot.send_message(chat_id=delivery.chat_id, text=delivery.payload)
+        except Exception as exc:  # noqa: BLE001 — pending delivery повторится при следующем запуске
+            # Не сохраняем текст исключения: он может содержать неожиданные приватные данные.
+            delivery.last_error = type(exc).__name__
+            db.commit()
+            logger.exception("[achievements] could not send report for #%s; delivery remains pending", tournament_id)
+            return sent, False
+
+        delivery.status = STATUS_SENT
+        delivery.sent_at = models.utc_now()
+        delivery.last_error = None
+        db.commit()  # фиксируем каждую часть: следующая попытка не задублирует её
+        sent += 1
+
+    return sent, not pending_owner_deliveries(db, tournament_id)
+
+
 async def send_achievements_report(bot, db, tournament_id: int) -> int:
     """Посчитать ачивки турнира и отправить отчёт. Возвращает число отправленных сообщений.
 
@@ -110,14 +145,27 @@ async def send_achievements_report(bot, db, tournament_id: int) -> int:
         return 0
 
     service = AchievementService(db)
-    result = service.process_tournament(tournament_id)
+    existing = pending_owner_deliveries(db, tournament_id)
+    if existing:
+        sent, complete = await _deliver_pending_owner_reports(bot, db, tournament_id)
+        if complete:
+            service.mark_notified(service.unnotified_for_tournament(tournament_id))
+        return sent
+
+    # Выдачи, progress snapshots и outbox создаются в одной транзакции. Если commit
+    # не состоится, не будет ни «выдано, но забыто сообщение», ни пустого outbox.
+    result = service.process_tournament(tournament_id, commit=False)
     if result is None:
         return 0
 
     messages = build_report(result)
     if not messages:
+        db.commit()
         logger.info("[achievements] tournament #%s: nothing new", tournament_id)
         return 0
+
+    create_owner_deliveries(db, tournament_id, settings.OWNER_CHAT_ID, messages)
+    db.commit()
 
     if settings.ACHIEVEMENT_LOG_DIR:
         try:
@@ -131,28 +179,20 @@ async def send_achievements_report(bot, db, tournament_id: int) -> int:
         # не рассылаем ничего, а сообщаем владельцу: молча слать всем игрокам недопустимо.
         logger.warning("[achievements] player DMs are flagged on, but not implemented yet — falling back to owner")
 
-    chat_id = settings.OWNER_CHAT_ID
-    if not chat_id:
-        logger.warning("[achievements] OWNER_CHAT_ID is not set — report not sent")
-        return 0
-
     subtitle = " · ".join(part for part in (result.title, result.club) if part)
-
-    sent = 0
-    for text in messages:
-        try:
-            await bot.send_message(chat_id=chat_id, text=text)
-            sent += 1
-        except Exception:  # noqa: BLE001 — отчёт не должен ронять завершение турнира
-            logger.exception("[achievements] could not send report for #%s", tournament_id)
-            return sent
+    sent, complete = await _deliver_pending_owner_reports(bot, db, tournament_id)
+    if not complete:
+        return sent
 
     # Карточки новых ачивок — вдогонку к тексту, альбомом. Best-effort: без них отчёт полный.
     if result.granted:
         cards = await _render_cards(result.granted, subtitle)
         if cards:
             try:
-                await bot.send_media_group(chat_id=chat_id, media=[InputMediaPhoto(io.BytesIO(c)) for c in cards])
+                await bot.send_media_group(
+                    chat_id=settings.OWNER_CHAT_ID,
+                    media=[InputMediaPhoto(io.BytesIO(c)) for c in cards],
+                )
             except Exception:  # noqa: BLE001
                 logger.exception("[achievements] could not send cards for #%s", tournament_id)
 
