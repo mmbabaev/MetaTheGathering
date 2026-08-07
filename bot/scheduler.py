@@ -7,6 +7,7 @@
 import asyncio
 import io
 import logging
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -29,6 +30,7 @@ from core.schemas import TournamentCreate
 from services.aetherhub_import_service import MIN_TOURNAMENT_DURATION, AetherhubImportService
 from services.aetherhub_service import AetherhubService
 from services.datalens import DataLensService
+from services.deck_mapping import refresh_archetype_classification
 from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.magicoculus import (
     MagicOculusClient,
@@ -739,6 +741,7 @@ async def _announce_to_targets(
     В каждый чат — одно сообщение-альбом (картинки + текст подписью к первой); не вошедшие в
     альбом картинки — best-effort. Сбой одного адресата не мешает остальным.
     """
+    macro_report = _refresh_and_format_macro_report(db, tournament_id)
     chart = await build_chart(db, tournament_id, chart_svc)
     standings = await build_standings(db, tournament_id)
     total = len(TournamentService(db).list_participants_for_tournament(tournament_id))
@@ -758,6 +761,8 @@ async def _announce_to_targets(
                 f"\n\n⚠️ Зарегистрировались в боте, но отсутствуют "
                 f"в итоговых стендингах AetherHub ({len(no_show_names)}):\n{names}"
             )
+        if chat_id == settings.OWNER_CHAT_ID and macro_report:
+            target_text += f"\n\n{macro_report}"
         try:
             leftover, message_id = await _send_announce(bot, chat_id, target_text, images)
         except Exception:
@@ -768,6 +773,42 @@ async def _announce_to_targets(
         deliveries.append(AnnouncementDelivery(chat_id=chat_id, message_id=message_id))
         await _send_announce_images(bot, chat_id, leftover)
     return deliveries
+
+
+def _refresh_and_format_macro_report(db, tournament_id: int) -> str:
+    """Пересчитать классификацию и собрать экспериментальный owner-only срез."""
+    rows = db.execute(
+        select(models.Archetype, models.Participant.id)
+        .join(models.Participant, models.Participant.archetype_id == models.Archetype.id)
+        .where(models.Participant.tournament_id == tournament_id)
+        .order_by(models.Participant.id)
+    ).all()
+    changed = False
+    macro_counts: Counter[str] = Counter()
+    sources: dict[str, Counter[str]] = defaultdict(Counter)
+    unmapped = 0
+    for archetype, _participant_id in rows:
+        changed = refresh_archetype_classification(archetype) or changed
+        if archetype.macro_name:
+            macro_counts[archetype.macro_name] += 1
+            sources[archetype.macro_name][archetype.general_name or archetype.name] += 1
+        else:
+            unmapped += 1
+    if changed:
+        db.commit()
+    if not rows:
+        return ""
+
+    lines = ["🧪 Крупные архетипы (тест, только owner):"]
+    for macro, count in sorted(macro_counts.items(), key=lambda item: (-item[1], item[0].casefold())):
+        details = ", ".join(
+            f"{name} ×{source_count}"
+            for name, source_count in sorted(sources[macro].items(), key=lambda item: (-item[1], item[0].casefold()))
+        )
+        lines.append(f"• {macro} — {count} ({details})")
+    if unmapped:
+        lines.append(f"• Пока без крупной группы — {unmapped}")
+    return "\n".join(lines)
 
 
 def _aetherhub_no_show_names(db, tournament_id: int) -> list[str]:

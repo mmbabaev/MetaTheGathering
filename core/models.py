@@ -171,6 +171,9 @@ class Archetype(Base):
     # Общий («канонический») тип колоды: разные записи одной деки сводятся сюда
     # («Blue Delver»/«Blue Terror» → «Blue Terror»). Кэш из services/deck_mapping; NULL — не определяли.
     general_name = Column(String(255), nullable=True, index=True)
+    # Крупная стратегическая группа поверх general_name (экспериментальный owner-only срез).
+    # Например, BG Gardens/BG Pestilence → BG Control; NULL — группа пока не определена.
+    macro_name = Column(String(255), nullable=True, index=True)
     meta_rank = Column(Integer, nullable=True, index=True)  # позиция в топ-мета (1=первый); NULL — нет места в списке
     is_custom = Column(
         Boolean, nullable=False, default=False, server_default="false"

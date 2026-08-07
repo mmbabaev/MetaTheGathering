@@ -20,6 +20,7 @@ class ArchetypeCreate(ArchetypeBase):
 
 class ArchetypeRead(ArchetypeBase):
     id: int
+    macro_name: Optional[str] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

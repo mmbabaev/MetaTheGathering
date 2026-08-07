@@ -18,7 +18,13 @@ from telegram.error import TelegramError
 from bot import chart as chart_mod
 from bot import scheduler  # noqa: F401
 from bot.messages import format_meta_gather_completed
-from bot.scheduler import AnnouncementDelivery, _aetherhub_no_show_names, maybe_announce_meta_gather_completed
+from bot.scheduler import (
+    AnnouncementDelivery,
+    _aetherhub_no_show_names,
+    _announce_to_targets,
+    _refresh_and_format_macro_report,
+    maybe_announce_meta_gather_completed,
+)
 from core import models
 from core.config import settings
 from core.schemas import TournamentCreate
@@ -118,6 +124,47 @@ def test_is_complete_false_when_a_match_unscored(db, user_svc, arch_svc):
     p.opponent_wins = None
     db.commit()
     assert AetherhubImportService(db).is_tournament_complete(t.id) is False
+
+
+def test_macro_report_reclassifies_cached_gardens_for_owner(db, user_svc, arch_svc):
+    t = _complete_tournament(db, user_svc, arch_svc)
+    gardens = arch_svc.get_or_create_by_name("golgary gardens")
+    gardens.general_name = "Gardens"  # старое значение из production-кэша
+    _register(db, user_svc, t.id, 10, "Late Player", archetype=gardens, final_place=5)
+    db.commit()
+
+    text = _refresh_and_format_macro_report(db, t.id)
+
+    db.refresh(gardens)
+    assert gardens.general_name == "BG Gardens"
+    assert gardens.macro_name == "BG Control"
+    assert "BG Control — 1 (BG Gardens ×1)" in text
+
+
+async def test_macro_report_is_appended_only_to_owner_message(db, user_svc, arch_svc, monkeypatch):
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    t = _complete_tournament(db, user_svc, arch_svc)
+    gardens = arch_svc.get_or_create_by_name("Gardens")
+    _register(db, user_svc, t.id, 10, "Gardener", archetype=gardens, final_place=5)
+    db.commit()
+    sent: dict[int, str] = {}
+
+    async def capture(_bot, chat_id, text, _images):
+        sent[chat_id] = text
+        return [], chat_id
+
+    monkeypatch.setattr("bot.scheduler.build_chart", AsyncMock(return_value=None))
+    monkeypatch.setattr("bot.scheduler.build_standings", AsyncMock(return_value=[]))
+    monkeypatch.setattr("bot.scheduler._send_announce", capture)
+    monkeypatch.setattr("bot.scheduler._send_announce_images", AsyncMock())
+
+    await _announce_to_targets(
+        AsyncMock(), db, t.id, t.title, [t.chat_id, 777], AetherhubImportService(db), None
+    )
+
+    assert "Крупные архетипы" not in sent[t.chat_id]
+    assert "🧪 Крупные архетипы (тест, только owner):" in sent[777]
+    assert "BG Control — 1" in sent[777]
 
 
 def test_is_complete_false_without_pairings(db):
