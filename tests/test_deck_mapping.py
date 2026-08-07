@@ -147,10 +147,21 @@ def test_macro_archetype(general, expected):
     "raw,expected",
     [
         ("Grixis Afinity", "Affinity"),
-        ("Grixis Afvinoty", "Affinity"),
+        ("Grixis Affinety", "Affinity"),
         ("Flicker trno", "Tron"),
+        ("Blue Teror", "Terror"),
+        ("Dimir Faereis", "Faeries"),
+        ("gardnes", "BG Control"),
+        ("Red Madnes", "Burn"),
+        ("Red Bunr", "Burn"),
+        ("Burnn", "Burn"),
         ("Grixis Finality", None),
+        ("Iron Combo", None),
+        ("Burm", None),
         ("Throne Combo", None),
+        ("Izzet Faereis", None),
+        ("UB Madnes", None),
+        ("Affinity Tron", None),
     ],
 )
 def test_fuzzy_matching_applies_only_to_macro_archetype(raw, expected):

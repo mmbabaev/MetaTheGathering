@@ -187,12 +187,64 @@ def _damerau_levenshtein(left: str, right: str) -> int:
     return rows[-1][-1]
 
 
-def _has_fuzzy_keyword(text: str, keyword: str, *, max_distance: int) -> bool:
-    """Есть ли отдельное слово, достаточно близкое к ключевому названию деки."""
+def _is_adjacent_transposition(left: str, right: str) -> bool:
+    """Отличаются ли слова только перестановкой одной пары соседних букв."""
+    if len(left) != len(right):
+        return False
+    different = [i for i, (a, b) in enumerate(zip(left, right)) if a != b]
+    return (
+        len(different) == 2
+        and different[1] == different[0] + 1
+        and left[different[0]] == right[different[1]]
+        and left[different[1]] == right[different[0]]
+    )
+
+
+def _one_typo_keyword(text: str, keyword: str) -> bool:
+    """Универсальный macro-fuzzy: одна ошибка, с защитой коротких слов от замен."""
     for token in re.findall(r"[a-z]+", text.casefold()):
-        if abs(len(token) - len(keyword)) <= max_distance and _damerau_levenshtein(token, keyword) <= max_distance:
+        distance = _damerau_levenshtein(token, keyword)
+        if distance == 0:
+            return True
+        if distance != 1:
+            continue
+        if min(len(token), len(keyword)) >= 5:
+            return True
+        # В коротком слове разрешаем вставку/удаление или явную перестановку, но не
+        # замену одной буквы: иначе ``iron`` автоматически становился бы Tron.
+        if len(token) != len(keyword) or _is_adjacent_transposition(token, keyword):
             return True
     return False
+
+
+def _fuzzy_macro_from_raw(raw_name: str | None) -> str | None:
+    """Макрогруппа из исходного имени по общему правилу одной опечатки."""
+    if not raw_name:
+        return None
+    colors = _colors(_norm(raw_name))
+    candidates: set[str] = set()
+    if _one_typo_keyword(raw_name, "affinity"):
+        candidates.add("Affinity")
+    if _one_typo_keyword(raw_name, "tron"):
+        candidates.add("Tron")
+    if _one_typo_keyword(raw_name, "gardens"):
+        candidates.add("BG Control")  # у Gardens нет цветовых вариантов
+    if _one_typo_keyword(raw_name, "pestilence") and colors == "BG":
+        candidates.add("BG Control")
+    if _one_typo_keyword(raw_name, "burn"):
+        candidates.add("Burn")
+    if _one_typo_keyword(raw_name, "madness") and colors in {"R", "BR"}:
+        candidates.add("Burn")
+    if _one_typo_keyword(raw_name, "rally") and colors == "R":
+        candidates.add("Burn")
+    if (_one_typo_keyword(raw_name, "terror") or _one_typo_keyword(raw_name, "delver")) and colors in {"U", "UB"}:
+        candidates.add("Terror")
+    if any(
+        _one_typo_keyword(raw_name, keyword)
+        for keyword in ("faeries", "faerie", "fairies", "fairy")
+    ) and colors in {"U", "UB"}:
+        candidates.add("Faeries")
+    return next(iter(candidates)) if len(candidates) == 1 else None
 
 
 def _tron(low: str) -> str | None:
@@ -295,11 +347,9 @@ def macro_archetype(general_name: str | None, raw_name: str | None = None) -> st
     BG Gardens и BG Pestilence, а здесь обе колоды попадают в BG Control.
     """
     # Fuzzy относится только к макроархетипу: исходное имя и general_name не меняются.
-    texts = [text for text in (raw_name, general_name) if text]
-    if any(_has_fuzzy_keyword(text, "affinity", max_distance=2) for text in texts):
-        return "Affinity"
-    if any(_has_fuzzy_keyword(text, "tron", max_distance=1) for text in texts):
-        return "Tron"
+    fuzzy = _fuzzy_macro_from_raw(raw_name or general_name)
+    if fuzzy:
+        return fuzzy
     if not general_name:
         return None
     name = general_name.casefold().strip()

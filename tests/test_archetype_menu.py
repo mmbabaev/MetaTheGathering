@@ -76,10 +76,10 @@ class TestCustomArchetypeClassification:
     def test_typo_keeps_custom_name_and_uses_separate_classification_fields(self, arch_svc):
         affinity = arch_svc.get_or_create_by_name("Grixis Affinity")
 
-        custom = arch_svc.get_or_create_by_name("Grixis Afvinoty", is_custom=True)
+        custom = arch_svc.get_or_create_by_name("Grixis Afinity", is_custom=True)
 
         assert custom.id != affinity.id
-        assert custom.name == "Grixis Afvinoty"
+        assert custom.name == "Grixis Afinity"
         assert custom.is_custom is True
         assert custom.general_name is None
         assert custom.macro_name == "Affinity"
