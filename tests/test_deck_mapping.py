@@ -14,8 +14,8 @@ from services.deck_mapping import general_archetype, macro_archetype
         ("Br madness", "BR Madness"),
         ("Red Madness", "Red Madness"),  # моно-R — отдельная (не BR)
         ("Grixis Affinity", "Grixis Affinity"),  # 3 цвета — словом
-        ("Grixis Afinity", "Grixis Affinity"),  # пропущенная буква
-        ("Grixis Afvinoty", "Grixis Affinity"),  # две ошибочные буквы
+        ("Grixis Afinity", None),  # fuzzy применяется только к отдельному macro_name
+        ("Grixis Afvinoty", None),
         ("Dimir Affinity", "UB Affinity"),  # 2 цвета — буквами
         ("Uw Familiars", "UW Familiars"),  # регистр
         ("UW fams", "UW Familiars"),  # синоним fams
@@ -43,7 +43,7 @@ from services.deck_mapping import general_archetype, macro_archetype
         # троны — по подтипу раздельно
         ("Flicker Tron", "Flicker Tron"),
         ("Flicker tron", "Flicker Tron"),
-        ("Flicker trno", "Flicker Tron"),  # переставлены соседние буквы
+        ("Flicker trno", None),  # fuzzy применяется только к отдельному macro_name
         ("Monster Tron", "Monster Tron"),
         ("Altar tron", "Altar Tron"),
         ("Tron", "Tron"),
@@ -141,3 +141,17 @@ def test_tournament_guild_names_become_two_color_codes_for_unknown_decks(guild, 
 )
 def test_macro_archetype(general, expected):
     assert macro_archetype(general) == expected
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("Grixis Afinity", "Affinity"),
+        ("Grixis Afvinoty", "Affinity"),
+        ("Flicker trno", "Tron"),
+        ("Grixis Finality", None),
+        ("Throne Combo", None),
+    ],
+)
+def test_fuzzy_matching_applies_only_to_macro_archetype(raw, expected):
+    assert macro_archetype(None, raw) == expected

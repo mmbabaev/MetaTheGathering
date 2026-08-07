@@ -168,7 +168,7 @@ class ArchetypeService:
             name=name.strip(),
             is_custom=is_custom,
             general_name=general_name,
-            macro_name=macro_archetype(general_name),
+            macro_name=macro_archetype(general_name, name),
         )
         self.db.add(archetype)
         self.db.commit()
