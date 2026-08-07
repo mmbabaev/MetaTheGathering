@@ -102,6 +102,38 @@ class TestCustomArchetypeMatching:
 
         assert first.id != second.id
 
+    def test_close_alias_uses_aliased_public_archetype(self, arch_svc):
+        spy = arch_svc.get_or_create_by_name("Spy Combo")
+        arch_svc.db.add(models.ArchetypeAlias(archetype_id=spy.id, alias="Walls Spy"))
+        arch_svc.db.commit()
+
+        matched = arch_svc.get_or_create_by_name("Walls Spyy", is_custom=True)
+
+        assert matched.id == spy.id
+
+    def test_ambiguous_high_similarity_does_not_guess(self, arch_svc):
+        first = arch_svc.get_or_create_by_name("Grixis Affinity")
+        second = arch_svc.get_or_create_by_name("Grixis Affinify")
+
+        created = arch_svc.get_or_create_by_name("Grixis Affinfty", is_custom=True)
+
+        assert created.id not in {first.id, second.id}
+        assert created.is_custom is True
+
+    def test_short_name_uses_canonical_match_instead_of_percentage(self, arch_svc):
+        tron = arch_svc.get_or_create_by_name("Tron")
+
+        matched = arch_svc.get_or_create_by_name("trno", is_custom=True)
+
+        assert matched.id == tron.id
+
+    def test_existing_custom_typo_is_not_used_as_dictionary_entry(self, arch_svc):
+        first_typo = arch_svc.get_or_create_by_name("Grixis Affinety", is_custom=True)
+
+        second_typo = arch_svc.get_or_create_by_name("Grixis Affinetyy", is_custom=True)
+
+        assert second_typo.id != first_typo.id
+
 
 # ---------------------------------------------------------------------------
 # 1. list_top_archetypes

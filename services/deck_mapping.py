@@ -308,7 +308,7 @@ def macro_archetype(general_name: str | None) -> str | None:
         return "Tron"
     if name in {"bg gardens", "bg pestilence"}:
         return "BG Control"
-    if name in {"mono red", "red madness", "red rally", "red burn", "br madness"}:
+    if name in {"burn", "mono red", "red madness", "red rally", "red burn", "br madness"}:
         return "Burn"
     if name in {"blue terror", "ub terror"}:
         return "Terror"
