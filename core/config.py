@@ -66,6 +66,10 @@ class Settings(BaseSettings):
     # Пользовательский frontend для ссылок в Telegram и CLI.
     MAGIC_OCULUS_PUBLIC_URL: str = "https://magicoculus.ru"
 
+    # Структурированные owner-отчёты ачивок для послетурнирного аудита.
+    # Пустая строка отключает файловый лог (по умолчанию так только внутри pytest).
+    ACHIEVEMENT_LOG_DIR: str = "" if _is_pytest_running() else "logs/achievements"
+
     YOOKASSA_SHOP_ID: str = ""
     YOOKASSA_SECRET_KEY: str = ""
     PAYMENT_AMOUNT: str = "525.00"

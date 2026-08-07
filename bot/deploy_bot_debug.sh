@@ -54,6 +54,7 @@ COPYFILE_DISABLE=1 tar -czf "$ARCHIVE" \
     --exclude='venv/' \
     --exclude='.git/' \
     --exclude='output/' \
+    --exclude='logs/' \
     --exclude='._*' \
     -C "$REPO_ROOT" .
 
