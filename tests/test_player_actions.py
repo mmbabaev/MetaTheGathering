@@ -214,12 +214,12 @@ class TestHandleCustomArchetypeText:
             first_name="Alice",
             last_name=None,
             tournament_id=active_tournament.id,
-            name="Grixis Afvinoty",
+            name="Grixis Afinity",
         )
 
         participant = svc.list_participants_for_tournament(active_tournament.id)[0]
         assert participant.archetype_id != affinity.id
-        assert participant.archetype.name == "Grixis Afvinoty"
+        assert participant.archetype.name == "Grixis Afinity"
         stored_archetype = svc.db.get(models.Archetype, participant.archetype_id)
         assert stored_archetype.general_name is None
         assert stored_archetype.macro_name == "Affinity"
