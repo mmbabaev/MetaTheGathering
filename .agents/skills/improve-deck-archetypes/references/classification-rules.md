@@ -10,7 +10,7 @@
 
 ## Канонические названия
 
-- Двухцветные гильдии переводить в буквенные коды: Golgari→BG, Orzhov→WB, Izzet→UR, Rakdos→BR, Selesnya→WG. Парсер поддерживает все десять гильдий.
+- Двухцветные гильдии переводить в буквенные коды: Golgari/Golgary→BG, Orzhov→WB, Izzet→UR, Rakdos→BR, Selesnya→WG. Парсер поддерживает все десять гильдий и подтверждённую турнирную опечатку Golgary.
 - Любой Gardens, включая `Golgari gardens`, `golgary gardens` и голый `Gardens`, считать `BG Gardens`: цветовых вариантов Gardens нет.
 - `Affinity` имеет приоритет независимо от цвета и других слов.
 - `Tron` имеет приоритет независимо от цвета и подтипа; конкретный `general_name` может сохранять Flicker/Altar/Monster/5C Tron, но `macro_name` всегда Tron.

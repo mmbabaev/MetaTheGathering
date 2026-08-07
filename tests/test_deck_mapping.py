@@ -161,6 +161,7 @@ def test_strict_general_fuzzy_allows_only_one_or_two_typos(raw, expected):
     "guild,code",
     [
         ("Golgari", "BG"),
+        ("Golgary", "BG"),
         ("Orzhov", "WB"),
         ("Izzet", "UR"),
         ("Rakdos", "BR"),
