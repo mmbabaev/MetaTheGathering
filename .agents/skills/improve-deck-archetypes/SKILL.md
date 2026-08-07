@@ -1,6 +1,6 @@
 ---
 name: improve-deck-archetypes
-description: Audit and improve MetaGatherer deck-name classification after a tournament. Use when the user asks to obtain a tournament's decks, inspect how player-entered names become Archetype.name/general_name/macro_name, merge spelling variants, add fuzzy matching or aliases, correct color identities, expand macro archetypes, add owner-only diagnostics, or create tests and a PR for those changes.
+description: Audit and improve MetaGatherer deck-name classification after a tournament without replacing player-entered archetypes. Use when the user asks to obtain a tournament's decks, inspect how preserved Archetype.name values become separate general_name/macro_name classifications, normalize spelling variants for statistics, correct color identities, expand macro archetypes, add owner-only diagnostics, or create tests and a PR for those changes.
 ---
 
 # Improve Deck Archetypes
@@ -18,12 +18,12 @@ description: Audit and improve MetaGatherer deck-name classification after a tou
 2. Получить read-only срез фактических участников и колод: исходное имя, `general_name`, `macro_name`, `color_identity`, место и число использований. Производственные секреты читать только внутри сервера из `bot/.env`; не выводить их.
 3. Показать владельцу найденные расхождения в компактном виде: `исходное → текущее → предлагаемое`, причина и уверенность. Явно принятые владельцем правила реализовывать без повторного согласования; неоднозначные слияния уточнять.
 4. Выбрать правильный слой изменения:
-   - опечатка свободного ввода относительно известного архетипа → `services/archetype.py`;
-   - каноническое название/цветовой префикс/синоним → `services/deck_mapping.py`;
+   - исходный свободный ввод всегда сохранять в `Archetype.name` через `services/archetype.py`;
+   - опечатка, каноническое название, цветовой префикс или синоним для статистики → `services/deck_mapping.py` и отдельный `general_name`;
    - крупная стратегическая семья → `macro_name` и `macro_archetype()`;
    - подтверждённый цвет → `services/deck_book.py`; эвристический цвет → `services/deck_colors.py`;
    - owner-only диагностическая отбивка → `bot/scheduler.py`.
-5. Не смешивать `general_name` и `macro_name`: первый сохраняет конкретную стратегию и значимые цветовые варианты, второй объединяет стратегии в крупную семью.
+5. Не менять `Participant.archetype_id` и `Archetype.name` ради классификации. `general_name` хранит конкретную каноническую стратегию и значимые цветовые варианты, `macro_name` отдельно объединяет их в крупную семью.
 6. Для новой колонки создать Alembic revision с уникальным UUID и одним текущим `down_revision`. Для изменения правил предусмотреть исправление старого кэша через миграцию или безопасный пересчёт.
 7. Написать юнит-тесты на каждый найденный пример и защитные негативные тесты. Обязательно проверить всю цепочку свободного ввода до `Participant.archetype_id`, а owner-only текст — отдельно от клубного.
 8. Запустить профильные тесты, `ruff check` для изменённых файлов, `git diff --check`, один Alembic head и полный `pytest tests/`.
@@ -35,7 +35,7 @@ description: Audit and improve MetaGatherer deck-name classification after a tou
 - Не менять production DB вручную без прямого запроса. Нормальный путь — код, миграция, PR и штатный deploy.
 - Не отправлять сообщения участникам при аудите. Тестовая диагностика допустима только owner и не должна создавать массовую рассылку.
 - Не запускать локально polling с production Telegram token.
-- Не угадывать архетип при слабом или спорном fuzzy-совпадении. Сохранять custom-ввод либо запрашивать решение владельца.
+- Никогда не подменять пользовательский custom-архетип существующим архетипом через fuzzy. Fuzzy влияет только на отдельные поля классификации; при сомнении оставлять их пустыми.
 
 ## Result
 

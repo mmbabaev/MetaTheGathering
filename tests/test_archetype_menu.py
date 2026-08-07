@@ -72,67 +72,28 @@ def admin_handler(svc, user_svc, arch_svc, keyboards, features):
     return AdminHandler(svc, user_svc, arch_svc, keyboards, features)
 
 
-class TestCustomArchetypeMatching:
-    def test_typo_uses_existing_public_archetype(self, arch_svc):
+class TestCustomArchetypeClassification:
+    def test_typo_keeps_custom_name_and_uses_separate_classification_fields(self, arch_svc):
         affinity = arch_svc.get_or_create_by_name("Grixis Affinity")
 
-        matched = arch_svc.get_or_create_by_name("Grixis Afvinoty", is_custom=True)
+        custom = arch_svc.get_or_create_by_name("Grixis Afvinoty", is_custom=True)
 
-        assert matched.id == affinity.id
-        assert arch_svc.db.query(models.Archetype).count() == 1
+        assert custom.id != affinity.id
+        assert custom.name == "Grixis Afvinoty"
+        assert custom.is_custom is True
+        assert custom.general_name == "Grixis Affinity"
+        assert custom.macro_name == "Affinity"
+        assert arch_svc.db.query(models.Archetype).count() == 2
 
-    def test_normalized_exact_name_uses_existing_public_archetype(self, arch_svc):
+    def test_normalized_variant_does_not_replace_original_archetype(self, arch_svc):
         tron = arch_svc.get_or_create_by_name("Flicker Tron")
 
-        matched = arch_svc.get_or_create_by_name("flicker-tron", is_custom=True)
+        custom = arch_svc.get_or_create_by_name("flicker-tron", is_custom=True)
 
-        assert matched.id == tron.id
-
-    def test_weak_similarity_keeps_new_custom_archetype(self, arch_svc):
-        affinity = arch_svc.get_or_create_by_name("Grixis Affinity")
-
-        created = arch_svc.get_or_create_by_name("Grixis Control", is_custom=True)
-
-        assert created.id != affinity.id
-        assert created.is_custom is True
-
-    def test_non_custom_creation_is_never_fuzzy_merged(self, arch_svc):
-        first = arch_svc.get_or_create_by_name("Deck Alpha")
-        second = arch_svc.get_or_create_by_name("Deck Alphb")
-
-        assert first.id != second.id
-
-    def test_close_alias_uses_aliased_public_archetype(self, arch_svc):
-        spy = arch_svc.get_or_create_by_name("Spy Combo")
-        arch_svc.db.add(models.ArchetypeAlias(archetype_id=spy.id, alias="Walls Spy"))
-        arch_svc.db.commit()
-
-        matched = arch_svc.get_or_create_by_name("Walls Spyy", is_custom=True)
-
-        assert matched.id == spy.id
-
-    def test_ambiguous_high_similarity_does_not_guess(self, arch_svc):
-        first = arch_svc.get_or_create_by_name("Grixis Affinity")
-        second = arch_svc.get_or_create_by_name("Grixis Affinify")
-
-        created = arch_svc.get_or_create_by_name("Grixis Affinfty", is_custom=True)
-
-        assert created.id not in {first.id, second.id}
-        assert created.is_custom is True
-
-    def test_short_name_uses_canonical_match_instead_of_percentage(self, arch_svc):
-        tron = arch_svc.get_or_create_by_name("Tron")
-
-        matched = arch_svc.get_or_create_by_name("trno", is_custom=True)
-
-        assert matched.id == tron.id
-
-    def test_existing_custom_typo_is_not_used_as_dictionary_entry(self, arch_svc):
-        first_typo = arch_svc.get_or_create_by_name("Grixis Affinety", is_custom=True)
-
-        second_typo = arch_svc.get_or_create_by_name("Grixis Affinetyy", is_custom=True)
-
-        assert second_typo.id != first_typo.id
+        assert custom.id != tron.id
+        assert custom.name == "flicker-tron"
+        assert custom.general_name == "Flicker Tron"
+        assert custom.macro_name == "Tron"
 
 
 # ---------------------------------------------------------------------------

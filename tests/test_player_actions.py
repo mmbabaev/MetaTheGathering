@@ -203,7 +203,7 @@ class TestHandleCustomArchetypeText:
         assert result.text == REGISTERED
         assert not result.is_alert
 
-    def test_typo_registers_with_existing_public_archetype(
+    def test_typo_registration_preserves_input_and_sets_separate_classification(
         self, handler, arch_svc, svc, active_tournament
     ):
         affinity = arch_svc.get_or_create_by_name("Grixis Affinity")
@@ -218,7 +218,11 @@ class TestHandleCustomArchetypeText:
         )
 
         participant = svc.list_participants_for_tournament(active_tournament.id)[0]
-        assert participant.archetype_id == affinity.id
+        assert participant.archetype_id != affinity.id
+        assert participant.archetype.name == "Grixis Afvinoty"
+        stored_archetype = svc.db.get(models.Archetype, participant.archetype_id)
+        assert stored_archetype.general_name == "Grixis Affinity"
+        assert stored_archetype.macro_name == "Affinity"
 
     def test_already_registered_returns_message(self, handler, active_tournament):
         handler.handle_custom_archetype_text(
