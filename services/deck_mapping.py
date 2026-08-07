@@ -196,8 +196,7 @@ def _has_fuzzy_keyword(text: str, keyword: str, *, max_distance: int) -> bool:
 
 
 def _tron(low: str) -> str | None:
-    # Короткое слово: максимум одна ошибка/перестановка, иначе слишком много ложных совпадений.
-    if not _has_fuzzy_keyword(low, "tron", max_distance=1):
+    if not re.search(r"\btron\b", low):
         return None
     for sub in ("flicker", "monster", "altar"):
         if sub in low:
@@ -212,9 +211,6 @@ def _base(low: str) -> tuple[str | None, bool]:
     for pat, canon in _FIXED:
         if re.search(pat, low):
             return canon, True
-    # Длинное и специфичное слово безопасно узнавать даже с двумя опечатками.
-    if _has_fuzzy_keyword(low, "affinity", max_distance=2):
-        return "Affinity", False
     # «Jund wildfire/midrange» → Midrange; для остальных цветов «Wildfire» — отдельная база
     if "jund" in low and ("wildfire" in low or "midrange" in low):
         return "Midrange", False
@@ -292,20 +288,21 @@ def backfill_general_names(db, *, only_missing: bool = True) -> int:
     return updated
 
 
-def macro_archetype(general_name: str | None) -> str | None:
+def macro_archetype(general_name: str | None, raw_name: str | None = None) -> str | None:
     """Крупная стратегическая группа поверх канонического типа колоды.
 
     Это отдельный экспериментальный слой: ``general_name`` продолжает различать, например,
     BG Gardens и BG Pestilence, а здесь обе колоды попадают в BG Control.
     """
+    # Fuzzy относится только к макроархетипу: исходное имя и general_name не меняются.
+    texts = [text for text in (raw_name, general_name) if text]
+    if any(_has_fuzzy_keyword(text, "affinity", max_distance=2) for text in texts):
+        return "Affinity"
+    if any(_has_fuzzy_keyword(text, "tron", max_distance=1) for text in texts):
+        return "Tron"
     if not general_name:
         return None
     name = general_name.casefold().strip()
-    # Для механически однозначных семейств ключевое слово сильнее цветов и подтипа.
-    if "affinity" in name:
-        return "Affinity"
-    if re.search(r"\btron\b", name):
-        return "Tron"
     if name in {"bg gardens", "bg pestilence"}:
         return "BG Control"
     if name in {"burn", "mono red", "red madness", "red rally", "red burn", "br madness"}:
@@ -320,7 +317,7 @@ def macro_archetype(general_name: str | None) -> str | None:
 def refresh_archetype_classification(archetype) -> bool:
     """Пересчитать оба слоя классификации; True, если объект изменился."""
     general = general_archetype(archetype.name)
-    macro = macro_archetype(general)
+    macro = macro_archetype(general, archetype.name)
     changed = archetype.general_name != general or archetype.macro_name != macro
     archetype.general_name = general
     archetype.macro_name = macro
