@@ -109,6 +109,54 @@ _FIXED = [
     (r"turbo fog", "Turbo Fog"),
 ]
 
+# Опечатки ищем только по явным словам-маркерам, а не по полным названиям. Значение:
+# (каноническая база/имя, fixed — нужно ли игнорировать цветовой префикс).
+_FUZZY_GENERAL_ALIASES = {
+    "terror": ("Terror", False),
+    "delver": ("Terror", False),
+    "madness": ("Madness", False),
+    "affinity": ("Affinity", False),
+    "familiars": ("Familiars", False),
+    "faeries": ("Faeries", False),
+    "faerie": ("Faeries", False),
+    "fairies": ("Faeries", False),
+    "fairy": ("Faeries", False),
+    "gates": ("Gates", False),
+    "pestilence": ("Pestilence", False),
+    "gardens": ("BG Gardens", True),
+    "ephemerate": ("Ephemerate", False),
+    "heroic": ("Heroic", False),
+    "metalcraft": ("Metalcraft", False),
+    "weenie": ("Aggro", False),
+    "aggro": ("Aggro", False),
+    "blade": ("Blade", False),
+    "tribe": ("Tribe", False),
+    "aristocrats": ("Aristocrats", False),
+    "sacrifice": ("Sacrifice", False),
+    "devotion": ("Devotion", False),
+    "burn": ("Burn", False),
+    "slime": ("Slime", False),
+    "stompy": ("Stompy", False),
+    "infect": ("Infect", False),
+    "skred": ("Skred", False),
+    "ponza": ("Ramp", False),
+    "landfall": ("Ramp", False),
+    "rally": ("Rally", False),
+    "synth": ("Synth", False),
+    "moxite": ("Synth", False),
+    "control": ("Control", False),
+    "rogue": ("Rogue", False),
+    "counters": ("Counters", False),
+    "arcane": ("Control", False),
+    "abjure": ("Control", False),
+    "combo": ("Combo", False),
+    "walls": ("Spy Walls", True),
+    "bogles": ("Bogles", True),
+    "elves": ("Elves", True),
+    "poison": ("Poison Storm", True),
+    "pizza": ("Pizza Combo", True),
+}
+
 # База без цвета в названии → цвет по умолчанию (эти деки практически всегда одноцветны).
 _DEFAULT_COLOR = {"Inside Out": "WR", "Ramp": "RG", "Tribe": "WR"}
 
@@ -217,6 +265,32 @@ def _one_typo_keyword(text: str, keyword: str) -> bool:
     return False
 
 
+def _strict_general_keyword(text: str, keyword: str) -> bool:
+    """Жёсткий general-fuzzy: 1 ошибка, 2 только у слов длиной от 8 букв."""
+    for token in re.findall(r"[a-z]+", text.casefold()):
+        distance = _damerau_levenshtein(token, keyword)
+        if distance == 0:
+            return True
+        allowed = 2 if len(keyword) >= 8 and len(token) >= 6 else 1
+        if distance > allowed:
+            continue
+        if min(len(token), len(keyword)) >= 5:
+            return True
+        if distance == 1 and (len(token) != len(keyword) or _is_adjacent_transposition(token, keyword)):
+            return True
+    return False
+
+
+def _fuzzy_general_base(low: str) -> tuple[str | None, bool]:
+    """Единственная уверенная каноническая база по словам с 1–2 опечатками."""
+    candidates = {
+        target
+        for alias, target in _FUZZY_GENERAL_ALIASES.items()
+        if _strict_general_keyword(low, alias)
+    }
+    return next(iter(candidates)) if len(candidates) == 1 else (None, False)
+
+
 def _fuzzy_macro_from_raw(raw_name: str | None) -> str | None:
     """Макрогруппа из исходного имени по общему правилу одной опечатки."""
     if not raw_name:
@@ -250,7 +324,7 @@ def _fuzzy_macro_from_raw(raw_name: str | None) -> str | None:
 
 
 def _tron(low: str) -> str | None:
-    if "tron" not in low:
+    if "tron" not in low and not _strict_general_keyword(low, "tron"):
         return None
     for sub in ("flicker", "monster", "altar"):
         if sub in low:
@@ -275,7 +349,7 @@ def _base(low: str) -> tuple[str | None, bool]:
     for pat, canon in _BASE_RULES:
         if re.search(pat, low):
             return canon, False
-    return None, False
+    return _fuzzy_general_base(low)
 
 
 def general_archetype(name: str) -> str | None:

@@ -221,7 +221,7 @@ class TestHandleCustomArchetypeText:
         assert participant.archetype_id != affinity.id
         assert participant.archetype.name == "Grixis Afinity"
         stored_archetype = svc.db.get(models.Archetype, participant.archetype_id)
-        assert stored_archetype.general_name is None
+        assert stored_archetype.general_name == "Grixis Affinity"
         assert stored_archetype.macro_name == "Affinity"
 
     def test_already_registered_returns_message(self, handler, active_tournament):
