@@ -468,6 +468,33 @@ class UserAchievementProgress(Base):
     __table_args__ = (UniqueConstraint("user_id", "code", name="uq_user_achievement_progress"),)
 
 
+class AchievementReportDelivery(Base):
+    """Одно текстовое сообщение owner-отчёта, ожидающее надёжной Telegram-доставки.
+
+    Строки создаются в одной транзакции с выдачами и прогрессом. Отправленные части
+    отмечаются отдельно, поэтому retry не дублирует уже доставленные сообщения.
+    """
+
+    __tablename__ = "achievement_report_deliveries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    report_id = Column(String(32), nullable=False, index=True)
+    tournament_id = Column(Integer, ForeignKey("tournaments.id", ondelete="CASCADE"), nullable=False, index=True)
+    recipient_type = Column(String(16), nullable=False, default="owner")
+    chat_id = Column(BigInteger, nullable=True)
+    message_index = Column(Integer, nullable=False)
+    payload = Column(Text, nullable=False)
+    status = Column(String(16), nullable=False, default="pending", index=True)
+    attempts = Column(Integer, nullable=False, default=0)
+    last_error = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    sent_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("report_id", "message_index", name="uq_achievement_report_delivery_message"),
+    )
+
+
 class RoundPairing(Base):
     """Паринг одного игрока в конкретном раунде турнира (импорт из AetherHub)."""
 

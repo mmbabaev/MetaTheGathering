@@ -143,7 +143,9 @@ class AchievementService:
 
     # ------------------------------------------------------------- запись
 
-    def process_tournament(self, tournament_id: int, *, notified: bool = False) -> Optional[AppliedResult]:
+    def process_tournament(
+        self, tournament_id: int, *, notified: bool = False, commit: bool = True
+    ) -> Optional[AppliedResult]:
         """Оценить турнир и записать изменения. None — считать нечего (турнир не готов).
 
         Повторный вызов вернёт результат с пустыми ``granted``/``progress_changes``.
@@ -151,9 +153,11 @@ class AchievementService:
         ctx, outcome = self.evaluate_for_tournament(tournament_id)
         if ctx is None:
             return None
-        return self.apply(ctx, outcome, notified=notified)
+        return self.apply(ctx, outcome, notified=notified, commit=commit)
 
-    def apply(self, ctx: TournamentContext, outcome: RuleOutcome, *, notified: bool = False) -> AppliedResult:
+    def apply(
+        self, ctx: TournamentContext, outcome: RuleOutcome, *, notified: bool = False, commit: bool = True
+    ) -> AppliedResult:
         result = AppliedResult(
             tournament_id=ctx.tournament.id,
             title=ctx.tournament.title,
@@ -168,7 +172,8 @@ class AchievementService:
             change = self._update_progress(ctx, update)
             if change is not None:
                 result.progress_changes.append(change)
-        self.db.commit()
+        if commit:
+            self.db.commit()
 
         result.granted.sort(key=lambda g: (definitions.CODE_ORDER.index(g.definition.code), g.player))
         result.progress_changes.sort(key=lambda p: (definitions.CODE_ORDER.index(p.definition.code), p.player))
