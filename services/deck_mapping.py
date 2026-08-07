@@ -167,8 +167,37 @@ def _color_prefix(code: str) -> str | None:
     return code  # 4 цвета — буквами
 
 
+def _damerau_levenshtein(left: str, right: str) -> int:
+    """Редакционное расстояние с одной операцией за перестановку соседних букв."""
+    rows = [[0] * (len(right) + 1) for _ in range(len(left) + 1)]
+    for i in range(len(left) + 1):
+        rows[i][0] = i
+    for j in range(len(right) + 1):
+        rows[0][j] = j
+    for i in range(1, len(left) + 1):
+        for j in range(1, len(right) + 1):
+            cost = left[i - 1] != right[j - 1]
+            rows[i][j] = min(
+                rows[i - 1][j] + 1,
+                rows[i][j - 1] + 1,
+                rows[i - 1][j - 1] + cost,
+            )
+            if i > 1 and j > 1 and left[i - 1] == right[j - 2] and left[i - 2] == right[j - 1]:
+                rows[i][j] = min(rows[i][j], rows[i - 2][j - 2] + 1)
+    return rows[-1][-1]
+
+
+def _has_fuzzy_keyword(text: str, keyword: str, *, max_distance: int) -> bool:
+    """Есть ли отдельное слово, достаточно близкое к ключевому названию деки."""
+    for token in re.findall(r"[a-z]+", text.casefold()):
+        if abs(len(token) - len(keyword)) <= max_distance and _damerau_levenshtein(token, keyword) <= max_distance:
+            return True
+    return False
+
+
 def _tron(low: str) -> str | None:
-    if "tron" not in low:
+    # Короткое слово: максимум одна ошибка/перестановка, иначе слишком много ложных совпадений.
+    if not _has_fuzzy_keyword(low, "tron", max_distance=1):
         return None
     for sub in ("flicker", "monster", "altar"):
         if sub in low:
@@ -183,6 +212,9 @@ def _base(low: str) -> tuple[str | None, bool]:
     for pat, canon in _FIXED:
         if re.search(pat, low):
             return canon, True
+    # Длинное и специфичное слово безопасно узнавать даже с двумя опечатками.
+    if _has_fuzzy_keyword(low, "affinity", max_distance=2):
+        return "Affinity", False
     # «Jund wildfire/midrange» → Midrange; для остальных цветов «Wildfire» — отдельная база
     if "jund" in low and ("wildfire" in low or "midrange" in low):
         return "Midrange", False

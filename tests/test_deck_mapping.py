@@ -14,6 +14,8 @@ from services.deck_mapping import general_archetype, macro_archetype
         ("Br madness", "BR Madness"),
         ("Red Madness", "Red Madness"),  # моно-R — отдельная (не BR)
         ("Grixis Affinity", "Grixis Affinity"),  # 3 цвета — словом
+        ("Grixis Afinity", "Grixis Affinity"),  # пропущенная буква
+        ("Grixis Afvinoty", "Grixis Affinity"),  # две ошибочные буквы
         ("Dimir Affinity", "UB Affinity"),  # 2 цвета — буквами
         ("Uw Familiars", "UW Familiars"),  # регистр
         ("UW fams", "UW Familiars"),  # синоним fams
@@ -41,6 +43,7 @@ from services.deck_mapping import general_archetype, macro_archetype
         # троны — по подтипу раздельно
         ("Flicker Tron", "Flicker Tron"),
         ("Flicker tron", "Flicker Tron"),
+        ("Flicker trno", "Flicker Tron"),  # переставлены соседние буквы
         ("Monster Tron", "Monster Tron"),
         ("Altar tron", "Altar Tron"),
         ("Tron", "Tron"),
@@ -90,6 +93,11 @@ def test_case_insensitive_and_emoji_are_ignored():
 @pytest.mark.parametrize("bad", ["", "   ", None])
 def test_empty_returns_none(bad):
     assert general_archetype(bad) is None
+
+
+@pytest.mark.parametrize("name", ["Grixis Finality", "Strong Control", "Throne Combo"])
+def test_similar_unrelated_words_do_not_match_priority_families(name):
+    assert general_archetype(name) not in {"Affinity", "Tron"}
 
 
 @pytest.mark.parametrize(
