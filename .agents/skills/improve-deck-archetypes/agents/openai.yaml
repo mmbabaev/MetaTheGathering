@@ -1,4 +1,4 @@
 interface:
   display_name: "Improve Deck Archetypes"
-  short_description: "Audit and improve tournament deck classification"
-  default_prompt: "Use $improve-deck-archetypes to audit the latest tournament deck names and improve their classification safely."
+  short_description: "Update deck logic and test a real tournament"
+  default_prompt: "Use $improve-deck-archetypes to update classification logic from this tournament and add a complete regression test set for its real deck names."
