@@ -14,8 +14,8 @@ from services.deck_mapping import general_archetype, macro_archetype
         ("Br madness", "BR Madness"),
         ("Red Madness", "Red Madness"),  # моно-R — отдельная (не BR)
         ("Grixis Affinity", "Grixis Affinity"),  # 3 цвета — словом
-        ("Grixis Afinity", None),  # fuzzy применяется только к отдельному macro_name
-        ("Grixis Afvinoty", None),
+        ("Grixis Afinity", "Grixis Affinity"),
+        ("Grixis Afvinoty", "Grixis Affinity"),  # длинное слово: две ошибки
         ("Dimir Affinity", "UB Affinity"),  # 2 цвета — буквами
         ("Uw Familiars", "UW Familiars"),  # регистр
         ("UW fams", "UW Familiars"),  # синоним fams
@@ -43,7 +43,7 @@ from services.deck_mapping import general_archetype, macro_archetype
         # троны — по подтипу раздельно
         ("Flicker Tron", "Flicker Tron"),
         ("Flicker tron", "Flicker Tron"),
-        ("Flicker trno", None),  # fuzzy применяется только к отдельному macro_name
+        ("Flicker trno", "Flicker Tron"),
         ("Monster Tron", "Monster Tron"),
         ("Altar tron", "Altar Tron"),
         ("Tron", "Tron"),
@@ -103,6 +103,23 @@ def test_similar_unrelated_words_do_not_match_priority_families(name):
 def test_existing_general_tron_substring_behavior_is_unchanged():
     """Macro feature must not silently alter the pre-existing general-name parser."""
     assert general_archetype("Strong Control") == "Tron"
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("Blue Teror", "Blue Terror"),
+        ("Dimir Faereis", "UB Faeries"),
+        ("Golgari Pestilnce", "BG Pestilence"),
+        ("gardnes", "BG Gardens"),
+        ("White Heroicc", "White Heroic"),
+        ("Grixis Afvixoty", None),  # три ошибки — уже не исправляем
+        ("Iron Combo", "Combo"),  # короткий Tron не ловит замену
+        ("Burm", None),  # короткий Burn не ловит замену
+    ],
+)
+def test_strict_general_fuzzy_allows_only_one_or_two_typos(raw, expected):
+    assert general_archetype(raw) == expected
 
 
 @pytest.mark.parametrize(

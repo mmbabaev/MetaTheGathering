@@ -81,7 +81,7 @@ class TestCustomArchetypeClassification:
         assert custom.id != affinity.id
         assert custom.name == "Grixis Afinity"
         assert custom.is_custom is True
-        assert custom.general_name is None
+        assert custom.general_name == "Grixis Affinity"
         assert custom.macro_name == "Affinity"
         assert arch_svc.db.query(models.Archetype).count() == 2
 
