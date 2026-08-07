@@ -192,11 +192,22 @@ class ArchetypeService:
     def _find_close_public_archetype(self, name: str) -> models.Archetype | None:
         """Однозначный близкий публичный архетип или None при слабом/спорном совпадении."""
         needle = normalize_deck_name(name)
-        if len(needle) < 5:
-            return None
         candidates = self.db.execute(
             select(models.Archetype).where(models.Archetype.is_custom.is_(False))
         ).scalars().all()
+        # Канонизатор умеет безопасно распознавать синонимы и короткие специальные
+        # названия (например, ``trno`` → Tron), где общий процент сходства ненадёжен.
+        general = general_archetype(name)
+        same_general = [
+            candidate
+            for candidate in candidates
+            if general is not None
+            and (candidate.general_name or general_archetype(candidate.name)) == general
+        ]
+        if len(same_general) == 1:
+            return same_general[0]
+        if len(needle) < 5:
+            return None
         scored: list[tuple[float, models.Archetype]] = []
         for candidate in candidates:
             variants = [candidate.name, *(alias.alias for alias in candidate.aliases)]

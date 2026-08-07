@@ -101,11 +101,26 @@ def test_similar_unrelated_words_do_not_match_priority_families(name):
 
 
 @pytest.mark.parametrize(
+    "guild,code",
+    [
+        ("Golgari", "BG"),
+        ("Orzhov", "WB"),
+        ("Izzet", "UR"),
+        ("Rakdos", "BR"),
+        ("Selesnya", "WG"),
+    ],
+)
+def test_tournament_guild_names_become_two_color_codes_for_unknown_decks(guild, code):
+    assert general_archetype(f"{guild} New Brew") == f"{code} New Brew"
+
+
+@pytest.mark.parametrize(
     "general,expected",
     [
         ("BG Gardens", "BG Control"),
         ("BG Pestilence", "BG Control"),
         ("Mono Red", "Burn"),
+        ("Burn", "Burn"),
         ("Red Madness", "Burn"),
         ("Red Rally", "Burn"),
         ("BR Madness", "Burn"),

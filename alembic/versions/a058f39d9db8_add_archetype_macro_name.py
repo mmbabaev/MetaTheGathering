@@ -33,7 +33,7 @@ def upgrade() -> None:
             "WHEN lower(general_name) LIKE '%affinity%' THEN 'Affinity' "
             "WHEN lower(general_name) LIKE '%tron%' THEN 'Tron' "
             "WHEN lower(general_name) IN ('bg gardens', 'bg pestilence') THEN 'BG Control' "
-            "WHEN lower(general_name) IN ('mono red', 'red madness', 'red rally', 'red burn', 'br madness') THEN 'Burn' "
+            "WHEN lower(general_name) IN ('burn', 'mono red', 'red madness', 'red rally', 'red burn', 'br madness') THEN 'Burn' "
             "WHEN lower(general_name) IN ('blue terror', 'ub terror') THEN 'Terror' "
             "WHEN lower(general_name) IN ('blue faeries', 'ub faeries') THEN 'Faeries' "
             "ELSE NULL END"
