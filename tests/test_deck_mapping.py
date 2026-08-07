@@ -2,7 +2,7 @@
 
 import pytest
 
-from services.deck_mapping import general_archetype
+from services.deck_mapping import general_archetype, macro_archetype
 
 
 @pytest.mark.parametrize(
@@ -67,6 +67,13 @@ from services.deck_mapping import general_archetype
         # прочее
         ("Orzhov Blade", "WB Blade"),
         ("Golgari Pestilence", "BG Pestilence"),
+        ("Golgari gardens", "BG Gardens"),
+        ("golgary gardens", "BG Gardens"),
+        ("Gardens", "BG Gardens"),
+        ("Izzet Gardens", "BG Gardens"),  # у Gardens нет цветовых вариантов
+        ("Selesnya Turbo Initiative", "WG Turbo Initiative"),
+        ("Izzet Faeries", "UR Faeries"),
+        ("Mono Red", "Mono Red"),
         ("Jeskai Ephemerate", "Jeskai Ephemerate"),
         ("Mono G Stompy", "Green Stompy"),
         ("Black Sacrifice", "Black Sacrifice"),
@@ -83,3 +90,25 @@ def test_case_insensitive_and_emoji_are_ignored():
 @pytest.mark.parametrize("bad", ["", "   ", None])
 def test_empty_returns_none(bad):
     assert general_archetype(bad) is None
+
+
+@pytest.mark.parametrize(
+    "general,expected",
+    [
+        ("BG Gardens", "BG Control"),
+        ("BG Pestilence", "BG Control"),
+        ("Mono Red", "Burn"),
+        ("Red Madness", "Burn"),
+        ("Red Rally", "Burn"),
+        ("BR Madness", "Burn"),
+        ("Blue Terror", "Terror"),
+        ("UB Terror", "Terror"),
+        ("Blue Faeries", "Faeries"),
+        ("UB Faeries", "Faeries"),
+        ("UR Faeries", None),
+        ("Grixis Affinity", None),
+        (None, None),
+    ],
+)
+def test_macro_archetype(general, expected):
+    assert macro_archetype(general) == expected

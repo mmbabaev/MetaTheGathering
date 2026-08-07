@@ -97,6 +97,9 @@ _BASE_RULES = [
 
 # Колоды с фиксированным именем (цвет игнорируем — он у них не различает деку).
 _FIXED = [
+    # В Pauper «Gardens» — всегда BG Gardens; цветовых вариантов этой деки нет.
+    # Правило намеренно сильнее написанного игроком цвета/гильдии.
+    (r"gardens", "BG Gardens"),
     (r"spy|walls", "Spy Walls"),
     (r"bogles", "Bogles"),
     (r"\belves\b", "Elves"),
@@ -204,6 +207,10 @@ def general_archetype(name: str) -> str | None:
         return None
     low = n.lower()
 
+    # Самостоятельное турнирное имя стратегии, а не только цветовой модификатор.
+    if low == "mono red":
+        return "Mono Red"
+
     tron = _tron(low)
     if tron:
         return tron
@@ -212,6 +219,15 @@ def general_archetype(name: str) -> str | None:
     if fixed:
         return base
     if base is None:
+        # Даже если новая стратегия ещё не добавлена в _BASE_RULES, гильдию всё равно
+        # нормализуем в двухцветный код: «Selesnya Turbo Initiative» →
+        # «WG Turbo Initiative». Так новые названия не создают отдельные варианты только
+        # из-за записи цвета словом.
+        for guild, code in _GUILD2.items():
+            match = re.search(rf"\b{guild}\b", n, flags=re.IGNORECASE)
+            if match:
+                remainder = re.sub(r"[\s_\-/]+", " ", f"{n[:match.start()]} {n[match.end():]}").strip()
+                return f"{code} {remainder.title()}" if remainder else code
         return None
 
     prefix = _color_prefix(_colors(n))
@@ -242,3 +258,33 @@ def backfill_general_names(db, *, only_missing: bool = True) -> int:
     if updated:
         db.commit()
     return updated
+
+
+def macro_archetype(general_name: str | None) -> str | None:
+    """Крупная стратегическая группа поверх канонического типа колоды.
+
+    Это отдельный экспериментальный слой: ``general_name`` продолжает различать, например,
+    BG Gardens и BG Pestilence, а здесь обе колоды попадают в BG Control.
+    """
+    if not general_name:
+        return None
+    name = general_name.casefold().strip()
+    if name in {"bg gardens", "bg pestilence"}:
+        return "BG Control"
+    if name in {"mono red", "red madness", "red rally", "red burn", "br madness"}:
+        return "Burn"
+    if name in {"blue terror", "ub terror"}:
+        return "Terror"
+    if name in {"blue faeries", "ub faeries"}:
+        return "Faeries"
+    return None
+
+
+def refresh_archetype_classification(archetype) -> bool:
+    """Пересчитать оба слоя классификации; True, если объект изменился."""
+    general = general_archetype(archetype.name)
+    macro = macro_archetype(general)
+    changed = archetype.general_name != general or archetype.macro_name != macro
+    archetype.general_name = general
+    archetype.macro_name = macro
+    return changed
