@@ -30,7 +30,7 @@
 
 ## Тесты
 
-- `tests/test_deck_mapping.py` — исходное имя → general/macro.
+- `tests/test_deck_mapping.py` — полный фактический срез каждого разобранного турнира (`raw → general`) плюс отдельные general/macro и fuzzy-границы.
 - `tests/test_archetype_menu.py` — исходный custom остаётся отдельным, а general/macro заполняются независимо.
 - `tests/test_player_actions.py` — пользовательский ввод → собственный `Participant.archetype_id` плюс отдельные поля классификации.
 - `tests/test_deck_colors.py` — WUBRG.

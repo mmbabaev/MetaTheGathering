@@ -4,6 +4,41 @@ import pytest
 
 from services.deck_mapping import general_archetype, macro_archetype
 
+# Фактический срез production-турнира «Edinorog Pauper 06.08.2026» (#65).
+# Это главный регрессионный набор: правила ниже должны объяснять реальные записи игроков,
+# а не только подобранные разработчиком синтетические строки.
+EDINOROG_2026_08_06_GENERAL_NAMES = [
+    ("Blue Terror", "Blue Terror"),
+    ("Flicker Tron", "Flicker Tron"),
+    ("Spy Walls", "Spy Walls"),
+    ("Jund Wildfire", "Jund Midrange"),
+    ("Red Rally", "Red Rally"),
+    ("Mono U Феи", "Blue Faeries"),
+    ("Golgari gardens", "BG Gardens"),
+    ("Orzhov Blade", "WB Blade"),
+    ("Altar Tron", "Altar Tron"),
+    ("Bow Combo", "Combo"),
+    ("Walls combo", "Spy Walls"),
+    ("Selesnya Turbo Initiative", "WG Turbo Initiative"),
+    ("Golgari Pestilence", "BG Pestilence"),
+    ("Izzet Faeries", "UR Faeries"),
+    ("Grixis Affinity", "Grixis Affinity"),
+    ("Rakdos Madness", "BR Madness"),
+    ("Blue Delver", "Blue Terror"),
+    ("Gardens", "BG Gardens"),
+    ("White Weenie", "White Aggro"),
+    ("White Heroic", "White Heroic"),
+    ("Blue Terror", "Blue Terror"),
+    ("mardu synth", "Mardu Synth"),
+    ("golgary gardens", "BG Gardens"),
+    ("White Tron", "Tron"),
+]
+
+
+@pytest.mark.parametrize("raw,expected", EDINOROG_2026_08_06_GENERAL_NAMES)
+def test_edinorog_2026_08_06_real_decks_general_name(raw, expected):
+    assert general_archetype(raw) == expected
+
 
 @pytest.mark.parametrize(
     "raw,expected",
