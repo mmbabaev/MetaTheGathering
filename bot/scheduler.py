@@ -30,7 +30,7 @@ from core.schemas import TournamentCreate
 from services.aetherhub_import_service import MIN_TOURNAMENT_DURATION, AetherhubImportService
 from services.aetherhub_service import AetherhubService
 from services.datalens import DataLensService
-from services.deck_mapping import refresh_archetype_classification
+from services.deck_mapping import refresh_archetype_macro
 from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.magicoculus import (
     MagicOculusClient,
@@ -788,7 +788,7 @@ def _refresh_and_format_macro_report(db, tournament_id: int) -> str:
     sources: dict[str, Counter[str]] = defaultdict(Counter)
     unmapped = 0
     for archetype, _participant_id in rows:
-        changed = refresh_archetype_classification(archetype) or changed
+        changed = refresh_archetype_macro(archetype) or changed
         if archetype.macro_name:
             macro_counts[archetype.macro_name] += 1
             sources[archetype.macro_name][archetype.general_name or archetype.name] += 1

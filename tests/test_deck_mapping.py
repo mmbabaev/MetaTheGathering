@@ -76,7 +76,7 @@ from services.deck_mapping import general_archetype, macro_archetype
         ("Izzet Gardens", "BG Gardens"),  # у Gardens нет цветовых вариантов
         ("Selesnya Turbo Initiative", "WG Turbo Initiative"),
         ("Izzet Faeries", "UR Faeries"),
-        ("Mono Red", "Mono Red"),
+        ("Mono Red", None),  # относится только к новому macro_name
         ("Jeskai Ephemerate", "Jeskai Ephemerate"),
         ("Mono G Stompy", "Green Stompy"),
         ("Black Sacrifice", "Black Sacrifice"),
@@ -95,9 +95,14 @@ def test_empty_returns_none(bad):
     assert general_archetype(bad) is None
 
 
-@pytest.mark.parametrize("name", ["Grixis Finality", "Strong Control", "Throne Combo"])
+@pytest.mark.parametrize("name", ["Grixis Finality", "Throne Combo"])
 def test_similar_unrelated_words_do_not_match_priority_families(name):
     assert general_archetype(name) not in {"Affinity", "Tron"}
+
+
+def test_existing_general_tron_substring_behavior_is_unchanged():
+    """Macro feature must not silently alter the pre-existing general-name parser."""
+    assert general_archetype("Strong Control") == "Tron"
 
 
 @pytest.mark.parametrize(

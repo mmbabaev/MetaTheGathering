@@ -223,6 +223,8 @@ def _fuzzy_macro_from_raw(raw_name: str | None) -> str | None:
         return None
     colors = _colors(_norm(raw_name))
     candidates: set[str] = set()
+    if _norm(raw_name).casefold() == "mono red":
+        candidates.add("Burn")
     if _one_typo_keyword(raw_name, "affinity"):
         candidates.add("Affinity")
     if _one_typo_keyword(raw_name, "tron"):
@@ -248,7 +250,7 @@ def _fuzzy_macro_from_raw(raw_name: str | None) -> str | None:
 
 
 def _tron(low: str) -> str | None:
-    if not re.search(r"\btron\b", low):
+    if "tron" not in low:
         return None
     for sub in ("flicker", "monster", "altar"):
         if sub in low:
@@ -286,10 +288,6 @@ def general_archetype(name: str) -> str | None:
     if not n:
         return None
     low = n.lower()
-
-    # Самостоятельное турнирное имя стратегии, а не только цветовой модификатор.
-    if low == "mono red":
-        return "Mono Red"
 
     tron = _tron(low)
     if tron:
@@ -353,6 +351,10 @@ def macro_archetype(general_name: str | None, raw_name: str | None = None) -> st
     if not general_name:
         return None
     name = general_name.casefold().strip()
+    if "affinity" in name:
+        return "Affinity"
+    if re.search(r"\btron\b", name):
+        return "Tron"
     if name in {"bg gardens", "bg pestilence"}:
         return "BG Control"
     if name in {"burn", "mono red", "red madness", "red rally", "red burn", "br madness"}:
@@ -364,11 +366,9 @@ def macro_archetype(general_name: str | None, raw_name: str | None = None) -> st
     return None
 
 
-def refresh_archetype_classification(archetype) -> bool:
-    """Пересчитать оба слоя классификации; True, если объект изменился."""
-    general = general_archetype(archetype.name)
-    macro = macro_archetype(general, archetype.name)
-    changed = archetype.general_name != general or archetype.macro_name != macro
-    archetype.general_name = general
+def refresh_archetype_macro(archetype) -> bool:
+    """Пересчитать только macro_name; существующие name/general_name не менять."""
+    macro = macro_archetype(archetype.general_name, archetype.name)
+    changed = archetype.macro_name != macro
     archetype.macro_name = macro
     return changed
