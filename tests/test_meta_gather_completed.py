@@ -126,19 +126,26 @@ def test_is_complete_false_when_a_match_unscored(db, user_svc, arch_svc):
     assert AetherhubImportService(db).is_tournament_complete(t.id) is False
 
 
-def test_macro_report_reclassifies_cached_gardens_for_owner(db, user_svc, arch_svc):
+def test_macro_report_never_rewrites_cached_general_name(db, user_svc, arch_svc):
     t = _complete_tournament(db, user_svc, arch_svc)
     gardens = arch_svc.get_or_create_by_name("golgary gardens")
     gardens.general_name = "Gardens"  # старое значение из production-кэша
+    gardens.color_identity = "BG"
+    gardens.is_custom = True
     _register(db, user_svc, t.id, 10, "Late Player", archetype=gardens, final_place=5)
     db.commit()
+    original_id = gardens.id
 
     text = _refresh_and_format_macro_report(db, t.id)
 
     db.refresh(gardens)
-    assert gardens.general_name == "BG Gardens"
+    assert gardens.name == "golgary gardens"
+    assert gardens.general_name == "Gardens"
+    assert gardens.id == original_id
+    assert gardens.color_identity == "BG"
+    assert gardens.is_custom is True
     assert gardens.macro_name == "BG Control"
-    assert "BG Control — 1 (BG Gardens ×1)" in text
+    assert "BG Control — 1 (Gardens ×1)" in text
 
 
 async def test_macro_report_is_appended_only_to_owner_message(db, user_svc, arch_svc, monkeypatch):

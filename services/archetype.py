@@ -158,7 +158,6 @@ class ArchetypeService:
 
     def get_or_create_by_name(self, name: str, is_custom: bool = False) -> models.Archetype:
         """Найти архетип по точному имени или создать новый, сохраняя ввод пользователя."""
-        name = name.strip()
         stmt = select(models.Archetype).where(models.Archetype.name == name)
         archetype = self.db.execute(stmt).scalar_one_or_none()
         if archetype:
