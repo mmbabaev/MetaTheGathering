@@ -7,6 +7,7 @@ Revises: e7b4e1fa452a
 from typing import Sequence, Union
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "a058f39d9db8"
@@ -29,6 +30,8 @@ def upgrade() -> None:
     op.execute(
         sa.text(
             "UPDATE archetypes SET macro_name = CASE "
+            "WHEN lower(general_name) LIKE '%affinity%' THEN 'Affinity' "
+            "WHEN lower(general_name) LIKE '%tron%' THEN 'Tron' "
             "WHEN lower(general_name) IN ('bg gardens', 'bg pestilence') THEN 'BG Control' "
             "WHEN lower(general_name) IN ('mono red', 'red madness', 'red rally', 'red burn', 'br madness') THEN 'Burn' "
             "WHEN lower(general_name) IN ('blue terror', 'ub terror') THEN 'Terror' "
