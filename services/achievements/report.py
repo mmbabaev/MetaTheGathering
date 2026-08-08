@@ -57,6 +57,13 @@ def _lines(result: AppliedResult) -> list[str]:
         if len(result.skipped) > _SKIPPED_LIMIT:
             head.append(f"…и ещё {len(result.skipped) - _SKIPPED_LIMIT}")
 
+    if result.rule_errors:
+        head.append("")
+        head.append("⚠️ ОШИБКИ РАСЧЁТА")
+        head.append(f"Статус: {result.status}. Часть ачивок могла быть не рассчитана.")
+        for error in result.rule_errors:
+            head.append(f"• {error.code} — {error.error_type}")
+
     return head
 
 
@@ -64,6 +71,8 @@ def _counters(result: AppliedResult) -> str:
     parts = [f"Выдано {len(result.granted)}", f"прогресс у {len(result.progress_changes)}"]
     if result.skipped:
         parts.append(f"не в зачёт {len(result.skipped)}")
+    if result.rule_errors:
+        parts.append(f"ошибок правил {len(result.rule_errors)}")
     return " · ".join(parts)
 
 

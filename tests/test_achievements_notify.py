@@ -211,7 +211,7 @@ async def test_report_is_written_to_separate_structured_log(
     assert len(files) == 1
     assert list(log_dir.glob("*.tmp")) == []
     payload = json.loads(files[0].read_text(encoding="utf-8"))
-    assert payload["version"] == 1
+    assert payload["version"] == 2
     assert payload["tournament"] == {
         "id": tournament.id,
         "title": tournament.title,
@@ -221,7 +221,36 @@ async def test_report_is_written_to_separate_structured_log(
     assert payload["summary"]["messages"] == len(payload["messages"])
     assert payload["summary"]["granted"] == len(payload["granted"])
     assert payload["summary"]["progress_changes"] == len(payload["progress_changes"])
+    assert payload["summary"]["status"] == "completed"
+    assert payload["summary"]["processing_run_id"] is not None
     assert all("user_id" in item and "code" in item and "evidence" in item for item in payload["granted"])
+
+
+@pytest.mark.asyncio
+async def test_rule_failure_is_visible_to_owner_and_persisted_safely(
+    db, played, owner_chat, monkeypatch
+):
+    tournament, _ = played
+    private_message = "private-data-must-not-be-stored"
+
+    def fail(_self, _ctx):
+        raise RuntimeError(private_message)
+
+    monkeypatch.setattr("services.achievements.rules.DebutRule.evaluate", fail)
+    bot = AsyncMock()
+
+    sent = await send_achievements_report(bot, db, tournament.id)
+
+    assert sent == 1
+    text = bot.send_message.await_args.kwargs["text"]
+    assert "⚠️ ОШИБКИ РАСЧЁТА" in text
+    assert "debut — RuntimeError" in text
+    assert private_message not in text
+    run = db.query(models.AchievementProcessingRun).one()
+    assert run.status == "partial"
+    assert run.rules_total == 7 and run.rules_failed == 1
+    assert json.loads(run.rule_errors_json) == [{"code": "debut", "error_type": "RuntimeError"}]
+    assert private_message not in run.rule_errors_json
 
 
 @pytest.mark.asyncio

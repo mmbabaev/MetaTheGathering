@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -19,9 +20,11 @@ from services.achievements import definitions
 from services.achievements.context import SkippedPlayer, TournamentContext, build_context
 from services.achievements.definitions import AchievementDef
 from services.achievements.history import AchievementHistory, display_name, tournament_date
-from services.achievements.rules import AchievementRule, Award, ProgressUpdate, RuleOutcome, default_rules
+from services.achievements.rules import AchievementRule, Award, ProgressUpdate, RuleError, RuleOutcome, default_rules
 
 logger = logging.getLogger(__name__)
+
+ENGINE_VERSION = 1
 
 
 @dataclass(frozen=True)
@@ -62,10 +65,13 @@ class AppliedResult:
     granted: list[GrantedAchievement] = field(default_factory=list)
     progress_changes: list[ProgressChange] = field(default_factory=list)
     skipped: list[SkippedPlayer] = field(default_factory=list)
+    status: str = "completed"
+    rule_errors: list[RuleError] = field(default_factory=list)
+    processing_run_id: Optional[int] = None
 
     @property
     def is_empty(self) -> bool:
-        return not self.granted and not self.progress_changes
+        return not self.granted and not self.progress_changes and not self.rule_errors
 
 
 @dataclass
@@ -133,12 +139,14 @@ class AchievementService:
             logger.info("[achievements] tournament #%s is not complete yet — skip", tournament_id)
             return None, RuleOutcome()
 
-        outcome = RuleOutcome()
+        outcome = RuleOutcome(started_at=models.utc_now(), rules_evaluated=len(self.rules))
         for rule in self.rules:
             try:
                 outcome.extend(rule.evaluate(ctx))
-            except Exception:  # noqa: BLE001 — сбой одного правила не должен ронять остальные
+            except Exception as exc:  # noqa: BLE001 — сбой одного правила не должен ронять остальные
+                outcome.rule_errors.append(RuleError(code=rule.code, error_type=type(exc).__name__))
                 logger.exception("[achievements] rule %s failed on tournament #%s", rule.code, tournament_id)
+        outcome.completed_at = models.utc_now()
         return ctx, outcome
 
     # ------------------------------------------------------------- запись
@@ -163,6 +171,8 @@ class AchievementService:
             title=ctx.tournament.title,
             club=ctx.tournament.club,
             skipped=list(ctx.skipped),
+            status=outcome.status,
+            rule_errors=list(outcome.rule_errors),
         )
         for award in outcome.awards:
             granted = self._grant(ctx, award, notified=notified)
@@ -172,6 +182,29 @@ class AchievementService:
             change = self._update_progress(ctx, update)
             if change is not None:
                 result.progress_changes.append(change)
+        run = models.AchievementProcessingRun(
+            tournament_id=ctx.tournament.id,
+            status=result.status,
+            engine_version=ENGINE_VERSION,
+            rules_total=outcome.rules_evaluated,
+            rules_failed=len(outcome.rule_errors),
+            granted_count=len(result.granted),
+            progress_changes_count=len(result.progress_changes),
+            skipped_count=len(result.skipped),
+            rule_errors_json=(
+                json.dumps(
+                    [{"code": error.code, "error_type": error.error_type} for error in outcome.rule_errors],
+                    ensure_ascii=False,
+                )
+                if outcome.rule_errors
+                else None
+            ),
+            started_at=outcome.started_at or models.utc_now(),
+            completed_at=outcome.completed_at or models.utc_now(),
+        )
+        self.db.add(run)
+        self.db.flush()
+        result.processing_run_id = run.id
         if commit:
             self.db.commit()
 

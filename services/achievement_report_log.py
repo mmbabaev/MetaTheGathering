@@ -8,7 +8,7 @@ from pathlib import Path
 
 from services.achievements import AppliedResult
 
-LOG_VERSION = 1
+LOG_VERSION = 2
 
 
 def write_achievement_report_log(
@@ -37,10 +37,13 @@ def write_achievement_report_log(
             "club": result.club,
         },
         "summary": {
+            "processing_run_id": result.processing_run_id,
+            "status": result.status,
             "granted": len(result.granted),
             "progress_changes": len(result.progress_changes),
             "skipped": len(result.skipped),
             "messages": len(messages),
+            "rule_errors": len(result.rule_errors),
         },
         "messages": messages,
         "granted": [
@@ -77,6 +80,13 @@ def write_achievement_report_log(
                 "reason": item.reason,
             }
             for item in result.skipped
+        ],
+        "rule_errors": [
+            {
+                "code": error.code,
+                "error_type": error.error_type,
+            }
+            for error in result.rule_errors
         ],
     }
     temporary.write_text(

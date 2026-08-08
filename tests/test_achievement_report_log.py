@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from services.achievement_report_log import write_achievement_report_log
 from services.achievements.context import SkippedPlayer
 from services.achievements.definitions import Codes, get
+from services.achievements.rules import RuleError
 from services.achievements.service import AppliedResult, GrantedAchievement, ProgressChange
 
 
@@ -39,6 +40,9 @@ def test_log_contains_every_section_needed_for_database_audit(tmp_path):
             )
         ],
         skipped=[SkippedPlayer(user_id=13, name="Игрок Три", reason="колоду записал не он")],
+        status="partial",
+        processing_run_id=44,
+        rule_errors=[RuleError(code="multiclass", error_type="RuntimeError")],
     )
     created_at = datetime(2026, 8, 7, 12, 34, 56, 123456, tzinfo=timezone.utc)
 
@@ -51,6 +55,9 @@ def test_log_contains_every_section_needed_for_database_audit(tmp_path):
 
     assert path.name == "tournament-65-20260807T123456.123456Z.json"
     payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["version"] == 2
+    assert payload["summary"]["processing_run_id"] == 44
+    assert payload["summary"]["status"] == "partial"
     assert payload["tournament"] == {"id": 65, "title": "Edinorog Pauper", "club": "Edinorog"}
     assert payload["messages"] == ["сообщение владельцу"]
     assert payload["granted"][0] == {
@@ -77,3 +84,4 @@ def test_log_contains_every_section_needed_for_database_audit(tmp_path):
     assert payload["skipped"] == [
         {"user_id": 13, "player": "Игрок Три", "reason": "колоду записал не он"}
     ]
+    assert payload["rule_errors"] == [{"code": "multiclass", "error_type": "RuntimeError"}]
