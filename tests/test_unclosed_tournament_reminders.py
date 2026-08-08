@@ -9,7 +9,6 @@ from core.config import settings
 from core.schemas import TournamentCreate
 from services.tournament import TournamentService
 
-
 NOW = datetime(2026, 8, 8, 10, 0, tzinfo=timezone.utc)
 
 
