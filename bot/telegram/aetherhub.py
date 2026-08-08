@@ -63,10 +63,12 @@ async def callback_aetherhub_import_prompt(update: Update, context: ContextTypes
             t = get_tournament(db, tournament_id)
             stored_url = t.aetherhub_url
             club_url = _club_aetherhub_url(t.club)
+            tournament_title = t.title
         except Exception:
             logger.exception("Failed to load tournament %s", tournament_id)
             stored_url = None
             club_url = None
+            tournament_title = None
     finally:
         db.close()
 
@@ -75,7 +77,9 @@ async def callback_aetherhub_import_prompt(update: Update, context: ContextTypes
     if stored_url or club_url:
         status_msg = await query.message.reply_text("⏳ Загружаю данные с AetherHub…")
         try:
-            result = _aetherhub_handler().handle_import_prompt(stored_url, club_url)
+            result = _aetherhub_handler().handle_import_prompt(
+                stored_url, club_url, tournament_title=tournament_title
+            )
         except Exception as e:
             await status_msg.edit_text(f"❌ Не удалось загрузить турнир: {e}")
             return
@@ -113,7 +117,14 @@ async def handle_pending_aetherhub_url(msg: Message, user: User, text: str, cont
 
     status_msg = await msg.reply_text("⏳ Загружаю данные с AetherHub…")
     try:
-        fetch_result = _aetherhub_handler().handle_fetch_preview(text.strip(), "📥 Импорт AetherHub")
+        db = SessionLocal()
+        try:
+            tournament_title = get_tournament(db, tournament_id).title
+        finally:
+            db.close()
+        fetch_result = _aetherhub_handler().handle_fetch_preview(
+            text.strip(), "📥 Импорт AetherHub", tournament_title=tournament_title
+        )
     except Exception as e:
         await status_msg.edit_text(f"❌ Не удалось загрузить турнир: {e}")
         return True

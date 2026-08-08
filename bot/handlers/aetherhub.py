@@ -27,7 +27,10 @@ class AetherhubHandler:
         self._tournament = tournament_service
 
     def handle_import_prompt(
-        self, stored_url: str | None, club_aetherhub_url: str | None
+        self,
+        stored_url: str | None,
+        club_aetherhub_url: str | None,
+        tournament_title: str | None = None,
     ) -> AetherhubFetchResult | None:
         """Find tournament URL and fetch preview. Returns None if URL must be provided manually.
 
@@ -41,7 +44,7 @@ class AetherhubHandler:
         if not url:
             return None
         header = "🔄 Обновление AetherHub" if stored_url else "📥 Импорт AetherHub"
-        result = self.handle_fetch_preview(url, header)
+        result = self.handle_fetch_preview(url, header, tournament_title=tournament_title)
         if not stored_url and not result.data.players:
             return None
         return result
@@ -53,25 +56,30 @@ class AetherhubHandler:
         найти не удалось (ещё не создан / создан пустым) — чтобы было видно, чего ждать, и можно
         было при необходимости прислать ссылку вручную.
         """
-        header = "❌ Сегодняшний паупер-турнир на AetherHub найти не удалось."
+        header = "ℹ️ Похоже, сегодняшний турнир на AetherHub ещё не создан."
         try:
             links = self._aetherhub.fetch_club_tournaments(club_aetherhub_url)
         except Exception:
             return header
         if not links:
             return f"{header}\nНа странице клуба турниров не видно."
-        lines = [header, "", "Что сейчас на странице клуба:"]
-        for link in links[:8]:
+        lines = [header, "", "Последние 3 турнира клуба:"]
+        for link in links[:3]:
             date_str = link.date.strftime("%d.%m") if link.date else "—"
             mark = "🎲" if link.is_pauper else "▫️"
-            lines.append(f"{mark} {date_str} — {link.name}")
+            lines.append(f"{mark} {date_str} — {link.name}\n{link.url}")
         lines.append("")
         lines.append("Если нужный турнир уже создан — пришлите ссылку на него.")
         return "\n".join(lines)
 
-    def handle_fetch_preview(self, url: str, header: str) -> AetherhubFetchResult:
+    def handle_fetch_preview(
+        self, url: str, header: str, tournament_title: str | None = None
+    ) -> AetherhubFetchResult:
         data = self._aetherhub.fetch_tournament(url)
-        return AetherhubFetchResult(data=data, preview_text=self._build_preview(data, header))
+        return AetherhubFetchResult(
+            data=data,
+            preview_text=self._build_preview(data, header, tournament_title=tournament_title),
+        )
 
     def handle_confirm_import(self, tournament_id: int, url: str, data: AetherhubTournamentData) -> HandlerResult:
         result = self._import.import_tournament(tournament_id, data)
@@ -117,10 +125,18 @@ class AetherhubHandler:
             lines.append(f"Созданы как новые игроки ({len(result.created_names)}): {names_str}{suffix}")
         return HandlerResult(text="\n".join(lines), new_round_numbers=result.new_round_numbers)
 
-    def _build_preview(self, data: AetherhubTournamentData, header: str) -> str:
+    def _build_preview(
+        self, data: AetherhubTournamentData, header: str, tournament_title: str | None = None
+    ) -> str:
         rounds_summary = ", ".join(f"R{r.number}: {len(r.pairings) // 2} столов" for r in data.rounds)
+        context_lines = []
+        if tournament_title:
+            context_lines.append(f"Турнир: {tournament_title}")
+        context_lines.append(f"AetherHub: {data.url}")
         preview = (
-            f"{header}\n\n"
+            f"{header}\n"
+            + "\n".join(context_lines)
+            + "\n\n"
             f"Игроков: {len(data.players)}\n"
             f"Раунды: {rounds_summary}\n\n"
             f"Первые 5 игроков:\n" + "\n".join(f"  • {p}" for p in data.players[:5])
