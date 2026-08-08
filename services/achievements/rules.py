@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Iterable, Optional, Protocol
 
 from sqlalchemy import select
@@ -48,14 +49,34 @@ class ProgressUpdate:
     evidence: str
 
 
+@dataclass(frozen=True)
+class RuleError:
+    """Безопасное описание сбоя правила без потенциально приватного exception message."""
+
+    code: str
+    error_type: str
+
+
 @dataclass
 class RuleOutcome:
     awards: list[Award] = field(default_factory=list)
     progress: list[ProgressUpdate] = field(default_factory=list)
+    rule_errors: list[RuleError] = field(default_factory=list)
+    rules_evaluated: int = 0
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
 
     def extend(self, other: "RuleOutcome") -> None:
         self.awards.extend(other.awards)
         self.progress.extend(other.progress)
+
+    @property
+    def status(self) -> str:
+        if not self.rule_errors:
+            return "completed"
+        if self.rules_evaluated and len(self.rule_errors) >= self.rules_evaluated:
+            return "failed"
+        return "partial"
 
 
 class AchievementRule(Protocol):

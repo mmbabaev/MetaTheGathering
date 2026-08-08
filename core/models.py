@@ -507,6 +507,25 @@ class AchievementProcessingLease(Base):
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
 
+class AchievementProcessingRun(Base):
+    """Аудит одного завершённого расчёта правил ачивок."""
+
+    __tablename__ = "achievement_processing_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tournament_id = Column(Integer, ForeignKey("tournaments.id", ondelete="CASCADE"), nullable=False, index=True)
+    status = Column(String(16), nullable=False, index=True)  # completed / partial / failed
+    engine_version = Column(Integer, nullable=False, default=1)
+    rules_total = Column(Integer, nullable=False)
+    rules_failed = Column(Integer, nullable=False, default=0)
+    granted_count = Column(Integer, nullable=False, default=0)
+    progress_changes_count = Column(Integer, nullable=False, default=0)
+    skipped_count = Column(Integer, nullable=False, default=0)
+    rule_errors_json = Column(Text, nullable=True)
+    started_at = Column(DateTime, nullable=False)
+    completed_at = Column(DateTime, nullable=False)
+
+
 class RoundPairing(Base):
     """Паринг одного игрока в конкретном раунде турнира (импорт из AetherHub)."""
 
