@@ -28,6 +28,7 @@ from services.achievement_delivery import (
     pending_owner_deliveries,
 )
 from services.achievement_image import render_achievement_card, render_shelf
+from services.achievement_processing_lease import acquire_achievement_lease, release_achievement_lease
 from services.achievement_report_log import write_achievement_report_log
 from services.achievements import AchievementService, build_report
 from services.feature_flags import FeatureFlagService
@@ -143,6 +144,19 @@ async def send_achievements_report(bot, db, tournament_id: int) -> int:
     features = FeatureService(FeatureFlagService(db))
     if not features.are_achievements_enabled():
         return 0
+
+    token = acquire_achievement_lease(db, tournament_id)
+    if token is None:
+        logger.info("[achievements] tournament #%s is already being processed — skip", tournament_id)
+        return 0
+    try:
+        return await _send_achievements_report_locked(bot, db, tournament_id, features)
+    finally:
+        release_achievement_lease(db, tournament_id, token)
+
+
+async def _send_achievements_report_locked(bot, db, tournament_id: int, features: FeatureService) -> int:
+    """Расчёт и доставка под межпроцессным DB lease."""
 
     service = AchievementService(db)
     existing = pending_owner_deliveries(db, tournament_id)
