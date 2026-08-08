@@ -94,10 +94,22 @@ class TestDescribeClubTournaments:
             ClubTournamentLink(name="Легаси 15.07.2026", url="u2", date=date(2026, 7, 15), is_pauper=False),
         ]
         text = self._handler_with_links(links).describe_club_tournaments("https://club.url")
-        assert "найти не удалось" in text
+        assert "ещё не создан" in text
+        assert "Последние 3 турнира клуба" in text
         assert "17.07" in text  # имя + дата турнира
+        assert "u1" in text
         assert "Легаси 15.07.2026" in text
         assert "15.07" in text  # дата второго турнира
+        assert "u2" in text
+
+    def test_lists_only_three_latest_tournaments(self):
+        links = [
+            ClubTournamentLink(name=f"Tournament {index}", url=f"u{index}", date=None)
+            for index in range(1, 5)
+        ]
+        text = self._handler_with_links(links).describe_club_tournaments("https://club.url")
+        assert "u1" in text and "u2" in text and "u3" in text
+        assert "u4" not in text
 
     def test_no_links_message(self):
         text = self._handler_with_links([]).describe_club_tournaments("https://club.url")
@@ -107,7 +119,7 @@ class TestDescribeClubTournaments:
         svc = MagicMock()
         svc.fetch_club_tournaments.side_effect = RuntimeError("boom")
         text = AetherhubHandler(svc).describe_club_tournaments("https://club.url")
-        assert "найти не удалось" in text
+        assert "ещё не создан" in text
 
 
 class TestPreviewMessage:
@@ -118,9 +130,13 @@ class TestPreviewMessage:
             rounds=[],
         )
         h = _handler(fetch_data=data)
-        result = h.handle_fetch_preview(data.url, header="📥 Импорт AetherHub")
+        result = h.handle_fetch_preview(
+            data.url, header="📥 Импорт AetherHub", tournament_title="🐠 Goldfish Pauper 07.08.2026"
+        )
         assert isinstance(result, AetherhubFetchResult)
         assert "📥 Импорт AetherHub" in result.preview_text
+        assert "Турнир: 🐠 Goldfish Pauper 07.08.2026" in result.preview_text
+        assert f"AetherHub: {data.url}" in result.preview_text
         assert "Игроков: 6" in result.preview_text
         assert "Первые 5 игроков:" in result.preview_text
         assert "• P1" in result.preview_text
