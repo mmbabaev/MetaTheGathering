@@ -1,7 +1,7 @@
 """Tests for AetherHub club page parsing and scheduler job logic."""
 
 import asyncio
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 from zoneinfo import ZoneInfo
 
@@ -1028,10 +1028,27 @@ class TestCreateTournamentJob:
     def test_closes_previous_active_tournament(self, db, svc):
         job = _make_create_job(weekday="friday", chat_id=0)
         old = svc.create_tournament(TournamentCreate(title="Old", chat_id=0, slug="old", club="Goldfish"))
+        now_utc = FRIDAY_NOW.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
+        db.get(cm.Tournament, old.id).created_at = now_utc - timedelta(days=6)
+        db.commit()
         bot = AsyncMock()
         asyncio.run(job.run(bot=bot, now=FRIDAY_NOW, db=db))
         old_refreshed = db.get(cm.Tournament, old.id)
         assert old_refreshed.status == TournamentStatus.CLOSED
+
+    def test_keeps_incomplete_tournament_open_for_six_days(self, db, svc):
+        job = _make_create_job(weekday="friday", chat_id=0)
+        old = svc.create_tournament(TournamentCreate(title="Old", chat_id=0, slug="old", club="Goldfish"))
+        now_utc = FRIDAY_NOW.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
+        db.get(cm.Tournament, old.id).created_at = now_utc - timedelta(days=5, hours=23)
+        db.commit()
+
+        asyncio.run(job.run(bot=AsyncMock(), now=FRIDAY_NOW, db=db))
+
+        assert db.get(cm.Tournament, old.id).status == TournamentStatus.REGISTRATION
+        active = svc.list_active_tournaments_for_chat(0)
+        assert len(active) == 1
+        assert active[0].title == "Old"
 
     def test_registration_open_goes_to_club_chat_and_owner_with_deeplink(self, db):
         job = _make_create_job(weekday="friday", chat_id=42)

@@ -119,6 +119,8 @@ def get_clubs() -> list[Club]:
 # Job: create tournament
 # ---------------------------------------------------------------------------
 
+INCOMPLETE_TOURNAMENT_CLOSE_DELAY = timedelta(days=6)
+
 
 class CreateTournamentJob:
     """Creates the club's tournament on the scheduled weekday."""
@@ -147,8 +149,15 @@ class CreateTournamentJob:
             try:
                 active = svc.get_active_tournament_for_chat(self.club.chat_id or 0)
                 if active:
-                    svc.close_tournament(active.id)
-                    logger.info(f"Closed previous tournament #{active.id} for '{self.club.name}'")
+                    now_utc = now.astimezone(timezone.utc).replace(tzinfo=None) if now.tzinfo else now
+                    if now_utc - active.created_at >= INCOMPLETE_TOURNAMENT_CLOSE_DELAY:
+                        svc.close_tournament(active.id)
+                        logger.info(f"Closed previous tournament #{active.id} for '{self.club.name}'")
+                    else:
+                        logger.info(
+                            f"Kept recent incomplete tournament #{active.id} open for '{self.club.name}'"
+                        )
+                        return
 
                 new_t = svc.create_tournament(
                     TournamentCreate(
