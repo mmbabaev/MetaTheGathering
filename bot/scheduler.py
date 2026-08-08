@@ -233,6 +233,7 @@ class AetherhubImportJob:
 
         url: str | None = None
         tournament_id: int | None = None
+        auto_discovered = False
 
         try:
             tournament = _find_active_club_tournament(db, self.club.name)
@@ -254,12 +255,20 @@ class AetherhubImportJob:
                 if not url:
                     logger.info(f"AetherhubImportJob: no pauper tournament found for '{self.club.name}'")
                     return
+                auto_discovered = True
 
             logger.info(f"AetherhubImportJob: importing {url} for tournament #{tournament_id}")
             try:
                 data = self._aetherhub.fetch_tournament(url)
             except Exception:
                 logger.exception(f"AetherhubImportJob: failed to fetch tournament data from {url}")
+                return
+
+            if auto_discovered and not data.players:
+                logger.info(
+                    f"AetherhubImportJob: auto-discovered tournament {url} has no players; "
+                    "skipping import and URL binding"
+                )
                 return
 
             try:
