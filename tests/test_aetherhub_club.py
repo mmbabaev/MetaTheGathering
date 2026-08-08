@@ -20,7 +20,7 @@ from core.config import Club, ClubSchedule
 from core.models import TournamentStatus
 from core.schemas import TournamentCreate
 from services.aetherhub_import_service import AetherhubImportService
-from services.aetherhub_models import ClubTournamentLink
+from services.aetherhub_models import AetherhubTournamentData, ClubTournamentLink
 from services.aetherhub_service import PAUPER_RE, AetherhubService
 
 # ---------------------------------------------------------------------------
@@ -837,6 +837,27 @@ class TestAetherhubImportJob:
         asyncio.run(job.run(now=FRIDAY_NOW, db=db))
 
         mock_svc.fetch_tournament.assert_not_called()
+
+    def test_does_not_import_or_save_auto_discovered_empty_tournament(self, db, svc):
+        """An empty auto-discovered event must not become the tournament's stored URL."""
+        found_url = "https://aetherhub.com/Tourney/RoundTourney/0"
+        mock_svc = MagicMock()
+        mock_svc.find_todays_pauper_tournament.return_value = found_url
+        mock_svc.fetch_tournament.return_value = AetherhubTournamentData(
+            url=found_url, players=[], rounds=[]
+        )
+
+        svc.create_tournament(TournamentCreate(title="T", chat_id=0, slug="t", club="Goldfish"))
+        job = _make_import_job(aetherhub_service=mock_svc)
+
+        with (
+            patch("bot.scheduler.AetherhubImportService") as mock_import_cls,
+            patch("bot.scheduler.TournamentService") as mock_ts_cls,
+        ):
+            asyncio.run(job.run(now=FRIDAY_NOW, db=db))
+
+        mock_import_cls.return_value.import_tournament.assert_not_called()
+        mock_ts_cls.return_value.set_aetherhub_url.assert_not_called()
 
     def test_saves_url_after_successful_import(self, db, svc):
         """After import, aetherhub_url is saved via a separate session."""
