@@ -472,6 +472,7 @@ class AetherhubFinalReimportJob:
 
 
 REVEAL_DECKS_TIME = "22:00"  # авто-раскрытие колод турниров текущего дня
+UNCLOSED_REMINDER_TIME = "10:00"
 
 
 class AutoRevealDecksJob:
@@ -535,6 +536,60 @@ class AutoRevealDecksJob:
             await bot.send_message(chat_id=settings.OWNER_CHAT_ID, text=text)
         except Exception:  # noqa: BLE001 — сбой одного анонса не должен ронять джобу
             logger.exception("AutoRevealDecksJob: announce failed for #%s", tournament.id)
+
+
+class UnclosedTournamentReminderJob:
+    """Owner-only напоминания о незакрытых турнирах через 3 и 7 суток."""
+
+    async def run(self, bot, now: datetime, db=None) -> None:
+        if bot is None or not settings.OWNER_CHAT_ID:
+            return
+        now_utc = now.astimezone(timezone.utc).replace(tzinfo=None) if now.tzinfo else now
+        close_db = db is None
+        if close_db:
+            db = SessionLocal()
+        try:
+            tournaments = db.execute(
+                select(models.Tournament).where(models.Tournament.status != models.TournamentStatus.CLOSED)
+            ).scalars().all()
+            for tournament in tournaments:
+                age = now_utc - tournament.created_at
+                days: int | None = None
+                if age >= timedelta(days=7) and tournament.unclosed_reminder_7d_sent_at is None:
+                    days = 7
+                elif age >= timedelta(days=3) and tournament.unclosed_reminder_3d_sent_at is None:
+                    days = 3
+                if days is None:
+                    continue
+
+                participants = TournamentService(db).list_participants_for_tournament(tournament.id)
+                with_deck = sum(participant.archetype_id is not None for participant in participants)
+                day_word = "дня" if days == 3 else "дней"
+                text = (
+                    f"⚠️ Турнир не закрыт уже {days} {day_word}\n\n"
+                    f"{tournament.title}\n"
+                    f"Участников: {len(participants)} ({with_deck} с колодой)\n"
+                    f"ID турнира: {tournament.id}\n\n"
+                    "Проверь данные и закрой турнир, когда он будет готов."
+                )
+                try:
+                    await bot.send_message(chat_id=settings.OWNER_CHAT_ID, text=text)
+                except Exception:  # noqa: BLE001 — повторим на следующем ежедневном запуске
+                    logger.exception(
+                        "UnclosedTournamentReminderJob: %s-day reminder failed for #%s", days, tournament.id
+                    )
+                    continue
+
+                sent_at = models.utc_now()
+                if days == 7:
+                    tournament.unclosed_reminder_7d_sent_at = sent_at
+                    tournament.unclosed_reminder_3d_sent_at = tournament.unclosed_reminder_3d_sent_at or sent_at
+                else:
+                    tournament.unclosed_reminder_3d_sent_at = sent_at
+                db.commit()
+        finally:
+            if close_db:
+                db.close()
 
 
 # ---------------------------------------------------------------------------
@@ -980,6 +1035,17 @@ def setup_scheduler(app: Application) -> None:
     _reveal_decks.__name__ = "auto_reveal_decks"
     app.job_queue.run_daily(_reveal_decks, time=reveal_time)
     logger.info(f"Scheduler: AutoRevealDecksJob registered (daily {REVEAL_DECKS_TIME})")
+
+    unclosed_reminder_job = UnclosedTournamentReminderJob()
+    unclosed_reminder_time = datetime.strptime(UNCLOSED_REMINDER_TIME, "%H:%M").time().replace(tzinfo=tz)
+
+    async def _remind_unclosed_tournaments(context: ContextTypes.DEFAULT_TYPE) -> None:
+        tz_ = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
+        await unclosed_reminder_job.run(context.bot, now=datetime.now(tz_))
+
+    _remind_unclosed_tournaments.__name__ = "unclosed_tournament_reminders"
+    app.job_queue.run_daily(_remind_unclosed_tournaments, time=unclosed_reminder_time)
+    logger.info(f"Scheduler: UnclosedTournamentReminderJob registered (daily {UNCLOSED_REMINDER_TIME})")
 
 
 def _register_schedule_jobs(app: Application) -> None:

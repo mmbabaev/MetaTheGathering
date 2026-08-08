@@ -125,6 +125,10 @@ class Tournament(Base):
     # момент отправки анонса «сбор метагейма завершён»; NULL = ещё не анонсировали (идемпотентность)
     completed_announced_at = Column(DateTime, nullable=True)
 
+    # owner-only напоминания о всё ещё незакрытом турнире; ставятся только после успешной доставки
+    unclosed_reminder_3d_sent_at = Column(DateTime, nullable=True)
+    unclosed_reminder_7d_sent_at = Column(DateTime, nullable=True)
+
     created_at = Column(DateTime, default=utc_now, nullable=False)
 
     participants = relationship("Participant", back_populates="tournament", cascade="all, delete-orphan")
