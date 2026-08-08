@@ -495,6 +495,18 @@ class AchievementReportDelivery(Base):
     )
 
 
+class AchievementProcessingLease(Base):
+    """Межпроцессная аренда права считать и доставлять ачивки одного турнира."""
+
+    __tablename__ = "achievement_processing_leases"
+
+    tournament_id = Column(Integer, ForeignKey("tournaments.id", ondelete="CASCADE"), primary_key=True)
+    token = Column(String(32), nullable=False, unique=True)
+    locked_until = Column(DateTime, nullable=False, index=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+
 class RoundPairing(Base):
     """Паринг одного игрока в конкретном раунде турнира (импорт из AetherHub)."""
 

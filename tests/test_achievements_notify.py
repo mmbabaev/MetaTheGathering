@@ -9,11 +9,13 @@ from datetime import timedelta
 from unittest.mock import AsyncMock
 
 import pytest
+from sqlalchemy.orm import Session
 
 from bot.telegram.achievements import send_achievements_report
 from core import models
 from core.config import settings
 from core.schemas import TournamentCreate
+from services.achievement_processing_lease import acquire_achievement_lease, release_achievement_lease
 from services.achievements import AchievementService
 from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.tournament import TournamentService
@@ -266,3 +268,38 @@ async def test_idempotent_second_run_does_not_create_another_log(
     await send_achievements_report(AsyncMock(), db, tournament.id)
 
     assert len(list(log_dir.glob(f"tournament-{tournament.id}-*.json"))) == 1
+
+
+@pytest.mark.asyncio
+async def test_live_lease_prevents_duplicate_processing_and_delivery(db, played, owner_chat):
+    tournament, _ = played
+    blocker = Session(db.bind)
+    token = acquire_achievement_lease(blocker, tournament.id)
+    assert token is not None
+    bot = AsyncMock()
+    try:
+        assert await send_achievements_report(bot, db, tournament.id) == 0
+        bot.send_message.assert_not_awaited()
+        assert db.query(models.UserAchievement).count() == 0
+        assert db.query(models.AchievementReportDelivery).count() == 0
+    finally:
+        release_achievement_lease(blocker, tournament.id, token)
+        blocker.close()
+
+    assert await send_achievements_report(bot, db, tournament.id) == 1
+    bot.send_message.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_lease_is_released_when_processing_raises(db, played, owner_chat, monkeypatch):
+    tournament, _ = played
+
+    async def fail(*_args, **_kwargs):
+        raise RuntimeError("processing failed")
+
+    monkeypatch.setattr("bot.telegram.achievements._send_achievements_report_locked", fail)
+
+    with pytest.raises(RuntimeError, match="processing failed"):
+        await send_achievements_report(AsyncMock(), db, tournament.id)
+
+    assert db.get(models.AchievementProcessingLease, tournament.id) is None
