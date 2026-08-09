@@ -24,6 +24,19 @@ python3 cli.py tournament import <url>   # импорт с AetherHub
 python3 cli.py tournament export-excel   # выгрузить Excel в текущую папку
 ```
 
+### Статистика для сезонных ачивок
+
+Read-only snapshot на начало сезона, без изменений БД и Telegram-сообщений:
+
+```bash
+python3 cli.py achievements season-stats --as-of 2026-09-01
+python3 cli.py achievements season-stats --as-of 2026-09-01 --format json -o /tmp/season.json
+```
+
+По умолчанию команда строит топ-10 колод за 120 дней, head-to-head за год и сравнивает
+два соседних 90-дневных окна винрейта. Подробные правила и продуктовая концепция:
+[`season_achievements.md`](season_achievements.md).
+
 ### Опции
 
 | Команда | Опция | Описание |
