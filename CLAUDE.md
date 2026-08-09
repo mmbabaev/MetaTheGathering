@@ -110,6 +110,7 @@ main.py  →  bot/telegram/  →  bot/handlers/  →  services/  →  core/model
 - **`bot/keyboards/`** — callback prefix constants (`CB_*`) and inline keyboard builders; callback data format is `PREFIX:arg1:arg2`
 - **`bot/messages/`** — Russian-language string constants and `format_*` helpers
 - **`services/tournament.py`** — the primary service class `TournamentService`; handles tournament lifecycle, participant registration, voting, and meta aggregation
+- **`services/achievements/`** — lifetime achievement engine. Read [`services/achievements/README.md`](services/achievements/README.md) before changing rules, eligibility, delivery, or season-related code
 - **`services/errors.py`** — re-exports the exception hierarchy from `services_errors.py`; handlers catch these by type
 - **`core/models.py`** — SQLAlchemy ORM models (7 tables)
 - **`core/schemas.py`** — Pydantic v2 read/create schemas used as service return types (all use `model_validate()`)
