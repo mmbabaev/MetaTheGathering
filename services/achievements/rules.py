@@ -18,7 +18,7 @@ from sqlalchemy import select
 
 from core import models
 from services.achievements import definitions
-from services.achievements.context import TournamentContext
+from services.achievements.context import DataRequirements, TournamentContext
 from services.achievements.history import Participation
 from services.achievements.registry import validate_registry
 
@@ -47,6 +47,8 @@ class ProgressUpdate:
     threshold: int
     next_level: int
     evidence: str
+    requirements: DataRequirements
+    source_tournament_ids: tuple[int, ...]
 
 
 @dataclass(frozen=True)
@@ -81,6 +83,7 @@ class RuleOutcome:
 
 class AchievementRule(Protocol):
     code: str
+    requirements: DataRequirements
 
     def evaluate(self, ctx: TournamentContext) -> RuleOutcome: ...
 
@@ -113,14 +116,23 @@ class CounterRule:
     """Базовое правило со счётчиком: значение → взятые уровни + прогресс до следующего."""
 
     code: str = ""
+    requirements = DataRequirements(
+        self_registered=True,
+        actually_played=True,
+        tournament_closed=True,
+        result_complete=True,
+    )
 
     def audience(self, ctx: TournamentContext) -> Iterable[int]:
         """Кого пересчитываем. По умолчанию — прошедшие гейт зачёта участники турнира."""
-        return sorted(ctx.eligible_user_ids)
+        return sorted(ctx.eligible_user_ids_for(self.requirements))
 
     def value_for(self, ctx: TournamentContext, user_id: int) -> tuple[int, str]:
         """(значение счётчика, причина). Переопределяется в наследниках."""
         raise NotImplementedError
+
+    def source_tournament_ids(self, ctx: TournamentContext, user_id: int) -> tuple[int, ...]:
+        return (ctx.tournament.id,)
 
     def evaluate(self, ctx: TournamentContext) -> RuleOutcome:
         outcome = RuleOutcome()
@@ -148,6 +160,8 @@ class CounterRule:
                         threshold=nxt.threshold,
                         next_level=nxt.level,
                         evidence=evidence,
+                        requirements=self.requirements,
+                        source_tournament_ids=self.source_tournament_ids(ctx, user_id),
                     )
                 )
         return outcome
@@ -157,10 +171,11 @@ class DebutRule:
     """🎖 Дебют — впервые сам записал свою колоду. Одноразовая, без прогресса."""
 
     code = definitions.Codes.DEBUT
+    requirements = CounterRule.requirements
 
     def evaluate(self, ctx: TournamentContext) -> RuleOutcome:
         outcome = RuleOutcome()
-        for user_id in sorted(ctx.eligible_user_ids):
+        for user_id in sorted(ctx.eligible_user_ids_for(self.requirements)):
             participations = ctx.history.participations(user_id, until=ctx.played_at)
             if not participations or participations[0].tournament_id != ctx.tournament.id:
                 continue
@@ -182,6 +197,9 @@ class FirstDeckRule(CounterRule):
 
     code = definitions.Codes.FIRST_DECK
 
+    def source_tournament_ids(self, ctx: TournamentContext, user_id: int) -> tuple[int, ...]:
+        return tuple(p.tournament_id for p in ctx.history.first_recorder_participations(user_id, until=ctx.played_at))
+
     def value_for(self, ctx: TournamentContext, user_id: int) -> tuple[int, str]:
         items = ctx.history.first_recorder_participations(user_id, until=ctx.played_at)
         if not items:
@@ -195,6 +213,9 @@ class UndefeatedRule(CounterRule):
     """🏆 Без поражений — турниры, пройденные X-0."""
 
     code = definitions.Codes.UNDEFEATED
+
+    def source_tournament_ids(self, ctx: TournamentContext, user_id: int) -> tuple[int, ...]:
+        return tuple(p.tournament_id for p in ctx.history.undefeated_participations(user_id, until=ctx.played_at))
 
     def value_for(self, ctx: TournamentContext, user_id: int) -> tuple[int, str]:
         items = ctx.history.undefeated_participations(user_id, until=ctx.played_at)
@@ -217,8 +238,16 @@ class ScribeRule(CounterRule):
     """
 
     code = definitions.Codes.SCRIBE
+    requirements = DataRequirements(
+        self_registered=False,
+        actually_played=False,
+        tournament_closed=True,
+        result_complete=True,
+    )
 
     def audience(self, ctx: TournamentContext) -> Iterable[int]:
+        if not ctx.meets_tournament_requirements(self.requirements):
+            return []
         tg_ids = (
             ctx.history.db.execute(
                 select(models.Participant.deck_added_by_tg_id).where(
@@ -232,6 +261,10 @@ class ScribeRule(CounterRule):
         )
         users = ctx.history.db.execute(select(models.User).where(models.User.tg_id.in_(set(tg_ids)))).scalars().all()
         return sorted(u.id for u in users if u.tg_id > 0)
+
+    def source_tournament_ids(self, ctx: TournamentContext, user_id: int) -> tuple[int, ...]:
+        user = ctx.users.get(user_id) or ctx.history.db.get(models.User, user_id)
+        return ctx.history.scribe_tournament_ids(user, until=ctx.played_at) if user is not None else ()
 
     def value_for(self, ctx: TournamentContext, user_id: int) -> tuple[int, str]:
         user = ctx.users.get(user_id) or ctx.history.db.get(models.User, user_id)
@@ -255,7 +288,7 @@ class RegularRule(CounterRule):
     def audience(self, ctx: TournamentContext) -> Iterable[int]:
         if not ctx.tournament.club:
             return []  # турнир вне клуба серию не двигает
-        return sorted(ctx.eligible_user_ids)
+        return sorted(ctx.eligible_user_ids_for(self.requirements))
 
     def value_for(self, ctx: TournamentContext, user_id: int) -> tuple[int, str]:
         club = ctx.tournament.club
@@ -266,11 +299,20 @@ class RegularRule(CounterRule):
             return 0, ""
         return len(streak), _clip(f"{club}: {_date_list(streak)}")
 
+    def source_tournament_ids(self, ctx: TournamentContext, user_id: int) -> tuple[int, ...]:
+        club = ctx.tournament.club
+        if not club:
+            return ()
+        return tuple(p.tournament_id for p in ctx.history.club_streak(user_id, club, until=ctx.played_at))
+
 
 class MulticlassRule(CounterRule):
     """🎭 Мультикласс — разные колоды за 90 дней."""
 
     code = definitions.Codes.MULTICLASS
+
+    def source_tournament_ids(self, ctx: TournamentContext, user_id: int) -> tuple[int, ...]:
+        return tuple(p.tournament_id for p in ctx.history.decks_in_window(user_id, now=ctx.played_at))
 
     def value_for(self, ctx: TournamentContext, user_id: int) -> tuple[int, str]:
         decks = ctx.history.decks_in_window(user_id, now=ctx.played_at)
@@ -283,6 +325,9 @@ class LoyalistRule(CounterRule):
     """💍 Однолюб — турниры подряд на одной и той же колоде."""
 
     code = definitions.Codes.LOYALIST
+
+    def source_tournament_ids(self, ctx: TournamentContext, user_id: int) -> tuple[int, ...]:
+        return tuple(p.tournament_id for p in ctx.history.loyalist_streak(user_id, until=ctx.played_at))
 
     def value_for(self, ctx: TournamentContext, user_id: int) -> tuple[int, str]:
         streak = ctx.history.loyalist_streak(user_id, until=ctx.played_at)

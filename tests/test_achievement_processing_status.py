@@ -25,6 +25,8 @@ class FailingRule:
 
 @pytest.fixture
 def complete_tournament(db, tournament):
+    row = db.get(models.Tournament, tournament.id)
+    row.status = models.TournamentStatus.CLOSED
     db.add(
         models.RoundPairing(
             tournament_id=tournament.id,

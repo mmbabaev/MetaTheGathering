@@ -74,6 +74,21 @@ async def callback_toggle_opponent_notify(update: Update, context: ContextTypes.
     await query.answer()
 
 
+async def callback_toggle_achievements_notify(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user = update.effective_user
+    if not query or not user:
+        return
+    _log("settings_toggle_achievements_notify", user)
+    db = SessionLocal()
+    try:
+        result = _settings_handler(db).handle_toggle_achievements_notify(user.id)
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+    finally:
+        db.close()
+    await query.answer()
+
+
 async def callback_toggle_poll_notify(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     user = update.effective_user

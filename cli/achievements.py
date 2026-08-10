@@ -144,3 +144,61 @@ def list_awards(
                 f"{row.awarded_at:%Y-%m-%d %H:%M}  {name:24}  {row.code}:{row.level}"
                 f"  турнир #{row.tournament_id}  {row.evidence or ''}"
             )
+
+
+@app.command("events")
+def list_progress_events(
+    limit: int = typer.Option(50, "--limit", "-n", help="Сколько последних events показать"),
+    user_id: Optional[int] = typer.Option(None, "--user-id"),
+    code: Optional[str] = typer.Option(None, "--code"),
+):
+    """Immutable progress audit log with before/after and source versions."""
+    with get_db() as db:
+        stmt = select(models.AchievementProgressEvent).order_by(models.AchievementProgressEvent.id.desc()).limit(limit)
+        if user_id is not None:
+            stmt = stmt.where(models.AchievementProgressEvent.user_id == user_id)
+        if code:
+            stmt = stmt.where(models.AchievementProgressEvent.code == code)
+        for event in db.execute(stmt).scalars().all():
+            typer.echo(
+                f"#{event.id} {event.event_type} user#{event.user_id} {event.code}: "
+                f"{event.before_value} -> {event.after_value} tournament#{event.tournament_id} "
+                f"ruleset={event.ruleset_version} stats={event.stats_version}"
+            )
+
+
+@app.command("replay-event")
+def replay_event(
+    event_id: int = typer.Argument(...),
+    apply: bool = typer.Option(False, "--apply", help="Применить переход; без флага только dry-run"),
+):
+    """Dry-run/replay one progress cell; conflicting newer state is never overwritten."""
+    with get_db() as db:
+        result = AchievementService(db).replay_progress_event(event_id, apply=apply)
+        mode = "applied" if apply else "dry-run"
+        typer.echo(
+            f"{mode}: event#{result.event_id}, current={result.current_value}, target={result.target_value}, "
+            f"changed={result.changed}, conflict={result.conflict}"
+        )
+        if result.conflict:
+            raise typer.Exit(2)
+
+
+@app.command("override-progress")
+def override_progress(
+    user_id: int = typer.Argument(...),
+    code: str = typer.Argument(...),
+    value: int = typer.Argument(...),
+    reason: str = typer.Option(..., "--reason", help="Обязательная причина owner override"),
+    tournament_id: Optional[int] = typer.Option(None, "--tournament-id"),
+):
+    """Owner override recorded as a separate immutable event."""
+    with get_db() as db:
+        event = AchievementService(db).override_progress(
+            user_id,
+            code,
+            value,
+            reason,
+            tournament_id=tournament_id,
+        )
+        typer.echo(f"override event #{event.id}: {event.before_value} -> {event.after_value}")

@@ -17,6 +17,10 @@
 - backfill, audit и owner-only `/achievements`;
 - DB lease, processing runs и transactional outbox для owner-отчёта;
 - повторная доставка недоставленных частей отчёта без дублей.
+- explicit gates `self_registered`, `actually_played`, `tournament_closed`,
+  `result_complete` на каждом rule и read-only canonical match projection;
+- immutable progress events с evidence/source/version и idempotent replay;
+- универсальный owner/player outbox с versioned targeted payload, opt-in и allow-list.
 
 Движок работает в **owner-only shadow mode**. Игрокам ничего автоматически не
 рассылается. Сезоны, персональное bingo-поле 4×4, клетки, prize claims и Board Lab
@@ -35,7 +39,7 @@ PR [#210](https://github.com/mmbabaev/MetaTheGathering/pull/210) добавля�
   -> retry существующего owner outbox ИЛИ AchievementService.process_tournament
   -> TournamentContext + проверка полноты результатов
   -> независимые rules
-  -> awards + progress snapshots + processing run + owner outbox
+  -> awards + progress snapshots/events + processing run + owner/player outbox
      в одной транзакции
   -> последовательная доставка owner-отчёта с retry
 ```
@@ -51,8 +55,8 @@ PR [#210](https://github.com/mmbabaev/MetaTheGathering/pull/210) добавля�
 | `definitions.py` | Коды, названия, уровни, thresholds и порядок показа — source of truth каталога в коде |
 | `registry.py` | Проверка согласованности definitions, rules и порядка кодов |
 | `rules.py` | Pure business rules и `default_rules()` |
-| `context.py` | Контекст одного турнира, текущий eligibility и причины skip |
-| `history.py` | Кэшированная история участий, парингов, результатов и колод |
+| `context.py` | Независимые data requirements, eligibility и причины skip |
+| `history.py` | Read-only canonical matches и только закрытая/полная история реально сыгравших |
 | `service.py` | Evaluate/apply, awards, progress, processing run, shelf и backfill |
 | `report.py` | Формирование текстового owner-отчёта |
 | `__init__.py` | Публичные импорты модуля |
@@ -76,7 +80,8 @@ PR [#210](https://github.com/mmbabaev/MetaTheGathering/pull/210) добавля�
   `(user_id, code, level)` обеспечивает идемпотентность.
 - `UserAchievementProgress` — только последний вычисленный snapshot счётчика, не
   история изменений.
-- `AchievementReportDelivery` — outbox частей owner-отчёта.
+- `AchievementProgressEvent` — immutable before/after, evidence, sources и versions.
+- `AchievementReportDelivery` — универсальный outbox owner/player/targeted payload.
 - `AchievementProcessingLease` — временная блокировка обработки турнира.
 - `AchievementProcessingRun` — итог запуска и ошибки отдельных rules.
 
@@ -90,16 +95,11 @@ Season/Board/Cell, immutable progress events, peer confirmations и prize claims
    источник правды.
 2. Повторный и параллельный запуск не должен дублировать award, progress event или
    доставку.
-3. `evaluate_for_tournament()` задуман read-only. Текущий name resolver использует
-   импортный resolver, который может объединять пользователей; это известный пробел
-   [#212](https://github.com/mmbabaev/MetaTheGathering/issues/212), его нельзя
-   распространять на новые read-only сценарии.
-4. Текущий eligibility в основном означает «сам записал колоду». Это ещё не строгое
-   `actually_played + tournament_closed + result_complete`: no-show и исторически
-   неполные турниры требуют исправления в #199/#212.
-5. Автоматическая player delivery не реализована. Любой новый цикл
-   `bot.send_message` по игрокам требует отдельного подтверждения и должен соблюдать
-   `notify_allowed_ids`. Debug отправляет сообщение только инициатору.
+3. `evaluate_for_tournament()` read-only: name resolver не создаёт и не merge пользователей.
+4. Каждое rule явно объявляет четыре gates; исторические counters читают только
+   `actually_played + tournament_closed + result_complete`.
+5. Player delivery реализована, но выключена по умолчанию. Отправка требует global
+   flag + per-user opt-in + `notify_allowed_ids`; debug отправляет только инициатору.
 6. `general_name` — стабильный ключ архетипа для статистики; `name` — отображаемый
    вариант. Не группируйте колоды по display name без явной причины.
 
@@ -123,7 +123,7 @@ python3 -m pytest tests/test_achievements_registry.py \
 - [#167](https://github.com/mmbabaev/MetaTheGathering/issues/167) — общий индекс и
   фактический статус;
 - [#199](https://github.com/mmbabaev/MetaTheGathering/issues/199) — hardening
-  eligibility, delivery и audit;
+  eligibility, delivery и audit (7/7, закрывается этим изменением);
 - [#200](https://github.com/mmbabaev/MetaTheGathering/issues/200) — каталог идей;
 - [#211](https://github.com/mmbabaev/MetaTheGathering/issues/211) — внешний stats API;
 - [#212](https://github.com/mmbabaev/MetaTheGathering/issues/212) — сезонная архитектура;

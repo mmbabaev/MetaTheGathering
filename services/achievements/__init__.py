@@ -5,7 +5,7 @@
 
 from services.achievements.definitions import ACHIEVEMENTS, AchievementDef, Codes
 from services.achievements.history import AchievementHistory, counts_for_achievements
-from services.achievements.report import build_report
+from services.achievements.report import build_player_report, build_report
 from services.achievements.service import (
     AchievementService,
     AchievementView,
@@ -25,5 +25,6 @@ __all__ = [
     "GrantedAchievement",
     "ProgressChange",
     "build_report",
+    "build_player_report",
     "counts_for_achievements",
 ]

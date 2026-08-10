@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
@@ -25,6 +26,7 @@ from services.achievements.rules import AchievementRule, Award, ProgressUpdate, 
 logger = logging.getLogger(__name__)
 
 ENGINE_VERSION = 1
+STATS_VERSION = "achievement-matches-v1"
 
 
 @dataclass(frozen=True)
@@ -109,6 +111,15 @@ class AchievementView:
     progress: Optional[int] = None  # текущее значение счётчика, если ачивка ещё не открыта
 
 
+@dataclass(frozen=True)
+class ProgressReplayResult:
+    event_id: int
+    changed: bool
+    conflict: bool
+    current_value: Optional[int]
+    target_value: int
+
+
 class AchievementService:
     def __init__(
         self,
@@ -135,8 +146,8 @@ class AchievementService:
         ctx = self.build_context(tournament_id)
         if ctx is None:
             return None, RuleOutcome()
-        if not ctx.history.is_complete(tournament_id):
-            logger.info("[achievements] tournament #%s is not complete yet — skip", tournament_id)
+        if not ctx.tournament_closed or not ctx.result_complete:
+            logger.info("[achievements] tournament #%s is not closed and complete yet — skip", tournament_id)
             return None, RuleOutcome()
 
         outcome = RuleOutcome(started_at=models.utc_now(), rules_evaluated=len(self.rules))
@@ -174,22 +185,14 @@ class AchievementService:
             status=outcome.status,
             rule_errors=list(outcome.rule_errors),
         )
-        for award in outcome.awards:
-            granted = self._grant(ctx, award, notified=notified)
-            if granted is not None:
-                result.granted.append(granted)
-        for update in outcome.progress:
-            change = self._update_progress(ctx, update)
-            if change is not None:
-                result.progress_changes.append(change)
         run = models.AchievementProcessingRun(
             tournament_id=ctx.tournament.id,
             status=result.status,
             engine_version=ENGINE_VERSION,
             rules_total=outcome.rules_evaluated,
             rules_failed=len(outcome.rule_errors),
-            granted_count=len(result.granted),
-            progress_changes_count=len(result.progress_changes),
+            granted_count=0,
+            progress_changes_count=0,
             skipped_count=len(result.skipped),
             rule_errors_json=(
                 json.dumps(
@@ -205,6 +208,16 @@ class AchievementService:
         self.db.add(run)
         self.db.flush()
         result.processing_run_id = run.id
+        for award in outcome.awards:
+            granted = self._grant(ctx, award, notified=notified)
+            if granted is not None:
+                result.granted.append(granted)
+        for update in outcome.progress:
+            change = self._update_progress(ctx, update, processing_run_id=run.id)
+            if change is not None:
+                result.progress_changes.append(change)
+        run.granted_count = len(result.granted)
+        run.progress_changes_count = len(result.progress_changes)
         if commit:
             self.db.commit()
 
@@ -247,7 +260,9 @@ class AchievementService:
             progress_value=award.progress_value,
         )
 
-    def _update_progress(self, ctx: TournamentContext, update: ProgressUpdate) -> Optional[ProgressChange]:
+    def _update_progress(
+        self, ctx: TournamentContext, update: ProgressUpdate, *, processing_run_id: int
+    ) -> Optional[ProgressChange]:
         definition = definitions.get(update.code, update.next_level)
         if definition is None:
             return None
@@ -267,6 +282,62 @@ class AchievementService:
 
         if update.value == previous:
             return None  # ничего не сдвинулось — в отчёт не попадает
+        source_tournament_ids = sorted(set(update.source_tournament_ids))
+        match_ids = sorted(
+            {
+                match.id
+                for tournament_id in source_tournament_ids
+                for match in ctx.history.matches(tournament_id)
+                if match.player_user_id == update.user_id
+            }
+        )
+        record = ctx.records.get(update.user_id)
+        stats_snapshot = {
+            "current_tournament_id": ctx.tournament.id,
+            "tournament_closed": ctx.tournament_closed,
+            "result_complete": ctx.result_complete,
+            "value": update.value,
+            "threshold": update.threshold,
+            "record": (
+                {
+                    "wins": record.wins,
+                    "losses": record.losses,
+                    "draws": record.draws,
+                    "rounds": record.rounds,
+                }
+                if record is not None
+                else None
+            ),
+        }
+        event_key = (
+            f"calculated:v{ENGINE_VERSION}:t{ctx.tournament.id}:u{update.user_id}:"
+            f"{update.code}:{previous}:{update.value}"
+        )
+        existing_event = self.db.execute(
+            select(models.AchievementProgressEvent.id).where(
+                models.AchievementProgressEvent.idempotency_key == event_key
+            )
+        ).scalar_one_or_none()
+        if existing_event is None:
+            self.db.add(
+                models.AchievementProgressEvent(
+                    user_id=update.user_id,
+                    code=update.code,
+                    event_type="calculated",
+                    tournament_id=ctx.tournament.id,
+                    processing_run_id=processing_run_id,
+                    before_value=previous,
+                    after_value=update.value,
+                    evidence=update.evidence or None,
+                    requirements_json=json.dumps(update.requirements.as_dict(), sort_keys=True),
+                    source_tournament_ids_json=json.dumps(source_tournament_ids),
+                    match_ids_json=json.dumps(match_ids),
+                    stats_snapshot_json=json.dumps(stats_snapshot, ensure_ascii=False, sort_keys=True),
+                    ruleset_version=ENGINE_VERSION,
+                    stats_version=STATS_VERSION,
+                    idempotency_key=event_key,
+                )
+            )
         return ProgressChange(
             user_id=update.user_id,
             player=self._player_name(ctx, update.user_id),
@@ -276,6 +347,95 @@ class AchievementService:
             threshold=update.threshold,
             evidence=update.evidence,
         )
+
+    def replay_progress_event(self, event_id: int, *, apply: bool = False) -> ProgressReplayResult:
+        """Dry-run or idempotently replay one immutable progress cell transition."""
+        event = self.db.get(models.AchievementProgressEvent, event_id)
+        if event is None:
+            raise ValueError(f"progress event #{event_id} not found")
+        row = self.db.execute(
+            select(models.UserAchievementProgress).where(
+                models.UserAchievementProgress.user_id == event.user_id,
+                models.UserAchievementProgress.code == event.code,
+            )
+        ).scalar_one_or_none()
+        current = row.value if row is not None else None
+        if current == event.after_value:
+            return ProgressReplayResult(
+                event.id, changed=False, conflict=False, current_value=current, target_value=event.after_value
+            )
+        expected_before = event.before_value
+        if current is None and expected_before == 0:
+            pass
+        elif current != expected_before:
+            return ProgressReplayResult(
+                event.id, changed=False, conflict=True, current_value=current, target_value=event.after_value
+            )
+        if not apply:
+            return ProgressReplayResult(
+                event.id, changed=True, conflict=False, current_value=current, target_value=event.after_value
+            )
+        if row is None:
+            row = models.UserAchievementProgress(user_id=event.user_id, code=event.code, value=event.after_value)
+            self.db.add(row)
+        row.value = event.after_value
+        row.tournament_id = event.tournament_id
+        row.evidence = event.evidence
+        self.db.commit()
+        return ProgressReplayResult(
+            event.id, changed=True, conflict=False, current_value=current, target_value=event.after_value
+        )
+
+    def override_progress(
+        self,
+        user_id: int,
+        code: str,
+        value: int,
+        evidence: str,
+        *,
+        tournament_id: Optional[int] = None,
+    ) -> models.AchievementProgressEvent:
+        """Owner tooling: set a cell and preserve the override as a separate event."""
+        if not evidence.strip():
+            raise ValueError("override evidence is required")
+        if value < 0:
+            raise ValueError("progress value must be non-negative")
+        if not definitions.levels_for(code):
+            raise ValueError(f"unknown achievement code: {code}")
+        row = self.db.execute(
+            select(models.UserAchievementProgress).where(
+                models.UserAchievementProgress.user_id == user_id,
+                models.UserAchievementProgress.code == code,
+            )
+        ).scalar_one_or_none()
+        before = row.value if row is not None else 0
+        if row is None:
+            row = models.UserAchievementProgress(user_id=user_id, code=code, value=value)
+            self.db.add(row)
+        row.value = value
+        row.tournament_id = tournament_id
+        row.evidence = evidence.strip()
+        event = models.AchievementProgressEvent(
+            user_id=user_id,
+            code=code,
+            event_type="owner_override",
+            tournament_id=tournament_id,
+            processing_run_id=None,
+            before_value=before,
+            after_value=value,
+            evidence=evidence.strip(),
+            requirements_json="{}",
+            source_tournament_ids_json=json.dumps([tournament_id] if tournament_id else []),
+            match_ids_json="[]",
+            stats_snapshot_json=json.dumps({"value": value, "owner_override": True}, sort_keys=True),
+            ruleset_version=ENGINE_VERSION,
+            stats_version=STATS_VERSION,
+            idempotency_key=f"owner-override:{uuid.uuid4().hex}:{user_id}:{code}",
+        )
+        self.db.add(event)
+        self.db.commit()
+        self.db.refresh(event)
+        return event
 
     def _player_name(self, ctx: TournamentContext, user_id: int) -> str:
         if user_id in ctx.users:

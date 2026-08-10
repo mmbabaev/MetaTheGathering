@@ -120,6 +120,7 @@ def played(db, user_svc, archetype_burn):
             opponent_wins=0,
         )
     )
+    t.status = models.TournamentStatus.CLOSED
     db.commit()
     FeatureFlagService(db).ensure_defaults()
     return t, user

@@ -29,6 +29,7 @@ def _tournament(db, title, *, club="Goldfish", days_ago=0):
 
 
 def _play(db, tournament, user, archetype, results, *, name):
+    tournament.status = models.TournamentStatus.REGISTRATION
     TournamentService(db).register_participant(
         tournament_id=tournament.id,
         user_id=user.id,
@@ -47,6 +48,7 @@ def _play(db, tournament, user, archetype, results, *, name):
                 opponent_wins=ow,
             )
         )
+    tournament.status = models.TournamentStatus.CLOSED
     db.commit()
 
 
@@ -118,7 +120,9 @@ def test_report_lists_awards_progress_and_skipped(db, alice, user_svc, archetype
     t = _tournament(db, "Pauper 1")
     _play(db, t, alice, archetype_burn, [(2, 0), (2, 0)], name="Иванова Алиса")
     lazy = user_svc.get_or_create(tg_id=5002, first_name="Боб", last_name="Петров")
+    t.status = models.TournamentStatus.REGISTRATION
     TournamentService(db).register_participant(tournament_id=t.id, user_id=lazy.id)
+    t.status = models.TournamentStatus.CLOSED
 
     result = AchievementService(db).process_tournament(t.id)
     messages = build_report(result)
