@@ -6,6 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **MetaGatherer** is a Telegram bot for collecting Magic: The Gathering Pauper tournament metagame data. Players self-register with deck archetypes; the community validates archetypes via voting. Admins export aggregated meta in CSV/Markdown.
 
+## Living project roadmap
+
+Read [`TODO.md`](TODO.md) before planning product work. It is the project-level
+source of truth for shipped/in-review/planned scope and open product decisions.
+Update it in the same PR whenever an implementation stage, dependency, issue status,
+or product decision changes.
+
 ## ⚠️ Notification safety (hard rules)
 
 > **NEVER send mass / broadcast DMs.** Real users receive every message the bot sends them — a wrong fan-out spams real people and is not reversible.
