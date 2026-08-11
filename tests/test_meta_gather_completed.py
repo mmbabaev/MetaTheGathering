@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from sqlalchemy.exc import OperationalError
-from telegram.error import BadRequest, TelegramError
+from telegram.error import TelegramError
 
 from bot import chart as chart_mod
 from bot import scheduler  # noqa: F401
@@ -672,12 +672,7 @@ async def test_magicoculus_import_runs_after_close_when_enabled(db, user_svc, ar
     monkeypatch.setattr("bot.scheduler.asyncio.to_thread", to_thread)
     monkeypatch.setattr(
         "bot.scheduler._announce_to_targets",
-        AsyncMock(
-            return_value=[
-                AnnouncementDelivery(chat_id=100, message_id=321),
-                AnnouncementDelivery(chat_id=777, message_id=654),
-            ]
-        ),
+        AsyncMock(return_value=[AnnouncementDelivery(chat_id=100, message_id=321)]),
     )
     t = _complete_tournament(db, user_svc, arch_svc)
 
@@ -686,18 +681,12 @@ async def test_magicoculus_import_runs_after_close_when_enabled(db, user_svc, ar
 
     to_thread.assert_awaited_once_with(scheduler.import_closed_tournament_to_magicoculus, t.id)
     assert db.get(models.Tournament, t.id).status == models.TournamentStatus.CLOSED
-    bot.send_message.assert_not_awaited()
-    assert bot.edit_message_reply_markup.await_count == 2
-    calls = {
-        call.kwargs["chat_id"]: call.kwargs
-        for call in bot.edit_message_reply_markup.await_args_list
-    }
-    assert calls[100]["message_id"] == 321
-    assert calls[777]["message_id"] == 654
-    for call in calls.values():
-        button = call["reply_markup"].inline_keyboard[0][0]
-        assert button.text == "👁 Открыть в Magic Oculus"
-        assert button.url == "https://magicoculus.ru/tournaments/145"
+    bot.send_message.assert_awaited_once()
+    call = bot.send_message.await_args.kwargs
+    assert call["chat_id"] == t.chat_id
+    assert "Pauper Friday" in call["text"]
+    assert "https://magicoculus.ru/tournaments/145" in call["text"]
+    bot.edit_message_reply_markup.assert_not_awaited()
 
 
 async def test_magicoculus_failure_does_not_break_close(db, user_svc, arch_svc, monkeypatch):
@@ -753,7 +742,7 @@ async def test_magicoculus_import_starts_only_after_tournament_is_closed(db, use
     await maybe_announce_meta_gather_completed(AsyncMock(), db, t.id)
 
 
-async def test_magicoculus_button_edit_failure_does_not_break_import(
+async def test_magicoculus_success_link_failure_does_not_break_import(
     db, user_svc, arch_svc, monkeypatch
 ):
     FeatureFlagService(db).toggle(FeatureFlags.MAGIC_OCULUS_IMPORT)
@@ -768,37 +757,10 @@ async def test_magicoculus_button_edit_failure_does_not_break_import(
     monkeypatch.setattr("bot.scheduler.send_achievements_report", AsyncMock())
     t = _complete_tournament(db, user_svc, arch_svc)
     bot = AsyncMock()
-    bot.edit_message_reply_markup.side_effect = TelegramError("message unavailable")
+    bot.send_message.side_effect = TelegramError("chat unavailable")
 
     await maybe_announce_meta_gather_completed(bot, db, t.id)
 
-    assert db.get(models.Tournament, t.id).status == models.TournamentStatus.CLOSED
-
-
-async def test_magicoculus_button_already_attached_is_not_logged_as_error(
-    db, user_svc, arch_svc, monkeypatch, caplog
-):
-    FeatureFlagService(db).toggle(FeatureFlags.MAGIC_OCULUS_IMPORT)
-    monkeypatch.setattr(
-        "bot.scheduler.asyncio.to_thread",
-        AsyncMock(return_value=MagicOculusImportResult(tournament_id=145, detail={})),
-    )
-    monkeypatch.setattr(
-        "bot.scheduler._announce_to_targets",
-        AsyncMock(return_value=[AnnouncementDelivery(chat_id=100, message_id=321)]),
-    )
-    monkeypatch.setattr("bot.scheduler.send_achievements_report", AsyncMock())
-    t = _complete_tournament(db, user_svc, arch_svc)
-    bot = AsyncMock()
-    bot.edit_message_reply_markup.side_effect = BadRequest(
-        "Message is not modified: specified new reply markup is already present"
-    )
-
-    with caplog.at_level("INFO", logger="bot.scheduler"):
-        await maybe_announce_meta_gather_completed(bot, db, t.id)
-
-    assert "button already attached" in caplog.text
-    assert "button edit failed" not in caplog.text
     assert db.get(models.Tournament, t.id).status == models.TournamentStatus.CLOSED
 
 
