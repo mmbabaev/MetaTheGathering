@@ -681,14 +681,12 @@ async def test_magicoculus_import_runs_after_close_when_enabled(db, user_svc, ar
 
     to_thread.assert_awaited_once_with(scheduler.import_closed_tournament_to_magicoculus, t.id)
     assert db.get(models.Tournament, t.id).status == models.TournamentStatus.CLOSED
-    bot.send_message.assert_not_awaited()
-    bot.edit_message_reply_markup.assert_awaited_once()
-    call = bot.edit_message_reply_markup.await_args.kwargs
+    bot.send_message.assert_awaited_once()
+    call = bot.send_message.await_args.kwargs
     assert call["chat_id"] == t.chat_id
-    assert call["message_id"] == 321
-    button = call["reply_markup"].inline_keyboard[0][0]
-    assert button.text == "👁 Открыть в Magic Oculus"
-    assert button.url == "https://magicoculus.ru/tournaments/145"
+    assert "Pauper Friday" in call["text"]
+    assert "https://magicoculus.ru/tournaments/145" in call["text"]
+    bot.edit_message_reply_markup.assert_not_awaited()
 
 
 async def test_magicoculus_failure_does_not_break_close(db, user_svc, arch_svc, monkeypatch):
@@ -744,7 +742,7 @@ async def test_magicoculus_import_starts_only_after_tournament_is_closed(db, use
     await maybe_announce_meta_gather_completed(AsyncMock(), db, t.id)
 
 
-async def test_magicoculus_button_edit_failure_does_not_break_import(
+async def test_magicoculus_success_link_failure_does_not_break_import(
     db, user_svc, arch_svc, monkeypatch
 ):
     FeatureFlagService(db).toggle(FeatureFlags.MAGIC_OCULUS_IMPORT)
@@ -759,7 +757,7 @@ async def test_magicoculus_button_edit_failure_does_not_break_import(
     monkeypatch.setattr("bot.scheduler.send_achievements_report", AsyncMock())
     t = _complete_tournament(db, user_svc, arch_svc)
     bot = AsyncMock()
-    bot.edit_message_reply_markup.side_effect = TelegramError("message unavailable")
+    bot.send_message.side_effect = TelegramError("chat unavailable")
 
     await maybe_announce_meta_gather_completed(bot, db, t.id)
 

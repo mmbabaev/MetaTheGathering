@@ -630,6 +630,106 @@ class TestImportTournament:
         assert result.registered == 0
         assert result.already_registered == 3
 
+    def test_final_import_keeps_second_round_bye_entry_and_removes_no_show(
+        self, import_svc, db, tournament, user_svc, svc, caplog
+    ):
+        """#221: a late entrant is real; a bot-only registration is not a result row."""
+        late = user_svc.get_or_create(
+            tg_id=22101,
+            first_name="Михаил",
+            last_name="Бабаев",
+        )
+        no_show = user_svc.get_or_create(
+            tg_id=22102,
+            first_name="Владислав",
+            last_name="Старостин",
+        )
+        svc.register_participant(tournament_id=tournament.id, user_id=no_show.id)
+        data = AetherhubTournamentData(
+            url="x",
+            players=["Ашаров Вадим", "Батуев Виталий"],
+            rounds=[
+                AetherhubRound(
+                    number=1,
+                    pairings=[
+                        AetherhubPairing(
+                            player="Ашаров Вадим",
+                            opponent="Батуев Виталий",
+                            player_wins=2,
+                            opponent_wins=0,
+                        ),
+                        AetherhubPairing(
+                            player="Батуев Виталий",
+                            opponent="Ашаров Вадим",
+                            player_wins=0,
+                            opponent_wins=2,
+                        ),
+                    ],
+                ),
+                AetherhubRound(
+                    number=2,
+                    pairings=[
+                        AetherhubPairing(
+                            player="Бабаев Михаил",
+                            opponent=None,
+                            player_wins=2,
+                            opponent_wins=0,
+                        ),
+                    ],
+                ),
+            ],
+            standings=["Ашаров Вадим", "Бабаев Михаил", "Батуев Виталий"],
+        )
+
+        with caplog.at_level("INFO", logger="services.aetherhub_import_service"):
+            import_svc.import_tournament(tournament.id, data)
+
+        late_participant = db.query(models.Participant).filter_by(
+            tournament_id=tournament.id,
+            user_id=late.id,
+        ).one()
+        assert late_participant.final_place == 2
+        assert (
+            db.query(models.Participant)
+            .filter_by(tournament_id=tournament.id, user_id=no_show.id)
+            .one_or_none()
+            is None
+        )
+        assert "Старостин Владислав" in caplog.text
+
+    def test_does_not_remove_bot_only_registration_before_scores_are_complete(
+        self, import_svc, db, tournament, user_svc, svc
+    ):
+        no_show = user_svc.get_or_create(
+            tg_id=22103,
+            first_name="Владислав",
+            last_name="Старостин",
+        )
+        svc.register_participant(tournament_id=tournament.id, user_id=no_show.id)
+        data = AetherhubTournamentData(
+            url="x",
+            players=["Ашаров Вадим", "Батуев Виталий"],
+            rounds=[
+                AetherhubRound(
+                    number=1,
+                    pairings=[
+                        AetherhubPairing(
+                            player="Ашаров Вадим",
+                            opponent="Батуев Виталий",
+                        ),
+                    ],
+                )
+            ],
+            standings=["Ашаров Вадим", "Батуев Виталий"],
+        )
+
+        import_svc.import_tournament(tournament.id, data)
+
+        assert db.query(models.Participant).filter_by(
+            tournament_id=tournament.id,
+            user_id=no_show.id,
+        ).one()
+
     def test_players_and_standings_name_order_does_not_double_count(
         self, import_svc, tournament, user_svc
     ):

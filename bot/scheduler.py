@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select, update
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
+from telegram import InputMediaPhoto
 from telegram.ext import Application, ContextTypes
 
 from bot.chart import build_chart, build_standings
@@ -701,10 +701,10 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, char
             logger.exception("maybe_announce_meta_gather_completed: Magic Oculus import failed for #%s", tournament_id)
             await _notify_magicoculus_import_error(bot, tournament_id, title, exc)
         else:
-            await _attach_magicoculus_button(
+            await _send_magicoculus_success_link(
                 bot,
                 tournament.chat_id,
-                deliveries,
+                title,
                 oculus_result.tournament_id,
             )
     logger.info("maybe_announce_meta_gather_completed: announced completion for #%s", tournament_id)
@@ -721,31 +721,24 @@ def import_closed_tournament_to_magicoculus(tournament_id: int) -> MagicOculusIm
         db.close()
 
 
-async def _attach_magicoculus_button(
+async def _send_magicoculus_success_link(
     bot,
     chat_id: int | None,
-    deliveries: list[AnnouncementDelivery],
+    title: str,
     magicoculus_tournament_id: int,
 ) -> None:
-    """Attach Oculus URL to the existing club completion message without a new notification."""
+    """Send one public Oculus link to the tournament's club chat after a successful import."""
     if bot is None or not chat_id:
         return
-    delivery = next((item for item in deliveries if item.chat_id == chat_id), None)
-    if delivery is None or delivery.message_id is None:
-        return
     url = f"{settings.MAGIC_OCULUS_PUBLIC_URL.rstrip('/')}/tournaments/{magicoculus_tournament_id}"
-    keyboard = InlineKeyboardMarkup(
-        [[InlineKeyboardButton("👁 Открыть в Magic Oculus", url=url)]]
-    )
     try:
-        await bot.edit_message_reply_markup(
-            chat_id=delivery.chat_id,
-            message_id=delivery.message_id,
-            reply_markup=keyboard,
+        await bot.send_message(
+            chat_id=chat_id,
+            text=f"✅ Турнир загружен в Magic Oculus\n\n{title}\n{url}",
         )
     except Exception:  # noqa: BLE001 — уведомление не должно откатывать успешный импорт
         logger.exception(
-            "maybe_announce_meta_gather_completed: Magic Oculus button edit failed for #%s",
+            "maybe_announce_meta_gather_completed: Magic Oculus success link failed for #%s",
             magicoculus_tournament_id,
         )
 
