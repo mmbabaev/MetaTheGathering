@@ -429,6 +429,19 @@ class UserService:
         user = self.get_by_tg_id(tg_id)
         return bool(user and user.notify_opponent_rounds)
 
+    def toggle_notify_achievements(self, tg_id: int) -> bool:
+        """Explicit opt-in for achievement DMs; OFF by default."""
+        user = self.get_by_tg_id(tg_id)
+        if not user:
+            return False
+        user.notify_achievements = not user.notify_achievements
+        self.db.commit()
+        return user.notify_achievements
+
+    def wants_achievement_notifications(self, tg_id: int) -> bool:
+        user = self.get_by_tg_id(tg_id)
+        return bool(user and user.notify_achievements)
+
     def toggle_notify_poll(self, tg_id: int) -> bool:
         """Инвертирует notify_poll (опт-ин на уведомления о голосованиях). Возвращает новое значение."""
         user = self.get_by_tg_id(tg_id)

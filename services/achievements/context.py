@@ -28,6 +28,31 @@ from services.achievements.history import (
 SKIP_NO_DECK = "колода не записана"
 SKIP_NOT_SELF = "колоду записал не он"
 SKIP_PLACEHOLDER = "нет аккаунта в боте"
+SKIP_NO_SHOW = "не сыграл ни одного раунда"
+
+
+@dataclass(frozen=True)
+class DataRequirements:
+    """Независимые gates, которые rule обязан объявить явно."""
+
+    self_registered: bool
+    actually_played: bool
+    tournament_closed: bool
+    result_complete: bool
+
+    def as_dict(self) -> dict[str, bool]:
+        return {
+            "self_registered": self.self_registered,
+            "actually_played": self.actually_played,
+            "tournament_closed": self.tournament_closed,
+            "result_complete": self.result_complete,
+        }
+
+
+@dataclass(frozen=True)
+class EligibilityFacts:
+    self_registered: bool
+    actually_played: bool
 
 
 @dataclass(frozen=True)
@@ -48,6 +73,9 @@ class TournamentContext:
     eligible_user_ids: set[int] = field(default_factory=set)
     records: dict[int, PlayerRecord] = field(default_factory=dict)
     undefeated_user_ids: set[int] = field(default_factory=set)
+    eligibility: dict[int, EligibilityFacts] = field(default_factory=dict)
+    tournament_closed: bool = False
+    result_complete: bool = False
     skipped: list[SkippedPlayer] = field(default_factory=list)
 
     @property
@@ -64,6 +92,22 @@ class TournamentContext:
         user = self.users.get(user_id)
         return display_name(user) if user is not None else f"user#{user_id}"
 
+    def meets_tournament_requirements(self, requirements: DataRequirements) -> bool:
+        return (not requirements.tournament_closed or self.tournament_closed) and (
+            not requirements.result_complete or self.result_complete
+        )
+
+    def eligible_user_ids_for(self, requirements: DataRequirements) -> set[int]:
+        if not self.meets_tournament_requirements(requirements):
+            return set()
+        return {
+            user_id
+            for user_id, facts in self.eligibility.items()
+            if self.users.get(user_id) is not None and self.users[user_id].tg_id > 0
+            if (not requirements.self_registered or facts.self_registered)
+            and (not requirements.actually_played or facts.actually_played)
+        }
+
 
 def build_context(
     db: Session, tournament_id: int, history: Optional[AchievementHistory] = None
@@ -79,6 +123,8 @@ def build_context(
 
     history = history if history is not None else AchievementHistory(db)
     ctx = TournamentContext(tournament=tournament, history=history)
+    ctx.tournament_closed = history.is_closed(tournament_id)
+    ctx.result_complete = history.is_complete(tournament_id)
 
     rows = db.execute(
         select(models.Participant, models.User)
@@ -88,14 +134,25 @@ def build_context(
     for participant, user in rows:
         ctx.participants[user.id] = participant
         ctx.users[user.id] = user
+        self_registered = counts_for_achievements(participant, user)
+        actually_played = history.actually_played(tournament_id, user.id)
+        ctx.eligibility[user.id] = EligibilityFacts(
+            self_registered=self_registered,
+            actually_played=actually_played,
+        )
         if user.tg_id <= 0:
             ctx.skipped.append(SkippedPlayer(user.id, display_name(user), SKIP_PLACEHOLDER))
             continue
         if participant.archetype_id is None:
             ctx.skipped.append(SkippedPlayer(user.id, display_name(user), SKIP_NO_DECK))
             continue
-        if not counts_for_achievements(participant, user):
+        if not self_registered:
             ctx.skipped.append(SkippedPlayer(user.id, display_name(user), SKIP_NOT_SELF))
+            continue
+        if not actually_played:
+            ctx.skipped.append(SkippedPlayer(user.id, display_name(user), SKIP_NO_SHOW))
+            continue
+        if not ctx.tournament_closed or not ctx.result_complete:
             continue
         ctx.eligible_user_ids.add(user.id)
 

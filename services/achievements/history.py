@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Optional
@@ -19,7 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from core import models
-from services.aetherhub_import_service import AetherhubImportService
+from services.user import UserService
 
 MULTICLASS_WINDOW_DAYS = 90
 
@@ -50,6 +51,28 @@ class PlayerRecord:
         return f"{base}-{self.draws}" if self.draws else base
 
 
+@dataclass(frozen=True)
+class AchievementMatch:
+    """Read-only canonical match row used by achievement calculations."""
+
+    id: int
+    tournament_id: int
+    round_number: int
+    player_name: str
+    player_user_id: Optional[int]
+    opponent_name: Optional[str]
+    player_wins: Optional[int]
+    opponent_wins: Optional[int]
+
+    @property
+    def is_bye(self) -> bool:
+        return self.opponent_name is None
+
+    @property
+    def is_complete(self) -> bool:
+        return self.is_bye or (self.player_wins is not None and self.opponent_wins is not None)
+
+
 def counts_for_achievements(participant: models.Participant, user: models.User) -> bool:
     """Гейт зачёта: турнир идёт в прогресс, только если игрок сам записал свою колоду.
 
@@ -71,20 +94,23 @@ def tournament_date(tournament: models.Tournament) -> datetime:
 class AchievementHistory:
     """Исторические данные игроков с кэшированием на прогон."""
 
-    def __init__(self, db: Session, imports: Optional[AetherhubImportService] = None) -> None:
+    def __init__(self, db: Session, users: Optional[UserService] = None) -> None:
         self.db = db
-        self._imports = imports if imports is not None else AetherhubImportService(db)
+        self._users = users if users is not None else UserService(db)
         self._user_by_name: dict[str, Optional[models.User]] = {}
         self._pairings: dict[int, list[models.RoundPairing]] = {}
+        self._matches: dict[int, list[AchievementMatch]] = {}
         self._participations: dict[int, list[Participation]] = {}
         self._first_recorder: dict[int, Optional[int]] = {}
 
     # ------------------------------------------------------------------ имена
 
     def user_by_name(self, name: str) -> Optional[models.User]:
-        """Имя из парингов → аккаунт бота. Кэшируется: имена повторяются между турнирами."""
+        """Имя из парингов → аккаунт без merge/create и любых других writes."""
         if name not in self._user_by_name:
-            self._user_by_name[name] = self._imports.find_user_by_name(name)
+            normalized = re.sub(r"\(\s*\d+\s*points?\s*\)", "", name or "", flags=re.IGNORECASE)
+            normalized = re.sub(r"\s+", " ", normalized).strip()
+            self._user_by_name[name] = self._users.find_by_name(normalized) if normalized else None
         return self._user_by_name[name]
 
     def user_ids_by_name(self, tournament_id: int) -> dict[str, int]:
@@ -108,24 +134,48 @@ class AchievementHistory:
             self._pairings[tournament_id] = list(rows)
         return self._pairings[tournament_id]
 
+    def matches(self, tournament_id: int) -> list[AchievementMatch]:
+        """Canonical immutable projection over imported pairing rows."""
+        if tournament_id not in self._matches:
+            self._matches[tournament_id] = [
+                AchievementMatch(
+                    id=pairing.id,
+                    tournament_id=pairing.tournament_id,
+                    round_number=pairing.round_number,
+                    player_name=pairing.player_name,
+                    player_user_id=(user.id if (user := self.user_by_name(pairing.player_name)) else None),
+                    opponent_name=pairing.opponent_name,
+                    player_wins=pairing.player_wins,
+                    opponent_wins=pairing.opponent_wins,
+                )
+                for pairing in self.pairings(tournament_id)
+            ]
+        return self._matches[tournament_id]
+
+    def is_closed(self, tournament_id: int) -> bool:
+        tournament = self.db.get(models.Tournament, tournament_id)
+        return bool(tournament and tournament.status == models.TournamentStatus.CLOSED)
+
     def is_complete(self, tournament_id: int) -> bool:
         """Все не-бай матчи турнира имеют счёт. Пустой турнир не считается завершённым."""
-        pairings = self.pairings(tournament_id)
-        if not pairings:
+        matches = self.matches(tournament_id)
+        if not matches:
             return False
-        return all(
-            p.opponent_name is None or (p.player_wins is not None and p.opponent_wins is not None) for p in pairings
-        )
+        return all(match.is_complete for match in matches)
+
+    def actually_played(self, tournament_id: int, user_id: int) -> bool:
+        return any(match.player_user_id == user_id for match in self.matches(tournament_id))
+
+    def tournament_is_eligible(self, tournament_id: int) -> bool:
+        return self.is_closed(tournament_id) and self.is_complete(tournament_id)
 
     def record_for(self, tournament_id: int, user_id: int) -> Optional[PlayerRecord]:
         """Результат игрока в турнире. None — игрока нет в парингах."""
-        names = [name for name, uid in self.user_ids_by_name(tournament_id).items() if uid == user_id]
-        if not names:
+        matches = [match for match in self.matches(tournament_id) if match.player_user_id == user_id]
+        if not matches:
             return None
         wins = losses = draws = rounds = 0
-        for pairing in self.pairings(tournament_id):
-            if pairing.player_name not in names:
-                continue
+        for pairing in matches:
             rounds += 1
             if pairing.opponent_name is None:
                 wins += 1  # бай — победа (так же считает отбивка «сбор завершён»)
@@ -140,7 +190,7 @@ class AchievementHistory:
         return PlayerRecord(wins=wins, losses=losses, draws=draws, rounds=rounds)
 
     def total_rounds(self, tournament_id: int) -> int:
-        pairings = self.pairings(tournament_id)
+        pairings = self.matches(tournament_id)
         return max((p.round_number for p in pairings), default=0)
 
     def is_undefeated(self, tournament_id: int, user_id: int) -> bool:
@@ -190,6 +240,8 @@ class AchievementHistory:
             )
             for participant, tournament, archetype in rows
             if counts_for_achievements(participant, user)
+            and self.actually_played(tournament.id, user.id)
+            and self.tournament_is_eligible(tournament.id)
         ]
         items.sort(key=lambda p: p.played_at)
         self._participations[user_id] = items
@@ -240,7 +292,7 @@ class AchievementHistory:
         rows = self.db.execute(select(models.Tournament).where(models.Tournament.club == club)).scalars().all()
         dated = [(tournament_date(t), t.id) for t in rows if tournament_date(t) <= until]
         dated.sort()
-        return [tid for _, tid in dated if self.pairings(tid)]
+        return [tid for _, tid in dated if self.tournament_is_eligible(tid)]
 
     def loyalist_streak(self, user_id: int, *, until: datetime) -> list[Participation]:
         """Серия подряд идущих турниров игрока на одной и той же колоде, заканчивающаяся на ``until``.
@@ -278,7 +330,10 @@ class AchievementHistory:
         eligible = [
             (participant.created_at, participant.id, participant.user_id)
             for participant, user in rows
-            if counts_for_achievements(participant, user) and user.tg_id > 0
+            if counts_for_achievements(participant, user)
+            and user.tg_id > 0
+            and self.actually_played(tournament_id, user.id)
+            and self.tournament_is_eligible(tournament_id)
         ]
         eligible.sort()
         self._first_recorder[tournament_id] = eligible[0][2] if eligible else None
@@ -294,18 +349,16 @@ class AchievementHistory:
         """Сколько ЧУЖИХ колод записал игрок. ``until`` — не позже даты этого турнира."""
         if until is not None:
             return len(self._scribe_rows(user, until=until))
-        rows = (
-            self.db.execute(
-                select(models.Participant.user_id).where(
-                    models.Participant.deck_added_by_tg_id == user.tg_id,
-                    models.Participant.archetype_id.isnot(None),
-                    models.Participant.user_id != user.id,
-                )
+        rows = self.db.execute(
+            select(models.Participant.id, models.Tournament)
+            .join(models.Tournament, models.Participant.tournament_id == models.Tournament.id)
+            .where(
+                models.Participant.deck_added_by_tg_id == user.tg_id,
+                models.Participant.archetype_id.isnot(None),
+                models.Participant.user_id != user.id,
             )
-            .scalars()
-            .all()
-        )
-        return len(rows)
+        ).all()
+        return sum(1 for _, tournament in rows if self.tournament_is_eligible(tournament.id))
 
     def _scribe_rows(self, user: models.User, *, until: datetime) -> list[int]:
         """Чужие колоды, записанные игроком в турнирах не позже ``until``."""
@@ -318,7 +371,31 @@ class AchievementHistory:
                 models.Participant.user_id != user.id,
             )
         ).all()
-        return [participant_id for participant_id, tournament in rows if tournament_date(tournament) <= until]
+        return [
+            participant_id
+            for participant_id, tournament in rows
+            if tournament_date(tournament) <= until and self.tournament_is_eligible(tournament.id)
+        ]
+
+    def scribe_tournament_ids(self, user: models.User, *, until: datetime) -> tuple[int, ...]:
+        rows = (
+            self.db.execute(
+                select(models.Tournament)
+                .join(models.Participant, models.Participant.tournament_id == models.Tournament.id)
+                .where(
+                    models.Participant.deck_added_by_tg_id == user.tg_id,
+                    models.Participant.archetype_id.isnot(None),
+                    models.Participant.user_id != user.id,
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return tuple(
+            tournament.id
+            for tournament in sorted(rows, key=tournament_date)
+            if tournament_date(tournament) <= until and self.tournament_is_eligible(tournament.id)
+        )
 
     def scribe_names_in(self, tournament_id: int, user: models.User) -> list[str]:
         """Кого игрок записал на конкретном турнире (для причины в отчёте)."""

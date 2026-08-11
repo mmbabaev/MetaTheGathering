@@ -188,6 +188,21 @@ class TestToggleNotifyOpponentRounds:
         assert user_svc.wants_opponent_notifications(99999) is False
 
 
+class TestToggleNotifyAchievements:
+    def test_requires_explicit_opt_in_and_can_be_disabled(self, user_svc):
+        user_svc.get_or_create(tg_id=9250, username="u", first_name="X")
+        assert user_svc.wants_achievement_notifications(9250) is False
+        assert user_svc.toggle_notify_achievements(9250) is True
+        assert user_svc.wants_achievement_notifications(9250) is True
+        assert user_svc.toggle_notify_achievements(9250) is False
+
+    def test_handler_exposes_achievement_toggle(self, handler, user_svc):
+        user_svc.get_or_create(tg_id=9251, username="u", first_name="X")
+        result = handler.handle_toggle_achievements_notify(9251)
+        labels = [button.text for row in result.keyboard.inline_keyboard for button in row]
+        assert any("Уведомления об ачивках: вкл" in label for label in labels)
+
+
 # --- handle_toggle_opponent_notify ---
 
 

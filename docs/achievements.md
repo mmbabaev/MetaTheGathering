@@ -1,7 +1,8 @@
 # Система ачивок — план и текущее состояние
 
-**Статус: фазы 1–3 реализованы** (движок, 8 ачивок, теневой режим, `/achievements` для владельца и
-админов, CLI, бэкафилл истории, картинки). Фазы 4–6 — план. Разделы ниже описывают и то, что уже работает, и то, что впереди;
+**Статус: lifetime hardening #199 — 7/7** (движок, теневой UI, eligibility,
+immutable progress audit и безопасная player delivery). Публичный UI и продуктовые
+подсказки остаются отдельными фазами. Разделы ниже описывают и то, что уже работает, и то, что впереди;
 где это неочевидно, состояние помечено.
 
 Контекст и каталог идей (зачем это вообще): [`ideas_engagement.md`](ideas_engagement.md) и
@@ -85,7 +86,9 @@ def counts_for_achievements(participant: models.Participant, user: models.User) 
     )
 ```
 
-Применяется **ко всем** ачивкам и ко всему прогрессу: серия «Завсегдатая» считается только по
+Это один из четырёх независимых gates: каждое rule также явно объявляет
+`actually_played`, `tournament_closed` и `result_complete`. Применяется **ко всем**
+спортивным/колодным ачивкам и ко всему прогрессу: серия «Завсегдатая» считается только по
 турнирам с самозаписью, «Без поражений» не выдаётся, если колоду вписал админ, «Мультикласс»
 считает только самостоятельно записанные деки. Единственное исключение — «Метаписец», который по
 определению награждает собственное действие игрока (запись чужих колод).
@@ -245,6 +248,14 @@ class UserAchievementProgress(Base):
 **Миграция:** `alembic/versions/2c906a8d5c01_add_achievements.py` — обе таблицы разом,
 `down_revision = 7c178567f22c`.
 
+### 4.3. Immutable progress audit
+
+Каждое реальное изменение snapshot создаёт `AchievementProgressEvent`: before/after,
+evidence, source tournament/match ids, requirements, processing run, ruleset/stats version
+и уникальный idempotency key. CLI `achievements events` показывает журнал,
+`replay-event` делает dry-run или безопасно повторяет одну клетку, не перетирая более
+новое состояние. Ручная коррекция пишется отдельным `owner_override` event.
+
 ---
 
 ## 5. Движок
@@ -302,13 +313,14 @@ class TournamentContext:
     history: AchievementHistory                   # история игроков с кэшами на прогон
     participants: dict[int, models.Participant]   # user_id -> participant (все, включая чужие записи)
     users: dict[int, models.User]
-    eligible_user_ids: set[int]                   # прошли гейт §2.5 — только они получают прогресс
+    eligible_user_ids: set[int]                   # прошли все requirements текущего lifetime ruleset
     records: dict[int, PlayerRecord]              # user_id -> wins/losses/draws/rounds
     undefeated_user_ids: set[int]
     skipped: list[SkippedPlayer]                  # кто и почему не в зачёте — идёт в отчёт
 ```
 
-Собирается один раз в `build_context()`: имена из парингов → `find_user_by_name()` с кэшом
+Собирается один раз в `build_context()`: имена из canonical read-only match projection →
+`UserService.find_by_name()` без merge/create, с кэшом
 name→user → `user_id`. Правила получают готовый контекст и ходят в БД только через
 `AchievementHistory` (счётчик колод, серия посещений, деки за 90 дней) — там тоже кэш на прогон.
 
@@ -342,6 +354,7 @@ class RuleOutcome:
 
 class AchievementRule(Protocol):
     code: str
+    requirements: DataRequirements
     def evaluate(self, ctx: TournamentContext) -> RuleOutcome: ...
 ```
 
@@ -408,7 +421,7 @@ feature flag + один резолвер получателя, а не три р
 |---|---|---|---|
 | **shadow** (старт) | да, на каждом завершённом турнире | только владелец и админы (команда скрыта из `/help`) | **владельцу, одним агрегированным сообщением на турнир** |
 | **beta** | да | владелец, админы и игроки из белого списка | владельцу |
-| **public** | да | всем | каждому игроку — своё, по opt-in |
+| **public** | да | всем | каждому игроку — своё, только по opt-in |
 
 Реализация:
 
@@ -420,11 +433,9 @@ class FeatureFlags:
 ```
 
 Маршрутизация получателя — **одно место**: `send_achievements_report()` в
-`bot/telegram/achievements.py`. Сейчас там единственный адресат — `settings.OWNER_CHAT_ID`;
-именно сюда добавится ветка «по сообщению на игрока» в фазе 5. Флаг `achievementsPlayerDm`
-уже заведён, но пока он **только логирует предупреждение и всё равно шлёт владельцу** — чтобы
-случайное включение флага не разослало DM реальным игрокам раньше, чем появится код с opt-in
-и гейтом (тест на это есть).
+`bot/telegram/achievements.py`. Owner и player получают независимые outbox rows/statuses;
+player batch создаётся только при одновременных global flag, персональном
+`notify_achievements` и `notify_allowed_ids`. Opt-out перед retry отменяет pending row.
 
 > ⚠️ Включение `ACHIEVEMENTS_PLAYER_DM` = новый путь массовой рассылки DM реальным людям. По
 > правилам проекта (`CLAUDE.md`, notification safety) оно требует **явного подтверждения
@@ -481,7 +492,7 @@ class FeatureFlags:
 - если новых ачивок и изменений прогресса нет — сообщение не шлём вообще (тишина = «всё посчитано,
   нового нет»).
 
-### 6.3. Как это будет выглядеть для игрока (режим public, позже)
+### 6.3. Player delivery (реализована, feature flag выключен)
 
 То же содержимое, но своё и в личку:
 
@@ -665,17 +676,17 @@ evidence и причину пропуска. Ошибка файловой за�
 - [ ] Кнопка «Поделиться» — отдать карточку файлом в чат клуба
 - [ ] Строка-агрегат в отбивке «сбор метагейма завершён»: «сегодня открыто N ачивок — /achievements»
 
-### Фаза 5 — уведомления игрокам (размер: M) — ⚠️ только после явного подтверждения владельца
+### Фаза 5 — уведомления игрокам ✅ архитектура готова; включение требует отдельной проверки
 
-- [ ] `User.notify_achievements` + миграция + тумблер в `/settings`
-- [ ] `resolve_recipients` в режиме public: батч на игрока, opt-in, гейт `notify_allowed_ids`,
-      `notified_at` после успешной отправки
-- [ ] Debug-команда: прислать **только себе** свои ачивки (по образцу `send_debug_round_notifications`)
-- [ ] Тесты: opt-out не получает, повтор не дублирует, чужие ачивки не уходят
+- [x] `User.notify_achievements` + миграция + тумблер в `/settings`
+- [x] `resolve_recipients` в режиме public: батч на игрока, opt-in, гейт `notify_allowed_ids`,
+      независимый outbox status после успешной отправки
+- [x] Debug helper: прислать **только себе** свои ачивки (по образцу `send_debug_round_notifications`)
+- [x] Тесты: opt-out не получает, повтор не дублирует, чужие ачивки не уходят
 - [ ] Выкатка: debug-окружение (три id) → prod под флагом
 
-> Пока фаза не сделана, включение флага `achievementsPlayerDm` ничего игрокам не разошлёт —
-> отчёт всё равно уйдёт владельцу с предупреждением в логе.
+> Флаг остаётся выключенным. Даже после включения сообщения получают только opt-in
+> пользователи, прошедшие environment allow-list; owner delivery работает независимо.
 
 ### Фаза 6 — прогресс и «почти получил» (размер: S)
 

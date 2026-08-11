@@ -50,6 +50,7 @@ def _played(db, user, archetype):
             opponent_wins=0,
         )
     )
+    t.status = models.TournamentStatus.CLOSED
     db.commit()
     AchievementService(db).process_tournament(t.id)
     return t

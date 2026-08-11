@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     Enum,
@@ -58,6 +59,7 @@ class User(Base):
     is_poll_organizer = Column(Boolean, default=False, nullable=False, server_default="false")
     hide_deck_emoji = Column(Boolean, default=False, nullable=False)
     notify_opponent_rounds = Column(Boolean, default=False, nullable=False)
+    notify_achievements = Column(Boolean, default=False, nullable=False, server_default="false")
     notify_poll = Column(
         Boolean, default=False, nullable=False, server_default="false"
     )  # опт-ин на уведомления о голосованиях
@@ -157,9 +159,7 @@ class TournamentRegistrationMessage(Base):
 
     tournament = relationship("Tournament", back_populates="registration_messages")
 
-    __table_args__ = (
-        UniqueConstraint("tournament_id", "chat_id", name="uq_tournament_registration_message_target"),
-    )
+    __table_args__ = (UniqueConstraint("tournament_id", "chat_id", name="uq_tournament_registration_message_target"),)
 
 
 class Archetype(Base):
@@ -473,10 +473,10 @@ class UserAchievementProgress(Base):
 
 
 class AchievementReportDelivery(Base):
-    """Одно текстовое сообщение owner-отчёта, ожидающее надёжной Telegram-доставки.
+    """Одна versioned delivery владельцу или конкретному игроку.
 
-    Строки создаются в одной транзакции с выдачами и прогрессом. Отправленные части
-    отмечаются отдельно, поэтому retry не дублирует уже доставленные сообщения.
+    Owner и player delivery представлены независимыми строками и статусами. Player
+    delivery всегда адресована одному ``user_id``; массового recipient здесь нет.
     """
 
     __tablename__ = "achievement_report_deliveries"
@@ -485,9 +485,13 @@ class AchievementReportDelivery(Base):
     report_id = Column(String(32), nullable=False, index=True)
     tournament_id = Column(Integer, ForeignKey("tournaments.id", ondelete="CASCADE"), nullable=False, index=True)
     recipient_type = Column(String(16), nullable=False, default="owner")
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     chat_id = Column(BigInteger, nullable=True)
     message_index = Column(Integer, nullable=False)
+    payload_type = Column(String(32), nullable=False, default="achievement_report")
+    payload_version = Column(Integer, nullable=False, default=1)
     payload = Column(Text, nullable=False)
+    idempotency_key = Column(String(160), nullable=True, unique=True)
     status = Column(String(16), nullable=False, default="pending", index=True)
     attempts = Column(Integer, nullable=False, default=0)
     last_error = Column(String(255), nullable=True)
@@ -496,6 +500,11 @@ class AchievementReportDelivery(Base):
 
     __table_args__ = (
         UniqueConstraint("report_id", "message_index", name="uq_achievement_report_delivery_message"),
+        CheckConstraint(
+            "recipient_type != 'player' OR (user_id IS NOT NULL AND chat_id IS NOT NULL)",
+            name="ck_achievement_player_delivery_targeted",
+        ),
+        CheckConstraint("payload_version > 0", name="ck_achievement_delivery_payload_version"),
     )
 
 
@@ -528,6 +537,32 @@ class AchievementProcessingRun(Base):
     rule_errors_json = Column(Text, nullable=True)
     started_at = Column(DateTime, nullable=False)
     completed_at = Column(DateTime, nullable=False)
+
+
+class AchievementProgressEvent(Base):
+    """Неизменяемое объяснение одного перехода achievement progress."""
+
+    __tablename__ = "achievement_progress_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    code = Column(String(32), nullable=False, index=True)
+    event_type = Column(String(24), nullable=False, default="calculated")
+    tournament_id = Column(Integer, ForeignKey("tournaments.id", ondelete="SET NULL"), nullable=True, index=True)
+    processing_run_id = Column(
+        Integer, ForeignKey("achievement_processing_runs.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    before_value = Column(Integer, nullable=False)
+    after_value = Column(Integer, nullable=False)
+    evidence = Column(String(512), nullable=True)
+    requirements_json = Column(Text, nullable=False)
+    source_tournament_ids_json = Column(Text, nullable=False)
+    match_ids_json = Column(Text, nullable=False)
+    stats_snapshot_json = Column(Text, nullable=False)
+    ruleset_version = Column(Integer, nullable=False)
+    stats_version = Column(String(32), nullable=False)
+    idempotency_key = Column(String(160), nullable=False, unique=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
 
 
 class RoundPairing(Base):

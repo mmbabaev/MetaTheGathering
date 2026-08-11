@@ -22,6 +22,30 @@ def build_report(result: AppliedResult) -> list[str]:
     return _split(_lines(result))
 
 
+def build_player_report(result: AppliedResult, user_id: int) -> list[str]:
+    """One player's own delta only; never includes other players or owner audit data."""
+    granted = [item for item in result.granted if item.user_id == user_id]
+    progress = [item for item in result.progress_changes if item.user_id == user_id]
+    if not granted and not progress:
+        return []
+    player = granted[0].player if granted else progress[0].player
+    lines = [f"🏅 {player}, итоги ачивок · {result.title}"]
+    for item in granted:
+        lines.append(f"{item.definition.icon} Открыто: {item.definition.title_with_level}")
+        if item.evidence:
+            lines.append(f"   {item.evidence}")
+    for change in progress:
+        delta = f"+{change.delta}" if change.delta > 0 else str(change.delta)
+        lines.append(
+            f"{change.definition.icon} {change.definition.title_with_level}: "
+            f"{change.value}/{change.threshold} ({delta})"
+        )
+        if change.evidence:
+            lines.append(f"   {change.evidence}")
+    lines.append("/achievements")
+    return _split(lines)
+
+
 def _lines(result: AppliedResult) -> list[str]:
     club = f" ({result.club})" if result.club else ""
     head = [

@@ -11,6 +11,7 @@ from services.achievements.definitions import AchievementDef, Rarity
 
 class RegisteredRule(Protocol):
     code: str
+    requirements: object
 
 
 class RegistryValidationError(ValueError):
@@ -23,6 +24,7 @@ def validate_registry(
     rules: Iterable[RegisteredRule],
 ) -> None:
     """Проверить инварианты, без которых выдача может стать частичной или упасть после commit."""
+    rules = list(rules)
     errors: list[str] = []
     definitions_by_code: dict[str, list[AchievementDef]] = defaultdict(list)
     keys = [definition.key for definition in definitions]
@@ -77,6 +79,13 @@ def validate_registry(
         errors.append(f"definitions without rules: {missing}")
     if unknown := sorted(set(rule_codes) - definition_codes):
         errors.append(f"rules without definitions: {unknown}")
+    for rule in rules:
+        requirements = getattr(rule, "requirements", None)
+        required_fields = ("self_registered", "actually_played", "tournament_closed", "result_complete")
+        if requirements is None or any(
+            not isinstance(getattr(requirements, field, None), bool) for field in required_fields
+        ):
+            errors.append(f"rule {rule.code!r} must declare boolean data requirements")
 
     if errors:
         raise RegistryValidationError("Invalid achievement registry: " + "; ".join(errors))

@@ -66,6 +66,7 @@ def _rounds(db, tournament, player_name, results):
                 opponent_wins=ow,
             )
         )
+    tournament.status = models.TournamentStatus.CLOSED
     db.commit()
 
 
