@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import select, update
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
+from telegram.error import BadRequest
 from telegram.ext import Application, ContextTypes
 
 from bot.chart import build_chart, build_standings
@@ -727,27 +728,41 @@ async def _attach_magicoculus_button(
     deliveries: list[AnnouncementDelivery],
     magicoculus_tournament_id: int,
 ) -> None:
-    """Attach Oculus URL to the existing club completion message without a new notification."""
-    if bot is None or not chat_id:
-        return
-    delivery = next((item for item in deliveries if item.chat_id == chat_id), None)
-    if delivery is None or delivery.message_id is None:
+    """Attach Oculus URL to the club and owner completion copies without new messages."""
+    if bot is None:
         return
     url = f"{settings.MAGIC_OCULUS_PUBLIC_URL.rstrip('/')}/tournaments/{magicoculus_tournament_id}"
     keyboard = InlineKeyboardMarkup(
         [[InlineKeyboardButton("👁 Открыть в Magic Oculus", url=url)]]
     )
-    try:
-        await bot.edit_message_reply_markup(
-            chat_id=delivery.chat_id,
-            message_id=delivery.message_id,
-            reply_markup=keyboard,
-        )
-    except Exception:  # noqa: BLE001 — уведомление не должно откатывать успешный импорт
-        logger.exception(
-            "maybe_announce_meta_gather_completed: Magic Oculus button edit failed for #%s",
-            magicoculus_tournament_id,
-        )
+    allowed_chat_ids = {cid for cid in (chat_id, settings.OWNER_CHAT_ID) if cid}
+    for delivery in deliveries:
+        if delivery.chat_id not in allowed_chat_ids or delivery.message_id is None:
+            continue
+        try:
+            await bot.edit_message_reply_markup(
+                chat_id=delivery.chat_id,
+                message_id=delivery.message_id,
+                reply_markup=keyboard,
+            )
+        except BadRequest as exc:
+            # Telegram can apply the edit and then answer a retried request with this text.
+            # The requested button is already present, so this is a successful end state.
+            if "message is not modified" in str(exc).casefold():
+                logger.info(
+                    "maybe_announce_meta_gather_completed: Magic Oculus button already attached for #%s",
+                    magicoculus_tournament_id,
+                )
+                continue
+            logger.exception(
+                "maybe_announce_meta_gather_completed: Magic Oculus button edit failed for #%s",
+                magicoculus_tournament_id,
+            )
+        except Exception:  # noqa: BLE001 — уведомление не должно откатывать успешный импорт
+            logger.exception(
+                "maybe_announce_meta_gather_completed: Magic Oculus button edit failed for #%s",
+                magicoculus_tournament_id,
+            )
 
 
 async def _notify_magicoculus_import_error(bot, tournament_id: int, title: str, exc: Exception) -> None:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from datetime import timedelta
@@ -12,6 +13,8 @@ from services import errors
 from services.aetherhub_models import AetherhubRound, AetherhubTournamentData
 from services.names import format_participant_name
 from services.user import UserService
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -255,6 +258,62 @@ class AetherhubImportService:
             result.append(name)
         return result
 
+    def _remove_confirmed_no_shows(
+        self, tournament_id: int, data: AetherhubTournamentData
+    ) -> list[str]:
+        """Remove bot registrations that never appeared in a finished AetherHub event.
+
+        A published standings list alone is not enough: AetherHub can temporarily return a
+        subset there. Removal is allowed only after every non-bye match has a score, and only
+        for a participant absent from players, every round, and standings. The removed names
+        are written to the application log so the automatic cleanup remains auditable.
+        """
+        if not data.standings or not self.is_tournament_complete(tournament_id):
+            return []
+
+        observed_keys = {
+            tuple(
+                sorted(
+                    self._normalize_import_name(name)
+                    .casefold()
+                    .replace("ё", "е")
+                    .split()
+                )
+            )
+            for name in self._registration_names(data)
+        }
+        participants = self.db.execute(
+            select(models.Participant).where(models.Participant.tournament_id == tournament_id)
+        ).scalars().all()
+        removed_names: list[str] = []
+        for participant in participants:
+            if participant.final_place is not None:
+                continue
+            name = format_participant_name(
+                participant.user.first_name, participant.user.last_name
+            ).strip()
+            key = tuple(
+                sorted(
+                    self._normalize_import_name(name)
+                    .casefold()
+                    .replace("ё", "е")
+                    .split()
+                )
+            )
+            if key in observed_keys:
+                continue
+            removed_names.append(name or f"participant:{participant.id}")
+            self.db.delete(participant)
+
+        if removed_names:
+            self.db.commit()
+            logger.info(
+                "AetherHub final import removed no-shows from tournament #%s: %s",
+                tournament_id,
+                ", ".join(removed_names),
+            )
+        return removed_names
+
     def _received_counts(self, data: AetherhubTournamentData) -> tuple[int, int, int, int]:
         return (
             len(self._registration_names(data)),
@@ -382,6 +441,7 @@ class AetherhubImportService:
             self.db.commit()
 
         self._apply_final_places(tournament_id, data.standings)
+        self._remove_confirmed_no_shows(tournament_id, data)
         players_received, rounds_received, pairings_received, standings_received = self._received_counts(data)
 
         return ImportResult(
