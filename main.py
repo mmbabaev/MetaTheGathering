@@ -43,6 +43,7 @@ from bot.keyboards import (
     CB_CREATE_POLL,
     CB_CUSTOM_ARCHETYPE,
     CB_DEBUG_ROUND_NOTIFY,
+    CB_DEFER_DECK,
     CB_DELETE_TOURNAMENT,
     CB_DELETE_TOURNAMENT_CANCEL,
     CB_DELETE_TOURNAMENT_CONFIRM,
@@ -292,6 +293,7 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(player.callback_tournament_select, pattern=f"^{CB_TOURNAMENT}:"))
     app.add_handler(CallbackQueryHandler(player.callback_register, pattern=f"^{CB_REGISTER}:"))
     app.add_handler(CallbackQueryHandler(player.callback_archetype, pattern=f"^{CB_ARCHETYPE}:"))
+    app.add_handler(CallbackQueryHandler(player.callback_defer_deck, pattern=f"^{CB_DEFER_DECK}:"))
     app.add_handler(CallbackQueryHandler(player.callback_archetype_more, pattern=f"^{CB_ARCHETYPE_MORE}:"))
     app.add_handler(CallbackQueryHandler(player.callback_custom_archetype, pattern=f"^{CB_CUSTOM_ARCHETYPE}:"))
     app.add_handler(CallbackQueryHandler(player.callback_tournament_status, pattern=f"^{CB_TSTATUS}:"))

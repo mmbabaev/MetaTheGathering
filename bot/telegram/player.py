@@ -138,6 +138,36 @@ async def callback_archetype(update: Update, context: ContextTypes.DEFAULT_TYPE)
         db.close()
 
 
+async def callback_defer_deck(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+    db = SessionLocal()
+    try:
+        result = _player_handler(db).handle_defer_deck(
+            user.id,
+            user.username,
+            user.first_name,
+            user.last_name,
+            tournament_id,
+        )
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        _log("register_deck_later", user, tournament_id=tournament_id)
+        await query.edit_message_text(result.text)
+        await query.answer()
+        card = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id)
+        await query.message.reply_text(card.text, reply_markup=card.keyboard)
+    finally:
+        db.close()
+
+
 async def callback_archetype_more(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     user = update.effective_user

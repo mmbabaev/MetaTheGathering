@@ -13,6 +13,7 @@ CB_REGISTER = "reg"
 CB_ARCHETYPE = "arch"
 CB_CUSTOM_ARCHETYPE = "custom"
 CB_ARCHETYPE_MORE = "arch_more"  # arch_more:{tournament_id}
+CB_DEFER_DECK = "deck_later"  # deck_later:{tournament_id}
 CB_TOURNAMENT = "t"
 CB_SETTINGS_NAME = "settings_name"
 CB_SETTINGS_TOGGLE_EMOJI = "settings_toggle_emoji"
@@ -657,6 +658,7 @@ class Keyboards:
         archetypes: list,
         has_more: bool = False,
         show_emoji: bool = True,
+        can_defer: bool = False,
     ) -> InlineKeyboardMarkup:
         buttons = [
             [
@@ -672,6 +674,8 @@ class Keyboards:
                 [InlineKeyboardButton("... ещё колоды", callback_data=f"{CB_ARCHETYPE_MORE}:{tournament_id}")]
             )
         buttons.append([InlineKeyboardButton("Свой вариант", callback_data=f"{CB_CUSTOM_ARCHETYPE}:{tournament_id}")])
+        if can_defer:
+            buttons.append([InlineKeyboardButton("Укажу позже", callback_data=f"{CB_DEFER_DECK}:{tournament_id}")])
         buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_TOURNAMENT}:{tournament_id}")])
         return InlineKeyboardMarkup(buttons)
 
@@ -889,5 +893,6 @@ def archetype_keyboard(
     tournament_id: int,
     archetypes: list,
     has_more: bool = False,
+    can_defer: bool = False,
 ) -> InlineKeyboardMarkup:
-    return _default.archetype_keyboard(tournament_id, archetypes, has_more=has_more)
+    return _default.archetype_keyboard(tournament_id, archetypes, has_more=has_more, can_defer=can_defer)

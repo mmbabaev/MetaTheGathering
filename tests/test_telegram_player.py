@@ -20,6 +20,7 @@ from bot.telegram.player import (
     USER_DATA_PENDING_SETTINGS_NAME,
     callback_archetype,
     callback_archetype_more,
+    callback_defer_deck,
     callback_leave_confirm,
     callback_leave_tournament,
     callback_register,
@@ -190,6 +191,38 @@ async def test_callback_archetype_alert():
         await callback_archetype(update, _make_context())
 
     update.callback_query.answer.assert_called_once_with("Уже записаны.", show_alert=True)
+    update.callback_query.edit_message_text.assert_not_called()
+
+
+async def test_callback_defer_deck_success():
+    result = HandlerResult("Вы записаны. Укажите колоду позже.")
+    update = _make_callback_update("deck_later:3")
+
+    with patch("bot.telegram.player.SessionLocal"), patch("bot.telegram.player.PlayerHandler") as mock_ph:
+        mock_ph.return_value.handle_defer_deck.return_value = result
+        mock_ph.return_value.handle_tournament_select.return_value = HandlerResult("Карточка")
+        await callback_defer_deck(update, _make_context())
+
+    mock_ph.return_value.handle_defer_deck.assert_called_once_with(
+        update.effective_user.id,
+        update.effective_user.username,
+        update.effective_user.first_name,
+        update.effective_user.last_name,
+        3,
+    )
+    update.callback_query.edit_message_text.assert_called_once_with(result.text)
+    update.callback_query.message.reply_text.assert_awaited_once()
+
+
+async def test_callback_defer_deck_alert():
+    result = HandlerResult("Слишком поздно.", is_alert=True)
+    update = _make_callback_update("deck_later:3")
+
+    with patch("bot.telegram.player.SessionLocal"), patch("bot.telegram.player.PlayerHandler") as mock_ph:
+        mock_ph.return_value.handle_defer_deck.return_value = result
+        await callback_defer_deck(update, _make_context())
+
+    update.callback_query.answer.assert_called_once_with(result.text, show_alert=True)
     update.callback_query.edit_message_text.assert_not_called()
 
 

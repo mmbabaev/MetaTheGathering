@@ -10,6 +10,7 @@ from bot.handlers.aetherhub import AetherhubHandler
 from bot.keyboards import aetherhub_confirm_keyboard
 from bot.scheduler import get_clubs
 from bot.telegram.common import announce_completion_if_ready, parse_callback_ints
+from bot.telegram.deck_reminder import send_deferred_deck_reminders
 from bot.telegram.player import _player_handler
 from bot.telegram.round_notify import send_round_notifications
 from core.database import SessionLocal
@@ -17,6 +18,7 @@ from services.aetherhub_import_service import AetherhubImportService
 from services.aetherhub_models import AetherhubTournamentData
 from services.aetherhub_service import AetherhubService
 from services.datalens import DataLensService
+from services.deck_reminders import DeckReminderStage
 from services.tournament import TournamentService
 from services.user import UserService
 from services.utils import get_tournament
@@ -213,13 +215,26 @@ async def callback_aetherhub_confirm(update: Update, context: ContextTypes.DEFAU
         try:
             # DataLens обязателен и здесь: без него ручной импорт слал бы уведомления без винрейта
             # (в отличие от scheduled-джоб, которые его передают) — см. bot/scheduler.py.
-            await send_round_notifications(
-                context.bot,
-                db_notify,
-                tournament_id,
-                result.new_round_numbers,
-                datalens_service=DataLensService(),
-            )
+            try:
+                await send_round_notifications(
+                    context.bot,
+                    db_notify,
+                    tournament_id,
+                    result.new_round_numbers,
+                    datalens_service=DataLensService(),
+                )
+            except Exception:
+                logger.exception("Round notifications failed for tournament %s", tournament_id)
+            if 2 in result.new_round_numbers:
+                try:
+                    await send_deferred_deck_reminders(
+                        context.bot,
+                        db_notify,
+                        tournament_id,
+                        DeckReminderStage.ROUND2,
+                    )
+                except Exception:
+                    logger.exception("Deck reminders failed for tournament %s", tournament_id)
         finally:
             db_notify.close()
 

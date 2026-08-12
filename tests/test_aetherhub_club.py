@@ -22,6 +22,7 @@ from core.schemas import TournamentCreate
 from services.aetherhub_import_service import AetherhubImportService
 from services.aetherhub_models import AetherhubTournamentData, ClubTournamentLink
 from services.aetherhub_service import PAUPER_RE, AetherhubService
+from services.deck_reminders import DeckReminderStage
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -826,6 +827,40 @@ class TestAetherhubImportJob:
 
         mock_svc.find_todays_pauper_tournament.assert_not_called()
         mock_svc.fetch_tournament.assert_called_once_with(stored_url)
+
+    def test_new_second_round_triggers_deferred_deck_reminder(self, db, svc):
+        stored_url = "https://aetherhub.com/Tourney/RoundTourney/218"
+        source = MagicMock()
+        source.fetch_tournament.return_value = MagicMock()
+        tournament = svc.create_tournament(
+            TournamentCreate(title="T", chat_id=0, slug="t", club="Goldfish")
+        )
+        svc.set_aetherhub_url(tournament.id, stored_url)
+        job = _make_import_job(aetherhub_service=source)
+        bot = AsyncMock()
+        reminder = AsyncMock()
+
+        with (
+            patch("bot.scheduler.AetherhubImportService") as import_cls,
+            patch("bot.scheduler.send_round_notifications", AsyncMock()),
+            patch("bot.scheduler.send_deferred_deck_reminders", reminder),
+            patch("bot.scheduler.maybe_announce_meta_gather_completed", AsyncMock()),
+            patch("bot.scheduler.SessionLocal", return_value=MagicMock()),
+        ):
+            import_cls.return_value.import_tournament.return_value = MagicMock(
+                registered=0,
+                already_registered=2,
+                pairings_saved=4,
+                new_round_numbers=[2],
+            )
+            asyncio.run(job.run(now=FRIDAY_NOW, db=db, bot=bot))
+
+        reminder.assert_awaited_once_with(
+            bot,
+            db,
+            tournament.id,
+            DeckReminderStage.ROUND2,
+        )
 
     def test_stops_gracefully_when_club_page_has_no_tournament(self, db, svc):
         """If find_todays_pauper_tournament returns None, import is skipped."""

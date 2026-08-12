@@ -1,18 +1,22 @@
 """Tests for player handler business logic (PlayerHandler methods)."""
 
+from datetime import timedelta
+
 import pytest
 
-from bot.handlers.player import PlayerHandler
-from bot.keyboards import CB_ARCHETYPE, CB_CUSTOM_ARCHETYPE, CB_LEAVE, CB_REGISTER, CB_TSTATUS
+from bot.handlers.player import DEFER_DECK_WINDOW, PlayerHandler
+from bot.keyboards import CB_ARCHETYPE, CB_CUSTOM_ARCHETYPE, CB_DEFER_DECK, CB_LEAVE, CB_REGISTER, CB_TSTATUS
 from bot.messages import (
     ALREADY_REGISTERED,
     CHOOSE_ARCHETYPE,
+    DEFER_DECK_EXPIRED,
     LEAVE_CONFIRM_PROMPT,
     LEFT_TOURNAMENT,
     NO_ACTIVE_TOURNAMENTS,
     NOT_REGISTERED_IN_TOURNAMENT,
     REGISTERED,
     REGISTERED_AS,
+    REGISTERED_DECK_LATER,
     REGISTRATION_CLOSED,
     TOURNAMENT_NOT_FOUND,
 )
@@ -118,6 +122,85 @@ class TestHandleRegister:
         result = handler.handle_register(active_tournament.id, tg_id=99999)
         assert result.needs_name is True
 
+    def test_shows_defer_button_during_first_seven_hours(
+        self, handler, user_svc, active_tournament
+    ):
+        user = user_svc.get_or_create(tg_id=5102, username="u", first_name="Иван")
+
+        result = handler.handle_register(active_tournament.id, tg_id=user.tg_id)
+
+        buttons = [button for row in result.keyboard.inline_keyboard for button in row]
+        assert any(button.callback_data == f"{CB_DEFER_DECK}:{active_tournament.id}" for button in buttons)
+
+    def test_hides_defer_button_after_seven_hours(
+        self, db, handler, user_svc, active_tournament
+    ):
+        user = user_svc.get_or_create(tg_id=5103, username="u", first_name="Иван")
+        tournament = db.get(models.Tournament, active_tournament.id)
+        tournament.created_at = utc_now() - DEFER_DECK_WINDOW - timedelta(seconds=1)
+        db.commit()
+
+        result = handler.handle_register(active_tournament.id, tg_id=user.tg_id)
+
+        buttons = [button for row in result.keyboard.inline_keyboard for button in row]
+        assert not any(button.callback_data.startswith(CB_DEFER_DECK) for button in buttons)
+
+
+class TestHandleDeferDeck:
+    def test_registers_without_deck_and_marks_explicit_defer(
+        self, handler, svc, user_svc, active_tournament
+    ):
+        result = handler.handle_defer_deck(
+            tg_id=5201,
+            username="later",
+            first_name="Иван",
+            last_name=None,
+            tournament_id=active_tournament.id,
+        )
+
+        user = user_svc.get_by_tg_id(5201)
+        participant = svc.get_participant(active_tournament.id, user.id)
+        assert result.text == REGISTERED_DECK_LATER
+        assert participant.archetype_id is None
+        assert participant.deck_deferred is True
+
+    def test_expired_defer_is_rejected_without_registration(
+        self, db, handler, svc, user_svc, active_tournament
+    ):
+        tournament = db.get(models.Tournament, active_tournament.id)
+        tournament.created_at = utc_now() - DEFER_DECK_WINDOW
+        db.commit()
+
+        result = handler.handle_defer_deck(
+            tg_id=5202,
+            username="late",
+            first_name="Иван",
+            last_name=None,
+            tournament_id=active_tournament.id,
+        )
+
+        assert result.text == DEFER_DECK_EXPIRED
+        assert result.is_alert
+        assert user_svc.get_by_tg_id(5202) is None
+
+    def test_existing_deckless_participant_becomes_deferred(
+        self, handler, svc, user_svc, active_tournament
+    ):
+        user = user_svc.get_or_create(tg_id=5203, username="later", first_name="Иван")
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user.id)
+
+        result = handler.handle_defer_deck(
+            tg_id=user.tg_id,
+            username=user.username,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            tournament_id=active_tournament.id,
+        )
+
+        participant = svc.get_participant(active_tournament.id, user.id)
+        assert result.text == REGISTERED_DECK_LATER
+        assert participant.deck_deferred is True
+
 
 # --- handle_archetype ---
 
@@ -159,7 +242,11 @@ class TestHandleArchetype:
         self, handler, svc, user_svc, active_tournament, archetype_burn
     ):
         user = user_svc.get_or_create(tg_id=1001, username="alice", first_name="Alice")
-        svc.register_participant(tournament_id=active_tournament.id, user_id=user.id)
+        svc.register_participant(
+            tournament_id=active_tournament.id,
+            user_id=user.id,
+            deck_deferred=True,
+        )
         result = handler.handle_archetype(
             tg_id=1001,
             username="alice",
@@ -172,6 +259,7 @@ class TestHandleArchetype:
         assert not result.is_alert
         participant = svc.get_participant(active_tournament.id, user.id)
         assert participant.archetype_id == archetype_burn.id
+        assert participant.deck_deferred is False
 
     def test_registration_closed_returns_alert(self, handler, svc, active_tournament, archetype_burn):
         svc.close_tournament(active_tournament.id)
