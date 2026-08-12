@@ -23,6 +23,15 @@
 - `Blue Faeries` и `UB Faeries` → `Faeries`; `UR Faeries` пока не объединять сюда.
 - Любой `* Affinity` → `Affinity`.
 - Любой `* Tron` → `Tron`.
+- `Bogles`, включая варианты с эмодзи и опечаткой в ключевом слове, → `Bogles`.
+- Любой `* Ephemerate` → `Ephemerate`.
+- `Spy Walls` (включая исходный вариант `Spy Combo`) → `Walls`.
+- `Black Sacrifice` и голый `Sacrifice` → `Sacrifice`; турнирные `MonoBlack Sacrifice`
+  и `Rainbow Black Sac` канонизируются как `Black Sacrifice` без изменения исходного имени.
+
+Не объединять только по слишком общим словам `Control` и `Aggro`: цветовые варианты могут быть
+разными стратегиями. Например, `UR Control` и `Black Control`, а также `Green Aggro` и
+`White Aggro`, остаются без общей macro-группы до более узкого подтверждённого правила.
 
 ## Fuzzy-сопоставление
 

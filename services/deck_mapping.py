@@ -63,7 +63,7 @@ _BASE_RULES = [
     (r"terror|delver", "Terror"),
     (r"madness", "Madness"),
     (r"affinity", "Affinity"),
-    (r"fams|familiars", "Familiars"),
+    (r"\bfam\b|fams|familiars", "Familiars"),
     (r"faeries|faerie|fairies|fairy|фе[ий]", "Faeries"),
     (r"gates", "Gates"),
     (r"pestilence", "Pestilence"),
@@ -75,7 +75,7 @@ _BASE_RULES = [
     (r"blade", "Blade"),
     (r"tribe", "Tribe"),
     (r"aristocrats", "Aristocrats"),
-    (r"sacrifice", "Sacrifice"),
+    (r"\bsac\b|sacrifice", "Sacrifice"),
     (r"devotion|devoution", "Devotion"),
     (r"burn", "Burn"),
     (r"slime", "Slime"),
@@ -191,7 +191,7 @@ def _colors(name: str) -> str:
     if re.search(r"\b5c\b|\bfive colou?r", low):
         return "5C"
     for w, letter in _MONO_WORD.items():
-        if re.search(rf"\bmono {w}\b|\b{w}\b", low):
+        if re.search(rf"\bmono[\s_-]*{w}\b|\b{w}\b", low):
             return letter
     for tok in re.findall(r"\b[wubrg]{1,3}\b", low):
         up = tok.upper()
@@ -314,6 +314,14 @@ def _fuzzy_macro_from_raw(raw_name: str | None) -> str | None:
         candidates.add("Burn")
     if _one_typo_keyword(raw_name, "rally") and colors == "R":
         candidates.add("Burn")
+    if _one_typo_keyword(raw_name, "bogles"):
+        candidates.add("Bogles")
+    if _one_typo_keyword(raw_name, "ephemerate"):
+        candidates.add("Ephemerate")
+    if _one_typo_keyword(raw_name, "walls") or _one_typo_keyword(raw_name, "spy"):
+        candidates.add("Walls")
+    if _one_typo_keyword(raw_name, "sacrifice"):
+        candidates.add("Sacrifice")
     if (_one_typo_keyword(raw_name, "terror") or _one_typo_keyword(raw_name, "delver")) and colors in {"U", "UB"}:
         candidates.add("Terror")
     if any(
@@ -438,6 +446,14 @@ def macro_archetype(general_name: str | None, raw_name: str | None = None) -> st
         return "Terror"
     if name in {"blue faeries", "ub faeries"}:
         return "Faeries"
+    if name == "bogles":
+        return "Bogles"
+    if name == "ephemerate" or name.endswith(" ephemerate"):
+        return "Ephemerate"
+    if name == "spy walls":
+        return "Walls"
+    if name in {"sacrifice", "black sacrifice"}:
+        return "Sacrifice"
     return None
 
 
