@@ -95,6 +95,14 @@ class TestCustomArchetypeClassification:
         assert custom.general_name == "Flicker Tron"
         assert custom.macro_name == "Tron"
 
+    def test_tournament_sac_name_stays_custom_while_classification_is_separate(self, arch_svc):
+        custom = arch_svc.get_or_create_by_name("Rainbow Black Sac", is_custom=True)
+
+        assert custom.name == "Rainbow Black Sac"
+        assert custom.is_custom is True
+        assert custom.general_name == "Black Sacrifice"
+        assert custom.macro_name == "Sacrifice"
+
 
 # ---------------------------------------------------------------------------
 # 1. list_top_archetypes

@@ -148,6 +148,32 @@ def test_macro_report_never_rewrites_cached_general_name(db, user_svc, arch_svc)
     assert "BG Control — 1 (Gardens ×1)" in text
 
 
+def test_macro_report_groups_new_edinorog_families(db, user_svc, arch_svc):
+    t = _complete_tournament(db, user_svc, arch_svc)
+    raw_names = [
+        "Bogles",
+        "🟢🔵🐸 Bogles",
+        "Jeskai Ephemerate",
+        "Jeskai Ephemerate",
+        "Spy Combo",
+        "Spy Walls",
+        "Rainbow Black Sac",
+        "MonoBlack Sacrifice",
+    ]
+    for offset, raw_name in enumerate(raw_names, start=10):
+        archetype = arch_svc.get_or_create_by_name(raw_name, is_custom=True)
+        _register(db, user_svc, t.id, offset, f"Player {offset}", archetype=archetype)
+    db.commit()
+
+    text = _refresh_and_format_macro_report(db, t.id)
+
+    assert "Bogles — 2 (Bogles ×2)" in text
+    assert "Ephemerate — 2 (Jeskai Ephemerate ×2)" in text
+    assert "Walls — 2 (Spy Walls ×2)" in text
+    assert "Sacrifice — 2 (Black Sacrifice ×2)" in text
+    assert "Пока без крупной группы — 2" in text
+
+
 async def test_macro_report_is_appended_only_to_owner_message(db, user_svc, arch_svc, monkeypatch):
     monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
     t = _complete_tournament(db, user_svc, arch_svc)

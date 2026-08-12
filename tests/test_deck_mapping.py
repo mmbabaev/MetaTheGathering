@@ -34,10 +34,63 @@ EDINOROG_2026_08_06_GENERAL_NAMES = [
     ("White Tron", "Tron"),
 ]
 
+# Полный фактический срез production-турнира «Edinorog Pauper 10.08.2026» (#67,
+# AetherHub 101064). Включает все 36 регистраций, в том числе no-show без итогового места.
+# Для каждого пользовательского имени фиксируем оба отдельных слоя классификации.
+EDINOROG_2026_08_10_DECK_CLASSIFICATION = [
+    ("Dimir Terror", "UB Terror", "Terror"),
+    ("Bogles", "Bogles", "Bogles"),
+    ("Blue Terror", "Blue Terror", "Terror"),
+    ("Flicker Tron", "Flicker Tron", "Tron"),
+    ("Green Counters Aggro", "Green Aggro", None),
+    ("Red Madness", "Red Madness", "Burn"),
+    ("Naya Gond", None, None),
+    ("Selesnya Turbo Initiative", "WG Turbo Initiative", None),
+    ("Cycling Storm", None, None),
+    ("Blue Terror", "Blue Terror", "Terror"),
+    ("Jund Wildfire", "Jund Midrange", None),
+    ("Jeskai Ephemerate", "Jeskai Ephemerate", "Ephemerate"),
+    ("Mono black control", "Black Control", None),
+    ("Spy Combo", "Spy Walls", "Walls"),
+    ("BG Gardens", "BG Gardens", "BG Control"),
+    ("Tortured Existence", None, None),
+    ("Red Rally", "Red Rally", "Burn"),
+    ("Red Rally", "Red Rally", "Burn"),
+    ("UR Control", "UR Control", None),
+    ("Golgari gardens", "BG Gardens", "BG Control"),
+    ("Spy Walls", "Spy Walls", "Walls"),
+    ("Elves", "Elves", None),
+    ("Blue Terror", "Blue Terror", "Terror"),
+    ("Jeskai Ephemerate", "Jeskai Ephemerate", "Ephemerate"),
+    ("Rainbow Black Sac", "Black Sacrifice", "Sacrifice"),
+    ("Infect", "Infect", None),
+    ("Red Madness", "Red Madness", "Burn"),
+    ("Orzhov Blade", "WB Blade", None),
+    ("🟢🔵🐸 Bogles", "Bogles", "Bogles"),
+    ("Red Rally", "Red Rally", "Burn"),
+    ("UW fam", "UW Familiars", None),
+    ("White Aggro", "White Aggro", None),
+    ("Blue Tron", "Tron", "Tron"),
+    ("Naya gates", "Naya Gates", None),
+    ("MonoBlack Sacrifice", "Black Sacrifice", "Sacrifice"),
+    ("Dimir Terror", "UB Terror", "Terror"),
+]
+
 
 @pytest.mark.parametrize("raw,expected", EDINOROG_2026_08_06_GENERAL_NAMES)
 def test_edinorog_2026_08_06_real_decks_general_name(raw, expected):
     assert general_archetype(raw) == expected
+
+
+@pytest.mark.parametrize(
+    "raw,expected_general,expected_macro",
+    EDINOROG_2026_08_10_DECK_CLASSIFICATION,
+)
+def test_edinorog_2026_08_10_real_decks_general_and_macro(raw, expected_general, expected_macro):
+    general = general_archetype(raw)
+
+    assert general == expected_general
+    assert macro_archetype(general, raw) == expected_macro
 
 
 @pytest.mark.parametrize(
@@ -54,6 +107,7 @@ def test_edinorog_2026_08_06_real_decks_general_name(raw, expected):
         ("Dimir Affinity", "UB Affinity"),  # 2 цвета — буквами
         ("Uw Familiars", "UW Familiars"),  # регистр
         ("UW fams", "UW Familiars"),  # синоним fams
+        ("UW fam", "UW Familiars"),  # турнирное сокращение
         ("Azorius Familiars", "UW Familiars"),  # гильдия→буквы (Азориус UW)
         # delver = terror; терроры по цвету НЕ сливаем
         ("Blue Delver", "Blue Terror"),
@@ -115,6 +169,8 @@ def test_edinorog_2026_08_06_real_decks_general_name(raw, expected):
         ("Jeskai Ephemerate", "Jeskai Ephemerate"),
         ("Mono G Stompy", "Green Stompy"),
         ("Black Sacrifice", "Black Sacrifice"),
+        ("MonoBlack Sacrifice", "Black Sacrifice"),
+        ("Rainbow Black Sac", "Black Sacrifice"),
     ],
 )
 def test_general_archetype(raw, expected):
@@ -187,6 +243,10 @@ def test_tournament_guild_names_become_two_color_codes_for_unknown_decks(guild, 
         ("Blue Faeries", "Faeries"),
         ("UB Faeries", "Faeries"),
         ("UR Faeries", None),
+        ("Bogles", "Bogles"),
+        ("Jeskai Ephemerate", "Ephemerate"),
+        ("Spy Walls", "Walls"),
+        ("Black Sacrifice", "Sacrifice"),
         ("Grixis Affinity", "Affinity"),
         ("UB Affinity", "Affinity"),
         ("Affinity", "Affinity"),
@@ -219,6 +279,16 @@ def test_macro_archetype(general, expected):
         ("Throne Combo", None),
         ("Izzet Faereis", None),
         ("UB Madnes", None),
+        ("Boglez", "Bogles"),
+        ("Jeskai Ephemerat", "Ephemerate"),
+        ("Spy Wals", "Walls"),
+        ("Black Sacrifce", "Sacrifice"),
+        ("Rainbow Black Sac", None),  # короткое sac не используем как fuzzy-сигнал
+        ("Boggle Combo", None),
+        ("Ephemeral Control", None),
+        ("Sacred Cat", None),
+        ("Wallace Combo", None),
+        ("Spicy Combo", None),
         ("Affinity Tron", None),
     ],
 )
