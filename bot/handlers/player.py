@@ -1,11 +1,14 @@
 # Регистрация, выбор колоды — чистая бизнес-логика
 
+from datetime import timedelta
+
 from bot.features import FeatureService
 from bot.handlers.base import HandlerResult
 from bot.keyboards import Keyboards
 from bot.messages import (
     ALREADY_REGISTERED,
     CHOOSE_ARCHETYPE,
+    DEFER_DECK_EXPIRED,
     LEAVE_CONFIRM_PROMPT,
     LEFT_TOURNAMENT,
     NAME_REQUIRED_FOR_REGISTRATION,
@@ -13,6 +16,7 @@ from bot.messages import (
     NOT_REGISTERED_IN_TOURNAMENT,
     REGISTERED,
     REGISTERED_AS,
+    REGISTERED_DECK_LATER,
     REGISTRATION_CLOSED,
     TOURNAMENT_NOT_FOUND,
     format_tournament_card,
@@ -29,6 +33,7 @@ from services.user import UserService
 from services.utils import get_tournament
 
 ARCHETYPE_COLLAPSED_COUNT = 3
+DEFER_DECK_WINDOW = timedelta(hours=7)
 
 
 def build_archetype_menu(
@@ -144,11 +149,23 @@ class PlayerHandler:
         self, tournament_id: int, tg_id: int | None, expanded: bool = False
     ) -> HandlerResult:
         """Строит HandlerResult с клавиатурой архетипов для игрока."""
+        tournament = get_tournament(self.svc.db, tournament_id)
         arch_list, has_more = build_archetype_menu(self.arch_svc, tg_id, expanded)
         user = self.user_svc.get_by_tg_id(tg_id) if tg_id else None
         show_emoji = not (user and user.hide_deck_emoji)
+        can_defer = (
+            tournament.status == models.TournamentStatus.REGISTRATION
+            and models.utc_now() < tournament.created_at + DEFER_DECK_WINDOW
+        )
         return HandlerResult(
-            CHOOSE_ARCHETYPE, keyboard=self.keyboards.archetype_keyboard(tournament_id, arch_list, has_more, show_emoji)
+            CHOOSE_ARCHETYPE,
+            keyboard=self.keyboards.archetype_keyboard(
+                tournament_id,
+                arch_list,
+                has_more,
+                show_emoji,
+                can_defer,
+            ),
         )
 
     def handle_tournaments(self, tg_id: int | None = None) -> HandlerResult:
@@ -268,6 +285,40 @@ class PlayerHandler:
             return HandlerResult(REGISTERED_AS.format(archetype_name=name))
         except errors.TournamentInvalidState:
             return HandlerResult(REGISTRATION_CLOSED, is_alert=True)
+
+    def handle_defer_deck(
+        self,
+        tg_id: int,
+        username: str | None,
+        first_name: str | None,
+        last_name: str | None,
+        tournament_id: int,
+    ) -> HandlerResult:
+        """Register without a deck during the first seven hours after tournament creation."""
+        try:
+            tournament = get_tournament(self.svc.db, tournament_id)
+        except errors.TournamentNotFound:
+            return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
+        if tournament.status != models.TournamentStatus.REGISTRATION:
+            return HandlerResult(REGISTRATION_CLOSED, is_alert=True)
+        if models.utc_now() >= tournament.created_at + DEFER_DECK_WINDOW:
+            return HandlerResult(DEFER_DECK_EXPIRED, is_alert=True)
+
+        db_user = self._register_user(tg_id, username, first_name, last_name)
+        try:
+            self.svc.register_participant(
+                tournament_id=tournament_id,
+                user_id=db_user.id,
+                deck_deferred=True,
+            )
+        except errors.ParticipantAlreadyRegistered:
+            participant = self.svc.get_participant(tournament_id, db_user.id)
+            if participant is None or participant.archetype_id is not None:
+                return HandlerResult(ALREADY_REGISTERED, is_alert=True)
+            self.svc.mark_participant_deck_deferred(participant.id)
+        except errors.TournamentInvalidState:
+            return HandlerResult(REGISTRATION_CLOSED, is_alert=True)
+        return HandlerResult(REGISTERED_DECK_LATER)
 
     def handle_custom_archetype_text(
         self,

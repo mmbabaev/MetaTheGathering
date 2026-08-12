@@ -291,6 +291,7 @@ class TournamentService:
         archetype_id: Optional[int] = None,
         added_by_admin: bool = False,
         deck_added_by_tg_id: Optional[int] = None,
+        deck_deferred: bool = False,
     ) -> ParticipantRead:
         tournament = get_tournament(self.db, tournament_id)
         ensure_tournament_status(tournament, allowed=[models.TournamentStatus.REGISTRATION])
@@ -311,6 +312,7 @@ class TournamentService:
             archetype_id=archetype_id,
             added_by_admin=added_by_admin,
             deck_added_by_tg_id=deck_added_by_tg_id if archetype_id else None,
+            deck_deferred=deck_deferred and archetype_id is None,
             created_at=models.utc_now(),
             updated_at=models.utc_now(),
         )
@@ -330,6 +332,8 @@ class TournamentService:
         participant = self._get_participant(participant_id)
 
         participant.archetype_id = archetype_id
+        if archetype_id is not None:
+            participant.deck_deferred = False
         participant.confirmed = False
         participant.updated_at = models.utc_now()
         if deck_added_by_tg_id is not None:
@@ -344,6 +348,16 @@ class TournamentService:
 
         self.db.commit()
         self.db.refresh(participant)
+        return ParticipantRead.model_validate(participant)
+
+    def mark_participant_deck_deferred(self, participant_id: int) -> ParticipantRead:
+        """Mark an existing deckless participant as explicitly choosing «Укажу позже»."""
+        participant = self._get_participant(participant_id)
+        if participant.archetype_id is None:
+            participant.deck_deferred = True
+            participant.updated_at = models.utc_now()
+            self.db.commit()
+            self.db.refresh(participant)
         return ParticipantRead.model_validate(participant)
 
     def list_participants_for_tournament(

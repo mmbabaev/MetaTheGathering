@@ -21,6 +21,7 @@ from bot.messages import format_decks_revealed, format_meta_gather_completed
 from bot.registration_messages import RegistrationMessageRefreshJob
 from bot.registration_messages import send_registration_open as _send_registration_open
 from bot.telegram.achievements import send_achievements_report
+from bot.telegram.deck_reminder import send_deferred_deck_reminders
 from bot.telegram.round_notify import send_round_notifications
 from core import models
 from core.clubs import debug_club, default_clubs
@@ -31,6 +32,7 @@ from services.aetherhub_import_service import MIN_TOURNAMENT_DURATION, Aetherhub
 from services.aetherhub_service import AetherhubService
 from services.datalens import DataLensService
 from services.deck_mapping import refresh_archetype_macro
+from services.deck_reminders import DeckReminderStage
 from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.magicoculus import (
     MagicOculusClient,
@@ -195,7 +197,19 @@ class PreStartReminderJob:
                 f"⏰ {self.club.name} Pauper начинается в {self.schedule.game_time}!\n"
                 f"Ещё не записали колоду? Успейте — жмите кнопку ниже."
             )
-            await send_registration_open(bot, db, self.club, active.id, text)
+            try:
+                await send_registration_open(bot, db, self.club, active.id, text)
+            except Exception:
+                logger.exception("PreStartReminderJob: group reminder failed for #%s", active.id)
+            try:
+                await send_deferred_deck_reminders(
+                    bot,
+                    db,
+                    active.id,
+                    DeckReminderStage.PRESTART,
+                )
+            except Exception:
+                logger.exception("PreStartReminderJob: deck reminders failed for #%s", active.id)
         except Exception:
             logger.exception("PreStartReminderJob error for '%s'", self.club.name)
         finally:
@@ -289,6 +303,16 @@ class AetherhubImportJob:
                     )
                 except Exception:
                     logger.exception(f"AetherhubImportJob: round notifications failed for #{tournament_id}")
+            if 2 in result.new_round_numbers and bot is not None:
+                try:
+                    await send_deferred_deck_reminders(
+                        bot,
+                        db,
+                        tournament_id,
+                        DeckReminderStage.ROUND2,
+                    )
+                except Exception:
+                    logger.exception(f"AetherhubImportJob: deck reminders failed for #{tournament_id}")
 
             if tournament.aetherhub_url != url:
                 db_url = SessionLocal()
@@ -400,6 +424,16 @@ class AetherhubTimedImportJob:
                     )
                 except Exception:
                     logger.exception(f"AetherhubTimedImportJob: round notifications failed for #{tournament_id}")
+            if 2 in result.new_round_numbers and bot is not None:
+                try:
+                    await send_deferred_deck_reminders(
+                        bot,
+                        db,
+                        tournament_id,
+                        DeckReminderStage.ROUND2,
+                    )
+                except Exception:
+                    logger.exception(f"AetherhubTimedImportJob: deck reminders failed for #{tournament_id}")
 
             try:
                 await maybe_announce_meta_gather_completed(bot, db, tournament_id)

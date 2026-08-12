@@ -94,6 +94,9 @@ Telegram-пользователь. Создаётся автоматически
 | `downvotes_count` | int | Кол-во голосов «против» |
 | `added_by_admin` | bool | Добавлен вручную (не через /register) |
 | `deck_added_by_tg_id` | bigint | Кто добавил архетип (игрок / админ / оппонент) |
+| `deck_deferred` | bool | Игрок явно выбрал «Укажу позже» в первые 7 часов регистрации |
+| `deck_reminder_prestart_sent_at` | datetime | Когда доставлено напоминание перед стартом |
+| `deck_reminder_round2_sent_at` | datetime | Когда доставлено напоминание после появления второго раунда |
 
 **Логика подтверждения:**
 - `upvotes − downvotes ≥ 3` → `confirmed = true`

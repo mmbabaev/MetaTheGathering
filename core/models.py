@@ -222,6 +222,11 @@ class Participant(Base):
     # tg_id того, кто записал колоду (сам игрок, админ или оппонент)
     deck_added_by_tg_id = Column(BigInteger, nullable=True)
 
+    # Игрок сам зарегистрировался через «Укажу позже» и ожидает напоминаний о колоде.
+    deck_deferred = Column(Boolean, default=False, nullable=False, server_default="false")
+    deck_reminder_prestart_sent_at = Column(DateTime, nullable=True)
+    deck_reminder_round2_sent_at = Column(DateTime, nullable=True)
+
     # подтверждена ли колода (по голосованию или руками админа)
     confirmed = Column(Boolean, default=False, nullable=False)
 

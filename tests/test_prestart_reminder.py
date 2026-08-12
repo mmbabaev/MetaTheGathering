@@ -10,6 +10,7 @@ from bot.scheduler import PreStartReminderJob, get_clubs, send_registration_open
 from core import models
 from core.config import Club, ClubSchedule
 from core.schemas import TournamentCreate
+from services.deck_reminders import DeckReminderStage
 from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.tournament import TournamentService
 
@@ -95,6 +96,48 @@ class TestPreStartReminderJob:
 
         bot.send_message.assert_awaited()
         assert "начинается" in bot.send_message.call_args_list[0].kwargs["text"]
+
+    async def test_dms_deferred_players_after_group_reminder(self, db, monkeypatch):
+        monkeypatch.setattr("bot.scheduler.settings.OWNER_CHAT_ID", None)
+        reminder = AsyncMock()
+        monkeypatch.setattr("bot.scheduler.send_deferred_deck_reminders", reminder)
+        club, schedule = self._club_schedule()
+        tournament = TournamentService(db).create_tournament(
+            TournamentCreate(title="Pauper", chat_id=-100)
+        )
+        bot = _bot()
+
+        await PreStartReminderJob(club, schedule).run(bot=bot, now=MONDAY, db=db)
+
+        reminder.assert_awaited_once_with(
+            bot,
+            db,
+            tournament.id,
+            DeckReminderStage.PRESTART,
+        )
+
+    async def test_group_failure_does_not_skip_deferred_player_dms(self, db, monkeypatch):
+        monkeypatch.setattr("bot.scheduler.settings.OWNER_CHAT_ID", None)
+        monkeypatch.setattr(
+            "bot.scheduler.send_registration_open",
+            AsyncMock(side_effect=TelegramError("group unavailable")),
+        )
+        reminder = AsyncMock()
+        monkeypatch.setattr("bot.scheduler.send_deferred_deck_reminders", reminder)
+        club, schedule = self._club_schedule()
+        tournament = TournamentService(db).create_tournament(
+            TournamentCreate(title="Pauper", chat_id=-100)
+        )
+        bot = _bot()
+
+        await PreStartReminderJob(club, schedule).run(bot=bot, now=MONDAY, db=db)
+
+        reminder.assert_awaited_once_with(
+            bot,
+            db,
+            tournament.id,
+            DeckReminderStage.PRESTART,
+        )
 
     async def test_silent_without_active_tournament(self, db):
         club, schedule = self._club_schedule()
