@@ -6,5 +6,6 @@ app_config = AppConfig(
     tournament_create_time="19:20",
     goldfish_chat_id=-1001399656692,  # @MoscowPauperChat
     edinorog_chat_id=-1001631119846,  # @paupermoscow «Паупер в Единороге»
+    pair_of_dice_chat_id=-1001236834154,  # «Питерский паупер» в Pair of dice
     owner_chat_id=232778570,  # mbabaev (владелец) — пока все служебные анонсы шлём ему в личку
 )

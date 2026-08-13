@@ -36,6 +36,7 @@ class ClubIdentity:
     chat_id: int
     aetherhub_url: str | None
     title_prefix: str
+    magicoculus_city: str
 
 
 def club_identities() -> list[ClubIdentity]:
@@ -46,12 +47,21 @@ def club_identities() -> list[ClubIdentity]:
             chat_id=app_cfg.goldfish_chat_id or 0,
             aetherhub_url="https://aetherhub.com/User/GoldFish",
             title_prefix="🐠 ",
+            magicoculus_city="Москва",
         ),
         ClubIdentity(
             name="Edinorog",
             chat_id=app_cfg.edinorog_chat_id or 0,
             aetherhub_url="https://aetherhub.com/User/Edinorog/",
             title_prefix="🦄 ",
+            magicoculus_city="Москва",
+        ),
+        ClubIdentity(
+            name="Pair of dice",
+            chat_id=app_cfg.pair_of_dice_chat_id or 0,
+            aetherhub_url="https://aetherhub.com/User/Andysays",
+            title_prefix="🎲🎲 ",
+            magicoculus_city="Санкт-Петербург",
         ),
     ]
 
@@ -74,6 +84,8 @@ def default_schedules() -> list[DefaultSchedule]:
         DefaultSchedule("Goldfish", "friday", "12:00", "19:45", "19:45", list(DEFAULT_IMPORT_TIMES)),
         DefaultSchedule("Edinorog", "monday", "12:00", "19:30", "19:25", list(DEFAULT_IMPORT_TIMES)),
         DefaultSchedule("Edinorog", "thursday", "12:00", "19:30", "19:25", list(DEFAULT_IMPORT_TIMES)),
+        DefaultSchedule("Pair of dice", "monday", "12:00", "19:30", "19:25", list(DEFAULT_IMPORT_TIMES)),
+        DefaultSchedule("Pair of dice", "wednesday", "12:00", "19:30", "19:25", list(DEFAULT_IMPORT_TIMES)),
     ]
 
 

@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from bot.scheduler import _ptb_day, reload_schedule_jobs, setup_scheduler
+from bot.scheduler import _import_day_offset, _ptb_day, reload_schedule_jobs, setup_scheduler
 from core.config import Club, ClubSchedule
 
 TZ = "Europe/Moscow"
@@ -199,6 +199,29 @@ class TestSetupScheduler:
                 continue
             assert call.kwargs["days"] == (5,)  # friday = 5 in PTB (0=Sunday)
 
+    def test_import_times_after_midnight_run_on_next_calendar_day(self):
+        app = _make_app()
+        clubs = [
+            Club(
+                name="Test",
+                chat_id=1,
+                aetherhub_url="https://aetherhub.com/User/Test",
+                schedules=[
+                    ClubSchedule(
+                        weekday="friday",
+                        game_time="19:45",
+                        aetherhub_fetch_times=["23:30", "00:00", "00:30"],
+                    )
+                ],
+            )
+        ]
+
+        with patch("bot.scheduler.settings", _mock_settings()), patch("bot.scheduler.get_clubs", return_value=clubs):
+            setup_scheduler(app)
+
+        import_calls = app.job_queue.run_daily.call_args_list[1:4]
+        assert [call.kwargs["days"] for call in import_calls] == [(5,), (6,), (6,)]
+
     def test_goldfish_full_config_registers_correct_count(self):
         """Goldfish fri(1+3) + sat(1+2) + Edinorog mon(1) = 8 jobs."""
         app = _make_app()
@@ -272,6 +295,17 @@ class TestPtbDay:
             setup_scheduler(app)
         call_kwargs = app.job_queue.run_daily.call_args_list[0].kwargs
         assert call_kwargs["days"] == (0,)  # sunday = 0 in PTB
+
+
+class TestImportDayOffset:
+    def test_detects_midnight_rollover_from_sequence(self):
+        times = ["23:30", "00:00", "00:30"]
+        assert _import_day_offset(times, "23:30") == 0
+        assert _import_day_offset(times, "00:00") == 1
+        assert _import_day_offset(times, "00:30") == 1
+
+    def test_midnight_only_sequence_stays_on_scheduled_day(self):
+        assert _import_day_offset(["00:00", "00:30"], "00:00") == 0
 
 
 # ── reload_schedule_jobs: правка расписания применяется без рестарта (issue #124) ──
