@@ -51,14 +51,14 @@ EDINOROG_2026_08_10_DECK_CLASSIFICATION = [
     ("Jund Wildfire", "Jund Midrange", None),
     ("Jeskai Ephemerate", "Jeskai Ephemerate", "Ephemerate"),
     ("Mono black control", "Black Control", None),
-    ("Spy Combo", "Spy Walls", "Walls"),
+    ("Spy Combo", "Spy Walls", "Spy"),
     ("BG Gardens", "BG Gardens", "BG Control"),
     ("Tortured Existence", None, None),
     ("Red Rally", "Red Rally", "Burn"),
     ("Red Rally", "Red Rally", "Burn"),
     ("UR Control", "UR Control", None),
     ("Golgari gardens", "BG Gardens", "BG Control"),
-    ("Spy Walls", "Spy Walls", "Walls"),
+    ("Spy Walls", "Spy Walls", "Spy"),
     ("Elves", "Elves", None),
     ("Blue Terror", "Blue Terror", "Terror"),
     ("Jeskai Ephemerate", "Jeskai Ephemerate", "Ephemerate"),
@@ -245,7 +245,7 @@ def test_tournament_guild_names_become_two_color_codes_for_unknown_decks(guild, 
         ("UR Faeries", None),
         ("Bogles", "Bogles"),
         ("Jeskai Ephemerate", "Ephemerate"),
-        ("Spy Walls", "Walls"),
+        ("Spy Walls", "Spy"),
         ("Black Sacrifice", "Sacrifice"),
         ("Grixis Affinity", "Affinity"),
         ("UB Affinity", "Affinity"),
@@ -281,7 +281,9 @@ def test_macro_archetype(general, expected):
         ("UB Madnes", None),
         ("Boglez", "Bogles"),
         ("Jeskai Ephemerat", "Ephemerate"),
-        ("Spy Wals", "Walls"),
+        ("Spy Wals", "Spy"),
+        ("Syp Combo", "Spy"),
+        ("Walls combo", "Walls"),
         ("Black Sacrifce", "Sacrifice"),
         ("Rainbow Black Sac", None),  # короткое sac не используем как fuzzy-сигнал
         ("Boggle Combo", None),
@@ -294,3 +296,7 @@ def test_macro_archetype(general, expected):
 )
 def test_fuzzy_matching_applies_only_to_macro_archetype(raw, expected):
     assert macro_archetype(None, raw) == expected
+
+
+def test_walls_without_spy_stays_in_walls_macro_despite_shared_general_name():
+    assert macro_archetype("Spy Walls", "Walls combo") == "Walls"

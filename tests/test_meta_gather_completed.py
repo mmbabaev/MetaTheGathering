@@ -169,7 +169,7 @@ def test_macro_report_groups_new_edinorog_families(db, user_svc, arch_svc):
 
     assert "Bogles — 2 (Bogles ×2)" in text
     assert "Ephemerate — 2 (Jeskai Ephemerate ×2)" in text
-    assert "Walls — 2 (Spy Walls ×2)" in text
+    assert "Spy — 2 (Spy Walls ×2)" in text
     assert "Sacrifice — 2 (Black Sacrifice ×2)" in text
     assert "Пока без крупной группы — 2" in text
 
