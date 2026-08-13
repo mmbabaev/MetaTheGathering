@@ -318,7 +318,9 @@ def _fuzzy_macro_from_raw(raw_name: str | None) -> str | None:
         candidates.add("Bogles")
     if _one_typo_keyword(raw_name, "ephemerate"):
         candidates.add("Ephemerate")
-    if _one_typo_keyword(raw_name, "walls") or _one_typo_keyword(raw_name, "spy"):
+    if _one_typo_keyword(raw_name, "spy"):
+        candidates.add("Spy")
+    elif _one_typo_keyword(raw_name, "walls"):
         candidates.add("Walls")
     if _one_typo_keyword(raw_name, "sacrifice"):
         candidates.add("Sacrifice")
@@ -451,7 +453,7 @@ def macro_archetype(general_name: str | None, raw_name: str | None = None) -> st
     if name == "ephemerate" or name.endswith(" ephemerate"):
         return "Ephemerate"
     if name == "spy walls":
-        return "Walls"
+        return "Spy"
     if name in {"sacrifice", "black sacrifice"}:
         return "Sacrifice"
     return None
