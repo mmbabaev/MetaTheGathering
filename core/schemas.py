@@ -65,7 +65,7 @@ class TournamentBase(BaseModel):
 
 
 class TournamentCreate(TournamentBase):
-    pass
+    registration_close_at: Optional[datetime] = None
 
 
 class TournamentRead(TournamentBase):

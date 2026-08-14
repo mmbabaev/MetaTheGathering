@@ -16,13 +16,21 @@ def test_pair_of_dice_production_and_debug_chat_ids_are_separate():
     assert debug_config.pair_of_dice_chat_id is None
 
 
-def test_pair_of_dice_defaults_match_edinorog_monday():
+def test_pair_of_dice_defaults_open_registration_the_evening_before():
     schedules = {(row.club_name, row.weekday): row for row in default_schedules()}
-    edinorog = schedules[("Edinorog", "monday")]
+    tuesday = schedules[("Pair of dice", "tuesday")]
+    sunday = schedules[("Pair of dice", "sunday")]
 
-    for weekday in ("monday", "wednesday"):
-        pair_of_dice = schedules[("Pair of dice", weekday)]
-        assert pair_of_dice.create_time == edinorog.create_time
-        assert pair_of_dice.game_time == edinorog.game_time
-        assert pair_of_dice.reminder_time == edinorog.reminder_time
-        assert pair_of_dice.import_times == edinorog.import_times
+    assert tuesday.create_time == "18:30"
+    assert tuesday.create_days_before == 1
+    assert tuesday.game_time == "19:30"
+    assert tuesday.reminder_time == "19:25"
+    assert tuesday.import_times[0] == "20:00"
+    assert tuesday.import_times[-1] == "00:30"
+
+    assert sunday.create_time == "18:30"
+    assert sunday.create_days_before == 1
+    assert sunday.game_time == "13:30"
+    assert sunday.reminder_time == "13:25"
+    assert sunday.import_times[0] == "14:00"
+    assert sunday.import_times[-1] == "18:30"

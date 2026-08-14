@@ -178,6 +178,43 @@ class TestSetupScheduler:
         call_kwargs = app.job_queue.run_daily.call_args_list[0].kwargs
         assert call_kwargs["days"] == (4,)  # thursday = 4 in PTB (0=Sunday)
 
+    @pytest.mark.parametrize(
+        "weekday, expected_create_day, expected_event_day",
+        [
+            ("tuesday", 1, 2),  # Monday creates Tuesday's event
+            ("sunday", 6, 0),  # Saturday creates Sunday's event, across week boundary
+        ],
+    )
+    def test_creation_runs_previous_day_but_reminder_and_import_stay_on_event_day(
+        self, weekday, expected_create_day, expected_event_day
+    ):
+        app = _make_app()
+        clubs = [
+            Club(
+                name="Pair of dice",
+                chat_id=1,
+                aetherhub_url="https://aetherhub.com/User/Andysays",
+                schedules=[
+                    ClubSchedule(
+                        weekday=weekday,
+                        game_time="19:30",
+                        create_time="18:30",
+                        create_days_before=1,
+                        reminder_time="19:25",
+                        aetherhub_fetch_times=["20:00"],
+                    )
+                ],
+            )
+        ]
+
+        with patch("bot.scheduler.settings", _mock_settings()), patch("bot.scheduler.get_clubs", return_value=clubs):
+            setup_scheduler(app)
+
+        create_call, reminder_call, import_call = app.job_queue.run_daily.call_args_list[:3]
+        assert create_call.kwargs["days"] == (expected_create_day,)
+        assert reminder_call.kwargs["days"] == (expected_event_day,)
+        assert import_call.kwargs["days"] == (expected_event_day,)
+
     def test_import_job_days_matches_weekday(self):
         """Import jobs also get the correct days= parameter."""
         app = _make_app()

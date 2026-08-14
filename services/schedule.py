@@ -118,6 +118,7 @@ class ScheduleService:
                     weekday=d.weekday,
                     enabled=True,
                     create_time=d.create_time,
+                    create_days_before=d.create_days_before,
                     game_time=d.game_time,
                     reminder_time=d.reminder_time,
                     import_times=format_import_times(d.import_times),
@@ -206,6 +207,7 @@ class ScheduleService:
                     weekday=r.weekday,
                     game_time=r.game_time,
                     create_time=r.create_time,
+                    create_days_before=r.create_days_before,
                     reminder_time=r.reminder_time,
                     aetherhub_fetch_times=parse_import_times(r.import_times),
                 )

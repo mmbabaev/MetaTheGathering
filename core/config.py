@@ -31,6 +31,7 @@ class ClubSchedule:
     weekday: str  # "friday"
     game_time: str  # "19:30"
     create_time: Optional[str] = None  # overrides TOURNAMENT_CREATE_TIME if set
+    create_days_before: int = 0  # 0 = в день игры, 1 = накануне
     aetherhub_fetch_times: List[str] = field(default_factory=list)  # ["20:15", "21:00"]
     find_latest: bool = False  # if True: import latest pauper, ignore date (debug only)
     reminder_time: Optional[str] = None  # "HH:MM" — напоминание «запишите колоду» перед стартом; None = нет

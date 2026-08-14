@@ -195,10 +195,12 @@ def _row_card_text(row) -> str:
     day = WEEKDAY_RU.get(row.weekday, row.weekday)
     status = "✅ включено" if row.enabled else "⏸ выключено"
     times = parse_import_times(row.import_times)
+    days_before = getattr(row, "create_days_before", 0)
+    create_day = "накануне в " if days_before == 1 else (f"за {days_before} дн. в " if days_before else "")
     lines = [
         f"📅 {row.club_name} · {day} — {status}",
         "",
-        f"🕐 Создание турнира: {row.create_time}",
+        f"🕐 Создание турнира: {create_day}{row.create_time}",
         f"🎮 Время игры: {row.game_time}",
         f"🔔 Напоминание: {row.reminder_time or 'выключено'}",
         f"🔄 Импорты: {', '.join(times) if times else 'выключены'}",

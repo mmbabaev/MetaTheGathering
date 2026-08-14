@@ -145,6 +145,18 @@ class TestHandleRegister:
         buttons = [button for row in result.keyboard.inline_keyboard for button in row]
         assert not any(button.callback_data.startswith(CB_DEFER_DECK) for button in buttons)
 
+    def test_keeps_defer_button_until_future_scheduled_start(self, db, handler, user_svc, active_tournament):
+        user = user_svc.get_or_create(tg_id=5104, username="u", first_name="Иван")
+        tournament = db.get(models.Tournament, active_tournament.id)
+        tournament.created_at = utc_now() - DEFER_DECK_WINDOW - timedelta(hours=1)
+        tournament.registration_close_at = utc_now() + timedelta(hours=10)
+        db.commit()
+
+        result = handler.handle_register(active_tournament.id, tg_id=user.tg_id)
+
+        buttons = [button for row in result.keyboard.inline_keyboard for button in row]
+        assert any(button.callback_data == f"{CB_DEFER_DECK}:{active_tournament.id}" for button in buttons)
+
 
 class TestHandleDeferDeck:
     def test_registers_without_deck_and_marks_explicit_defer(

@@ -380,6 +380,7 @@ class ClubScheduleRow(Base):
     enabled = Column(Boolean, default=True, nullable=False, server_default="true")
 
     create_time = Column(String(5), nullable=False)  # "12:00" — когда создаём турнир (анонс 1)
+    create_days_before = Column(Integer, nullable=False, default=0, server_default="0")
     game_time = Column(String(5), nullable=False)  # "19:30" — время игры, идёт в текст анонса
     reminder_time = Column(String(5), nullable=True)  # "19:25" — напоминание (анонс 2); NULL = выключено
     import_times = Column(String(512), nullable=False, default="")  # CSV "20:00,20:30"; "" = импортов нет

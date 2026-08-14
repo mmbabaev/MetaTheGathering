@@ -75,8 +75,8 @@ class TestEnsureDefaults:
             ("Goldfish", "friday"),
             ("Edinorog", "monday"),
             ("Edinorog", "thursday"),
-            ("Pair of dice", "monday"),
-            ("Pair of dice", "wednesday"),
+            ("Pair of dice", "tuesday"),
+            ("Pair of dice", "sunday"),
         }
         assert all(r.enabled for r in rows)
 
@@ -103,14 +103,14 @@ class TestRows:
         _row(db, club="Edinorog", weekday="thursday")
         _row(db, club="Edinorog", weekday="monday")
         _row(db, club="Goldfish", weekday="friday")
-        _row(db, club="Pair of dice", weekday="wednesday")
-        _row(db, club="Pair of dice", weekday="monday")
+        _row(db, club="Pair of dice", weekday="sunday")
+        _row(db, club="Pair of dice", weekday="tuesday")
         assert [(r.club_name, r.weekday) for r in sched_svc.list_rows()] == [
             ("Goldfish", "friday"),
             ("Edinorog", "monday"),
             ("Edinorog", "thursday"),
-            ("Pair of dice", "monday"),
-            ("Pair of dice", "wednesday"),
+            ("Pair of dice", "tuesday"),
+            ("Pair of dice", "sunday"),
         ]
 
     def test_toggle_flips_and_returns_new_state(self, sched_svc, db):
@@ -142,6 +142,15 @@ class TestBuildClubs:
         assert sched.reminder_time == "19:40"
         assert sched.aetherhub_fetch_times == ["20:00", "21:00"]
 
+    def test_create_days_before_passes_through(self, sched_svc, db):
+        row = _row(db, club="Pair of dice", weekday="tuesday")
+        row.create_days_before = 1
+        db.commit()
+
+        club = next(c for c in sched_svc.build_clubs() if c.name == "Pair of dice")
+
+        assert club.schedules[0].create_days_before == 1
+
     def test_club_identity_comes_from_code(self, sched_svc, db):
         _row(db, club="Goldfish", weekday="friday")
         club = next(c for c in sched_svc.build_clubs() if c.name == "Goldfish")
@@ -149,7 +158,7 @@ class TestBuildClubs:
         assert club.aetherhub_url
 
     def test_pair_of_dice_identity_comes_from_code(self, sched_svc, db):
-        _row(db, club="Pair of dice", weekday="monday")
+        _row(db, club="Pair of dice", weekday="tuesday")
         club = next(c for c in sched_svc.build_clubs() if c.name == "Pair of dice")
         assert club.title_prefix == "🎲🎲 "
         assert club.aetherhub_url == "https://aetherhub.com/User/Andysays"
@@ -180,6 +189,18 @@ class TestScheduleHandler:
         result = handler.handle_schedule_list(ADMIN_TG_ID)
         assert "выключено" in result.text
         assert len(result.keyboard.inline_keyboard) == 1
+
+    def test_list_and_card_show_previous_day_creation(self, handler, admin_user, db):
+        row = _row(db, club="Pair of dice", weekday="tuesday")
+        row.create_time = "18:30"
+        row.create_days_before = 1
+        db.commit()
+
+        schedule = handler.handle_schedule_list(ADMIN_TG_ID)
+        card = handler.handle_schedule_row(ADMIN_TG_ID, row.id)
+
+        assert "создание накануне 18:30" in schedule.text
+        assert "Создание турнира: накануне в 18:30" in card.text
 
     def test_empty_schedule_has_no_keyboard(self, handler, admin_user):
         result = handler.handle_schedule_list(ADMIN_TG_ID)

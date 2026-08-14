@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select, update
+from sqlalchemy import and_, or_, select, update
 from telegram import InputMediaPhoto
 from telegram.ext import Application, ContextTypes
 
@@ -72,6 +72,22 @@ def _ptb_day(weekday: str) -> int:
     Python's datetime.weekday() uses 0=Monday. Conversion: ptb = (py + 1) % 7.
     """
     return (DAYS[weekday] + 1) % 7
+
+
+def _create_run_weekday(schedule: ClubSchedule) -> int:
+    """Python weekday on which the tournament creation job must run."""
+    return (DAYS[schedule.weekday] - schedule.create_days_before) % 7
+
+
+def _event_datetime(now: datetime, schedule: ClubSchedule) -> datetime:
+    """Scheduled local start, even when registration opens on an earlier date."""
+    event_date = now.date() + timedelta(days=schedule.create_days_before)
+    game_time = datetime.strptime(schedule.game_time, "%H:%M").time()
+    return datetime.combine(event_date, game_time, tzinfo=now.tzinfo)
+
+
+def _naive_utc(value: datetime) -> datetime:
+    return value.astimezone(timezone.utc).replace(tzinfo=None) if value.tzinfo else value
 
 
 def _import_day_offset(import_times: list[str], fetch_time: str) -> int:
@@ -139,7 +155,7 @@ def get_clubs() -> list[Club]:
 
 
 class CreateTournamentJob:
-    """Creates the club's tournament on the scheduled weekday."""
+    """Creates the club's tournament on its configured registration-opening day."""
 
     def __init__(self, club: Club, schedule: ClubSchedule) -> None:
         self.club = club
@@ -147,14 +163,19 @@ class CreateTournamentJob:
 
     async def run(self, bot, now: datetime, db=None) -> None:
         logger.info(f"CreateTournamentJob: running for '{self.club.name}', now={now.strftime('%A %H:%M')}")
-        if now.weekday() != DAYS[self.schedule.weekday]:
+        run_weekday = _create_run_weekday(self.schedule)
+        if now.weekday() != run_weekday:
             logger.info(
-                f"CreateTournamentJob: skipping '{self.club.name}' — not {self.schedule.weekday} (now={now.strftime('%A')})"
+                "CreateTournamentJob: skipping '%s' — expected weekday=%s (now=%s)",
+                self.club.name,
+                run_weekday,
+                now.strftime("%A"),
             )
             return
 
-        date_str = now.strftime("%Y-%m-%d")
-        title = f"{self.club.title_prefix}{self.club.name} Pauper {now.strftime('%d.%m.%Y')}"
+        event_at = _event_datetime(now, self.schedule)
+        date_str = event_at.strftime("%Y-%m-%d")
+        title = f"{self.club.title_prefix}{self.club.name} Pauper {event_at.strftime('%d.%m.%Y')}"
         club_slug = "-".join(self.club.name.lower().split())
         slug = f"{date_str}-{club_slug}-pauper"
 
@@ -175,13 +196,21 @@ class CreateTournamentJob:
                         chat_id=self.club.chat_id or 0,
                         slug=slug,
                         club=self.club.name,
+                        registration_close_at=_naive_utc(event_at),
                     )
                 )
                 logger.info(f"Created tournament #{new_t.id} '{title}' for '{self.club.name}'")
 
                 if bot is not None:
+                    when = (
+                        "сегодня"
+                        if self.schedule.create_days_before == 0
+                        else "завтра"
+                        if self.schedule.create_days_before == 1
+                        else event_at.strftime("%d.%m.%Y")
+                    )
                     text = (
-                        f"🏆 {self.club.name} Pauper — сегодня в {self.schedule.game_time}\n"
+                        f"🏆 {self.club.name} Pauper — {when} в {self.schedule.game_time}\n"
                         f"Турнир создан. Регистрация открыта."
                     )
                     await send_registration_open(bot, db, self.club, new_t.id, text)
@@ -552,11 +581,12 @@ class AutoRevealDecksJob:
 
     Во время регистрации колоды скрыты (``decks_hidden=True``), чтобы их не копировали.
     Раньше админ раскрывал их кнопкой «Показать колоды»; теперь это происходит
-    автоматически вечером. Берём незакрытые турниры со скрытыми колодами, созданные
-    сегодня (по таймзоне турниров), и снимаем флаг.
+    автоматически вечером. Для плановых турниров ждём их ``registration_close_at``;
+    legacy/ручные турниры без этого поля раскрываем в день создания.
     """
 
     async def run(self, now: datetime, db=None, bot=None) -> None:
+        now_utc = _naive_utc(now)
         if now.tzinfo:
             day_start = (
                 now.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc).replace(tzinfo=None)
@@ -571,7 +601,13 @@ class AutoRevealDecksJob:
             stmt = select(models.Tournament).where(
                 models.Tournament.status != models.TournamentStatus.CLOSED,
                 models.Tournament.decks_hidden.is_(True),
-                models.Tournament.created_at >= day_start,
+                or_(
+                    models.Tournament.registration_close_at <= now_utc,
+                    and_(
+                        models.Tournament.registration_close_at.is_(None),
+                        models.Tournament.created_at >= day_start,
+                    ),
+                ),
             )
             tournaments = db.execute(stmt).scalars().all()
             if not tournaments:
@@ -1141,10 +1177,12 @@ def _register_schedule_jobs(app: Application) -> None:
                 await _job.run(bot=context.bot, now=datetime.now(tz_))
 
             _create.__name__ = f"create_tournament[{club.name}/{schedule.weekday}]"
-            app.job_queue.run_daily(_create, time=create_time, days=(_ptb_day(schedule.weekday),))
+            create_day = (_ptb_day(schedule.weekday) - schedule.create_days_before) % 7
+            app.job_queue.run_daily(_create, time=create_time, days=(create_day,))
             logger.info(
-                f"Scheduler: {club.name} create on {schedule.weekday} at {time_str} "
-                f"({settings.TOURNAMENT_TIMEZONE}), game at {schedule.game_time}"
+                f"Scheduler: {club.name} create {schedule.create_days_before} day(s) before "
+                f"{schedule.weekday} at {time_str} ({settings.TOURNAMENT_TIMEZONE}), "
+                f"game at {schedule.game_time}"
             )
 
             if schedule.reminder_time:
@@ -1198,7 +1236,8 @@ def _format_club_schedule(club: Club) -> str:
     for schedule in club.schedules:
         time_str = schedule.create_time or settings.TOURNAMENT_CREATE_TIME
         day_ru = _DAY_RU.get(schedule.weekday.lower(), schedule.weekday)
-        lines.append(f"  {day_ru}: создание {time_str}, игра {schedule.game_time}")
+        create_day = " накануне" if schedule.create_days_before == 1 else ""
+        lines.append(f"  {day_ru}: создание{create_day} {time_str}, игра {schedule.game_time}")
         if schedule.aetherhub_fetch_times:
             lines.append(f"    импорт: {', '.join(schedule.aetherhub_fetch_times)}")
     return "\n".join(lines)
