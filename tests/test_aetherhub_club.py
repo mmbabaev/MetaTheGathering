@@ -1126,6 +1126,37 @@ class TestCreateTournamentJob:
         tournament = svc.get_active_tournament_for_chat(0)
         assert tournament.slug == "2026-04-24-pair-of-dice-pauper"
 
+    def test_previous_day_job_uses_event_date_and_says_tomorrow(self, db, svc):
+        club = Club(name="Pair of dice", chat_id=42, schedules=[], title_prefix="🎲🎲 ")
+        schedule = ClubSchedule(
+            weekday="tuesday",
+            game_time="19:30",
+            create_time="18:30",
+            create_days_before=1,
+        )
+        monday = datetime(2026, 4, 27, 18, 30, tzinfo=TZ)
+
+        with patch("bot.scheduler.send_registration_open", new_callable=AsyncMock) as announce:
+            asyncio.run(CreateTournamentJob(club, schedule).run(bot=AsyncMock(), now=monday, db=db))
+
+        tournament = svc.get_active_tournament_for_chat(42)
+        assert tournament is not None
+        assert tournament.title == "🎲🎲 Pair of dice Pauper 28.04.2026"
+        assert tournament.slug == "2026-04-28-pair-of-dice-pauper"
+        assert tournament.registration_close_at == datetime(2026, 4, 28, 16, 30)
+        text = announce.await_args.args[-1]
+        assert "завтра в 19:30" in text
+        assert "сегодня" not in text
+
+    def test_previous_day_job_does_not_run_on_event_weekday(self, db, svc):
+        club = Club(name="Pair of dice", chat_id=42, schedules=[])
+        schedule = ClubSchedule(weekday="tuesday", game_time="19:30", create_days_before=1)
+        tuesday = datetime(2026, 4, 28, 18, 30, tzinfo=TZ)
+
+        asyncio.run(CreateTournamentJob(club, schedule).run(bot=None, now=tuesday, db=db))
+
+        assert svc.get_active_tournament_for_chat(42) is None
+
     def test_closes_previous_active_tournament(self, db, svc):
         job = _make_create_job(weekday="friday", chat_id=0)
         old = svc.create_tournament(TournamentCreate(title="Old", chat_id=0, slug="old", club="Goldfish"))

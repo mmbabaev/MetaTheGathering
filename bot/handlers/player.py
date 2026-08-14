@@ -1,6 +1,6 @@
 # Регистрация, выбор колоды — чистая бизнес-логика
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from bot.features import FeatureService
 from bot.handlers.base import HandlerResult
@@ -34,6 +34,14 @@ from services.utils import get_tournament
 
 ARCHETYPE_COLLAPSED_COUNT = 3
 DEFER_DECK_WINDOW = timedelta(hours=7)
+
+
+def _defer_deck_deadline(tournament) -> datetime:
+    """Keep “choose later” available until start for tournaments opened in advance."""
+    deadline = tournament.created_at + DEFER_DECK_WINDOW
+    if tournament.registration_close_at is not None:
+        deadline = max(deadline, tournament.registration_close_at)
+    return deadline
 
 
 def build_archetype_menu(
@@ -155,7 +163,7 @@ class PlayerHandler:
         show_emoji = not (user and user.hide_deck_emoji)
         can_defer = (
             tournament.status == models.TournamentStatus.REGISTRATION
-            and models.utc_now() < tournament.created_at + DEFER_DECK_WINDOW
+            and models.utc_now() < _defer_deck_deadline(tournament)
         )
         return HandlerResult(
             CHOOSE_ARCHETYPE,
@@ -301,7 +309,7 @@ class PlayerHandler:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
         if tournament.status != models.TournamentStatus.REGISTRATION:
             return HandlerResult(REGISTRATION_CLOSED, is_alert=True)
-        if models.utc_now() >= tournament.created_at + DEFER_DECK_WINDOW:
+        if models.utc_now() >= _defer_deck_deadline(tournament):
             return HandlerResult(DEFER_DECK_EXPIRED, is_alert=True)
 
         db_user = self._register_user(tg_id, username, first_name, last_name)

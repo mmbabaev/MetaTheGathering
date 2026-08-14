@@ -47,6 +47,28 @@ async def test_skips_previous_day(db):
     assert t.decks_hidden is True  # создан не сегодня — не трогаем
 
 
+async def test_skips_tournament_created_today_for_tomorrow(db):
+    t = _tournament(db, chat_id=30, hidden=True)
+    t.registration_close_at = NOW.replace(tzinfo=None) + timedelta(hours=15, minutes=30)
+    db.commit()
+
+    await AutoRevealDecksJob().run(now=NOW, db=db)
+
+    db.refresh(t)
+    assert t.decks_hidden is True
+
+
+async def test_reveals_advance_created_tournament_after_scheduled_start(db):
+    t = _tournament(db, chat_id=31, hidden=True, created_days_ago=1)
+    t.registration_close_at = NOW.replace(tzinfo=None) - timedelta(hours=2, minutes=30)
+    db.commit()
+
+    await AutoRevealDecksJob().run(now=NOW, db=db)
+
+    db.refresh(t)
+    assert t.decks_hidden is False
+
+
 async def test_already_revealed_stays_revealed(db):
     t = _tournament(db, chat_id=4, hidden=False)
     await AutoRevealDecksJob().run(now=NOW, db=db)

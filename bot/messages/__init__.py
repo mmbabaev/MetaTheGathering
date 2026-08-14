@@ -302,7 +302,9 @@ def format_schedule_rows(rows, tz: str) -> str:
             lines.append(f"\n{row.club_name}:")
         day = WEEKDAY_RU.get(row.weekday, row.weekday)
         status = "" if row.enabled else "  ⏸ выключено"
-        lines.append(f"  {day}: создание {row.create_time}, игра {row.game_time}{status}")
+        days_before = getattr(row, "create_days_before", 0)
+        create_day = " накануне" if days_before == 1 else (f" за {days_before} дн." if days_before else "")
+        lines.append(f"  {day}: создание{create_day} {row.create_time}, игра {row.game_time}{status}")
         if row.reminder_time:
             lines.append(f"    напоминание: {row.reminder_time}")
         times = parse_import_times(row.import_times)

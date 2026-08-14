@@ -102,6 +102,7 @@ class TournamentService:
             slug=data.slug,
             club=data.club,
             status=models.TournamentStatus.REGISTRATION,
+            registration_close_at=data.registration_close_at,
             created_at=models.utc_now(),
         )
         self.db.add(tournament)

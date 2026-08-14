@@ -27,6 +27,19 @@ DEFAULT_IMPORT_TIMES = [
     "00:30",
 ]
 
+PAIR_OF_DICE_SUNDAY_IMPORT_TIMES = [
+    "14:00",
+    "14:30",
+    "15:00",
+    "15:30",
+    "16:00",
+    "16:30",
+    "17:00",
+    "17:30",
+    "18:00",
+    "18:30",
+]
+
 
 @dataclass(frozen=True)
 class ClubIdentity:
@@ -76,6 +89,7 @@ class DefaultSchedule:
     game_time: str
     reminder_time: str | None
     import_times: list[str]
+    create_days_before: int = 0
 
 
 def default_schedules() -> list[DefaultSchedule]:
@@ -84,8 +98,18 @@ def default_schedules() -> list[DefaultSchedule]:
         DefaultSchedule("Goldfish", "friday", "12:00", "19:45", "19:45", list(DEFAULT_IMPORT_TIMES)),
         DefaultSchedule("Edinorog", "monday", "12:00", "19:30", "19:25", list(DEFAULT_IMPORT_TIMES)),
         DefaultSchedule("Edinorog", "thursday", "12:00", "19:30", "19:25", list(DEFAULT_IMPORT_TIMES)),
-        DefaultSchedule("Pair of dice", "monday", "12:00", "19:30", "19:25", list(DEFAULT_IMPORT_TIMES)),
-        DefaultSchedule("Pair of dice", "wednesday", "12:00", "19:30", "19:25", list(DEFAULT_IMPORT_TIMES)),
+        DefaultSchedule(
+            "Pair of dice", "tuesday", "18:30", "19:30", "19:25", list(DEFAULT_IMPORT_TIMES), create_days_before=1
+        ),
+        DefaultSchedule(
+            "Pair of dice",
+            "sunday",
+            "18:30",
+            "13:30",
+            "13:25",
+            list(PAIR_OF_DICE_SUNDAY_IMPORT_TIMES),
+            create_days_before=1,
+        ),
     ]
 
 
@@ -98,6 +122,7 @@ def default_clubs() -> list[Club]:
                 weekday=d.weekday,
                 game_time=d.game_time,
                 create_time=d.create_time,
+                create_days_before=d.create_days_before,
                 reminder_time=d.reminder_time,
                 aetherhub_fetch_times=list(d.import_times),
             )
