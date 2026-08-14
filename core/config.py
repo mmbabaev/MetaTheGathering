@@ -111,6 +111,8 @@ class Settings(BaseSettings):
             ids.append(_app_cfg.goldfish_chat_id)
         if _app_cfg.edinorog_chat_id:
             ids.append(_app_cfg.edinorog_chat_id)
+        if _app_cfg.pair_of_dice_chat_id:
+            ids.append(_app_cfg.pair_of_dice_chat_id)
         return ids
 
 

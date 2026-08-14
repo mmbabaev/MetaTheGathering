@@ -102,9 +102,7 @@ class TestPreStartReminderJob:
         reminder = AsyncMock()
         monkeypatch.setattr("bot.scheduler.send_deferred_deck_reminders", reminder)
         club, schedule = self._club_schedule()
-        tournament = TournamentService(db).create_tournament(
-            TournamentCreate(title="Pauper", chat_id=-100)
-        )
+        tournament = TournamentService(db).create_tournament(TournamentCreate(title="Pauper", chat_id=-100))
         bot = _bot()
 
         await PreStartReminderJob(club, schedule).run(bot=bot, now=MONDAY, db=db)
@@ -125,9 +123,7 @@ class TestPreStartReminderJob:
         reminder = AsyncMock()
         monkeypatch.setattr("bot.scheduler.send_deferred_deck_reminders", reminder)
         club, schedule = self._club_schedule()
-        tournament = TournamentService(db).create_tournament(
-            TournamentCreate(title="Pauper", chat_id=-100)
-        )
+        tournament = TournamentService(db).create_tournament(TournamentCreate(title="Pauper", chat_id=-100))
         bot = _bot()
 
         await PreStartReminderJob(club, schedule).run(bot=bot, now=MONDAY, db=db)
@@ -164,5 +160,7 @@ class TestReminderSchedule:
         assert times[("Goldfish", "friday")] == "19:45"
         assert times[("Edinorog", "monday")] == "19:25"
         assert times[("Edinorog", "thursday")] == "19:25"
+        assert times[("Pair of dice", "monday")] == "19:25"
+        assert times[("Pair of dice", "wednesday")] == "19:25"
         # Четверг у Goldfish отключён — остались только пятницы
         assert ("Goldfish", "thursday") not in times

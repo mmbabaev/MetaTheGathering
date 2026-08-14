@@ -75,13 +75,15 @@ class TestEnsureDefaults:
             ("Goldfish", "friday"),
             ("Edinorog", "monday"),
             ("Edinorog", "thursday"),
+            ("Pair of dice", "monday"),
+            ("Pair of dice", "wednesday"),
         }
         assert all(r.enabled for r in rows)
 
     def test_is_idempotent(self, sched_svc):
         sched_svc.ensure_defaults()
         assert sched_svc.ensure_defaults() == 0
-        assert len(sched_svc.list_rows()) == 3
+        assert len(sched_svc.list_rows()) == 5
 
     def test_does_not_resurrect_deleted_rows(self, sched_svc, db):
         sched_svc.ensure_defaults()
@@ -90,7 +92,7 @@ class TestEnsureDefaults:
         db.commit()
         # таблица не пуста → сид не трогает её, удалённая строка не воскресает
         assert sched_svc.ensure_defaults() == 0
-        assert len(sched_svc.list_rows()) == 2
+        assert len(sched_svc.list_rows()) == 4
 
 
 # ── list_rows / toggle ───────────────────────────────────────────────────────
@@ -101,10 +103,14 @@ class TestRows:
         _row(db, club="Edinorog", weekday="thursday")
         _row(db, club="Edinorog", weekday="monday")
         _row(db, club="Goldfish", weekday="friday")
+        _row(db, club="Pair of dice", weekday="wednesday")
+        _row(db, club="Pair of dice", weekday="monday")
         assert [(r.club_name, r.weekday) for r in sched_svc.list_rows()] == [
             ("Goldfish", "friday"),
             ("Edinorog", "monday"),
             ("Edinorog", "thursday"),
+            ("Pair of dice", "monday"),
+            ("Pair of dice", "wednesday"),
         ]
 
     def test_toggle_flips_and_returns_new_state(self, sched_svc, db):
@@ -141,6 +147,12 @@ class TestBuildClubs:
         club = next(c for c in sched_svc.build_clubs() if c.name == "Goldfish")
         assert club.title_prefix == "🐠 "
         assert club.aetherhub_url
+
+    def test_pair_of_dice_identity_comes_from_code(self, sched_svc, db):
+        _row(db, club="Pair of dice", weekday="monday")
+        club = next(c for c in sched_svc.build_clubs() if c.name == "Pair of dice")
+        assert club.title_prefix == "🎲🎲 "
+        assert club.aetherhub_url == "https://aetherhub.com/User/Andysays"
 
 
 # ── ScheduleHandler ──────────────────────────────────────────────────────────

@@ -354,6 +354,40 @@ class TestParseClubPage:
         )
         assert self.svc._parse_club_page(html)[0].is_pauper is False
 
+    def test_pair_of_dice_pauper_without_date_uses_relative_age(self):
+        html = _club_cards_html(
+            [
+                {
+                    "name": "Премодерн",
+                    "url": "/Tourney/RoundTourney/3",
+                    "subtitle": PLAIN_SUBTITLE,
+                    "ago": "1 hour ago",
+                },
+                {
+                    "name": "Паупер",
+                    "url": "/Tourney/RoundTourney/2",
+                    "subtitle": PLAIN_SUBTITLE,
+                    "ago": "2 hours ago",
+                },
+                {
+                    "name": "Паупер",
+                    "url": "/Tourney/RoundTourney/1",
+                    "subtitle": PLAIN_SUBTITLE,
+                    "ago": "2 days ago",
+                },
+            ]
+        )
+        scraper = MagicMock()
+        scraper.get.return_value.text = html
+        service = AetherhubService(scraper=scraper)
+
+        result = service.find_todays_pauper_tournament(
+            "https://aetherhub.com/User/Andysays",
+            today=date(2026, 8, 12),
+        )
+
+        assert result == "https://aetherhub.com/Tourney/RoundTourney/2"
+
 
 # ---------------------------------------------------------------------------
 # find_todays_pauper_tournament
@@ -757,6 +791,7 @@ def _make_import_job(
     fetch_times=None,
     find_latest=False,
     aetherhub_service=None,
+    event_day_offset=0,
 ) -> AetherhubImportJob:
     club = Club(name="Goldfish", chat_id=0, aetherhub_url=aetherhub_url, schedules=[])
     schedule = ClubSchedule(
@@ -765,7 +800,12 @@ def _make_import_job(
         aetherhub_fetch_times=fetch_times or ["21:00"],
         find_latest=find_latest,
     )
-    return AetherhubImportJob(club, schedule, aetherhub_service=aetherhub_service)
+    return AetherhubImportJob(
+        club,
+        schedule,
+        aetherhub_service=aetherhub_service,
+        event_day_offset=event_day_offset,
+    )
 
 
 class TestAetherhubImportJob:
@@ -832,9 +872,7 @@ class TestAetherhubImportJob:
         stored_url = "https://aetherhub.com/Tourney/RoundTourney/218"
         source = MagicMock()
         source.fetch_tournament.return_value = MagicMock()
-        tournament = svc.create_tournament(
-            TournamentCreate(title="T", chat_id=0, slug="t", club="Goldfish")
-        )
+        tournament = svc.create_tournament(TournamentCreate(title="T", chat_id=0, slug="t", club="Goldfish"))
         svc.set_aetherhub_url(tournament.id, stored_url)
         job = _make_import_job(aetherhub_service=source)
         bot = AsyncMock()
@@ -878,9 +916,7 @@ class TestAetherhubImportJob:
         found_url = "https://aetherhub.com/Tourney/RoundTourney/0"
         mock_svc = MagicMock()
         mock_svc.find_todays_pauper_tournament.return_value = found_url
-        mock_svc.fetch_tournament.return_value = AetherhubTournamentData(
-            url=found_url, players=[], rounds=[]
-        )
+        mock_svc.fetch_tournament.return_value = AetherhubTournamentData(url=found_url, players=[], rounds=[])
 
         svc.create_tournament(TournamentCreate(title="T", chat_id=0, slug="t", club="Goldfish"))
         job = _make_import_job(aetherhub_service=mock_svc)
@@ -1081,6 +1117,15 @@ class TestCreateTournamentJob:
         assert "Goldfish" in t.title
         assert FRIDAY_DATE.strftime("%d.%m.%Y") in t.title
 
+    def test_club_name_with_spaces_produces_url_safe_slug(self, db, svc):
+        club = Club(name="Pair of dice", chat_id=0, schedules=[], title_prefix="🎲🎲 ")
+        schedule = ClubSchedule(weekday="friday", game_time="19:30")
+
+        asyncio.run(CreateTournamentJob(club, schedule).run(bot=None, now=FRIDAY_NOW, db=db))
+
+        tournament = svc.get_active_tournament_for_chat(0)
+        assert tournament.slug == "2026-04-24-pair-of-dice-pauper"
+
     def test_closes_previous_active_tournament(self, db, svc):
         job = _make_create_job(weekday="friday", chat_id=0)
         old = svc.create_tournament(TournamentCreate(title="Old", chat_id=0, slug="old", club="Goldfish"))
@@ -1148,6 +1193,23 @@ class TestAetherhubImportJobWeekdayGuard:
         svc.create_tournament(TournamentCreate(title="T", chat_id=0, slug="t", club="Goldfish"))
         asyncio.run(job.run(now=FRIDAY_NOW, db=db))
         mock_svc.find_todays_pauper_tournament.assert_called_once()
+
+    def test_after_midnight_import_runs_next_day_for_previous_event_date(self, db, svc):
+        mock_svc = MagicMock()
+        mock_svc.find_todays_pauper_tournament.return_value = None
+        job = _make_import_job(
+            weekday="friday",
+            aetherhub_service=mock_svc,
+            event_day_offset=1,
+        )
+        svc.create_tournament(TournamentCreate(title="T", chat_id=0, slug="t", club="Goldfish"))
+
+        asyncio.run(job.run(now=SATURDAY_NOW.replace(hour=0, minute=30), db=db))
+
+        mock_svc.find_todays_pauper_tournament.assert_called_once_with(
+            job.club.aetherhub_url,
+            today=FRIDAY_DATE,
+        )
 
 
 # ---------------------------------------------------------------------------

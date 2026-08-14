@@ -191,9 +191,7 @@ async def test_macro_report_is_appended_only_to_owner_message(db, user_svc, arch
     monkeypatch.setattr("bot.scheduler._send_announce", capture)
     monkeypatch.setattr("bot.scheduler._send_announce_images", AsyncMock())
 
-    await _announce_to_targets(
-        AsyncMock(), db, t.id, t.title, [t.chat_id, 777], AetherhubImportService(db), None
-    )
+    await _announce_to_targets(AsyncMock(), db, t.id, t.title, [t.chat_id, 777], AetherhubImportService(db), None)
 
     assert "Крупные архетипы" not in sent[t.chat_id]
     assert "🧪 Крупные архетипы (тест, только owner):" in sent[777]
@@ -715,6 +713,30 @@ async def test_magicoculus_import_runs_after_close_when_enabled(db, user_svc, ar
     bot.edit_message_reply_markup.assert_not_awaited()
 
 
+def test_pair_of_dice_magicoculus_import_uses_saint_petersburg(monkeypatch):
+    db = MagicMock()
+    tournament = SimpleNamespace(club="Pair of dice")
+    collector = MagicMock()
+    collector.return_value.collect.return_value = tournament
+    client = MagicMock()
+    importer = MagicMock()
+    expected = MagicOculusImportResult(tournament_id=469, detail={})
+    importer.return_value.import_once.return_value = expected
+    monkeypatch.setattr("bot.scheduler.SessionLocal", MagicMock(return_value=db))
+    monkeypatch.setattr("bot.scheduler.MagicOculusTournamentCollector", collector)
+    monkeypatch.setattr("bot.scheduler.MagicOculusClient", client)
+    monkeypatch.setattr("bot.scheduler.MagicOculusImporter", importer)
+
+    result = scheduler.import_closed_tournament_to_magicoculus(42)
+
+    assert result == expected
+    importer.return_value.import_once.assert_called_once_with(
+        tournament,
+        city="Санкт-Петербург",
+    )
+    db.close.assert_called_once()
+
+
 async def test_magicoculus_failure_does_not_break_close(db, user_svc, arch_svc, monkeypatch):
     monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
     FeatureFlagService(db).toggle(FeatureFlags.MAGIC_OCULUS_IMPORT)
@@ -768,9 +790,7 @@ async def test_magicoculus_import_starts_only_after_tournament_is_closed(db, use
     await maybe_announce_meta_gather_completed(AsyncMock(), db, t.id)
 
 
-async def test_magicoculus_success_link_failure_does_not_break_import(
-    db, user_svc, arch_svc, monkeypatch
-):
+async def test_magicoculus_success_link_failure_does_not_break_import(db, user_svc, arch_svc, monkeypatch):
     FeatureFlagService(db).toggle(FeatureFlags.MAGIC_OCULUS_IMPORT)
     monkeypatch.setattr(
         "bot.scheduler.asyncio.to_thread",

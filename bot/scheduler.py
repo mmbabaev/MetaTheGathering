@@ -24,7 +24,7 @@ from bot.telegram.achievements import send_achievements_report
 from bot.telegram.deck_reminder import send_deferred_deck_reminders
 from bot.telegram.round_notify import send_round_notifications
 from core import models
-from core.clubs import debug_club, default_clubs
+from core.clubs import club_identities, debug_club, default_clubs
 from core.config import Club, ClubSchedule, settings
 from core.database import SessionLocal
 from core.schemas import TournamentCreate
@@ -53,6 +53,7 @@ class AnnouncementDelivery:
     chat_id: int
     message_id: int | None
 
+
 DAYS = {
     "monday": 0,
     "tuesday": 1,
@@ -71,6 +72,21 @@ def _ptb_day(weekday: str) -> int:
     Python's datetime.weekday() uses 0=Monday. Conversion: ptb = (py + 1) % 7.
     """
     return (DAYS[weekday] + 1) % 7
+
+
+def _import_day_offset(import_times: list[str], fetch_time: str) -> int:
+    """Return 1 for import times after a midnight rollover in the configured sequence."""
+    previous_minutes: int | None = None
+    day_offset = 0
+    for current in import_times:
+        hour, minute = (int(part) for part in current.split(":"))
+        current_minutes = hour * 60 + minute
+        if previous_minutes is not None and current_minutes < previous_minutes:
+            day_offset = 1
+        if current == fetch_time:
+            return day_offset
+        previous_minutes = current_minutes
+    return 0
 
 
 async def send_registration_open(bot, db, club: Club, tournament_id: int, base_text: str) -> None:
@@ -139,7 +155,8 @@ class CreateTournamentJob:
 
         date_str = now.strftime("%Y-%m-%d")
         title = f"{self.club.title_prefix}{self.club.name} Pauper {now.strftime('%d.%m.%Y')}"
-        slug = f"{date_str}-{self.club.name.lower()}-pauper"
+        club_slug = "-".join(self.club.name.lower().split())
+        slug = f"{date_str}-{club_slug}-pauper"
 
         close_db = db is None
         if close_db:
@@ -225,19 +242,30 @@ class PreStartReminderJob:
 class AetherhubImportJob:
     """Fetches today's pauper tournament from AetherHub and imports it automatically."""
 
-    def __init__(self, club: Club, schedule: ClubSchedule, aetherhub_service: AetherhubService | None = None) -> None:
+    def __init__(
+        self,
+        club: Club,
+        schedule: ClubSchedule,
+        aetherhub_service: AetherhubService | None = None,
+        event_day_offset: int = 0,
+    ) -> None:
         self.club = club
         self.schedule = schedule
         self._aetherhub = aetherhub_service or AetherhubService()
+        self._event_day_offset = event_day_offset
 
     async def run(self, now: datetime, db=None, bot=None) -> None:
         logger.info(f"AetherhubImportJob: running for '{self.club.name}', now={now.strftime('%A %H:%M')}")
         if not self.club.aetherhub_url:
             logger.warning(f"AetherhubImportJob: no aetherhub_url for '{self.club.name}', skipping")
             return
-        if now.weekday() != DAYS[self.schedule.weekday]:
+        run_weekday = (DAYS[self.schedule.weekday] + self._event_day_offset) % 7
+        if now.weekday() != run_weekday:
             logger.info(
-                f"AetherhubImportJob: skipping '{self.club.name}' — not {self.schedule.weekday} (now={now.strftime('%A')})"
+                "AetherhubImportJob: skipping '%s' — expected weekday=%s (now=%s)",
+                self.club.name,
+                run_weekday,
+                now.strftime("%A"),
             )
             return
 
@@ -260,7 +288,8 @@ class AetherhubImportJob:
 
             if not url:
                 logger.info(f"AetherhubImportJob: fetching club page for '{self.club.name}'")
-                today = None if self.schedule.find_latest else now.date()
+                event_date = now.date() - timedelta(days=self._event_day_offset)
+                today = None if self.schedule.find_latest else event_date
                 try:
                     url = self._aetherhub.find_todays_pauper_tournament(self.club.aetherhub_url, today=today)
                 except Exception:
@@ -592,9 +621,11 @@ class UnclosedTournamentReminderJob:
         if close_db:
             db = SessionLocal()
         try:
-            tournaments = db.execute(
-                select(models.Tournament).where(models.Tournament.status != models.TournamentStatus.CLOSED)
-            ).scalars().all()
+            tournaments = (
+                db.execute(select(models.Tournament).where(models.Tournament.status != models.TournamentStatus.CLOSED))
+                .scalars()
+                .all()
+            )
             for tournament in tournaments:
                 age = now_utc - tournament.created_at
                 days: int | None = None
@@ -727,7 +758,7 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, char
     except Exception:
         logger.exception("maybe_announce_meta_gather_completed: achievements failed for #%s", tournament_id)
     # 5) Magic Oculus: отдельная сессия и worker thread, чтобы HTTP не блокировал Telegram loop.
-    #    Флаг по умолчанию выключен; ошибка внешнего API не откатывает закрытый турнир.
+    #    Флаг управляемый; ошибка внешнего API не откатывает закрытый турнир.
     if FeatureFlagService(db).is_enabled(FeatureFlags.MAGIC_OCULUS_IMPORT):
         try:
             oculus_result = await asyncio.to_thread(import_closed_tournament_to_magicoculus, tournament_id)
@@ -749,8 +780,14 @@ def import_closed_tournament_to_magicoculus(tournament_id: int) -> MagicOculusIm
     db = SessionLocal()
     try:
         tournament = MagicOculusTournamentCollector(db).collect(tournament_id, validate_aetherhub=True)
+        identity = next(
+            (row for row in club_identities() if row.name.casefold() == tournament.club.casefold()),
+            None,
+        )
+        if identity is None:
+            raise ValueError(f'Для клуба "{tournament.club}" не настроен город Magic Oculus')
         client = MagicOculusClient(settings.MAGIC_OCULUS_API_URL)
-        return MagicOculusImporter(db, client).import_once(tournament, city="Москва")
+        return MagicOculusImporter(db, client).import_once(tournament, city=identity.magicoculus_city)
     finally:
         db.close()
 
@@ -909,11 +946,15 @@ def _aetherhub_no_show_names(db, tournament_id: int) -> list[str]:
     places when at least one participant has a place, so a temporarily absent standings response
     never labels the whole tournament as no-shows.
     """
-    participants = db.execute(
-        select(models.Participant)
-        .where(models.Participant.tournament_id == tournament_id)
-        .order_by(models.Participant.id)
-    ).scalars().all()
+    participants = (
+        db.execute(
+            select(models.Participant)
+            .where(models.Participant.tournament_id == tournament_id)
+            .order_by(models.Participant.id)
+        )
+        .scalars()
+        .all()
+    )
     if not any(participant.final_place is not None for participant in participants):
         return []
     names = {
@@ -1122,15 +1163,23 @@ def _register_schedule_jobs(app: Application) -> None:
 
             for fetch_time_str in schedule.aetherhub_fetch_times:
                 fetch_time = datetime.strptime(fetch_time_str, "%H:%M").time().replace(tzinfo=tz)
-                import_job = AetherhubImportJob(club, schedule)
+                event_day_offset = _import_day_offset(schedule.aetherhub_fetch_times, fetch_time_str)
+                import_job = AetherhubImportJob(club, schedule, event_day_offset=event_day_offset)
 
                 async def _import(context: ContextTypes.DEFAULT_TYPE, _job=import_job) -> None:
                     tz_ = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
                     await _job.run(now=datetime.now(tz_), bot=context.bot)
 
                 _import.__name__ = f"aetherhub_import[{club.name}/{schedule.weekday}/{fetch_time_str}]"
-                app.job_queue.run_daily(_import, time=fetch_time, days=(_ptb_day(schedule.weekday),))
-                logger.info(f"Scheduler: AetherHub import for '{club.name}' ({schedule.weekday}) at {fetch_time_str}")
+                import_day = (_ptb_day(schedule.weekday) + event_day_offset) % 7
+                app.job_queue.run_daily(_import, time=fetch_time, days=(import_day,))
+                logger.info(
+                    "Scheduler: AetherHub import for '%s' (%s%s) at %s",
+                    club.name,
+                    schedule.weekday,
+                    "+1d" if event_day_offset else "",
+                    fetch_time_str,
+                )
 
 
 _DAY_RU = {

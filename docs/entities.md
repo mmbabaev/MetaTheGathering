@@ -32,7 +32,7 @@ Telegram-пользователь. Создаётся автоматически
 | `chat_id` | bigint | ID группового чата в Telegram |
 | `slug` | string | URL-идентификатор, напр. `2026-04-24-goldfish-pauper` |
 | `status` | enum | `REGISTRATION → ONGOING → CLOSED` |
-| `club` | string | `Goldfish` / `Edinorog` / null |
+| `club` | string | `Goldfish` / `Edinorog` / `Pair of dice` / null |
 | `aetherhub_url` | string | Ссылка на турнир в AetherHub |
 | `decks_hidden` | bool | Скрывать архетипы до конца турнира |
 
@@ -179,7 +179,7 @@ Telegram-опрос «Пойду / Не пойду», привязанный к 
 
 | Поле | Тип | Описание |
 |------|-----|----------|
-| `name` | string | Уникальное имя клуба (`Goldfish`, `Edinorog`) |
+| `name` | string | Уникальное имя клуба (`Goldfish`, `Edinorog`, `Pair of dice`) |
 | `chat_id` | int | Telegram chat ID группы клуба |
 | `aetherhub_url` | string | URL страницы клуба на AetherHub |
 | `title_prefix` | string | Префикс в названии турнира (напр. `🦄 `) |
