@@ -61,13 +61,15 @@ POINTS_X = WIDTH - MARGIN - 30  # очки (правый край)
 DECK_MAX = POINTS_X - 70 - DECK_X
 
 
-def accent_color(row: "StandingRow") -> Optional[tuple]:
+def accent_color(row: "StandingRow", total_rounds: int) -> Optional[tuple]:
     """Цвет левого акцента по записи игрока. None — не топ-тир.
 
     Верх — тем, кто без поражений (4-0, затем 3-0-1) и ровно с одним поражением (3-1).
-    Требуем сыгранные матчи (wins > 0), чтобы «пустой» игрок не подсветился.
+    Требуем сыграть все раунды, чтобы выбывший раньше игрок с записью вроде 1-1 не
+    подсветился как полноценный 3-1 (issue #231).
     """
-    if row.wins == 0:
+    games_played = row.wins + row.losses + row.draws
+    if row.wins == 0 or games_played != total_rounds:
         return None
     if row.losses == 0:
         return ACCENT_UNDEFEATED if row.draws == 0 else ACCENT_NO_LOSS
@@ -100,15 +102,21 @@ def render_standings_pages(rows: list[StandingRow], subtitle: str = "") -> list[
     """PNG-страницы стендингов (см. paginate)."""
     pages = paginate(rows)
     total = len(pages)
-    return [_render_page(page, subtitle, i + 1, total) for i, page in enumerate(pages)]
+    total_rounds = _total_rounds(rows)
+    return [_render_page(page, subtitle, i + 1, total, total_rounds) for i, page in enumerate(pages)]
 
 
 def render_standings(rows: list[StandingRow], subtitle: str = "") -> bytes:
     """Одна картинка (первая страница) — для тестов и простых вызовов."""
-    return _render_page(rows, subtitle, 1, 1)
+    return _render_page(rows, subtitle, 1, 1, _total_rounds(rows))
 
 
-def _render_page(rows: list[StandingRow], subtitle: str, page: int, total: int) -> bytes:
+def _total_rounds(rows: list[StandingRow]) -> int:
+    """Число раундов турнира по самой полной записи в стендингах."""
+    return max((row.wins + row.losses + row.draws for row in rows), default=0)
+
+
+def _render_page(rows: list[StandingRow], subtitle: str, page: int, total: int, total_rounds: int) -> bytes:
     height = TABLE_TOP + len(rows) * (ROW_H + ROW_GAP) + FOOTER_GAP + 30
     img = background(height)
     draw = ImageDraw.Draw(img)
@@ -123,7 +131,7 @@ def _render_page(rows: list[StandingRow], subtitle: str, page: int, total: int) 
     points_font = font("DejaVuSans-Bold.ttf", 34)
     for i, row in enumerate(rows):
         top = TABLE_TOP + i * (ROW_H + ROW_GAP)
-        _draw_row(draw, row, top, place_font, name_font, deck_font, points_font)
+        _draw_row(draw, row, top, place_font, name_font, deck_font, points_font, total_rounds)
 
     if total > 1:
         footer_y = TABLE_TOP + len(rows) * (ROW_H + ROW_GAP) + FOOTER_GAP
@@ -136,11 +144,11 @@ def _render_page(rows: list[StandingRow], subtitle: str, page: int, total: int) 
     return buffer.getvalue()
 
 
-def _draw_row(draw, row, top, place_font, name_font, deck_font, points_font) -> None:
+def _draw_row(draw, row, top, place_font, name_font, deck_font, points_font, total_rounds) -> None:
     middle = top + ROW_H // 2
     draw.rounded_rectangle((MARGIN, top, WIDTH - MARGIN, top + ROW_H), radius=14, fill=CARD_BG)
 
-    accent = accent_color(row)
+    accent = accent_color(row, total_rounds)
     if accent is not None:
         draw.rounded_rectangle((MARGIN, top + 6, MARGIN + ACCENT_W, top + ROW_H - 6), radius=3, fill=accent)
 

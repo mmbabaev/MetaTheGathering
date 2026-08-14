@@ -10,6 +10,12 @@ from core.schemas import TournamentCreate
 from services.aetherhub_import_service import AetherhubImportService, StandingRow
 from services.chart_style import WIDTH
 from services.standings_image import (
+    ACCENT_W,
+    CARD_BG,
+    MARGIN,
+    ROW_GAP,
+    ROW_H,
+    TABLE_TOP,
     StandingsImageService,
     accent_color,
     paginate,
@@ -40,29 +46,40 @@ class TestAccentColor:
         return StandingRow(place=1, display_name="X", archetype_name=None, wins=w, losses=loss, draws=d)
 
     def test_undefeated_no_draw_is_green(self):
-        assert accent_color(self._row(4, 0, 0)) == (0x54, 0xB8, 0x6A)  # 4-0
+        assert accent_color(self._row(4, 0, 0), total_rounds=4) == (0x54, 0xB8, 0x6A)  # 4-0
 
     def test_no_loss_with_draw_is_gold(self):
-        assert accent_color(self._row(3, 0, 1)) == (0xE0, 0xB8, 0x4C)  # 3-0-1
+        assert accent_color(self._row(3, 0, 1), total_rounds=4) == (0xE0, 0xB8, 0x4C)  # 3-0-1
 
     def test_one_loss_no_draw_is_orange(self):
-        assert accent_color(self._row(3, 1, 0)) == (0xE0, 0x8A, 0x3C)  # 3-1
+        assert accent_color(self._row(3, 1, 0), total_rounds=4) == (0xE0, 0x8A, 0x3C)  # 3-1
+
+    def test_dropped_player_with_one_loss_has_no_accent(self):
+        """Issue #231: 1-1 after a drop is not a top result in a four-round event."""
+        assert accent_color(self._row(1, 1, 0), total_rounds=4) is None
+
+    def test_dropped_undefeated_player_has_no_accent(self):
+        assert accent_color(self._row(2, 0, 0), total_rounds=4) is None
 
     def test_two_losses_has_no_accent(self):
-        assert accent_color(self._row(2, 2, 0)) is None
+        assert accent_color(self._row(2, 2, 0), total_rounds=4) is None
 
     def test_one_loss_with_draw_has_no_accent(self):
-        assert accent_color(self._row(2, 1, 1)) is None
+        assert accent_color(self._row(2, 1, 1), total_rounds=4) is None
 
     def test_no_games_has_no_accent(self):
-        assert accent_color(self._row(0, 0, 0)) is None
+        assert accent_color(self._row(0, 0, 0), total_rounds=4) is None
 
     def test_tiers_by_record_not_points(self):
         """Круглозависимость: 4-1 (12 очков) в 5 раундов — не зелёный, а оранжевый."""
-        assert accent_color(self._row(4, 1, 0)) == (0xE0, 0x8A, 0x3C)
+        assert accent_color(self._row(4, 1, 0), total_rounds=5) == (0xE0, 0x8A, 0x3C)
 
     def test_tiers_are_distinct(self):
-        tiers = {accent_color(self._row(4, 0, 0)), accent_color(self._row(3, 0, 1)), accent_color(self._row(3, 1, 0))}
+        tiers = {
+            accent_color(self._row(4, 0, 0), total_rounds=4),
+            accent_color(self._row(3, 0, 1), total_rounds=4),
+            accent_color(self._row(3, 1, 0), total_rounds=4),
+        }
         assert len(tiers) == 3
 
 
@@ -165,6 +182,17 @@ class TestRenderStandings:
     def test_all_mana_colors_render(self):
         rows = [StandingRow(1, "Alice", "5c", 4, 0, 0, color_identity="WUBRG")]
         assert render_standings(rows).startswith(b"\x89PNG")
+
+    def test_dropped_player_is_not_accented(self):
+        rows = [
+            StandingRow(1, "Winner", None, 4, 0, 0),
+            StandingRow(17, "Dropped", None, 1, 1, 0),
+        ]
+
+        image = Image.open(io.BytesIO(render_standings(rows)))
+        dropped_row_middle = TABLE_TOP + ROW_H + ROW_GAP + ROW_H // 2
+
+        assert image.getpixel((MARGIN + ACCENT_W // 2, dropped_row_middle)) == CARD_BG
 
 
 class TestPaginate:
