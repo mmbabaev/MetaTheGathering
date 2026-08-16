@@ -48,6 +48,10 @@ Fixtures нужны только для Board Lab и fairness-тестов. Он
 первого сезона и не должны активироваться как production boards. Перед activation нужны
 решения #215, frozen stats provider #211 и persistence/events/claims #212.
 
+Пример preview-поля для персоны «Регуляр», seed `42`:
+
+![Bingo board preview](assets/bingo-board-preview-seed-42.png)
+
 ## Проверка
 
 ```bash
