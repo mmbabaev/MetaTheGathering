@@ -1,7 +1,7 @@
 """Telegram deeplinks: `t.me/<bot>?start=<payload>`.
 
-Пока один тип — переход сразу в запись колоды на турнир (`deck_<id>`): игрок жмёт кнопку
-в анонсе/напоминании и попадает в выбор архетипа, не листая /tournaments.
+Поддерживаются переход в запись колоды (`deck_<id>`) и общая регистрация
+(`register_<id>`). Вторая сначала проверяет, не записан ли игрок уже.
 """
 
 from __future__ import annotations
@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Optional
 
 _DECK_PREFIX = "deck_"
+_REGISTER_PREFIX = "register_"
 
 
 def deck_payload(tournament_id: int) -> str:
@@ -31,3 +32,21 @@ def parse_deck_payload(payload: str) -> Optional[int]:
 def deck_deeplink(bot_username: str, tournament_id: int) -> str:
     """Ссылка `https://t.me/<bot>?start=deck_<id>` — открывает бота и ведёт в запись колоды."""
     return f"https://t.me/{bot_username}?start={deck_payload(tournament_id)}"
+
+
+def registration_payload(tournament_id: int) -> str:
+    """start-payload общей кнопки «Записаться»."""
+    return f"{_REGISTER_PREFIX}{tournament_id}"
+
+
+def parse_registration_payload(payload: str) -> Optional[int]:
+    """tournament_id из registration start-payload, либо None."""
+    if not payload or not payload.startswith(_REGISTER_PREFIX):
+        return None
+    rest = payload[len(_REGISTER_PREFIX) :]
+    return int(rest) if rest.isascii() and rest.isdigit() else None
+
+
+def registration_deeplink(bot_username: str, tournament_id: int) -> str:
+    """Ссылка общей регистрации: записанным показывает статус турнира."""
+    return f"https://t.me/{bot_username}?start={registration_payload(tournament_id)}"

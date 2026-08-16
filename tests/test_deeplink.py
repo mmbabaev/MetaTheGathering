@@ -2,7 +2,14 @@
 
 import pytest
 
-from bot.deeplink import deck_deeplink, deck_payload, parse_deck_payload
+from bot.deeplink import (
+    deck_deeplink,
+    deck_payload,
+    parse_deck_payload,
+    parse_registration_payload,
+    registration_deeplink,
+    registration_payload,
+)
 from bot.handlers.base import HandlerResult
 from bot.handlers.player import PlayerHandler
 from bot.messages import CHOOSE_ARCHETYPE, NAME_REQUIRED_FOR_REGISTRATION, TOURNAMENT_NOT_FOUND
@@ -24,6 +31,16 @@ class TestPayload:
 
     def test_deeplink_url(self):
         assert deck_deeplink("MyBot", 7) == "https://t.me/MyBot?start=deck_7"
+
+    def test_registration_round_trip(self):
+        assert parse_registration_payload(registration_payload(42)) == 42
+
+    @pytest.mark.parametrize("bad", ["", "register_", "register_x", "register_1x", "deck_1", None])
+    def test_non_registration_payloads_are_none(self, bad):
+        assert parse_registration_payload(bad or "") is None
+
+    def test_registration_deeplink_url(self):
+        assert registration_deeplink("MyBot", 7) == "https://t.me/MyBot?start=register_7"
 
 
 @pytest.fixture
@@ -69,11 +86,44 @@ class TestHandleDeeplinkDeck:
         assert isinstance(result, HandlerResult)
 
     def test_registration_closed_does_not_offer_archetype(self, player_handler, svc, user_svc, tournament):
-        """Регистрация закрыта — диплинк ведёт на карточку, а не в выбор архетипа
-        (иначе выбор упал бы TournamentInvalidState)."""
+        """Регистрация закрыта — диплинк ведёт на карточку, а не в выбор архетипа."""
         svc.close_tournament(tournament.id)
-        u = user_svc.get_or_create(tg_id=1, first_name="Алиса")
+        user = user_svc.get_or_create(tg_id=1, first_name="Алиса")
 
-        result = player_handler.handle_deeplink_deck(tournament.id, tg_id=u.tg_id)
+        result = player_handler.handle_deeplink_deck(tournament.id, tg_id=user.tg_id)
 
         assert result.text != CHOOSE_ARCHETYPE
+
+
+class TestHandleDeeplinkRegistration:
+    def test_unknown_tournament(self, player_handler, user_svc):
+        user = user_svc.get_or_create(tg_id=1, first_name="Алиса")
+        assert player_handler.handle_deeplink_registration(99999, tg_id=user.tg_id).text == TOURNAMENT_NOT_FOUND
+
+    def test_new_player_starts_registration(self, player_handler, user_svc, tournament):
+        user = user_svc.get_or_create(tg_id=1, first_name="Алиса")
+
+        result = player_handler.handle_deeplink_registration(tournament.id, tg_id=user.tg_id)
+
+        assert result.text == CHOOSE_ARCHETYPE
+
+    def test_registered_without_deck_goes_to_tournament_status(
+        self, player_handler, svc, user_svc, tournament
+    ):
+        user = user_svc.get_or_create(tg_id=1, first_name="Алиса")
+        svc.register_participant(tournament_id=tournament.id, user_id=user.id, archetype_id=None)
+
+        result = player_handler.handle_deeplink_registration(tournament.id, tg_id=user.tg_id)
+
+        assert result.text != CHOOSE_ARCHETYPE
+        assert "Pauper" in result.text
+
+    def test_closed_registration_goes_to_tournament_status(self, player_handler, svc, user_svc, tournament):
+        svc.close_tournament(tournament.id)
+        user = user_svc.get_or_create(tg_id=1, first_name="Алиса")
+
+        result = player_handler.handle_deeplink_registration(tournament.id, tg_id=user.tg_id)
+
+        assert result.text != CHOOSE_ARCHETYPE
+        assert "Pauper" in result.text
+        assert isinstance(result, HandlerResult)

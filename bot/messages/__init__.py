@@ -167,6 +167,25 @@ def format_tournament_status(title: str, status: str, participants: list, decks_
     return "\n".join(lines)
 
 
+def format_missing_decks_reminder(title: str, participants: list) -> str:
+    """Шуточное напоминание со списком только игроков без колоды."""
+    lines = [
+        "🚨👮 Вас посетила мета-полиция!",
+        "На какой колоде были эти игроки?",
+        "",
+        f"🏆 {title}",
+        "Список игроков без колоды:",
+    ]
+    for participant in participants:
+        if participant.archetype_id is not None:
+            continue
+        user = participant.user
+        name = format_participant_name(user.first_name, user.last_name) or f"id{user.tg_id}"
+        username = f" (@{user.username})" if user.username else ""
+        lines.append(f"• {name}{username}")
+    return "\n".join(lines)
+
+
 def format_decks_revealed(title: str, total: int, with_deck: int, meta_rows: list, top_n: int = 8) -> str:
     """Анонс в чат при авто-раскрытии колод: турнир, счётчики, топ колод.
 

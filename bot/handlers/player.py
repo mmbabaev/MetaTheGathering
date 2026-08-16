@@ -224,6 +224,20 @@ class PlayerHandler:
                 return self.handle_tournament_select(tournament_id, tg_id=tg_id)
         return self.handle_register(tournament_id, tg_id=tg_id)
 
+    def handle_deeplink_registration(self, tournament_id: int, tg_id: int) -> HandlerResult:
+        """Общая регистрация: новый игрок выбирает колоду, записанный видит статус."""
+        try:
+            tournament = get_tournament(self.svc.db, tournament_id)
+        except errors.TournamentNotFound:
+            return HandlerResult(TOURNAMENT_NOT_FOUND)
+
+        user = self.user_svc.get_by_tg_id(tg_id)
+        if user is not None and self.svc.get_participant(tournament_id, user.id) is not None:
+            return self.handle_tournament_select(tournament_id, tg_id=tg_id)
+        if tournament.status != models.TournamentStatus.REGISTRATION:
+            return self.handle_tournament_select(tournament_id, tg_id=tg_id)
+        return self.handle_register(tournament_id, tg_id=tg_id)
+
     def handle_archetype_more(self, tournament_id: int, tg_id: int) -> HandlerResult:
         """Разворачивает полный список архетипов (история + топ)."""
         return self._archetype_keyboard_for_player(tournament_id, tg_id, expanded=True)
