@@ -6,6 +6,24 @@ from bot.messages import family_name_sort_key, format_participant_name
 from bot.messages import sort_participants as _sort_participants
 from core import models
 from core.schemas import TournamentCreate
+from services.names import is_single_word_name_typo
+
+
+class TestSingleWordNameTypo:
+    def test_accepts_issue_233_missing_letter_in_either_order(self):
+        assert is_single_word_name_typo("Бурбаев Констанин", "Константин Бурбаев") is True
+
+    @pytest.mark.parametrize(
+        ("imported", "candidate"),
+        [
+            ("Бурбаев Константин", "Константин Бурбаев"),  # exact, not a typo
+            ("Иван Иван", "Иван Иван"),  # repeated words must stay safe
+            ("Иванов Илья", "Иванов Игорь"),  # more than one edit
+            ("Ли Ан", "Ли Ян"),  # short names are too risky for fuzzy matching
+        ],
+    )
+    def test_rejects_unsafe_or_non_typo_pairs(self, imported, candidate):
+        assert is_single_word_name_typo(imported, candidate) is False
 
 
 class TestFormatParticipantName:

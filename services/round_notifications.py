@@ -91,7 +91,7 @@ class RoundNotificationService:
             return []
 
         names = {p.player_name for p in pairings} | {p.opponent_name for p in pairings if p.opponent_name}
-        name_to_user = {name: self._import.find_user_by_name(name) for name in names}
+        name_to_user = {name: self._import.find_user_by_name(name, tournament_id) for name in names}
         participants = self._participants_by_user_id(tournament_id)
 
         notifications: list[RoundNotification] = []

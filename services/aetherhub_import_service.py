@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from core import models
 from services import errors
 from services.aetherhub_models import AetherhubRound, AetherhubTournamentData
-from services.names import format_participant_name
+from services.names import format_participant_name, is_single_word_name_typo
 from services.user import UserService
 
 logger = logging.getLogger(__name__)
@@ -137,13 +137,44 @@ class AetherhubImportService:
         s = re.sub(r"\s+", " ", s).strip()
         return s
 
-    def find_user_by_name(self, full_name: str) -> models.User | None:
+    def find_user_by_name(self, full_name: str, tournament_id: int | None = None) -> models.User | None:
         """Match full_name against User records using flexible name matching
-        (both orderings, case-insensitive, ё/е normalization)."""
+        (both orderings, case-insensitive, ё/е normalization).
+
+        Inside one tournament, also accept a single-character typo only when it points
+        unambiguously to one real, already registered player with a current-event deck.
+        """
         full_name = self._normalize_import_name(full_name)
         if not full_name:
             return None
-        return self._user_svc.resolve_and_merge_import_name(full_name)
+        exact = self._user_svc.resolve_and_merge_import_name(full_name)
+        if tournament_id is None or (exact is not None and exact.tg_id > 0):
+            return exact
+
+        candidate = self._find_tournament_typo_candidate(tournament_id, full_name)
+        if candidate is None:
+            return exact
+        if exact is not None:
+            self._user_svc.merge_users_by_id(exact.id, candidate.id, adopt_name=False)
+            return self._user_svc.get_by_id(candidate.id)
+        return candidate
+
+    def _find_tournament_typo_candidate(self, tournament_id: int, full_name: str) -> models.User | None:
+        users = self.db.execute(
+            select(models.User)
+            .join(models.Participant, models.Participant.user_id == models.User.id)
+            .where(
+                models.Participant.tournament_id == tournament_id,
+                models.Participant.archetype_id.is_not(None),
+                models.User.tg_id > 0,
+            )
+        ).scalars().all()
+        candidates = []
+        for user in users:
+            candidate_name = " ".join(part for part in (user.first_name, user.last_name) if part)
+            if is_single_word_name_typo(full_name, candidate_name):
+                candidates.append(user)
+        return candidates[0] if len(candidates) == 1 else None
 
     def get_unfilled_opponents(
         self, tournament_id: int, user_id: int, participants: list
@@ -167,7 +198,7 @@ class AetherhubImportService:
         all_names = {p.player_name for p in pairings} | {p.opponent_name for p in pairings if p.opponent_name}
         name_to_user: dict[str, models.User | None] = {}
         for name in all_names:
-            name_to_user[name] = self.find_user_by_name(name)
+            name_to_user[name] = self.find_user_by_name(name, tournament_id)
 
         # раунд, в котором наш игрок встречался с каждым оппонентом (по имени из пейрингов);
         # при повторной встрече берём самый ранний раунд
@@ -226,7 +257,7 @@ class AetherhubImportService:
             return
         direct, normalized = self._build_place_maps(standings)
         for name in direct:
-            user = self.find_user_by_name(name)
+            user = self.find_user_by_name(name, tournament_id)
             if user is None:
                 continue
             participant = self._get_participant(tournament_id, user.id)
@@ -394,7 +425,7 @@ class AetherhubImportService:
         processed_user_ids: set[int] = set()
         for name in self._registration_names(data):
             place = place_map.get(name) or normalized_place_map.get(self._normalize_import_name(name))
-            user = self.find_user_by_name(name)
+            user = self.find_user_by_name(name, tournament_id)
             was_created = False
             if user is None:
                 user, was_created = self._get_or_create_user_by_name(name)
@@ -552,7 +583,7 @@ class AetherhubImportService:
         Общий блок для стендингов и списка X-0: игрока ищем в боте, у участника берём
         место и колоду. Не найден / не участник — только имя из парингов.
         """
-        user = self.find_user_by_name(name)
+        user = self.find_user_by_name(name, tournament_id)
         if user is None:
             return PlayerProfile(first_name=None, last_name=None, archetype_name=None, final_place=None)
         participant = self._get_participant(tournament_id, user.id)
@@ -669,7 +700,9 @@ class AetherhubImportService:
             return [], "not_found"
 
         all_names = {p.player_name for p in pairings} | {p.opponent_name for p in pairings if p.opponent_name}
-        name_to_user: dict[str, models.User | None] = {name: self.find_user_by_name(name) for name in all_names}
+        name_to_user: dict[str, models.User | None] = {
+            name: self.find_user_by_name(name, tournament_id) for name in all_names
+        }
 
         player_pairings: list[models.RoundPairing] = []
         for p in pairings:
