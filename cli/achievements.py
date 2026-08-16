@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 import typer
@@ -15,9 +17,65 @@ from cli.db import get_db
 from core import models
 from services.achievements import AchievementService, build_report
 from services.achievements.history import AchievementHistory, counts_for_achievements, display_name
+from services.season_stats import SeasonStatsService, SeasonStatsSnapshot
 from services.user import UserService
 
 app = typer.Typer(no_args_is_help=True)
+
+
+def _record_text(record) -> str:
+    winrate = "—" if record.winrate is None else f"{record.winrate:.2f}%"
+    return f"{record.wins}-{record.losses}-{record.draws} ({winrate})"
+
+
+def _markdown_cell(value: str) -> str:
+    return value.replace("|", "\\|")
+
+
+def format_season_snapshot(snapshot: SeasonStatsSnapshot, *, player_limit: int = 30) -> str:
+    """Compact Markdown for a human review; JSON remains the machine-readable contract."""
+    quality = snapshot.quality
+    lines = [
+        f"# Срез сезонной статистики на {snapshot.as_of:%Y-%m-%d}",
+        "",
+        f"Клуб: {snapshot.club or 'все клубы'}.",
+        (
+            f"Качество данных: {quality.complete_tournaments}/{quality.tournaments_scanned} пригодных турниров; "
+            f"{quality.scored_matches} матчей; {quality.unmatched_player_rows} несопоставленных строк парингов; "
+            f"{quality.participants_without_pairing} регистраций без фактической игры."
+        ),
+        "",
+        f"## Топ-{len(snapshot.popular_decks)} колод за {snapshot.deck_window_days} дней",
+        "",
+        "| # | Колода | Участия | Игроки | Участия зарегистрированных |",
+        "|---:|---|---:|---:|---:|",
+    ]
+    lines.extend(
+        f"| {deck.rank} | {_markdown_cell(deck.deck)} | {deck.participations} | {deck.players} | "
+        f"{deck.registered_participations} |"
+        for deck in snapshot.popular_decks
+    )
+    lines.extend(
+        [
+            "",
+            f"## Игроки (первые {min(player_limit, len(snapshot.players))} из {len(snapshot.players)})",
+            "",
+            "| Игрок | Матчи за историю | Худший H2H | Изменение винрейта | Достаточно матчей |",
+            "|---|---|---|---:|:---:|",
+        ]
+    )
+    for player in snapshot.players[:player_limit]:
+        worst = player.worst_opponent
+        worst_text = "—"
+        if worst is not None:
+            worst_text = f"{worst.opponent_name}: {worst.winrate:.2f}% ({worst.matches})"
+        change = player.winrate_change
+        delta = "—" if change.delta_percentage_points is None else f"{change.delta_percentage_points:+.2f} п.п."
+        lines.append(
+            f"| {_markdown_cell(player.name)} | {_record_text(player.record)} | "
+            f"{_markdown_cell(worst_text)} | {delta} | {'да' if change.eligible else 'нет'} |"
+        )
+    return "\n".join(lines) + "\n"
 
 
 @app.command("process")
@@ -89,6 +147,55 @@ def audit():
                 "(«кто записал»). По таким турнирам ачивки не выдаются — это ожидаемо для\n"
                 "    старых данных, записанных до появления поля."
             )
+
+
+@app.command("season-stats")
+def season_stats(
+    as_of: datetime = typer.Option(..., "--as-of", formats=["%Y-%m-%d"], help="Начало сезона YYYY-MM-DD"),
+    club: Optional[str] = typer.Option(None, "--club", help="Только один клуб"),
+    output_format: str = typer.Option("markdown", "--format", help="markdown или json"),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Сохранить результат в файл"),
+    history_days: int = typer.Option(365, "--history-days", min=1, help="Глубина head-to-head"),
+    deck_window_days: int = typer.Option(120, "--deck-window-days", min=1, help="Окно популярности колод"),
+    winrate_window_days: int = typer.Option(90, "--winrate-window-days", min=1, help="Размер каждого окна"),
+    top_decks: int = typer.Option(10, "--top-decks", min=1, help="Сколько популярных колод оставить"),
+    min_h2h_matches: int = typer.Option(3, "--min-h2h-matches", min=1, help="Минимум матчей с оппонентом"),
+    min_window_matches: int = typer.Option(5, "--min-window-matches", min=1, help="Минимум матчей в каждом окне"),
+    player_limit: int = typer.Option(30, "--player-limit", min=1, help="Игроков в Markdown; JSON содержит всех"),
+):
+    """Собрать read-only snapshot для проектирования сезонного бинго.
+
+    Команда ничего не записывает в БД и ничего не отправляет в Telegram. Дата ``--as-of``
+    является правой невключительной границей: для сезона 1 сентября учитываются данные
+    не позднее 31 августа.
+    """
+    normalized_format = output_format.strip().casefold()
+    if normalized_format not in {"markdown", "json"}:
+        raise typer.BadParameter("--format должен быть markdown или json")
+
+    with get_db() as db:
+        snapshot = SeasonStatsService(db).build_snapshot(
+            as_of=as_of,
+            club=club,
+            history_days=history_days,
+            deck_window_days=deck_window_days,
+            winrate_window_days=winrate_window_days,
+            top_decks=top_decks,
+            min_h2h_matches=min_h2h_matches,
+            min_window_matches=min_window_matches,
+        )
+
+    rendered = (
+        snapshot.model_dump_json(indent=2)
+        if normalized_format == "json"
+        else format_season_snapshot(snapshot, player_limit=player_limit)
+    )
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(rendered + ("\n" if normalized_format == "json" else ""), encoding="utf-8")
+        typer.echo(str(output.resolve()))
+        return
+    typer.echo(rendered, nl=not rendered.endswith("\n"))
 
 
 @app.command("backfill")
