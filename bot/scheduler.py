@@ -9,15 +9,16 @@ import io
 import logging
 from collections import Counter, defaultdict
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, or_, select, update
-from telegram import InputMediaPhoto
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 from telegram.ext import Application, ContextTypes
 
 from bot.chart import build_chart, build_standings
-from bot.messages import format_decks_revealed, format_meta_gather_completed
+from bot.deeplink import registration_deeplink
+from bot.messages import format_decks_revealed, format_meta_gather_completed, format_missing_decks_reminder
 from bot.registration_messages import RegistrationMessageRefreshJob
 from bot.registration_messages import send_registration_open as _send_registration_open
 from bot.telegram.achievements import send_achievements_report
@@ -574,6 +575,7 @@ class AetherhubFinalReimportJob:
 
 REVEAL_DECKS_TIME = "22:00"  # авто-раскрытие колод турниров текущего дня
 UNCLOSED_REMINDER_TIME = "10:00"
+MISSING_DECKS_REMINDER_TIME = "15:00"
 
 
 class AutoRevealDecksJob:
@@ -696,6 +698,81 @@ class UnclosedTournamentReminderJob:
                     tournament.unclosed_reminder_3d_sent_at = tournament.unclosed_reminder_3d_sent_at or sent_at
                 else:
                     tournament.unclosed_reminder_3d_sent_at = sent_at
+                db.commit()
+        finally:
+            if close_db:
+                db.close()
+
+
+class MissingDecksReminderJob:
+    """Просит чат заполнить колоды на следующий и третий календарный день после турнира."""
+
+    @staticmethod
+    def _event_date(tournament, tz) -> date:
+        event_at = tournament.registration_close_at or tournament.started_at or tournament.created_at
+        if event_at.tzinfo is None:
+            event_at = event_at.replace(tzinfo=timezone.utc)
+        return event_at.astimezone(tz).date()
+
+    async def run(self, bot, now: datetime, db=None) -> None:
+        if bot is None:
+            return
+        tz = now.tzinfo or ZoneInfo(settings.TOURNAMENT_TIMEZONE)
+        local_now = now.astimezone(tz) if now.tzinfo else now.replace(tzinfo=tz)
+        close_db = db is None
+        if close_db:
+            db = SessionLocal()
+        try:
+            tournaments = (
+                db.execute(
+                    select(models.Tournament).where(
+                        models.Tournament.status != models.TournamentStatus.CLOSED,
+                        or_(
+                            models.Tournament.missing_decks_reminder_1d_sent_at.is_(None),
+                            models.Tournament.missing_decks_reminder_3d_sent_at.is_(None),
+                        ),
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            for tournament in tournaments:
+                elapsed_days = (local_now.date() - self._event_date(tournament, tz)).days
+                reminder_day: int | None = None
+                if elapsed_days >= 3 and tournament.missing_decks_reminder_3d_sent_at is None:
+                    reminder_day = 3
+                elif elapsed_days >= 1 and tournament.missing_decks_reminder_1d_sent_at is None:
+                    reminder_day = 1
+                if reminder_day is None:
+                    continue
+
+                participants = TournamentService(db).list_participants_for_tournament(tournament.id)
+                if not any(participant.archetype_id is None for participant in participants):
+                    continue
+
+                try:
+                    me = await bot.get_me()
+                    button_url = registration_deeplink(me.username, tournament.id)
+                except Exception:  # noqa: BLE001 — без рабочей кнопки уведомление не считаем доставленным
+                    logger.exception("MissingDecksReminderJob: get_me failed for #%s", tournament.id)
+                    continue
+
+                text = format_missing_decks_reminder(tournament.title, participants)
+                keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("Записаться", url=button_url)]])
+                try:
+                    await bot.send_message(chat_id=tournament.chat_id, text=text, reply_markup=keyboard)
+                except Exception:  # noqa: BLE001 — повторим на следующем ежедневном запуске
+                    logger.exception("MissingDecksReminderJob: reminder failed for #%s", tournament.id)
+                    continue
+
+                sent_at = models.utc_now()
+                if reminder_day == 3:
+                    tournament.missing_decks_reminder_3d_sent_at = sent_at
+                    tournament.missing_decks_reminder_1d_sent_at = (
+                        tournament.missing_decks_reminder_1d_sent_at or sent_at
+                    )
+                else:
+                    tournament.missing_decks_reminder_1d_sent_at = sent_at
                 db.commit()
         finally:
             if close_db:
@@ -1159,6 +1236,17 @@ def setup_scheduler(app: Application) -> None:
     _remind_unclosed_tournaments.__name__ = "unclosed_tournament_reminders"
     app.job_queue.run_daily(_remind_unclosed_tournaments, time=unclosed_reminder_time)
     logger.info(f"Scheduler: UnclosedTournamentReminderJob registered (daily {UNCLOSED_REMINDER_TIME})")
+
+    missing_decks_reminder_job = MissingDecksReminderJob()
+    missing_decks_reminder_time = datetime.strptime(MISSING_DECKS_REMINDER_TIME, "%H:%M").time().replace(tzinfo=tz)
+
+    async def _remind_about_missing_decks(context: ContextTypes.DEFAULT_TYPE) -> None:
+        tz_ = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
+        await missing_decks_reminder_job.run(context.bot, now=datetime.now(tz_))
+
+    _remind_about_missing_decks.__name__ = "missing_decks_reminder"
+    app.job_queue.run_daily(_remind_about_missing_decks, time=missing_decks_reminder_time)
+    logger.info(f"Scheduler: MissingDecksReminderJob registered (daily {MISSING_DECKS_REMINDER_TIME})")
 
 
 def _register_schedule_jobs(app: Application) -> None:
