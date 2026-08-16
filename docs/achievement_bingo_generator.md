@@ -52,6 +52,14 @@ Fixtures нужны только для Board Lab и fairness-тестов. Он
 
 ![Bingo board preview](assets/bingo-board-preview-seed-42.png)
 
+Дополнительные варианты той же персоны с другими seeds:
+
+![Bingo board preview seed 43](assets/bingo-board-preview-seed-43.jpg)
+
+![Bingo board preview seed 44](assets/bingo-board-preview-seed-44.jpg)
+
+![Bingo board preview seed 45](assets/bingo-board-preview-seed-45.jpg)
+
 ## Проверка
 
 ```bash
