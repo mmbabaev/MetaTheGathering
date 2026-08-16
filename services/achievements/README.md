@@ -59,6 +59,9 @@ PR [#210](https://github.com/mmbabaev/MetaTheGathering/pull/210) добавля�
 | `history.py` | Read-only canonical matches и только закрытая/полная история реально сыгравших |
 | `service.py` | Evaluate/apply, awards, progress, processing run, shelf и backfill |
 | `report.py` | Формирование текстового owner-отчёта |
+| `bingo/models.py` | Versioned manifest/candidate/BoardDraft contracts без DB |
+| `bingo/generator.py` | Детерминированный constraint solver поля 4×4 |
+| `bingo/fixtures.py` | Preview-pool и четыре fairness-personas для Board Lab |
 | `__init__.py` | Публичные импорты модуля |
 
 Соседние точки интеграции:
@@ -85,8 +88,12 @@ PR [#210](https://github.com/mmbabaev/MetaTheGathering/pull/210) добавля�
 - `AchievementProcessingLease` — временная блокировка обработки турнира.
 - `AchievementProcessingRun` — итог запуска и ошибки отдельных rules.
 
-Season/Board/Cell, immutable progress events, peer confirmations и prize claims
-должны получить отдельные модели. Не добавляйте сезонную семантику в lifetime awards
+Preview-контракты и pure generator bingo лежат отдельно в `bingo/`; подробный контракт —
+[`docs/achievement_bingo_generator.md`](../../docs/achievement_bingo_generator.md). Они не
+создают production Season/Board/Cell и не меняют lifetime awards.
+
+Season/Board/Cell, сезонные progress/completion events, peer confirmations и prize claims
+должны получить отдельные DB-модели. Не добавляйте сезонную семантику в lifetime awards
 как скрытые поля.
 
 ## Инварианты и известные пробелы
