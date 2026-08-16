@@ -131,9 +131,8 @@ class Tournament(Base):
     unclosed_reminder_3d_sent_at = Column(DateTime, nullable=True)
     unclosed_reminder_7d_sent_at = Column(DateTime, nullable=True)
 
-    # просьбы в чат заполнить недостающие колоды на следующий и третий день после турнира
+    # просьба в чат заполнить недостающие колоды на следующий день после турнира
     missing_decks_reminder_1d_sent_at = Column(DateTime, nullable=True)
-    missing_decks_reminder_3d_sent_at = Column(DateTime, nullable=True)
 
     created_at = Column(DateTime, default=utc_now, nullable=False)
 
