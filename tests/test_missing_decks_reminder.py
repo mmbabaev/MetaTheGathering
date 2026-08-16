@@ -12,7 +12,6 @@ from services.tournament import TournamentService
 MOSCOW = ZoneInfo("Europe/Moscow")
 EVENT_AT = datetime(2026, 8, 14, 19, 30, tzinfo=MOSCOW)
 DAY_ONE = datetime(2026, 8, 15, 15, 0, tzinfo=MOSCOW)
-DAY_TWO = datetime(2026, 8, 16, 15, 0, tzinfo=MOSCOW)
 DAY_THREE = datetime(2026, 8, 17, 15, 0, tzinfo=MOSCOW)
 
 
@@ -59,11 +58,10 @@ async def test_sends_meta_police_to_tournament_chat_with_missing_players_and_reg
     assert button.url == f"https://t.me/TestBot?start=register_{tournament.id}"
     row = db.get(models.Tournament, tournament.id)
     assert row.missing_decks_reminder_1d_sent_at is not None
-    assert row.missing_decks_reminder_3d_sent_at is None
 
 
 @pytest.mark.asyncio
-async def test_sends_again_on_third_day_but_not_between_or_twice(db, svc, user_alice):
+async def test_reminder_is_sent_only_once(db, svc, user_alice):
     tournament = _tournament(db, svc)
     svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id)
     bot = _bot()
@@ -71,18 +69,14 @@ async def test_sends_again_on_third_day_but_not_between_or_twice(db, svc, user_a
 
     await job.run(bot, DAY_ONE, db=db)
     await job.run(bot, DAY_ONE, db=db)
-    await job.run(bot, DAY_TWO, db=db)
-    await job.run(bot, DAY_THREE, db=db)
     await job.run(bot, DAY_THREE, db=db)
 
-    assert bot.send_message.await_count == 2
-    row = db.get(models.Tournament, tournament.id)
-    assert row.missing_decks_reminder_1d_sent_at is not None
-    assert row.missing_decks_reminder_3d_sent_at is not None
+    bot.send_message.assert_awaited_once()
+    assert db.get(models.Tournament, tournament.id).missing_decks_reminder_1d_sent_at is not None
 
 
 @pytest.mark.asyncio
-async def test_missed_first_deadline_sends_only_third_day_reminder(db, svc, user_alice):
+async def test_overdue_first_reminder_is_sent_once(db, svc, user_alice):
     tournament = _tournament(db, svc)
     svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id)
     bot = _bot()
@@ -92,9 +86,7 @@ async def test_missed_first_deadline_sends_only_third_day_reminder(db, svc, user
     await job.run(bot, DAY_THREE, db=db)
 
     bot.send_message.assert_awaited_once()
-    row = db.get(models.Tournament, tournament.id)
-    assert row.missing_decks_reminder_1d_sent_at is not None
-    assert row.missing_decks_reminder_3d_sent_at is not None
+    assert db.get(models.Tournament, tournament.id).missing_decks_reminder_1d_sent_at is not None
 
 
 @pytest.mark.asyncio
@@ -139,21 +131,6 @@ async def test_ignores_tournament_on_event_day(db, svc, user_alice):
     await MissingDecksReminderJob().run(bot, EVENT_AT, db=db)
 
     bot.send_message.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_skips_third_day_when_decks_were_filled_after_first_reminder(db, svc, user_alice, archetype_burn):
-    tournament = _tournament(db, svc)
-    participant = svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id)
-    bot = _bot()
-    job = MissingDecksReminderJob()
-
-    await job.run(bot, DAY_ONE, db=db)
-    svc.set_participant_archetype(participant_id=participant.id, archetype_id=archetype_burn.id)
-    await job.run(bot, DAY_THREE, db=db)
-
-    assert bot.send_message.await_count == 1
-    assert db.get(models.Tournament, tournament.id).missing_decks_reminder_3d_sent_at is None
 
 
 @pytest.mark.asyncio

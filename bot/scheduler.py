@@ -705,7 +705,7 @@ class UnclosedTournamentReminderJob:
 
 
 class MissingDecksReminderJob:
-    """Просит чат заполнить колоды на следующий и третий календарный день после турнира."""
+    """Один раз просит чат заполнить колоды на следующий календарный день после турнира."""
 
     @staticmethod
     def _event_date(tournament, tz) -> date:
@@ -727,10 +727,7 @@ class MissingDecksReminderJob:
                 db.execute(
                     select(models.Tournament).where(
                         models.Tournament.status != models.TournamentStatus.CLOSED,
-                        or_(
-                            models.Tournament.missing_decks_reminder_1d_sent_at.is_(None),
-                            models.Tournament.missing_decks_reminder_3d_sent_at.is_(None),
-                        ),
+                        models.Tournament.missing_decks_reminder_1d_sent_at.is_(None),
                     )
                 )
                 .scalars()
@@ -738,12 +735,7 @@ class MissingDecksReminderJob:
             )
             for tournament in tournaments:
                 elapsed_days = (local_now.date() - self._event_date(tournament, tz)).days
-                reminder_day: int | None = None
-                if elapsed_days >= 3 and tournament.missing_decks_reminder_3d_sent_at is None:
-                    reminder_day = 3
-                elif elapsed_days >= 1 and tournament.missing_decks_reminder_1d_sent_at is None:
-                    reminder_day = 1
-                if reminder_day is None:
+                if elapsed_days < 1:
                     continue
 
                 participants = TournamentService(db).list_participants_for_tournament(tournament.id)
@@ -765,14 +757,7 @@ class MissingDecksReminderJob:
                     logger.exception("MissingDecksReminderJob: reminder failed for #%s", tournament.id)
                     continue
 
-                sent_at = models.utc_now()
-                if reminder_day == 3:
-                    tournament.missing_decks_reminder_3d_sent_at = sent_at
-                    tournament.missing_decks_reminder_1d_sent_at = (
-                        tournament.missing_decks_reminder_1d_sent_at or sent_at
-                    )
-                else:
-                    tournament.missing_decks_reminder_1d_sent_at = sent_at
+                tournament.missing_decks_reminder_1d_sent_at = models.utc_now()
                 db.commit()
         finally:
             if close_db:
