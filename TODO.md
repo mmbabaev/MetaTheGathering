@@ -1,6 +1,6 @@
 # MetaGatherer — живой план проекта
 
-Последнее обновление: **10 августа 2026**.
+Последнее обновление: **17 августа 2026**.
 
 Это верхнеуровневый source of truth о том, что уже находится в `main`, что сейчас
 проходит review и что ещё только запланировано. Детали и acceptance criteria живут
@@ -47,6 +47,10 @@
   quality report. PR открыт, CI и debug deploy зелёные.
 - Это fallback/prototype вычислений, а не внешний stats API, Season/Board model или
   генератор поля.
+- PR [#239](https://github.com/mmbabaev/MetaTheGathering/pull/239) — этапы A–B #213:
+  versioned manifest/candidate contracts, fixture-pool для четырёх personas и pure
+  deterministic generator 4×4 с diagnostics. Persistence, Board Lab UI и player UI
+  в PR не входят.
 
 ### Lifetime-движок укреплён
 
@@ -65,8 +69,7 @@ Pull-only UI от delivery не зависит.
 
 - `Season`, frozen ruleset/stats snapshot и lifecycle сезона.
 - Персональные `Board`, 16 `Cell` и immutable completion/progress events.
-- Pure generator поля 4×4 и проверка сложности/fairness.
-- Owner Board Lab для массовой генерации и ручной валидации полей.
+- Owner Board Lab для массовой генерации, ручной валидации и batch fairness report.
 - Atomic row/full-board prize claims, tie review и owner approval.
 - Player board UI, архив сезона и opt-in sharing.
 - Peer-confirmed claims и подтверждение события реальным оппонентом.
@@ -112,7 +115,7 @@ Pull-only UI от delivery не зависит.
 
 1. Принять или доработать PR #210; после merge обновить этот план.
 2. Утвердить правила #215 и baseline/targets #216.
-3. Реализовать versioned manifest, pure generator и Board Lab #213 на fixtures.
+3. Проверить PR #239; после merge подключить его generator к owner Board Lab #213.
 4. Подключить frozen stats provider #211 и persistence/events/claims #212.
 5. Добавить peer-confirmed state machine #214 через targeted delivery с pull-only fallback.
 6. Провести ограниченную beta без массовых DM.
