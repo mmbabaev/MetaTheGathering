@@ -14,12 +14,57 @@ from sqlalchemy.orm import Session, joinedload
 from core import models
 from core.clubs import club_identities
 from services.aetherhub_service import AetherhubService
-from services.names import format_participant_name
+from services.names import format_participant_name, is_single_word_name_typo
 
 
 def _roster_name_key(name: str) -> tuple[str, ...]:
     """Order-independent full-name key shared by MetaGatherer and AetherHub rosters."""
     return tuple(sorted(name.strip().casefold().replace("ё", "е").split()))
+
+
+def _matched_roster_indexes(metagatherer_names: list[str], aetherhub_names: list[str]) -> set[int]:
+    """MetaGatherer row indexes matched exactly or by one unambiguous one-letter typo."""
+    matched_meta: set[int] = set()
+    matched_aetherhub: set[int] = set()
+
+    meta_by_key: dict[tuple[str, ...], list[int]] = {}
+    source_by_key: dict[tuple[str, ...], list[int]] = {}
+    for index, name in enumerate(metagatherer_names):
+        meta_by_key.setdefault(_roster_name_key(name), []).append(index)
+    for index, name in enumerate(aetherhub_names):
+        source_by_key.setdefault(_roster_name_key(name), []).append(index)
+    for key in meta_by_key.keys() & source_by_key.keys():
+        meta_indexes = meta_by_key[key]
+        source_indexes = source_by_key[key]
+        if len(meta_indexes) == len(source_indexes) == 1:
+            matched_meta.add(meta_indexes[0])
+            matched_aetherhub.add(source_indexes[0])
+
+    unmatched_meta = set(range(len(metagatherer_names))) - matched_meta
+    unmatched_source = set(range(len(aetherhub_names))) - matched_aetherhub
+    meta_candidates = {
+        meta_index: {
+            source_index
+            for source_index in unmatched_source
+            if is_single_word_name_typo(metagatherer_names[meta_index], aetherhub_names[source_index])
+        }
+        for meta_index in unmatched_meta
+    }
+    source_candidates = {
+        source_index: {
+            meta_index
+            for meta_index in unmatched_meta
+            if is_single_word_name_typo(metagatherer_names[meta_index], aetherhub_names[source_index])
+        }
+        for source_index in unmatched_source
+    }
+    for meta_index, candidates in meta_candidates.items():
+        if len(candidates) != 1:
+            continue
+        source_index = next(iter(candidates))
+        if source_candidates[source_index] == {meta_index}:
+            matched_meta.add(meta_index)
+    return matched_meta
 
 
 class MagicOculusPlayerDeck(BaseModel):
@@ -138,7 +183,6 @@ class MagicOculusTournamentCollector:
         event_date = (tournament.started_at or tournament.created_at).date()
         aetherhub_url = self._resolve_aetherhub_url(tournament, event_date)
         aetherhub_players = self._fetch_aetherhub_players(aetherhub_url) if validate_aetherhub else None
-        aetherhub_keys = {_roster_name_key(name) for name in aetherhub_players} if aetherhub_players else None
 
         rows: list[MagicOculusPlayerDeck] = []
         missing_names: list[str] = []
@@ -148,14 +192,23 @@ class MagicOculusTournamentCollector:
             tournament.participants,
             key=lambda row: (row.final_place is None, row.final_place or 0, row.id),
         )
-        for participant in participants:
-            player = format_participant_name(participant.user.first_name, participant.user.last_name).strip()
+        participant_names = [
+            format_participant_name(participant.user.first_name, participant.user.last_name).strip()
+            for participant in participants
+        ]
+        matched_participants = (
+            _matched_roster_indexes(participant_names, aetherhub_players)
+            if aetherhub_players is not None
+            else None
+        )
+        for index, participant in enumerate(participants):
+            player = participant_names[index]
             if not player:
                 missing_names.append(f"participant:{participant.id}")
                 continue
             # Players who registered but did not actually play are absent from the authoritative
             # AetherHub roster and must not block/export into Magic Oculus.
-            if aetherhub_keys is not None and _roster_name_key(player) not in aetherhub_keys:
+            if matched_participants is not None and index not in matched_participants:
                 continue
             if player.casefold() in seen_names:
                 raise MagicOculusCollectionError(f'Имя игрока "{player}" встречается несколько раз')
@@ -212,9 +265,9 @@ class MagicOculusTournamentCollector:
         aetherhub_players: list[str] | None = None,
     ) -> None:
         players = aetherhub_players or self._fetch_aetherhub_players(str(tournament.aetherhub_url))
-        aetherhub_keys = {_roster_name_key(name) for name in players}
-        metagatherer_keys = {_roster_name_key(row.player) for row in tournament.player_decks}
-        if aetherhub_keys != metagatherer_keys or len(players) != len(tournament.player_decks):
+        metagatherer_names = [row.player for row in tournament.player_decks]
+        matched = _matched_roster_indexes(metagatherer_names, players)
+        if len(matched) != len(players) or len(players) != len(tournament.player_decks):
             raise MagicOculusCollectionError(
                 f"Состав не совпадает: в MetaGatherer {len(tournament.player_decks)} колод, "
                 f"в AetherHub {len(players)} игроков"

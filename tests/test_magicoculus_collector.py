@@ -154,6 +154,47 @@ def test_aetherhub_validation_excludes_registered_no_shows(db, svc, user_svc, ar
     assert [row.player for row in result.player_decks] == ["Иванова Алиса"]
 
 
+def test_aetherhub_validation_accepts_unique_single_letter_name_typo(db, svc, user_svc, arch_svc):
+    """Issue #233: AetherHub «Констанин» matches registered «Константин»."""
+    tournament = _tournament(svc, db)
+    player = user_svc.get_or_create(tg_id=233, first_name="Константин", last_name="Бурбаев")
+    deck = arch_svc.get_or_create_by_name("Jeskai Ephemerate")
+    _participant(db, tournament, player, deck, place=1)
+    aetherhub = MagicMock()
+    aetherhub.fetch_tournament.return_value = AetherhubTournamentData(
+        url=tournament.aetherhub_url,
+        players=[],
+        rounds=[],
+        standings=["Бурбаев Констанин"],
+    )
+
+    result = MagicOculusTournamentCollector(db, aetherhub).collect(
+        tournament.id, validate_aetherhub=True
+    )
+
+    assert result.player_decks == [
+        MagicOculusPlayerDeck(player="Бурбаев Константин", deck="Jeskai Ephemerate", final_place=1)
+    ]
+
+
+def test_aetherhub_validation_rejects_ambiguous_single_letter_name_typo(db, svc, user_svc, arch_svc):
+    tournament = _tournament(svc, db)
+    deck = arch_svc.get_or_create_by_name("Burn")
+    for tg_id, first_name, place in ((234, "Мария", 1), (235, "Марина", 2)):
+        player = user_svc.get_or_create(tg_id=tg_id, first_name=first_name, last_name="Иванова")
+        _participant(db, tournament, player, deck, place=place)
+    aetherhub = MagicMock()
+    aetherhub.fetch_tournament.return_value = AetherhubTournamentData(
+        url=tournament.aetherhub_url,
+        players=[],
+        rounds=[],
+        standings=["Иванова Мариа"],
+    )
+
+    with pytest.raises(MagicOculusCollectionError):
+        MagicOculusTournamentCollector(db, aetherhub).collect(tournament.id, validate_aetherhub=True)
+
+
 def test_no_show_without_deck_does_not_block_validated_export(db, svc, user_svc, arch_svc):
     tournament = _tournament(svc, db)
     played = user_svc.get_or_create(tg_id=1, first_name="Алиса", last_name="Иванова")

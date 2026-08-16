@@ -133,6 +133,94 @@ def test_import_does_not_auto_merge_when_multiple_real_users_share_name(db):
     assert db.get(models.User, placeholder.id) is not None
 
 
+def test_import_matches_unique_registered_player_with_single_name_typo(db, svc, arch_svc):
+    """Issue #233: «Констанин» in AetherHub is the registered «Константин»."""
+    tournament = svc.create_tournament(TournamentCreate(title="Goldfish 14.08", chat_id=233))
+    real = UserService(db).get_or_create(
+        tg_id=233001,
+        first_name="Константин",
+        last_name="Бурбаев",
+    )
+    deck = arch_svc.get_or_create_by_name("Jeskai Ephemerate")
+    svc.register_participant(tournament_id=tournament.id, user_id=real.id, archetype_id=deck.id)
+    data = _make_data(
+        players=["Бурбаев Констанин"],
+        rounds_pairings=[[("Бурбаев Констанин", None)]],
+        standings=["Бурбаев Констанин"],
+    )
+
+    result = AetherhubImportService(db).import_tournament(tournament.id, data)
+
+    participants = db.execute(
+        select(models.Participant).where(models.Participant.tournament_id == tournament.id)
+    ).scalars().all()
+    assert result.created_names == []
+    assert len(participants) == 1
+    assert participants[0].user_id == real.id
+    assert participants[0].archetype_id == deck.id
+    assert participants[0].final_place == 1
+    standing = AetherhubImportService(db).get_standings(tournament.id)[0]
+    assert standing.display_name == "Бурбаев Константин"
+    assert standing.archetype_name == "Jeskai Ephemerate"
+
+
+def test_import_repairs_existing_typo_placeholder_without_replacing_real_name(db, svc, arch_svc):
+    """Повторный импорт сам схлопывает уже созданный issue #233 placeholder."""
+    tournament = svc.create_tournament(TournamentCreate(title="Goldfish 14.08", chat_id=234))
+    real = UserService(db).get_or_create(
+        tg_id=234001,
+        first_name="Константин",
+        last_name="Бурбаев",
+    )
+    placeholder = models.User(tg_id=-234001, first_name="Бурбаев", last_name="Констанин")
+    deck = arch_svc.get_or_create_by_name("Jeskai Ephemerate")
+    db.add(placeholder)
+    db.flush()
+    db.add(models.Participant(tournament_id=tournament.id, user_id=real.id, archetype_id=deck.id))
+    db.add(models.Participant(tournament_id=tournament.id, user_id=placeholder.id, final_place=3))
+    db.commit()
+    placeholder_id = placeholder.id
+    data = _make_data(
+        players=["Бурбаев Констанин"],
+        rounds_pairings=[],
+        standings=["Бурбаев Констанин"],
+    )
+
+    AetherhubImportService(db).import_tournament(tournament.id, data)
+
+    participant = db.execute(
+        select(models.Participant).where(models.Participant.tournament_id == tournament.id)
+    ).scalar_one()
+    assert participant.user_id == real.id
+    assert participant.archetype_id == deck.id
+    assert participant.final_place == 1
+    assert db.get(models.User, placeholder_id) is None
+    db.refresh(real)
+    assert (real.first_name, real.last_name) == ("Константин", "Бурбаев")
+
+
+def test_import_does_not_guess_when_single_typo_match_is_ambiguous(db, svc, arch_svc):
+    tournament = svc.create_tournament(TournamentCreate(title="Ambiguous typo", chat_id=235))
+    deck = arch_svc.get_or_create_by_name("Burn")
+    for tg_id, first_name in ((235001, "Мария"), (235002, "Марина")):
+        user = UserService(db).get_or_create(tg_id=tg_id, first_name=first_name, last_name="Иванова")
+        svc.register_participant(tournament_id=tournament.id, user_id=user.id, archetype_id=deck.id)
+    data = _make_data(
+        players=["Иванова Мариа"],
+        rounds_pairings=[],
+        standings=["Иванова Мариа"],
+    )
+
+    result = AetherhubImportService(db).import_tournament(tournament.id, data)
+
+    participants = db.execute(
+        select(models.Participant).where(models.Participant.tournament_id == tournament.id)
+    ).scalars().all()
+    assert result.created_names == ["Иванова Мариа"]
+    assert len(participants) == 3
+    assert sum(participant.user.tg_id < 0 for participant in participants) == 1
+
+
 # ── Sample HTML fixtures ─────────────────────────────────────────────────────
 
 # Main tournament page: standings table + navigation links
