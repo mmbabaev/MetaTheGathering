@@ -7,6 +7,8 @@ from pydantic import ValidationError
 
 from services.achievements.bingo import (
     FIXTURE_CATALOG_VERSION,
+    FIXTURE_DECK_TARGETS,
+    PLAY_DECK_CODE,
     PREVIEW_MANIFESTS,
     BoardConstraints,
     BoardGenerationError,
@@ -16,6 +18,8 @@ from services.achievements.bingo import (
     FixturePersona,
     fixture_candidates,
     generate_board,
+    instantiate_play_deck_candidates,
+    play_deck_completed,
 )
 
 
@@ -44,6 +48,84 @@ def test_preview_catalog_has_versioned_diverse_candidates():
     assert all(fallback in codes for manifest in PREVIEW_MANIFESTS for fallback in manifest.fallback_codes)
 
 
+def test_play_deck_x_is_parameterized_from_frozen_general_names():
+    manifest = next(item for item in PREVIEW_MANIFESTS if item.code == PLAY_DECK_CODE)
+
+    candidates = instantiate_play_deck_candidates(
+        manifest,
+        FIXTURE_DECK_TARGETS[:2],
+        stats_snapshot_id="snapshot-2026-09-01",
+    )
+
+    assert len(candidates) == 2
+    assert len({candidate.candidate_id for candidate in candidates}) == 2
+    assert {candidate.mechanic_key for candidate in candidates} == {PLAY_DECK_CODE}
+    assert [candidate.frozen_params["deckGeneralName"] for candidate in candidates] == [
+        "Kuldotha Red",
+        "Grixis Affinity",
+    ]
+    assert candidates[0].title == "Красная жара"
+    assert candidates[0].hint == "Сыграй турнир на колоде Kuldotha Red"
+    assert candidates[0].frozen_params["statsSnapshotId"] == "snapshot-2026-09-01"
+    assert "deck_general_name" in candidates[0].evidence_fields
+    assert candidates[0].parameterizer_key == "play_deck_from_frozen_catalog_v1"
+    assert candidates[0].completion_evaluator_key == "play_deck_completed_v1"
+
+
+def test_play_deck_x_completion_uses_frozen_canonical_name():
+    manifest = next(item for item in PREVIEW_MANIFESTS if item.code == PLAY_DECK_CODE)
+    candidate = instantiate_play_deck_candidates(
+        manifest,
+        FIXTURE_DECK_TARGETS[:1],
+        stats_snapshot_id="snapshot-2026-09-01",
+    )[0]
+
+    assert play_deck_completed(candidate, "  kuldotha   RED ") is True
+    assert play_deck_completed(candidate, "Mono Red") is False
+    assert play_deck_completed(candidate, None) is False
+
+
+def test_play_deck_x_rejects_duplicate_canonical_targets():
+    manifest = next(item for item in PREVIEW_MANIFESTS if item.code == PLAY_DECK_CODE)
+    duplicate = FIXTURE_DECK_TARGETS[0].__class__(
+        " kuldotha  red ",
+        "Ещё один заголовок",
+        rank=2,
+        participations=10,
+        players=5,
+    )
+
+    with pytest.raises(ValueError, match="unique general_name"):
+        instantiate_play_deck_candidates(
+            manifest,
+            (FIXTURE_DECK_TARGETS[0], duplicate),
+            stats_snapshot_id="snapshot-2026-09-01",
+        )
+
+
+def test_play_deck_x_without_frozen_targets_is_auditable_rejection():
+    manifest = next(item for item in PREVIEW_MANIFESTS if item.code == PLAY_DECK_CODE)
+
+    candidate = instantiate_play_deck_candidates(
+        manifest,
+        (),
+        stats_snapshot_id="empty-snapshot-2026-09-01",
+    )[0]
+
+    assert candidate.eligibility.eligible is False
+    assert candidate.eligibility.reason_code == "no_frozen_deck_targets"
+    assert candidate.fallback_codes == ("try_new_deck",)
+
+
+def test_generated_board_can_contain_one_concrete_play_deck_x_cell():
+    draft = _generate(FixturePersona.REGULAR, 0)
+    play_deck_cells = [cell.candidate for cell in draft.cells if cell.candidate.manifest_code == PLAY_DECK_CODE]
+
+    assert len(play_deck_cells) == 1
+    assert play_deck_cells[0].title == "Красная жара"
+    assert play_deck_cells[0].frozen_params["deckGeneralName"] == "Kuldotha Red"
+
+
 def test_ineligible_candidate_requires_auditable_reason():
     with pytest.raises(ValidationError, match="reason_code"):
         EligibilityResult(eligible=False)
@@ -61,6 +143,7 @@ def test_one_hundred_seeds_satisfy_board_and_row_constraints(persona):
         )
         assert len({candidate.candidate_id for candidate in candidates}) == 16
         assert len({candidate.mechanic_key for candidate in candidates}) == 16
+        assert sum(candidate.manifest_code == PLAY_DECK_CODE for candidate in candidates) <= 1
         assert len({candidate.category for candidate in candidates}) >= 4
         assert all(row.valid for row in draft.diagnostics.rows)
         assert all(row.easy_count >= 1 for row in draft.diagnostics.rows)
