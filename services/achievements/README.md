@@ -9,7 +9,7 @@
 
 ## Что уже работает
 
-На 9 августа 2026 года в `main` есть:
+На 17 августа 2026 года в `main` есть:
 
 - 7 механик / 20 уровней: `debut`, `first_deck`, `undefeated`, `scribe`,
   `regular`, `multiclass`, `loyalist`;
@@ -21,14 +21,16 @@
   `result_complete` на каждом rule и read-only canonical match projection;
 - immutable progress events с evidence/source/version и idempotent replay;
 - универсальный owner/player outbox с versioned targeted payload, opt-in и allow-list.
+- read-only локальный snapshot сезонной статистики и pure bingo generator 4×4 с
+  versioned preview-каталогом для четырёх fairness-personas.
 
 Движок работает в **owner-only shadow mode**. Игрокам ничего автоматически не
 рассылается. Сезоны, персональное bingo-поле 4×4, клетки, prize claims и Board Lab
 ещё не существуют в `main`.
 
-PR [#210](https://github.com/mmbabaev/MetaTheGathering/pull/210) добавляет read-only
-локальный snapshot сезонной статистики, но это не внешний stats API и не сезонная
-модель. До merge код PR нельзя считать частью `main`.
+Локальный snapshot не является внешним stats API или сезонной моделью, а preview-каталог
+не создаёт production boards. Для запуска по-прежнему нужны Season/Board/Cell persistence,
+immutable completion events и утверждённый ruleset.
 
 ## Поток обработки турнира
 
@@ -62,6 +64,7 @@ PR [#210](https://github.com/mmbabaev/MetaTheGathering/pull/210) добавля�
 | `bingo/models.py` | Versioned manifest/candidate/BoardDraft contracts без DB |
 | `bingo/generator.py` | Детерминированный constraint solver поля 4×4 |
 | `bingo/fixtures.py` | Preview-pool и четыре fairness-personas для Board Lab |
+| `bingo/parameterizers.py` | Pure-параметризация и проверка конкретных сезонных candidates |
 | `__init__.py` | Публичные импорты модуля |
 
 Соседние точки интеграции:
@@ -109,6 +112,9 @@ Season/Board/Cell, сезонные progress/completion events, peer confirmatio
    flag + per-user opt-in + `notify_allowed_ids`; debug отправляет только инициатору.
 6. `general_name` — стабильный ключ архетипа для статистики; `name` — отображаемый
    вариант. Не группируйте колоды по display name без явной причины.
+7. Сезонная `play_deck` замораживает одну конкретную `general_name` и id stats snapshot:
+   несколько вариантов могут войти в candidate pool, но solver оставляет на поле не больше
+   одной клетки этой mechanic.
 
 ## Как добавить lifetime-rule
 

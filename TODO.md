@@ -37,20 +37,21 @@
 - Карта achievement-модуля для разработчиков и агентов — source commit `90ecbf6`,
   PR [#217](https://github.com/mmbabaev/MetaTheGathering/pull/217), merge
   `49768b8`. При подготовке документации прошли 38 focused achievement tests.
+- Read-only локальный snapshot сезонной статистики: top decks, H2H, два равных окна
+  winrate и quality report — PR [#210](https://github.com/mmbabaev/MetaTheGathering/pull/210).
+- Versioned manifest/candidate contracts, fixture-pool для четырёх personas и pure
+  deterministic generator 4×4 с diagnostics — PR
+  [#239](https://github.com/mmbabaev/MetaTheGathering/pull/239).
 
 Игрокам ачивки автоматически не рассылаются: текущий режим — owner-only shadow.
 
 ### В review, но ещё не в `main`
 
-- PR [#210](https://github.com/mmbabaev/MetaTheGathering/pull/210) — read-only
-  snapshot сезонной статистики из локальной БД: top decks, H2H, два окна winrate и
-  quality report. PR открыт, CI и debug deploy зелёные.
-- Это fallback/prototype вычислений, а не внешний stats API, Season/Board model или
-  генератор поля.
-- PR [#239](https://github.com/mmbabaev/MetaTheGathering/pull/239) — этапы A–B #213:
-  versioned manifest/candidate contracts, fixture-pool для четырёх personas и pure
-  deterministic generator 4×4 с diagnostics. Persistence, Board Lab UI и player UI
-  в PR не входят.
+- Параметризованная сезонная механика `play_deck` из #200: frozen snapshot превращается
+  в candidates «Сыграй турнир на колоде X» с конкретной `general_name`, ручным
+  флейворным названием и pure completion evaluator.
+- Это расширение preview-контракта; persistence, Board Lab UI, player UI и DM в него
+  не входят.
 
 ### Lifetime-движок укреплён
 
@@ -77,14 +78,13 @@ Pull-only UI от delivery не зависит.
 
 ## Карта активных issues
 
-Все перечисленные задачи открыты на дату обновления.
-9 августа были актуализированы #167, #199, #200 и #211–#214; для вынесенных
-продуктовых пробелов созданы #215 и #216.
+Статусы перечислены на дату обновления. #199 закрыта после завершения hardening;
+остальные задачи таблицы остаются открыты.
 
 | Issue | Назначение |
 |---|---|
 | [#167](https://github.com/mmbabaev/MetaTheGathering/issues/167) | Общий эпик и индекс системы ачивок |
-| [#199](https://github.com/mmbabaev/MetaTheGathering/issues/199) | Lifetime hardening — 7/7; закрыть после merge PR |
+| [#199](https://github.com/mmbabaev/MetaTheGathering/issues/199) | Lifetime hardening — 7/7, issue закрыта |
 | [#200](https://github.com/mmbabaev/MetaTheGathering/issues/200) | Каталог существующих и будущих типов ачивок |
 | [#211](https://github.com/mmbabaev/MetaTheGathering/issues/211) | Недостающие ручки внешнего API статистики |
 | [#212](https://github.com/mmbabaev/MetaTheGathering/issues/212) | Сезонная архитектура, canonical Match, events и prize claims |
@@ -113,13 +113,13 @@ Pull-only UI от delivery не зависит.
 
 ## Рекомендуемый порядок реализации
 
-1. Принять или доработать PR #210; после merge обновить этот план.
-2. Утвердить правила #215 и baseline/targets #216.
-3. Проверить PR #239; после merge подключить его generator к owner Board Lab #213.
-4. Подключить frozen stats provider #211 и persistence/events/claims #212.
-5. Добавить peer-confirmed state machine #214 через targeted delivery с pull-only fallback.
-6. Провести ограниченную beta без массовых DM.
-7. Только после отдельной проверки включать player delivery и материальные призы.
+1. Утвердить правила #215 и baseline/targets #216.
+2. Подключить generator к owner Board Lab #213 и заменить fixture deck targets реальным
+   frozen top-deck catalog первого сезона.
+3. Подключить frozen stats provider #211 и persistence/events/claims #212.
+4. Добавить peer-confirmed state machine #214 через targeted delivery с pull-only fallback.
+5. Провести ограниченную beta без массовых DM.
+6. Только после отдельной проверки включать player delivery и материальные призы.
 
 ## Остальной продуктовый backlog
 

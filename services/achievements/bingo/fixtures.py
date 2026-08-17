@@ -15,8 +15,13 @@ from services.achievements.bingo.models import (
     ManifestStatus,
     Requirement,
 )
+from services.achievements.bingo.parameterizers import (
+    PLAY_DECK_CODE,
+    FrozenDeckTarget,
+    instantiate_play_deck_candidates,
+)
 
-FIXTURE_CATALOG_VERSION = "board-lab-fixtures-v1"
+FIXTURE_CATALOG_VERSION = "board-lab-fixtures-v2"
 
 
 class FixturePersona(str, Enum):
@@ -53,6 +58,12 @@ _DECK = (*_BASIC, Requirement.PLAYER_DECK_KNOWN)
 _H2H = (*_BASIC, Requirement.OPPONENT_IDENTIFIED, Requirement.STATS_BASELINE)
 _MATCHUP = (*_H2H, Requirement.PLAYER_DECK_KNOWN, Requirement.OPPONENT_DECK_KNOWN)
 
+FIXTURE_DECK_TARGETS: tuple[FrozenDeckTarget, ...] = (
+    FrozenDeckTarget("Kuldotha Red", "Красная жара", rank=1, participations=42, players=18),
+    FrozenDeckTarget("Grixis Affinity", "Родство с металлом", rank=2, participations=35, players=15),
+    FrozenDeckTarget("Broodscale Combo", "Чешуйчатый план", rank=3, participations=29, players=13),
+)
+
 
 def _manifest(
     code: str,
@@ -65,17 +76,22 @@ def _manifest(
     requirements: tuple[Requirement, ...] = _BASIC,
     fallback_codes: tuple[str, ...] = (),
     incompatibilities: tuple[str, ...] = (),
+    evidence_fields: tuple[str, ...] | None = None,
+    parameterizer_key: str | None = None,
+    progress_evaluator_key: str | None = None,
+    completion_evaluator_key: str | None = None,
 ) -> AchievementTypeManifest:
-    evidence_fields = {
-        DataSource.DATABASE: ("tournament_id",),
-        DataSource.STATS_SNAPSHOT: ("stats_snapshot_id", "tournament_id"),
-        DataSource.PEER_CONFIRMATION: (
-            "tournament_id",
-            "round_number",
-            "opponent_user_id",
-            "confirmation_id",
-        ),
-    }[source]
+    if evidence_fields is None:
+        evidence_fields = {
+            DataSource.DATABASE: ("tournament_id",),
+            DataSource.STATS_SNAPSHOT: ("stats_snapshot_id", "tournament_id"),
+            DataSource.PEER_CONFIRMATION: (
+                "tournament_id",
+                "round_number",
+                "opponent_user_id",
+                "confirmation_id",
+            ),
+        }[source]
     return AchievementTypeManifest(
         code=code,
         title_template=title,
@@ -85,9 +101,9 @@ def _manifest(
         data_source=source,
         requirements=requirements,
         mechanic_key=code,
-        parameterizer_key=f"{code}_fixture_v1",
-        progress_evaluator_key=f"{code}_preview_progress_v1",
-        completion_evaluator_key=f"{code}_preview_completion_v1",
+        parameterizer_key=parameterizer_key or f"{code}_fixture_v1",
+        progress_evaluator_key=progress_evaluator_key or f"{code}_preview_progress_v1",
+        completion_evaluator_key=completion_evaluator_key or f"{code}_preview_completion_v1",
         evidence_fields=evidence_fields,
         fallback_codes=fallback_codes,
         incompatibilities=incompatibilities,
@@ -133,13 +149,18 @@ PREVIEW_MANIFESTS: tuple[AchievementTypeManifest, ...] = (
         Difficulty.EASY,
     ),
     _manifest(
-        "play_top_deck",
-        "В центре меты",
-        "Сыграй одной из frozen top-10 колод",
+        PLAY_DECK_CODE,
+        "{flavor_title}",
+        "Сыграй турнир на колоде {deck_general_name}",
         Category.DECK,
         Difficulty.EASY,
         source=DataSource.STATS_SNAPSHOT,
         requirements=_DECK,
+        fallback_codes=("try_new_deck",),
+        evidence_fields=("stats_snapshot_id", "tournament_id", "deck_general_name"),
+        parameterizer_key="play_deck_from_frozen_catalog_v1",
+        progress_evaluator_key="play_deck_binary_progress_v1",
+        completion_evaluator_key="play_deck_completed_v1",
     ),
     # Medium: recognizable tournament stories without elite baseline requirements.
     _manifest(
@@ -356,6 +377,21 @@ def fixture_candidates(persona: FixturePersona) -> tuple[InstantiatedCandidate, 
     peer_index = 0
 
     for manifest in PREVIEW_MANIFESTS:
+        if manifest.code == PLAY_DECK_CODE:
+            candidates.extend(
+                instantiate_play_deck_candidates(
+                    manifest,
+                    FIXTURE_DECK_TARGETS,
+                    stats_snapshot_id="fixture-stats-2026-09-01",
+                    frozen_context={
+                        "persona": persona.value,
+                        "historyMatches": facts.history_matches,
+                        "knownDecks": facts.known_decks,
+                        "knownClubs": facts.known_clubs,
+                    },
+                )
+            )
+            continue
         eligible = facts.has_h2h_baseline or Requirement.STATS_BASELINE not in manifest.requirements
         eligibility = (
             EligibilityResult(eligible=True, baseline_sample=facts.history_matches)
