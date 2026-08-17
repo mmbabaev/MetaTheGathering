@@ -7,7 +7,7 @@ def test_hobby_games_identity():
     identity = next(row for row in club_identities() if row.name == "Hobby Games")
 
     assert identity.chat_id == -1002787710855
-    assert identity.aetherhub_url is None
+    assert identity.aetherhub_url == "https://aetherhub.com/User/HobbyGames39/"
     assert identity.title_prefix == "🎲 "
     assert identity.magicoculus_city == "Калининград"
     assert identity.timezone == "Europe/Kaliningrad"
@@ -26,7 +26,18 @@ def test_hobby_games_defaults_follow_pair_of_dice_registration_flow():
     assert schedule.create_days_before == 1
     assert schedule.game_time == "17:00"
     assert schedule.reminder_time == "16:55"
-    assert schedule.import_times == []
+    assert schedule.import_times == [
+        "17:30",
+        "18:00",
+        "18:30",
+        "19:00",
+        "19:30",
+        "20:00",
+        "20:30",
+        "21:00",
+        "21:30",
+        "22:00",
+    ]
 
 
 def test_hobby_games_default_club_uses_local_timezone():

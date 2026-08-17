@@ -177,6 +177,7 @@ class TestSetupScheduler:
                         create_time="18:30",
                         create_days_before=1,
                         reminder_time="16:55",
+                        aetherhub_fetch_times=["17:30"],
                     )
                 ],
             )
@@ -185,11 +186,13 @@ class TestSetupScheduler:
         with patch("bot.scheduler.settings", _mock_settings()), patch("bot.scheduler.get_clubs", return_value=clubs):
             setup_scheduler(app)
 
-        create_call, reminder_call = app.job_queue.run_daily.call_args_list[:2]
+        create_call, reminder_call, import_call = app.job_queue.run_daily.call_args_list[:3]
         assert create_call.kwargs["days"] == (5,)  # Friday opens registration for Saturday
         assert create_call.kwargs["time"].tzinfo == ZoneInfo("Europe/Kaliningrad")
         assert reminder_call.kwargs["days"] == (6,)
         assert reminder_call.kwargs["time"].tzinfo == ZoneInfo("Europe/Kaliningrad")
+        assert import_call.kwargs["days"] == (6,)
+        assert import_call.kwargs["time"].tzinfo == ZoneInfo("Europe/Kaliningrad")
 
     def test_create_job_days_matches_weekday(self):
         """run_daily is called with days=(weekday_int,) matching the schedule."""
