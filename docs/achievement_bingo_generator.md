@@ -59,6 +59,22 @@ Fixtures нужны только для Board Lab и fairness-тестов. Он
 первого сезона и не должны активироваться как production boards. Перед activation нужны
 решения #215, frozen stats provider #211 и persistence/events/claims #212.
 
+## Telegram preview для owner/admin
+
+Команда `/bingo_preview [профиль] [seed]` даёт первый read-only интерфейс к generator:
+
+- профили: `newcomer/новичок`, `amateur/любитель`, `regular/регуляр`, `pro/про`;
+- без seed создаётся новый пример, явный seed воспроизводит то же поле;
+- бот отвечает только инициатору красивой PNG-сеткой 4×4 и отдельным текстом всех
+  16 названий/условий;
+- команда доступна только owner/admin и управляется feature flag `achievementBoardLab`;
+- БД achievement progress/boards не меняется, DM другим игрокам и сообщения в клубные
+  чаты не отправляются.
+
+Примеры: `/bingo_preview`, `/bingo_preview новичок`, `/bingo_preview regular 42`.
+Это лёгкая часть Board Lab: управление pool/quotas, реальные игроки, batch diagnostics,
+JSON export и сохранение draft остаются в #213.
+
 Пример preview-поля каталога v1 для персоны «Регуляр», seed `42`:
 
 ![Bingo board preview](assets/bingo-board-preview-seed-42.png)

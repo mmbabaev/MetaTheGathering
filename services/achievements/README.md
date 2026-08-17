@@ -65,12 +65,15 @@ immutable completion events и утверждённый ruleset.
 | `bingo/generator.py` | Детерминированный constraint solver поля 4×4 |
 | `bingo/fixtures.py` | Preview-pool и четыре fairness-personas для Board Lab |
 | `bingo/parameterizers.py` | Pure-параметризация и проверка конкретных сезонных candidates |
+| `../achievement_bingo_image.py` | PNG 4×4 для owner/admin preview-команды |
 | `__init__.py` | Публичные импорты модуля |
 
 Соседние точки интеграции:
 
 - `bot/telegram/achievements.py` — команда, оркестрация расчёта и единственная
   текущая маршрутизация получателя;
+- `bot/handlers/bingo.py`, `bot/telegram/bingo.py` — read-only `/bingo_preview` для
+  одного owner/admin-инициатора, без рассылок и production writes;
 - `bot/handlers/achievements.py` — Telegram-независимая логика shelf;
 - `services/achievement_delivery.py` — owner text outbox;
 - `services/achievement_processing_lease.py` — межпроцессный lock турнира;
@@ -115,6 +118,8 @@ Season/Board/Cell, сезонные progress/completion events, peer confirmatio
 7. Сезонная `play_deck` замораживает одну конкретную `general_name` и id stats snapshot:
    несколько вариантов могут войти в candidate pool, но solver оставляет на поле не больше
    одной клетки этой mechanic.
+8. `/bingo_preview` работает только на fixtures, принимает persona/seed и всегда отвечает
+   в тот же private chat. Это визуальный preview, а не activation или player board.
 
 ## Как добавить lifetime-rule
 

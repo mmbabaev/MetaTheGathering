@@ -28,6 +28,7 @@ class FeatureFlags:
     ACHIEVEMENTS = "achievements"
     ACHIEVEMENTS_PUBLIC_UI = "achievementsPublicUi"
     ACHIEVEMENTS_PLAYER_DM = "achievementsPlayerDm"
+    ACHIEVEMENT_BOARD_LAB = "achievementBoardLab"
     MAGIC_OCULUS_IMPORT = "magicOculusImport"
     LIVE_REGISTRATION_COUNT = "liveRegistrationCount"
 
@@ -57,6 +58,11 @@ KNOWN_FLAGS: dict[str, FeatureFlagMeta] = {
         description="Ачивки: уведомления уходят самим игрокам, а не владельцу",
         value_type="bool",
         default_value="false",
+    ),
+    FeatureFlags.ACHIEVEMENT_BOARD_LAB: FeatureFlagMeta(
+        description="Ачивки: owner/admin команда /bingo_preview для тестовых полей",
+        value_type="bool",
+        default_value="true",
     ),
     FeatureFlags.MAGIC_OCULUS_IMPORT: FeatureFlagMeta(
         description="Magic Oculus: импортировать полный турнир после штатного закрытия",
