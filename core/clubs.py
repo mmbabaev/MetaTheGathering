@@ -40,6 +40,19 @@ PAIR_OF_DICE_SUNDAY_IMPORT_TIMES = [
     "18:30",
 ]
 
+HOBBY_GAMES_IMPORT_TIMES = [
+    "17:30",
+    "18:00",
+    "18:30",
+    "19:00",
+    "19:30",
+    "20:00",
+    "20:30",
+    "21:00",
+    "21:30",
+    "22:00",
+]
+
 
 @dataclass(frozen=True)
 class ClubIdentity:
@@ -83,7 +96,7 @@ def club_identities() -> list[ClubIdentity]:
         ClubIdentity(
             name="Hobby Games",
             chat_id=app_cfg.hobby_games_chat_id or 0,
-            aetherhub_url=None,
+            aetherhub_url="https://aetherhub.com/User/HobbyGames39/",
             title_prefix="🎲 ",
             magicoculus_city="Калининград",
             timezone="Europe/Kaliningrad",
@@ -128,7 +141,7 @@ def default_schedules() -> list[DefaultSchedule]:
             "18:30",
             "17:00",
             "16:55",
-            [],
+            list(HOBBY_GAMES_IMPORT_TIMES),
             create_days_before=1,
         ),
     ]

@@ -170,7 +170,7 @@ class TestBuildClubs:
         _row(db, club="Hobby Games", weekday="saturday")
         club = next(c for c in sched_svc.build_clubs() if c.name == "Hobby Games")
         assert club.chat_id == -1002787710855
-        assert club.aetherhub_url is None
+        assert club.aetherhub_url == "https://aetherhub.com/User/HobbyGames39/"
         assert club.timezone == "Europe/Kaliningrad"
 
 
