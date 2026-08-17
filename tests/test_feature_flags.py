@@ -50,6 +50,9 @@ class TestFeatureFlagService:
     def test_live_registration_count_is_disabled_by_default(self, ff_svc):
         assert ff_svc.is_enabled(FeatureFlags.LIVE_REGISTRATION_COUNT) is False
 
+    def test_owner_board_lab_is_enabled_by_default(self, ff_svc):
+        assert ff_svc.is_enabled(FeatureFlags.ACHIEVEMENT_BOARD_LAB) is True
+
     def test_ensure_defaults_updates_stale_metadata_but_preserves_override(self, ff_svc, db):
         db.add(
             models.FeatureFlag(

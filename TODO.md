@@ -42,16 +42,20 @@
 - Versioned manifest/candidate contracts, fixture-pool для четырёх personas и pure
   deterministic generator 4×4 с diagnostics — PR
   [#239](https://github.com/mmbabaev/MetaTheGathering/pull/239).
+- Параметризованная сезонная механика `play_deck` из #200: frozen snapshot создаёт
+  candidates «Сыграй турнир на колоде X» с конкретной `general_name`, ручным
+  флейворным названием и pure completion evaluator — PR
+  [#241](https://github.com/mmbabaev/MetaTheGathering/pull/241).
 
 Игрокам ачивки автоматически не рассылаются: текущий режим — owner-only shadow.
 
 ### В review, но ещё не в `main`
 
-- Параметризованная сезонная механика `play_deck` из #200: frozen snapshot превращается
-  в candidates «Сыграй турнир на колоде X» с конкретной `general_name`, ручным
-  флейворным названием и pure completion evaluator.
-- Это расширение preview-контракта; persistence, Board Lab UI, player UI и DM в него
-  не входят.
+- Owner/admin команда `/bingo_preview [профиль] [seed]`: read-only генерация fixture-поля,
+  PNG 4×4 и текст всех 16 условий. Команда доступна под feature flag
+  `achievementBoardLab`, отвечает только инициатору и ничего не записывает в production boards.
+- Это лёгкий Telegram-preview этапа C из #213. Выбор реального игрока/pool/quotas,
+  batch diagnostics, JSON export и сохранение draft по-прежнему не реализованы.
 
 ### Lifetime-движок укреплён
 
@@ -70,7 +74,7 @@ Pull-only UI от delivery не зависит.
 
 - `Season`, frozen ruleset/stats snapshot и lifecycle сезона.
 - Персональные `Board`, 16 `Cell` и immutable completion/progress events.
-- Owner Board Lab для массовой генерации, ручной валидации и batch fairness report.
+- Полный owner Board Lab: реальные игроки, pool/quotas, batch fairness, JSON export и drafts.
 - Atomic row/full-board prize claims, tie review и owner approval.
 - Player board UI, архив сезона и opt-in sharing.
 - Peer-confirmed claims и подтверждение события реальным оппонентом.

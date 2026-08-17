@@ -99,6 +99,7 @@ from bot.telegram import achievements as achievements_handler
 from bot.telegram import admin, common, player
 from bot.telegram import aetherhub as aetherhub_handler
 from bot.telegram import app_stats as app_stats_handler
+from bot.telegram import bingo as bingo_handler
 from bot.telegram import features as features_handler
 from bot.telegram import payment as payment_handler
 from bot.telegram import poll as poll_handler
@@ -157,6 +158,7 @@ _ADMIN_COMMANDS = _SCOREKEEPER_COMMANDS + [
     BotCommand("schedule", "Расписание автозаданий"),
     BotCommand("features", "Feature flags"),
     BotCommand("achievements", "Ачивки игрока"),
+    BotCommand("bingo_preview", "Пример bingo-поля 4×4"),
     _POLL_CMD,
 ]
 
@@ -281,6 +283,7 @@ def main() -> None:
     app.add_handler(CommandHandler("poll", poll_handler.cmd_poll, filters=private))
     app.add_handler(CommandHandler("app_statistics", app_stats_handler.cmd_app_statistics, filters=private))
     app.add_handler(CommandHandler("achievements", achievements_handler.cmd_achievements, filters=private))
+    app.add_handler(CommandHandler("bingo_preview", bingo_handler.cmd_bingo_preview, filters=private))
 
     app.add_handler(CommandHandler("add_players", admin.cmd_add_players, filters=private))
     app.add_handler(CommandHandler("tournament_status", admin.cmd_tournament_status, filters=private))

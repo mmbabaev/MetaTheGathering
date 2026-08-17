@@ -69,6 +69,18 @@ ACHIEVEMENTS_EMPTY = "Пока ачивок нет."
 ACHIEVEMENTS_UNAVAILABLE = "Команда пока недоступна."
 ACHIEVEMENTS_PLAYER_NOT_FOUND = "Игрок «{query}» не найден."
 
+# Owner/admin bingo preview
+BINGO_PREVIEW_USAGE = (
+    "Формат: /bingo_preview [профиль] [seed]\n"
+    "Профили: newcomer/новичок, amateur/любитель, regular/регуляр, pro/про.\n"
+    "Примеры:\n"
+    "/bingo_preview\n"
+    "/bingo_preview новичок\n"
+    "/bingo_preview regular 42"
+)
+BINGO_PREVIEW_DISABLED = "Bingo preview отключён feature flag achievementBoardLab."
+BINGO_PREVIEW_FAILED = "Не удалось собрать поле с выбранными параметрами."
+
 HELP_TEXT = """\
 /tournaments — посмотреть активные турниры и записаться
   Выберите турнир → укажите колоду → готово.
@@ -91,6 +103,8 @@ HELP_TEXT_ADMIN = """\
 /poll — меню организатора голосований: регуляры клуба и «кому ещё написать»
 
 /achievements — полка ачивок; /achievements Иванов — посмотреть чужую\
+
+/bingo_preview [профиль] [seed] — пример bingo-поля 4×4\
 """
 
 
