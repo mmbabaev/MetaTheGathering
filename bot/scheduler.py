@@ -1236,25 +1236,24 @@ def setup_scheduler(app: Application) -> None:
 
 def _register_schedule_jobs(app: Application) -> None:
     """Вешает джобы создания/напоминания/импорта по строкам расписания (только включённым)."""
-    tz = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
-
     for club in get_clubs():
+        club_timezone = club.timezone or settings.TOURNAMENT_TIMEZONE
+        tz = ZoneInfo(club_timezone)
         for schedule in club.schedules:
             time_str = schedule.create_time or settings.TOURNAMENT_CREATE_TIME
             create_time = datetime.strptime(time_str, "%H:%M").time().replace(tzinfo=tz)
 
             create_job = CreateTournamentJob(club, schedule)
 
-            async def _create(context: ContextTypes.DEFAULT_TYPE, _job=create_job) -> None:
-                tz_ = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
-                await _job.run(bot=context.bot, now=datetime.now(tz_))
+            async def _create(context: ContextTypes.DEFAULT_TYPE, _job=create_job, _tz=tz) -> None:
+                await _job.run(bot=context.bot, now=datetime.now(_tz))
 
             _create.__name__ = f"create_tournament[{club.name}/{schedule.weekday}]"
             create_day = (_ptb_day(schedule.weekday) - schedule.create_days_before) % 7
             app.job_queue.run_daily(_create, time=create_time, days=(create_day,))
             logger.info(
                 f"Scheduler: {club.name} create {schedule.create_days_before} day(s) before "
-                f"{schedule.weekday} at {time_str} ({settings.TOURNAMENT_TIMEZONE}), "
+                f"{schedule.weekday} at {time_str} ({club_timezone}), "
                 f"game at {schedule.game_time}"
             )
 
@@ -1262,9 +1261,8 @@ def _register_schedule_jobs(app: Application) -> None:
                 reminder_time = datetime.strptime(schedule.reminder_time, "%H:%M").time().replace(tzinfo=tz)
                 reminder_job = PreStartReminderJob(club, schedule)
 
-                async def _reminder(context: ContextTypes.DEFAULT_TYPE, _job=reminder_job) -> None:
-                    tz_ = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
-                    await _job.run(bot=context.bot, now=datetime.now(tz_))
+                async def _reminder(context: ContextTypes.DEFAULT_TYPE, _job=reminder_job, _tz=tz) -> None:
+                    await _job.run(bot=context.bot, now=datetime.now(_tz))
 
                 _reminder.__name__ = f"prestart_reminder[{club.name}/{schedule.weekday}]"
                 app.job_queue.run_daily(_reminder, time=reminder_time, days=(_ptb_day(schedule.weekday),))
@@ -1277,9 +1275,8 @@ def _register_schedule_jobs(app: Application) -> None:
                 event_day_offset = _import_day_offset(schedule.aetherhub_fetch_times, fetch_time_str)
                 import_job = AetherhubImportJob(club, schedule, event_day_offset=event_day_offset)
 
-                async def _import(context: ContextTypes.DEFAULT_TYPE, _job=import_job) -> None:
-                    tz_ = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
-                    await _job.run(now=datetime.now(tz_), bot=context.bot)
+                async def _import(context: ContextTypes.DEFAULT_TYPE, _job=import_job, _tz=tz) -> None:
+                    await _job.run(now=datetime.now(_tz), bot=context.bot)
 
                 _import.__name__ = f"aetherhub_import[{club.name}/{schedule.weekday}/{fetch_time_str}]"
                 import_day = (_ptb_day(schedule.weekday) + event_day_offset) % 7
@@ -1305,7 +1302,8 @@ _DAY_RU = {
 
 
 def _format_club_schedule(club: Club) -> str:
-    lines = [f"\n{club.title_prefix}{club.name}:"]
+    timezone_suffix = f" ({club.timezone})" if club.timezone and club.timezone != settings.TOURNAMENT_TIMEZONE else ""
+    lines = [f"\n{club.title_prefix}{club.name}{timezone_suffix}:"]
     for schedule in club.schedules:
         time_str = schedule.create_time or settings.TOURNAMENT_CREATE_TIME
         day_ru = _DAY_RU.get(schedule.weekday.lower(), schedule.weekday)

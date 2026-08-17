@@ -44,6 +44,7 @@ class Club:
     schedules: List[ClubSchedule]
     aetherhub_url: Optional[str] = None  # https://aetherhub.com/User/GoldFish
     title_prefix: str = ""
+    timezone: Optional[str] = None  # None = settings.TOURNAMENT_TIMEZONE
 
 
 class Settings(BaseSettings):
@@ -114,6 +115,8 @@ class Settings(BaseSettings):
             ids.append(_app_cfg.edinorog_chat_id)
         if _app_cfg.pair_of_dice_chat_id:
             ids.append(_app_cfg.pair_of_dice_chat_id)
+        if _app_cfg.hobby_games_chat_id:
+            ids.append(_app_cfg.hobby_games_chat_id)
         return ids
 
 

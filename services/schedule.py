@@ -221,5 +221,6 @@ def _to_club(identity: ClubIdentity, schedules: list[ClubSchedule]) -> Club:
         chat_id=identity.chat_id,
         aetherhub_url=identity.aetherhub_url,
         title_prefix=identity.title_prefix,
+        timezone=identity.timezone,
         schedules=schedules,
     )

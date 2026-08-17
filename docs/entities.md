@@ -179,10 +179,11 @@ Telegram-опрос «Пойду / Не пойду», привязанный к 
 
 | Поле | Тип | Описание |
 |------|-----|----------|
-| `name` | string | Уникальное имя клуба (`Goldfish`, `Edinorog`, `Pair of dice`) |
+| `name` | string | Уникальное имя клуба (`Goldfish`, `Edinorog`, `Pair of dice`, `Hobby Games`) |
 | `chat_id` | int | Telegram chat ID группы клуба |
 | `aetherhub_url` | string | URL страницы клуба на AetherHub |
 | `title_prefix` | string | Префикс в названии турнира (напр. `🦄 `) |
+| `timezone` | string | Локальная таймзона клуба; если не задана, используется общая |
 | `schedules` | list | Список расписаний (ClubSchedule) |
 
 ---
