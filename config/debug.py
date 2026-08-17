@@ -8,5 +8,6 @@ app_config = AppConfig(
     goldfish_chat_id=-1003631429183,
     edinorog_chat_id=-1003631429183,
     pair_of_dice_chat_id=None,  # никогда не использовать production-чат Pair of dice в debug
+    hobby_games_chat_id=None,  # никогда не использовать production-чат Hobby Games в debug
     owner_chat_id=232778570,  # mbabaev (владелец) — служебные анонсы в личку
 )

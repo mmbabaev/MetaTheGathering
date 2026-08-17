@@ -322,17 +322,21 @@ def schedule_row_label(row) -> str:
 
 def format_schedule_rows(rows, tz: str) -> str:
     """Текст /schedule по строкам из БД — включая выключенные (их в планировщике нет)."""
+    from core.clubs import club_identities  # noqa: PLC0415 — иначе цикл импортов
     from services.schedule import WEEKDAY_RU, parse_import_times  # noqa: PLC0415
 
     if not rows:
         return "📅 Расписание пусто."
 
     lines = [f"📅 Расписание ({tz}):"]
+    club_timezones = {club.name: club.timezone for club in club_identities()}
     current_club = None
     for row in rows:
         if row.club_name != current_club:
             current_club = row.club_name
-            lines.append(f"\n{row.club_name}:")
+            club_tz = club_timezones.get(row.club_name)
+            timezone_suffix = f" ({club_tz})" if club_tz and club_tz != tz else ""
+            lines.append(f"\n{row.club_name}{timezone_suffix}:")
         day = WEEKDAY_RU.get(row.weekday, row.weekday)
         status = "" if row.enabled else "  ⏸ выключено"
         days_before = getattr(row, "create_days_before", 0)

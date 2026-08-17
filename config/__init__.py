@@ -12,4 +12,5 @@ class AppConfig:
     goldfish_chat_id: Optional[int] = None
     edinorog_chat_id: Optional[int] = None
     pair_of_dice_chat_id: Optional[int] = None
+    hobby_games_chat_id: Optional[int] = None
     owner_chat_id: Optional[int] = None  # личка владельца бота для служебных анонсов (создан турнир, колоды раскрыты)

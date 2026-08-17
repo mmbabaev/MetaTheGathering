@@ -50,6 +50,7 @@ class ClubIdentity:
     aetherhub_url: str | None
     title_prefix: str
     magicoculus_city: str
+    timezone: str
 
 
 def club_identities() -> list[ClubIdentity]:
@@ -61,6 +62,7 @@ def club_identities() -> list[ClubIdentity]:
             aetherhub_url="https://aetherhub.com/User/GoldFish",
             title_prefix="🐠 ",
             magicoculus_city="Москва",
+            timezone="Europe/Moscow",
         ),
         ClubIdentity(
             name="Edinorog",
@@ -68,6 +70,7 @@ def club_identities() -> list[ClubIdentity]:
             aetherhub_url="https://aetherhub.com/User/Edinorog/",
             title_prefix="🦄 ",
             magicoculus_city="Москва",
+            timezone="Europe/Moscow",
         ),
         ClubIdentity(
             name="Pair of dice",
@@ -75,6 +78,15 @@ def club_identities() -> list[ClubIdentity]:
             aetherhub_url="https://aetherhub.com/User/Andysays",
             title_prefix="🎲🎲 ",
             magicoculus_city="Санкт-Петербург",
+            timezone="Europe/Moscow",
+        ),
+        ClubIdentity(
+            name="Hobby Games",
+            chat_id=app_cfg.hobby_games_chat_id or 0,
+            aetherhub_url=None,
+            title_prefix="🎲 ",
+            magicoculus_city="Калининград",
+            timezone="Europe/Kaliningrad",
         ),
     ]
 
@@ -110,6 +122,15 @@ def default_schedules() -> list[DefaultSchedule]:
             list(PAIR_OF_DICE_SUNDAY_IMPORT_TIMES),
             create_days_before=1,
         ),
+        DefaultSchedule(
+            "Hobby Games",
+            "saturday",
+            "18:30",
+            "17:00",
+            "16:55",
+            [],
+            create_days_before=1,
+        ),
     ]
 
 
@@ -133,6 +154,7 @@ def default_clubs() -> list[Club]:
             chat_id=i.chat_id,
             aetherhub_url=i.aetherhub_url,
             title_prefix=i.title_prefix,
+            timezone=i.timezone,
             schedules=by_name.get(i.name, []),
         )
         for i in club_identities()
@@ -152,6 +174,7 @@ def debug_club() -> Club | None:
         chat_id=app_cfg.goldfish_chat_id or 0,
         aetherhub_url="https://aetherhub.com/User/GoldFish",
         title_prefix="[DEBUG] 🐠 ",
+        timezone=settings.TOURNAMENT_TIMEZONE,
         schedules=[
             ClubSchedule(
                 weekday="thursday",

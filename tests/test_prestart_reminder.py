@@ -162,5 +162,6 @@ class TestReminderSchedule:
         assert times[("Edinorog", "thursday")] == "19:25"
         assert times[("Pair of dice", "tuesday")] == "19:25"
         assert times[("Pair of dice", "sunday")] == "13:25"
+        assert times[("Hobby Games", "saturday")] == "16:55"
         # Четверг у Goldfish отключён — остались только пятницы
         assert ("Goldfish", "thursday") not in times
