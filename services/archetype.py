@@ -29,11 +29,28 @@ class ArchetypeService:
         return [ArchetypeItem(id=a.id, name=a.name) for a in rows]
 
     def list_top_archetypes(self, n: int = 10) -> List[ArchetypeItem]:
-        """Топ-N архетипов по числу использований в турнирах прошедших фазу регистрации.
+        """Сохранённый недельный топ-N; до первого среза — живой fallback.
 
-        Участники турниров в статусе REGISTRATION не учитываются — иначе только что
-        назначенные колоды всплывали бы в топе и загрязняли меню выбора.
+        ``meta_rank`` обновляет недельная джоба. Fallback нужен для новой/тестовой БД,
+        где срез ещё ни разу не строился.
         """
+        ranked_stmt = (
+            select(models.Archetype.id, models.Archetype.name)
+            .where(
+                models.Archetype.is_custom.is_(False),
+                models.Archetype.meta_rank.isnot(None),
+            )
+            .order_by(models.Archetype.meta_rank.asc(), models.Archetype.name.asc())
+            .limit(n)
+        )
+        ranked = self.db.execute(ranked_stmt).all()
+        if ranked:
+            return [ArchetypeItem(id=row.id, name=row.name) for row in ranked]
+
+        return self._list_live_top_archetypes(n)
+
+    def _list_live_top_archetypes(self, n: int) -> List[ArchetypeItem]:
+        """Compatibility fallback before the first weekly snapshot exists."""
         past_registration = (
             select(models.Tournament.id).where(models.Tournament.status != models.TournamentStatus.REGISTRATION)
         ).scalar_subquery()

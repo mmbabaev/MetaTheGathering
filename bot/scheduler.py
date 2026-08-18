@@ -44,6 +44,7 @@ from services.magicoculus import (
 from services.names import format_participant_name
 from services.schedule import ScheduleService
 from services.stats import StatsService
+from services.top_archetypes import TopArchetypeSnapshotService
 from services.tournament import TournamentService
 
 logger = logging.getLogger(__name__)
@@ -576,6 +577,31 @@ class AetherhubFinalReimportJob:
 REVEAL_DECKS_TIME = "22:00"  # авто-раскрытие колод турниров текущего дня
 UNCLOSED_REMINDER_TIME = "10:00"
 MISSING_DECKS_REMINDER_TIME = "15:00"
+TOP_ARCHETYPES_REFRESH_TIME = "04:00"
+
+
+class WeeklyTopArchetypesJob:
+    """Rebuilds the persisted top-10 menu without sending any messages."""
+
+    async def run(self, now: datetime) -> None:
+        as_of = _naive_utc(now)
+        await asyncio.to_thread(self._refresh, as_of)
+
+    @staticmethod
+    def _refresh(as_of: datetime) -> None:
+        db = SessionLocal()
+        try:
+            result = TopArchetypeSnapshotService(db).refresh(as_of=as_of)
+            logger.info(
+                "WeeklyTopArchetypesJob: updated=%s decks=%s complete_tournaments=%s",
+                result.updated,
+                [assignment.archetype_name for assignment in result.assignments],
+                result.complete_tournaments,
+            )
+        except Exception:
+            logger.exception("WeeklyTopArchetypesJob: refresh failed")
+        finally:
+            db.close()
 
 
 class AutoRevealDecksJob:
@@ -1232,6 +1258,25 @@ def setup_scheduler(app: Application) -> None:
     _remind_about_missing_decks.__name__ = "missing_decks_reminder"
     app.job_queue.run_daily(_remind_about_missing_decks, time=missing_decks_reminder_time)
     logger.info(f"Scheduler: MissingDecksReminderJob registered (daily {MISSING_DECKS_REMINDER_TIME})")
+
+    top_archetypes_job = WeeklyTopArchetypesJob()
+    top_archetypes_time = datetime.strptime(TOP_ARCHETYPES_REFRESH_TIME, "%H:%M").time().replace(tzinfo=tz)
+
+    async def _refresh_top_archetypes(context: ContextTypes.DEFAULT_TYPE) -> None:
+        tz_ = ZoneInfo(settings.TOURNAMENT_TIMEZONE)
+        await top_archetypes_job.run(now=datetime.now(tz_))
+
+    _refresh_top_archetypes.__name__ = "weekly_top_archetypes"
+    app.job_queue.run_daily(
+        _refresh_top_archetypes,
+        time=top_archetypes_time,
+        days=(_ptb_day("monday"),),
+    )
+    app.job_queue.run_once(_refresh_top_archetypes, when=15)
+    logger.info(
+        "Scheduler: WeeklyTopArchetypesJob registered (Monday %s and once after startup)",
+        TOP_ARCHETYPES_REFRESH_TIME,
+    )
 
 
 def _register_schedule_jobs(app: Application) -> None:
