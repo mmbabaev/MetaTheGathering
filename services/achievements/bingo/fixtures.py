@@ -21,7 +21,8 @@ from services.achievements.bingo.parameterizers import (
     instantiate_play_deck_candidates,
 )
 
-FIXTURE_CATALOG_VERSION = "board-lab-fixtures-v2"
+FIXTURE_CATALOG_VERSION = "board-lab-fixtures-v4"
+FIXTURE_DECK_STATS_SNAPSHOT_ID = "fixture-stats-2026-08-19-365d"
 
 
 class FixturePersona(str, Enum):
@@ -59,9 +60,16 @@ _H2H = (*_BASIC, Requirement.OPPONENT_IDENTIFIED, Requirement.STATS_BASELINE)
 _MATCHUP = (*_H2H, Requirement.PLAYER_DECK_KNOWN, Requirement.OPPONENT_DECK_KNOWN)
 
 FIXTURE_DECK_TARGETS: tuple[FrozenDeckTarget, ...] = (
-    FrozenDeckTarget("Kuldotha Red", "Красная жара", rank=1, participations=42, players=18),
-    FrozenDeckTarget("Grixis Affinity", "Родство с металлом", rank=2, participations=35, players=15),
-    FrozenDeckTarget("Broodscale Combo", "Чешуйчатый план", rank=3, participations=29, players=13),
+    FrozenDeckTarget("Blue Terror", "Хитрый уж", rank=1, participations=46, players=27),
+    FrozenDeckTarget("Grixis Affinity", "Родство с металлом", rank=2, participations=36, players=20),
+    FrozenDeckTarget("Jund Midrange", "Мосты не горят", rank=3, participations=29, players=15),
+    FrozenDeckTarget("Red Rally", "И грянул рог", rank=4, participations=28, players=10),
+    FrozenDeckTarget("Spy Walls", "У стен есть глаза", rank=5, participations=25, players=7),
+    FrozenDeckTarget("Red Madness", "Вспыльчивый нрав", rank=6, participations=23, players=17),
+    FrozenDeckTarget("BG Gardens", "Цветы зла", rank=7, participations=22, players=9),
+    FrozenDeckTarget("White Aggro", "Следствие ведут двое", rank=8, participations=22, players=17),
+    FrozenDeckTarget("Flicker Tron", "Стена всё помнит", rank=9, participations=20, players=6),
+    FrozenDeckTarget("Bogles", "Броня крепка", rank=10, participations=19, players=10),
 )
 
 
@@ -382,7 +390,7 @@ def fixture_candidates(persona: FixturePersona) -> tuple[InstantiatedCandidate, 
                 instantiate_play_deck_candidates(
                     manifest,
                     FIXTURE_DECK_TARGETS,
-                    stats_snapshot_id="fixture-stats-2026-09-01",
+                    stats_snapshot_id=FIXTURE_DECK_STATS_SNAPSHOT_ID,
                     frozen_context={
                         "persona": persona.value,
                         "historyMatches": facts.history_matches,

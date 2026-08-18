@@ -2,6 +2,7 @@
 
 from services.achievements.bingo.fixtures import (
     FIXTURE_CATALOG_VERSION,
+    FIXTURE_DECK_STATS_SNAPSHOT_ID,
     FIXTURE_DECK_TARGETS,
     PREVIEW_MANIFESTS,
     FixturePersona,
@@ -31,6 +32,7 @@ from services.achievements.bingo.parameterizers import (
 __all__ = [
     "ALGORITHM_VERSION",
     "FIXTURE_CATALOG_VERSION",
+    "FIXTURE_DECK_STATS_SNAPSHOT_ID",
     "FIXTURE_DECK_TARGETS",
     "PLAY_DECK_CODE",
     "PREVIEW_MANIFESTS",

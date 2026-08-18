@@ -9,7 +9,7 @@
 
 ## Что уже работает
 
-На 17 августа 2026 года в `main` есть:
+На 18 августа 2026 года в текущем коде есть:
 
 - 7 механик / 20 уровней: `debut`, `first_deck`, `undefeated`, `scribe`,
   `regular`, `multiclass`, `loyalist`;
@@ -22,11 +22,13 @@
 - immutable progress events с evidence/source/version и idempotent replay;
 - универсальный owner/player outbox с versioned targeted payload, opt-in и allow-list.
 - read-only локальный snapshot сезонной статистики и pure bingo generator 4×4 с
-  versioned preview-каталогом для четырёх fairness-personas.
+  versioned preview-каталогом для четырёх fairness-personas;
+- owner/admin `/bingo_preview`, который отвечает только инициатору и не создаёт
+  production boards.
 
 Движок работает в **owner-only shadow mode**. Игрокам ничего автоматически не
-рассылается. Сезоны, персональное bingo-поле 4×4, клетки, prize claims и Board Lab
-ещё не существуют в `main`.
+рассылается. Сезоны, персональное bingo-поле 4×4, клетки, prize claims и полный
+Board Lab с реальными игроками ещё не существуют.
 
 Локальный snapshot не является внешним stats API или сезонной моделью, а preview-каталог
 не создаёт production boards. Для запуска по-прежнему нужны Season/Board/Cell persistence,
@@ -117,7 +119,9 @@ Season/Board/Cell, сезонные progress/completion events, peer confirmatio
    вариант. Не группируйте колоды по display name без явной причины.
 7. Сезонная `play_deck` замораживает одну конкретную `general_name` и id stats snapshot:
    несколько вариантов могут войти в candidate pool, но solver оставляет на поле не больше
-   одной клетки этой mechanic.
+   одной клетки этой mechanic. Fixture-каталог v4 использует все десять архетипов
+   актуального годового production snapshot с ручными названиями; production season
+   должен заморозить собственный snapshot на дату старта.
 8. `/bingo_preview` работает только на fixtures, принимает persona/seed и всегда отвечает
    в тот же private chat. Это визуальный preview, а не activation или player board.
 
