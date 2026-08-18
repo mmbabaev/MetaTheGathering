@@ -21,7 +21,8 @@ from services.achievements.bingo.parameterizers import (
     instantiate_play_deck_candidates,
 )
 
-FIXTURE_CATALOG_VERSION = "board-lab-fixtures-v2"
+FIXTURE_CATALOG_VERSION = "board-lab-fixtures-v3"
+FIXTURE_DECK_STATS_SNAPSHOT_ID = "fixture-stats-2026-08-19-365d"
 
 
 class FixturePersona(str, Enum):
@@ -59,9 +60,9 @@ _H2H = (*_BASIC, Requirement.OPPONENT_IDENTIFIED, Requirement.STATS_BASELINE)
 _MATCHUP = (*_H2H, Requirement.PLAYER_DECK_KNOWN, Requirement.OPPONENT_DECK_KNOWN)
 
 FIXTURE_DECK_TARGETS: tuple[FrozenDeckTarget, ...] = (
-    FrozenDeckTarget("Kuldotha Red", "Красная жара", rank=1, participations=42, players=18),
-    FrozenDeckTarget("Grixis Affinity", "Родство с металлом", rank=2, participations=35, players=15),
-    FrozenDeckTarget("Broodscale Combo", "Чешуйчатый план", rank=3, participations=29, players=13),
+    FrozenDeckTarget("Blue Terror", "Синий экран смерти", rank=1, participations=46, players=27),
+    FrozenDeckTarget("Grixis Affinity", "Родство с металлом", rank=2, participations=36, players=20),
+    FrozenDeckTarget("Jund Midrange", "Джунд — дело тонкое", rank=3, participations=29, players=15),
 )
 
 
@@ -382,7 +383,7 @@ def fixture_candidates(persona: FixturePersona) -> tuple[InstantiatedCandidate, 
                 instantiate_play_deck_candidates(
                     manifest,
                     FIXTURE_DECK_TARGETS,
-                    stats_snapshot_id="fixture-stats-2026-09-01",
+                    stats_snapshot_id=FIXTURE_DECK_STATS_SNAPSHOT_ID,
                     frozen_context={
                         "persona": persona.value,
                         "historyMatches": facts.history_matches,

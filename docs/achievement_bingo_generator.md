@@ -45,7 +45,7 @@ playerId + seed`. Порядок candidates на входе не влияет н
 новичок, любитель, регуляр и про. У новичка stats/H2H candidates без baseline явно
 отклоняются; database fallback остаётся в пуле той же сложности.
 
-Версия `board-lab-fixtures-v2` добавляет production-shaped механику `play_deck` из
+Версия `board-lab-fixtures-v2` добавила production-shaped механику `play_deck` из
 [#200](https://github.com/mmbabaev/MetaTheGathering/issues/200). Она превращает frozen
 top-deck catalog в несколько конкретных candidates с одной mechanic: каждая клетка хранит
 `statsSnapshotId`, точную `deckGeneralName`, rank и размер baseline, а игрок видит ручное
@@ -54,6 +54,29 @@ top-deck catalog в несколько конкретных candidates с одн
 только canonical `general_name`; пользовательский display name не засчитывается как скрытая
 эвристика. Пустой catalog создаёт auditable rejected candidate с reason
 `no_frozen_deck_targets` и fallback на `try_new_deck`, а не исчезает из diagnostics молча.
+
+Версия `board-lab-fixtures-v3` обновляет три preview-цели по read-only production snapshot
+с правой невключительной границей `2026-08-19` и окном 365 дней. В выборку вошли только
+закрытые турниры с полными результатами: 19 из 56 просмотренных (34 исключены как
+неполные, 3 — как незакрытые). Тот же порядок получился на окнах 120 и 180 дней, потому
+что все подходящие данные находятся внутри последних 120 дней.
+
+| Место | `general_name` | Участия | Игроки | Preview-клетка |
+|---:|---|---:|---:|---|
+| 1 | Blue Terror | 46 | 27 | Синий экран смерти |
+| 2 | Grixis Affinity | 36 | 20 | Родство с металлом |
+| 3 | Jund Midrange | 29 | 15 | Джунд — дело тонкое |
+| 4 | Red Rally | 28 | 10 | — |
+| 5 | Spy Walls | 25 | 7 | — |
+| 6 | Red Madness | 23 | 17 | — |
+| 7 | BG Gardens | 22 | 9 | — |
+| 8 | White Aggro | 22 | 17 | — |
+| 9 | Flicker Tron | 20 | 6 | — |
+| 10 | Bogles | 19 | 10 | — |
+
+Preview-pool берёт первые три строки: существующее «Родство с металлом» сохранено,
+Kuldotha Red и Broodscale Combo удалены как не входящие в актуальный top-10. Эта таблица
+аудирует fixture-решение, но не заменяет frozen snapshot первого production-сезона.
 
 Fixtures нужны только для Board Lab и fairness-тестов. Они не являются утверждённым pool
 первого сезона и не должны активироваться как production boards. Перед activation нужны

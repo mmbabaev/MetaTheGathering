@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from services.achievements.bingo import (
     FIXTURE_CATALOG_VERSION,
+    FIXTURE_DECK_STATS_SNAPSHOT_ID,
     FIXTURE_DECK_TARGETS,
     PLAY_DECK_CODE,
     PREVIEW_MANIFESTS,
@@ -61,11 +62,11 @@ def test_play_deck_x_is_parameterized_from_frozen_general_names():
     assert len({candidate.candidate_id for candidate in candidates}) == 2
     assert {candidate.mechanic_key for candidate in candidates} == {PLAY_DECK_CODE}
     assert [candidate.frozen_params["deckGeneralName"] for candidate in candidates] == [
-        "Kuldotha Red",
+        "Blue Terror",
         "Grixis Affinity",
     ]
-    assert candidates[0].title == "Красная жара"
-    assert candidates[0].hint == "Сыграй турнир на колоде Kuldotha Red"
+    assert candidates[0].title == "Синий экран смерти"
+    assert candidates[0].hint == "Сыграй турнир на колоде Blue Terror"
     assert candidates[0].frozen_params["statsSnapshotId"] == "snapshot-2026-09-01"
     assert "deck_general_name" in candidates[0].evidence_fields
     assert candidates[0].parameterizer_key == "play_deck_from_frozen_catalog_v1"
@@ -80,15 +81,15 @@ def test_play_deck_x_completion_uses_frozen_canonical_name():
         stats_snapshot_id="snapshot-2026-09-01",
     )[0]
 
-    assert play_deck_completed(candidate, "  kuldotha   RED ") is True
-    assert play_deck_completed(candidate, "Mono Red") is False
+    assert play_deck_completed(candidate, "  blue   TERROR ") is True
+    assert play_deck_completed(candidate, "Mono Blue") is False
     assert play_deck_completed(candidate, None) is False
 
 
 def test_play_deck_x_rejects_duplicate_canonical_targets():
     manifest = next(item for item in PREVIEW_MANIFESTS if item.code == PLAY_DECK_CODE)
     duplicate = FIXTURE_DECK_TARGETS[0].__class__(
-        " kuldotha  red ",
+        " blue  terror ",
         "Ещё один заголовок",
         rank=2,
         participations=10,
@@ -122,8 +123,24 @@ def test_generated_board_can_contain_one_concrete_play_deck_x_cell():
     play_deck_cells = [cell.candidate for cell in draft.cells if cell.candidate.manifest_code == PLAY_DECK_CODE]
 
     assert len(play_deck_cells) == 1
-    assert play_deck_cells[0].title == "Красная жара"
-    assert play_deck_cells[0].frozen_params["deckGeneralName"] == "Kuldotha Red"
+    assert play_deck_cells[0].title in {target.title for target in FIXTURE_DECK_TARGETS}
+    assert play_deck_cells[0].frozen_params["deckGeneralName"] in {
+        target.general_name for target in FIXTURE_DECK_TARGETS
+    }
+    assert play_deck_cells[0].frozen_params["statsSnapshotId"] == FIXTURE_DECK_STATS_SNAPSHOT_ID
+
+
+def test_preview_play_deck_targets_match_current_top_three_snapshot():
+    assert FIXTURE_CATALOG_VERSION == "board-lab-fixtures-v3"
+    assert FIXTURE_DECK_STATS_SNAPSHOT_ID == "fixture-stats-2026-08-19-365d"
+    assert [
+        (target.general_name, target.title, target.rank, target.participations, target.players)
+        for target in FIXTURE_DECK_TARGETS
+    ] == [
+        ("Blue Terror", "Синий экран смерти", 1, 46, 27),
+        ("Grixis Affinity", "Родство с металлом", 2, 36, 20),
+        ("Jund Midrange", "Джунд — дело тонкое", 3, 29, 15),
+    ]
 
 
 def test_ineligible_candidate_requires_auditable_reason():

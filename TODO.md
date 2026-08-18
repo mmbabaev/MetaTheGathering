@@ -1,6 +1,6 @@
 # MetaGatherer — живой план проекта
 
-Последнее обновление: **17 августа 2026**.
+Последнее обновление: **18 августа 2026**.
 
 Это верхнеуровневый source of truth о том, что уже находится в `main`, что сейчас
 проходит review и что ещё только запланировано. Детали и acceptance criteria живут
@@ -46,16 +46,19 @@
   candidates «Сыграй турнир на колоде X» с конкретной `general_name`, ручным
   флейворным названием и pure completion evaluator — PR
   [#241](https://github.com/mmbabaev/MetaTheGathering/pull/241).
+- Owner/admin команда `/bingo_preview [профиль] [seed]`: read-only генерация fixture-поля,
+  PNG 4×4 и текст всех 16 условий. Команда доступна под feature flag
+  `achievementBoardLab`, отвечает только инициатору и ничего не записывает в production
+  boards — PR [#242](https://github.com/mmbabaev/MetaTheGathering/pull/242).
 
 Игрокам ачивки автоматически не рассылаются: текущий режим — owner-only shadow.
 
 ### В review, но ещё не в `main`
 
-- Owner/admin команда `/bingo_preview [профиль] [seed]`: read-only генерация fixture-поля,
-  PNG 4×4 и текст всех 16 условий. Команда доступна под feature flag
-  `achievementBoardLab`, отвечает только инициатору и ничего не записывает в production boards.
-- Это лёгкий Telegram-preview этапа C из #213. Выбор реального игрока/pool/quotas,
-  batch diagnostics, JSON export и сохранение draft по-прежнему не реализованы.
+- Fixture-каталог `play_deck` обновляется по production snapshot за год на 19 августа:
+  три preview-цели — Blue Terror, Grixis Affinity и Jund Midrange. Устаревшие Kuldotha
+  Red и Broodscale Combo удаляются из preview-pool; production season по-прежнему требует
+  отдельного frozen snapshot на дату старта.
 
 ### Lifetime-движок укреплён
 
