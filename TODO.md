@@ -56,9 +56,9 @@
 ### В review, но ещё не в `main`
 
 - Fixture-каталог `play_deck` обновляется по production snapshot за год на 19 августа:
-  три preview-цели — Blue Terror, Grixis Affinity и Jund Midrange. Устаревшие Kuldotha
-  Red и Broodscale Combo удаляются из preview-pool; production season по-прежнему требует
-  отдельного frozen snapshot на дату старта.
+  все десять актуальных архетипов получают отдельные preview-цели с ручными названиями.
+  Устаревшие Kuldotha Red и Broodscale Combo удаляются из preview-pool; production season
+  по-прежнему требует отдельного frozen snapshot на дату старта.
 
 ### Lifetime-движок укреплён
 

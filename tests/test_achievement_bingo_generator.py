@@ -130,8 +130,8 @@ def test_generated_board_can_contain_one_concrete_play_deck_x_cell():
     assert play_deck_cells[0].frozen_params["statsSnapshotId"] == FIXTURE_DECK_STATS_SNAPSHOT_ID
 
 
-def test_preview_play_deck_targets_match_current_top_three_snapshot():
-    assert FIXTURE_CATALOG_VERSION == "board-lab-fixtures-v3"
+def test_preview_play_deck_targets_match_current_top_ten_snapshot():
+    assert FIXTURE_CATALOG_VERSION == "board-lab-fixtures-v4"
     assert FIXTURE_DECK_STATS_SNAPSHOT_ID == "fixture-stats-2026-08-19-365d"
     assert [
         (target.general_name, target.title, target.rank, target.participations, target.players)
@@ -140,6 +140,13 @@ def test_preview_play_deck_targets_match_current_top_three_snapshot():
         ("Blue Terror", "Хитрый уж", 1, 46, 27),
         ("Grixis Affinity", "Родство с металлом", 2, 36, 20),
         ("Jund Midrange", "Мосты не горят", 3, 29, 15),
+        ("Red Rally", "И грянул рог", 4, 28, 10),
+        ("Spy Walls", "У стен есть глаза", 5, 25, 7),
+        ("Red Madness", "Вспыльчивый нрав", 6, 23, 17),
+        ("BG Gardens", "Цветы зла", 7, 22, 9),
+        ("White Aggro", "Следствие ведут двое", 8, 22, 17),
+        ("Flicker Tron", "Стена всё помнит", 9, 20, 6),
+        ("Bogles", "Броня крепка", 10, 19, 10),
     ]
 
 
@@ -208,9 +215,12 @@ def test_no_data_candidates_are_rejected_with_fallbacks_instead_of_becoming_zero
 
 
 def test_impossible_pool_returns_actionable_diagnostics_without_rerolling():
-    easy_only = tuple(
-        candidate for candidate in fixture_candidates(FixturePersona.PRO) if candidate.difficulty == Difficulty.EASY
-    )
+    easy_by_mechanic = {
+        candidate.mechanic_key: candidate
+        for candidate in fixture_candidates(FixturePersona.PRO)
+        if candidate.difficulty == Difficulty.EASY
+    }
+    easy_only = tuple(easy_by_mechanic.values())
 
     with pytest.raises(BoardGenerationError) as raised:
         _generate(FixturePersona.PRO, 1, easy_only)

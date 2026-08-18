@@ -66,22 +66,25 @@ top-deck catalog в несколько конкретных candidates с одн
 | 1 | Blue Terror | 46 | 27 | Хитрый уж |
 | 2 | Grixis Affinity | 36 | 20 | Родство с металлом |
 | 3 | Jund Midrange | 29 | 15 | Мосты не горят |
-| 4 | Red Rally | 28 | 10 | — |
-| 5 | Spy Walls | 25 | 7 | — |
-| 6 | Red Madness | 23 | 17 | — |
-| 7 | BG Gardens | 22 | 9 | — |
-| 8 | White Aggro | 22 | 17 | — |
-| 9 | Flicker Tron | 20 | 6 | — |
-| 10 | Bogles | 19 | 10 | — |
+| 4 | Red Rally | 28 | 10 | И грянул рог |
+| 5 | Spy Walls | 25 | 7 | У стен есть глаза |
+| 6 | Red Madness | 23 | 17 | Вспыльчивый нрав |
+| 7 | BG Gardens | 22 | 9 | Цветы зла |
+| 8 | White Aggro | 22 | 17 | Следствие ведут двое |
+| 9 | Flicker Tron | 20 | 6 | Стена всё помнит |
+| 10 | Bogles | 19 | 10 | Броня крепка |
 
-Preview-pool берёт первые три строки: существующее «Родство с металлом» сохранено,
-Kuldotha Red и Broodscale Combo удалены как не входящие в актуальный top-10. Эта таблица
-аудирует fixture-решение, но не заменяет frozen snapshot первого production-сезона.
+Версия `board-lab-fixtures-v4` расширяет preview-pool с первых трёх строк на весь top-10.
+Kuldotha Red и Broodscale Combo остаются удалёнными как не входящие в актуальную десятку.
+Таблица аудирует fixture-решение, но не заменяет frozen snapshot первого production-сезона.
 
 Названия опираются на сигнатурные карты и игру колод, а не только на имя архетипа:
 «Хитрый уж» — Cryptic Serpent из Blue Terror; «Мосты не горят» — Cleansing Wildfire
 по собственным неразрушимым artifact bridges в Jund; «Родство с металлом» — механика
-Affinity и металлическая основа Grixis.
+Affinity и металлическая основа Grixis. Остальная семёрка продолжает тот же принцип:
+Rally at the Hornburg; Balustrade Spy; Fiery Temper; жертвенные растения Khalni Garden;
+пара Thraben Inspector / Novice Inspector; цикл Mnemonic Wall / Ghostly Flicker;
+Ethereal Armor и Ancestral Mask на hexproof-существе.
 
 Fixtures нужны только для Board Lab и fairness-тестов. Они не являются утверждённым pool
 первого сезона и не должны активироваться как production boards. Перед activation нужны

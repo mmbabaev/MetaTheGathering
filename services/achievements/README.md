@@ -119,9 +119,9 @@ Season/Board/Cell, сезонные progress/completion events, peer confirmatio
    вариант. Не группируйте колоды по display name без явной причины.
 7. Сезонная `play_deck` замораживает одну конкретную `general_name` и id stats snapshot:
    несколько вариантов могут войти в candidate pool, но solver оставляет на поле не больше
-   одной клетки этой mechanic. Fixture-каталог v3 использует актуальную preview-тройку
-   Blue Terror / Grixis Affinity / Jund Midrange из годового production snapshot;
-   production season должен заморозить собственный snapshot на дату старта.
+   одной клетки этой mechanic. Fixture-каталог v4 использует все десять архетипов
+   актуального годового production snapshot с ручными названиями; production season
+   должен заморозить собственный snapshot на дату старта.
 8. `/bingo_preview` работает только на fixtures, принимает persona/seed и всегда отвечает
    в тот же private chat. Это визуальный preview, а не activation или player board.
 
