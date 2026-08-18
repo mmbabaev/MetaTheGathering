@@ -65,7 +65,7 @@ def test_play_deck_x_is_parameterized_from_frozen_general_names():
         "Blue Terror",
         "Grixis Affinity",
     ]
-    assert candidates[0].title == "Синий экран смерти"
+    assert candidates[0].title == "Хитрый уж"
     assert candidates[0].hint == "Сыграй турнир на колоде Blue Terror"
     assert candidates[0].frozen_params["statsSnapshotId"] == "snapshot-2026-09-01"
     assert "deck_general_name" in candidates[0].evidence_fields
@@ -137,9 +137,9 @@ def test_preview_play_deck_targets_match_current_top_three_snapshot():
         (target.general_name, target.title, target.rank, target.participations, target.players)
         for target in FIXTURE_DECK_TARGETS
     ] == [
-        ("Blue Terror", "Синий экран смерти", 1, 46, 27),
+        ("Blue Terror", "Хитрый уж", 1, 46, 27),
         ("Grixis Affinity", "Родство с металлом", 2, 36, 20),
-        ("Jund Midrange", "Джунд — дело тонкое", 3, 29, 15),
+        ("Jund Midrange", "Мосты не горят", 3, 29, 15),
     ]
 
 

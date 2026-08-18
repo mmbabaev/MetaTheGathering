@@ -63,9 +63,9 @@ top-deck catalog в несколько конкретных candidates с одн
 
 | Место | `general_name` | Участия | Игроки | Preview-клетка |
 |---:|---|---:|---:|---|
-| 1 | Blue Terror | 46 | 27 | Синий экран смерти |
+| 1 | Blue Terror | 46 | 27 | Хитрый уж |
 | 2 | Grixis Affinity | 36 | 20 | Родство с металлом |
-| 3 | Jund Midrange | 29 | 15 | Джунд — дело тонкое |
+| 3 | Jund Midrange | 29 | 15 | Мосты не горят |
 | 4 | Red Rally | 28 | 10 | — |
 | 5 | Spy Walls | 25 | 7 | — |
 | 6 | Red Madness | 23 | 17 | — |
@@ -77,6 +77,11 @@ top-deck catalog в несколько конкретных candidates с одн
 Preview-pool берёт первые три строки: существующее «Родство с металлом» сохранено,
 Kuldotha Red и Broodscale Combo удалены как не входящие в актуальный top-10. Эта таблица
 аудирует fixture-решение, но не заменяет frozen snapshot первого production-сезона.
+
+Названия опираются на сигнатурные карты и игру колод, а не только на имя архетипа:
+«Хитрый уж» — Cryptic Serpent из Blue Terror; «Мосты не горят» — Cleansing Wildfire
+по собственным неразрушимым artifact bridges в Jund; «Родство с металлом» — механика
+Affinity и металлическая основа Grixis.
 
 Fixtures нужны только для Board Lab и fairness-тестов. Они не являются утверждённым pool
 первого сезона и не должны активироваться как production boards. Перед activation нужны

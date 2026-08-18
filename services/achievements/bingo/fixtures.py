@@ -60,9 +60,9 @@ _H2H = (*_BASIC, Requirement.OPPONENT_IDENTIFIED, Requirement.STATS_BASELINE)
 _MATCHUP = (*_H2H, Requirement.PLAYER_DECK_KNOWN, Requirement.OPPONENT_DECK_KNOWN)
 
 FIXTURE_DECK_TARGETS: tuple[FrozenDeckTarget, ...] = (
-    FrozenDeckTarget("Blue Terror", "Синий экран смерти", rank=1, participations=46, players=27),
+    FrozenDeckTarget("Blue Terror", "Хитрый уж", rank=1, participations=46, players=27),
     FrozenDeckTarget("Grixis Affinity", "Родство с металлом", rank=2, participations=36, players=20),
-    FrozenDeckTarget("Jund Midrange", "Джунд — дело тонкое", rank=3, participations=29, players=15),
+    FrozenDeckTarget("Jund Midrange", "Мосты не горят", rank=3, participations=29, players=15),
 )
 
 
