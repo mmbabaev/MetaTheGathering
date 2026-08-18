@@ -181,7 +181,8 @@ class Archetype(Base):
     # Крупная стратегическая группа поверх general_name (экспериментальный owner-only срез).
     # Например, BG Gardens/BG Pestilence → BG Control; NULL — группа пока не определена.
     macro_name = Column(String(255), nullable=True, index=True)
-    meta_rank = Column(Integer, nullable=True, index=True)  # позиция в топ-мета (1=первый); NULL — нет места в списке
+    # Позиция в последнем недельном top-10 snapshot (1=первый); NULL — вне глобального меню.
+    meta_rank = Column(Integer, nullable=True, index=True)
     is_custom = Column(
         Boolean, nullable=False, default=False, server_default="false"
     )  # True = введён игроком вручную; не показывается в глобальном топе

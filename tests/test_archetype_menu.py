@@ -217,6 +217,24 @@ class TestListTopArchetypes:
         assert "Public Deck" in names
         assert "My Weird Deck" not in names
 
+    def test_saved_weekly_ranks_take_priority_over_live_usage(self, svc, user_svc, arch_svc):
+        weekly_first = arch_svc.get_or_create_by_name("Weekly First")
+        often_played = arch_svc.get_or_create_by_name("Often Played")
+        weekly_first.meta_rank = 1
+        arch_svc.db.commit()
+
+        tournament = svc.create_tournament(TournamentCreate(title="Historical", chat_id=CHAT_ID + 23))
+        for tg in range(701, 706):
+            user = user_svc.get_or_create(tg_id=tg, username=None, first_name=f"P{tg}")
+            svc.register_participant(
+                tournament_id=tournament.id,
+                user_id=user.id,
+                archetype_id=often_played.id,
+            )
+        close_tournament(svc, tournament.id)
+
+        assert [item.name for item in arch_svc.list_top_archetypes()] == ["Weekly First"]
+
     def test_custom_archetype_stays_in_user_history(self, svc, user_svc, arch_svc):
         """Кастомный архетип остаётся в истории пользователя, который его использовал."""
         custom = arch_svc.get_or_create_by_name("My Weird Deck", is_custom=True)
@@ -501,6 +519,30 @@ class TestHandleArchetypeMore:
 
         btns = [b.text for row in result.keyboard.inline_keyboard for b in row]
         assert btns.count("Burn") == 1
+
+    def test_weekly_top_only_changes_expanded_menu_for_player_with_history(
+        self, svc, user_svc, player_handler, active_tournament, arch_svc
+    ):
+        history = [arch_svc.get_or_create_by_name(f"History {index}") for index in range(1, 4)]
+        weekly = arch_svc.get_or_create_by_name("Weekly Top")
+        weekly.meta_rank = 1
+        user = user_svc.get_or_create(tg_id=PLAYER_TG_ID, username=None, first_name="Player")
+        for index, archetype in enumerate(history):
+            tournament = svc.create_tournament(TournamentCreate(title=f"Past {index}", chat_id=CHAT_ID + 90 + index))
+            svc.register_participant(
+                tournament_id=tournament.id,
+                user_id=user.id,
+                archetype_id=archetype.id,
+            )
+        arch_svc.db.commit()
+
+        collapsed = player_handler.handle_register(active_tournament.id, tg_id=PLAYER_TG_ID)
+        expanded = player_handler.handle_archetype_more(active_tournament.id, tg_id=PLAYER_TG_ID)
+        collapsed_names = [button.text for row in collapsed.keyboard.inline_keyboard for button in row]
+        expanded_names = [button.text for row in expanded.keyboard.inline_keyboard for button in row]
+
+        assert "Weekly Top" not in collapsed_names
+        assert "Weekly Top" in expanded_names
 
 
 # ---------------------------------------------------------------------------
