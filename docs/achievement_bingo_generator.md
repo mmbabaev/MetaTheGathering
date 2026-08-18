@@ -5,6 +5,13 @@
 детерминированный pure generator. Здесь ещё нет БД, Season/Board/Cell, Board Lab route,
 player UI, сохранения completion events или prize claims.
 
+> **Разделение версий.** Описанный ниже `bingo-v1` проверяет только четыре горизонтальных
+> ряда и использует статические difficulty quotas. Для production принят target `bingo-v2`:
+> все 10 линий, накопительные клетки, персональная вероятность выполнения и числовой баланс
+> линий. Полная формула и migration boundary описаны в
+> [`achievement_bingo_fairness.md`](achievement_bingo_fairness.md). Target ещё не реализован;
+> старые preview не меняются задним числом.
+
 ## Поток данных
 
 ```text
@@ -33,6 +40,10 @@ AchievementTypeManifest
   в diagnostics с reason/fallback;
 - невозможный pool завершает ограниченный backtracking с `BoardGenerationError`, а не
   уходит в случайный reroll.
+
+Эти инварианты являются контрактом воспроизводимости preview v1, а не правилами первого
+production-сезона. В частности, `RowDiagnostic` и horizontal-only placement должны быть
+заменены versioned `LineDiagnostic`/solver из ADR, а не молча менять смысл `bingo-v1`.
 
 Алгоритм использует SHA-256 ranking от `algorithmVersion + catalogVersion + seasonId +
 playerId + seed`. Порядок candidates на входе не влияет на результат. `BoardDraft.stable_json()`
