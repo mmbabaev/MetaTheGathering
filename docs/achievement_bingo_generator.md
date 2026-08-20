@@ -106,6 +106,24 @@ Fixtures нужны только для Board Lab и fairness-тестов. Он
 Это лёгкая часть Board Lab: управление pool/quotas, реальные игроки, batch diagnostics,
 JSON export и сохранение draft остаются в #213.
 
+## Fairness foundation для всех линий
+
+`services/achievements/bingo/fairness.py` добавляет read-only анализ целевой геометрии,
+не меняя воспроизводимый `bingo-v1` и текущий `/bingo_preview`:
+
+- перечисляет 4 строки, 4 столбца и 2 диагонали в стабильном порядке `R0..D1`;
+- переводит completion probability в аддитивный вес `−log₂(p)` с явными bounds;
+- проверяет rare, peer-confirmed и доступность во всех десяти линиях;
+- считает median line weight, relative imbalance и отношение вероятностей самой лёгкой и
+  тяжёлой линии;
+- принимает player-specific probability overrides, а без них явно помечает использование
+  fixture `attainability` и independence fallback;
+- возвращает versioned stable diagnostics, не переставляя клетки и ничего не записывая.
+
+Это диагностический foundation, а не готовый weighted solver. Текущие fixtures задают всего
+четыре вероятности по статическим difficulty tiers, поэтому 10%-гейт нельзя честно включить
+до появления персонального estimator с более гранулярными frozen probabilities.
+
 Пример preview-поля каталога v1 для персоны «Регуляр», seed `42`:
 
 ![Bingo board preview](assets/bingo-board-preview-seed-42.png)
