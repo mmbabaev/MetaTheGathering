@@ -1,6 +1,6 @@
 # MetaGatherer — живой план проекта
 
-Последнее обновление: **18 августа 2026**.
+Последнее обновление: **21 августа 2026**.
 
 Это верхнеуровневый source of truth о том, что уже находится в `main`, что сейчас
 проходит review и что ещё только запланировано. Детали и acceptance criteria живут
@@ -55,6 +55,11 @@
 
 ### В review, но ещё не в `main`
 
+- Pure fairness foundation перечисляет все 10 линий Bingo 4×4 и считает вероятностные
+  веса/imbalance с отдельными diagnostics для строк, столбцов и диагоналей, не меняя
+  horizontal-only `bingo-v1` — PR
+  [#250](https://github.com/mmbabaev/MetaTheGathering/pull/250). Персональный estimator и
+  weighted solver с hard gate 10% остаются следующими отдельными этапами.
 - Fixture-каталог `play_deck` обновляется по production snapshot за год на 19 августа:
   все десять актуальных архетипов получают отдельные preview-цели с ручными названиями.
   Устаревшие Kuldotha Red и Broodscale Combo удаляются из preview-pool; production season
