@@ -101,6 +101,11 @@ Preview-контракты и pure generator bingo лежат отдельно �
 [`docs/achievement_bingo_generator.md`](../../docs/achievement_bingo_generator.md). Они не
 создают production Season/Board/Cell и не меняют lifetime awards.
 
+Pure `bingo/fairness.py` отдельно анализирует target-геометрию из десяти линий и
+вероятностные веса. Он не переставляет клетки и не включает новый призовой путь: текущий
+generator/preview сохраняет семантику `bingo-v1`, пока не появится персональный estimator и
+отдельный versioned solver.
+
 Season/Board/Cell, сезонные progress/completion events, peer confirmations и prize claims
 должны получить отдельные DB-модели. Не добавляйте сезонную семантику в lifetime awards
 как скрытые поля.
