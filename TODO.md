@@ -1,6 +1,6 @@
 # MetaGatherer — живой план проекта
 
-Последнее обновление: **18 августа 2026**.
+Последнее обновление: **21 августа 2026**.
 
 Это верхнеуровневый source of truth о том, что уже находится в `main`, что сейчас
 проходит review и что ещё только запланировано. Детали и acceptance criteria живут
@@ -59,6 +59,11 @@
   все десять актуальных архетипов получают отдельные preview-цели с ручными названиями.
   Устаревшие Kuldotha Red и Broodscale Combo удаляются из preview-pool; production season
   по-прежнему требует отдельного frozen snapshot на дату старта.
+- Накопительный контракт `play_deck` v2: candidate замораживает цель в три турнира,
+  progress идемпотентно пересчитывается по distinct `tournament_id` после активации поля
+  и требует все eligibility-gates. Binary evaluator v1 и текущий fixture-preview не
+  изменяются; подключение v2 к production board ждёт persistence из #212 — PR
+  [#251](https://github.com/mmbabaev/MetaTheGathering/pull/251).
 
 ### Lifetime-движок укреплён
 

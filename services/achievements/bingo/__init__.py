@@ -28,6 +28,19 @@ from services.achievements.bingo.parameterizers import (
     instantiate_play_deck_candidates,
     play_deck_completed,
 )
+from services.achievements.bingo.play_deck_counter import (
+    PLAY_DECK_COUNTER_COMPLETION_KEY,
+    PLAY_DECK_COUNTER_MANIFEST_VERSION,
+    PLAY_DECK_COUNTER_PARAMETERIZER_KEY,
+    PLAY_DECK_COUNTER_PROGRESS_KEY,
+    PLAY_DECK_TARGET_PARAM,
+    PLAY_DECK_TARGET_TOURNAMENTS,
+    PlayDeckCounterProgress,
+    PlayDeckTournamentEvidence,
+    build_play_deck_counter_manifest,
+    evaluate_play_deck_counter,
+    instantiate_play_deck_counter_candidates,
+)
 
 __all__ = [
     "ALGORITHM_VERSION",
@@ -35,6 +48,12 @@ __all__ = [
     "FIXTURE_DECK_STATS_SNAPSHOT_ID",
     "FIXTURE_DECK_TARGETS",
     "PLAY_DECK_CODE",
+    "PLAY_DECK_COUNTER_COMPLETION_KEY",
+    "PLAY_DECK_COUNTER_MANIFEST_VERSION",
+    "PLAY_DECK_COUNTER_PARAMETERIZER_KEY",
+    "PLAY_DECK_COUNTER_PROGRESS_KEY",
+    "PLAY_DECK_TARGET_PARAM",
+    "PLAY_DECK_TARGET_TOURNAMENTS",
     "PREVIEW_MANIFESTS",
     "AchievementTypeManifest",
     "BoardConstraints",
@@ -48,9 +67,14 @@ __all__ = [
     "FrozenDeckTarget",
     "InstantiatedCandidate",
     "ManifestStatus",
+    "PlayDeckCounterProgress",
+    "PlayDeckTournamentEvidence",
     "Requirement",
+    "build_play_deck_counter_manifest",
+    "evaluate_play_deck_counter",
     "fixture_candidates",
     "generate_board",
     "instantiate_play_deck_candidates",
+    "instantiate_play_deck_counter_candidates",
     "play_deck_completed",
 ]

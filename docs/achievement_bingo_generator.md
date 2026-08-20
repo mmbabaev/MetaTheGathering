@@ -90,6 +90,48 @@ Fixtures нужны только для Board Lab и fairness-тестов. Он
 первого сезона и не должны активироваться как production boards. Перед activation нужны
 решения #215, frozen stats provider #211 и persistence/events/claims #212.
 
+## `play_deck` counter v2: три турнира
+
+Накопительное условие вынесено в отдельный versioned-контракт и пока не подменяет
+воспроизводимый fixture-preview v1. `build_play_deck_counter_manifest()` создаёт manifest
+версии 2, а параметризатор замораживает в candidate одновременно:
+
+- `statsSnapshotId` и точную canonical `deckGeneralName`;
+- `targetTournaments = 3`;
+- отдельные ключи parameterizer/progress/completion с суффиксом `v2`;
+- рассчитанную снаружи вероятность выполнения `attainability` — counter не придумывает
+  универсальную вероятность для разных игроков и колод.
+
+Candidate v2 имеет другой `candidate_id` (`…:v2`) и условие «Сыграй 3 турнира на колоде
+X». Поэтому изменение механики не переопределяет уже созданную клетку v1 задним числом.
+
+Pure evaluator не исполняет команду `increment`. Он каждый раз воспроизводимо пересчитывает
+snapshot из первичных турнирных фактов:
+
+```text
+eligible(e) =
+  e.played_at >= board.activated_at
+  AND canonical(e.deck_general_name) = candidate.deckGeneralName
+  AND e.self_registered
+  AND e.actually_played
+  AND e.tournament_closed
+  AND e.result_complete
+
+current = min(targetTournaments, count(distinct eligible tournament_id))
+completed = (current = targetTournaments)
+```
+
+В зачёт идут первые три турнира в стабильном порядке `(played_at, tournament_id)`;
+`completed_at` равен времени третьего. Точный повтор одного evidence идемпотентен, а две
+разные версии факта с одним `tournament_id` считаются повреждённым входом и дают явную
+ошибку вместо двойного зачёта. Naive datetime интерпретируется как UTC согласно соглашению
+БД проекта, aware datetime сначала приводится к UTC.
+
+Когда появятся `Season / Board / Cell` из #212, persistence должна хранить frozen candidate
+и immutable evidence/progress events, а текущий snapshot получать replay этой функции.
+Исторические турниры до `activated_at` разрешено использовать для baseline и персональной
+оценки сложности, но не для закрытия клетки.
+
 ## Telegram preview для owner/admin
 
 Команда `/bingo_preview [профиль] [seed]` даёт первый read-only интерфейс к generator:

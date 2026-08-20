@@ -124,6 +124,10 @@ Season/Board/Cell, сезонные progress/completion events, peer confirmatio
    должен заморозить собственный snapshot на дату старта.
 8. `/bingo_preview` работает только на fixtures, принимает persona/seed и всегда отвечает
    в тот же private chat. Это визуальный preview, а не activation или player board.
+9. Накопительная `play_deck` версии 2 замораживает цель в три разных турнира и считает
+   progress replay первичных фактов после `board.activated_at`. Все eligibility-gates
+   обязательны; повтор одного `tournament_id` не увеличивает counter. Binary v1 остаётся
+   отдельным контрактом для воспроизводимости уже созданных preview.
 
 ## Как добавить lifetime-rule
 
