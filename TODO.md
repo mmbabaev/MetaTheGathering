@@ -62,7 +62,8 @@
 - Накопительный контракт `play_deck` v2: candidate замораживает цель в три турнира,
   progress идемпотентно пересчитывается по distinct `tournament_id` после активации поля
   и требует все eligibility-gates. Binary evaluator v1 и текущий fixture-preview не
-  изменяются; подключение v2 к production board ждёт persistence из #212.
+  изменяются; подключение v2 к production board ждёт persistence из #212 — PR
+  [#251](https://github.com/mmbabaev/MetaTheGathering/pull/251).
 
 ### Lifetime-движок укреплён
 
