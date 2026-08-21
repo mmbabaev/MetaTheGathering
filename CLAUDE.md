@@ -130,7 +130,7 @@ main.py  →  bot/telegram/  →  bot/handlers/  →  services/  →  core/model
 - `register_participant()` only allowed in `REGISTRATION`
 - Legacy `cast_vote()` is only allowed in `ONGOING`
 - `ensure_tournament_status()` in `services/utils.py` raises `TournamentInvalidState` on mismatch
-- One active (non-CLOSED) tournament per `chat_id`
+- Up to two active (non-CLOSED) tournaments per `chat_id`; implicit “current tournament” lookups use the newest one
 
 ### Voting rules
 
