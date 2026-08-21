@@ -68,6 +68,7 @@ immutable completion events и утверждённый ruleset.
 | `bingo/fixtures.py` | Preview-pool и четыре fairness-personas для Board Lab |
 | `bingo/parameterizers.py` | Pure-параметризация и проверка конкретных сезонных candidates |
 | `../achievement_bingo_image.py` | PNG 4×4 для owner/admin preview-команды |
+| `../../docs/achievement_bingo_fairness.md` | Target `bingo-v2`: 10 линий, персональные веса, counters и fairness gates |
 | `__init__.py` | Публичные импорты модуля |
 
 Соседние точки интеграции:
@@ -124,6 +125,9 @@ Season/Board/Cell, сезонные progress/completion events, peer confirmatio
    должен заморозить собственный snapshot на дату старта.
 8. `/bingo_preview` работает только на fixtures, принимает persona/seed и всегда отвечает
    в тот же private chat. Это визуальный preview, а не activation или player board.
+9. `bingo-v1` остаётся horizontal-only preview-контрактом. Принятое production-правило
+   считает 4 строки, 4 столбца и 2 диагонали и требует отдельного `bingo-v2`; нельзя менять
+   геометрию или смысл `attainability` без новой algorithm version.
 
 ## Как добавить lifetime-rule
 

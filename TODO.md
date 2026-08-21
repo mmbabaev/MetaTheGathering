@@ -73,6 +73,19 @@ source matches, ruleset/stats version и идемпотентным replay. Owne
 нужны global feature flag, `User.notify_achievements` и `notify_allowed_ids`.
 Pull-only UI от delivery не зависит.
 
+### Принятые решения для `bingo-v2`
+
+- Победными считаются все 10 линий поля 4×4: четыре горизонтали, четыре вертикали и две
+  диагонали; квадраты 2×2 и углы отдельно не считаются.
+- `play_deck` становится накопительной целью «сыграй три турнира на колоде X»; старая
+  история используется для baseline, но прогресс начинается только после активации поля.
+- Статические `easy/medium/hard/rare` дополняются персональной completion probability и
+  весом `−log₂(p)`. Все 10 линий балансируются по dependency-aware joint probability с
+  целевым relative imbalance не выше 10%.
+- Текущий `bingo-v1` не меняется задним числом. Новая геометрия, counters, contracts и
+  diagnostics требуют отдельной algorithm version. Подробный ADR:
+  [`docs/achievement_bingo_fairness.md`](docs/achievement_bingo_fairness.md).
+
 ### Ещё не реализовано
 
 - `Season`, frozen ruleset/stats snapshot и lifecycle сезона.
