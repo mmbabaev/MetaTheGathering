@@ -1157,13 +1157,16 @@ class TestCreateTournamentJob:
 
         assert svc.get_active_tournament_for_chat(42) is None
 
-    def test_closes_previous_active_tournament(self, db, svc):
+    def test_does_not_close_previous_active_tournament_or_create_next(self, db, svc):
         job = _make_create_job(weekday="friday", chat_id=0)
         old = svc.create_tournament(TournamentCreate(title="Old", chat_id=0, slug="old", club="Goldfish"))
         bot = AsyncMock()
         asyncio.run(job.run(bot=bot, now=FRIDAY_NOW, db=db))
         old_refreshed = db.get(cm.Tournament, old.id)
-        assert old_refreshed.status == TournamentStatus.CLOSED
+        assert old_refreshed.status == TournamentStatus.REGISTRATION
+        assert old_refreshed.ended_at is None
+        assert db.query(cm.Tournament).count() == 1
+        bot.send_message.assert_not_awaited()
 
     def test_registration_open_goes_to_club_chat_and_owner_with_deeplink(self, db):
         job = _make_create_job(weekday="friday", chat_id=42)
