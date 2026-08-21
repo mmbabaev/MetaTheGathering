@@ -1500,8 +1500,16 @@ class TestHandleCreateTournament:
         assert "Pauper" in result.text
         assert result.tournament_id is not None
 
-    def test_already_exists_returns_alert(self, handler, admin_user, active_tournament):
-        result = handler.handle_create_tournament(tg_id=ADMIN_TG_ID, chat_id=CHAT_ID, title="Duplicate")
+    def test_second_active_tournament_is_created(self, handler, admin_user, active_tournament):
+        result = handler.handle_create_tournament(tg_id=ADMIN_TG_ID, chat_id=CHAT_ID, title="Second")
+        assert not result.is_alert
+        assert result.tournament_id is not None
+
+    def test_third_active_tournament_returns_alert(self, handler, admin_user, active_tournament):
+        second = handler.handle_create_tournament(tg_id=ADMIN_TG_ID, chat_id=CHAT_ID, title="Second")
+        assert not second.is_alert
+
+        result = handler.handle_create_tournament(tg_id=ADMIN_TG_ID, chat_id=CHAT_ID, title="Third")
         assert result.is_alert
         assert result.text == TOURNAMENT_ALREADY_EXISTS_MSG
 
@@ -1950,12 +1958,20 @@ class TestReopenTournament:
         assert result.is_alert
         assert "и так активен" in result.text
 
-    def test_blocked_when_chat_has_another_active(self, handler, svc, admin_user, active_tournament):
+    def test_reopens_as_second_active_tournament(self, handler, svc, admin_user, active_tournament):
         svc.close_tournament(active_tournament.id)
         svc.create_tournament(TournamentCreate(title="Новый", chat_id=CHAT_ID, slug="new-one"))
         result = handler.handle_reopen_tournament(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+        assert not result.is_alert
+        assert "снова активен" in result.text
+
+    def test_blocked_when_chat_already_has_two_active(self, handler, svc, admin_user, active_tournament):
+        svc.close_tournament(active_tournament.id)
+        svc.create_tournament(TournamentCreate(title="Новый 1", chat_id=CHAT_ID, slug="new-one"))
+        svc.create_tournament(TournamentCreate(title="Новый 2", chat_id=CHAT_ID, slug="new-two"))
+        result = handler.handle_reopen_tournament(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
         assert result.is_alert
-        assert "уже есть активный" in result.text
+        assert "уже открыты два турнира" in result.text
 
     def test_not_found_returns_alert(self, handler, admin_user):
         result = handler.handle_reopen_tournament(tg_id=ADMIN_TG_ID, tournament_id=99999)

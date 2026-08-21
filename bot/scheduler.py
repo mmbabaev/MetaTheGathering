@@ -44,7 +44,7 @@ from services.magicoculus import (
 from services.names import format_participant_name
 from services.schedule import ScheduleService
 from services.stats import StatsService
-from services.tournament import TournamentService
+from services.tournament import MAX_ACTIVE_TOURNAMENTS_PER_CHAT, TournamentService
 
 logger = logging.getLogger(__name__)
 
@@ -186,12 +186,13 @@ class CreateTournamentJob:
         try:
             svc = TournamentService(db)
             try:
-                active = svc.get_active_tournament_for_chat(self.club.chat_id or 0)
-                if active:
+                active = svc.list_active_tournaments_for_chat(self.club.chat_id or 0)
+                if len(active) >= MAX_ACTIVE_TOURNAMENTS_PER_CHAT:
                     logger.warning(
-                        "CreateTournamentJob: skipping '%s' — active tournament #%s must be closed manually",
+                        "CreateTournamentJob: skipping '%s' — active tournament limit reached (%s: %s)",
                         self.club.name,
-                        active.id,
+                        len(active),
+                        ", ".join(f"#{t.id}" for t in active),
                     )
                     return
 
@@ -1129,7 +1130,7 @@ def _find_active_club_tournament(db, club_name: str):
             models.Tournament.club == club_name,
             models.Tournament.status != models.TournamentStatus.CLOSED,
         )
-        .order_by(models.Tournament.created_at.desc())
+        .order_by(models.Tournament.created_at.desc(), models.Tournament.id.desc())
         .limit(1)
     )
     return db.execute(stmt).scalar_one_or_none()

@@ -26,7 +26,7 @@ from services.tournament import TournamentService
 
 def _tournament(db, title, *, club="Goldfish", days_ago=0):
     svc = TournamentService(db)
-    # на чат допустим только один незакрытый турнир — прошлые закрываем, как в жизни
+    # Для изоляции истории ачивок прошлые турниры закрываем перед созданием следующего.
     active = (
         db.query(models.Tournament)
         .filter(models.Tournament.chat_id == 100, models.Tournament.status != models.TournamentStatus.CLOSED)

@@ -36,9 +36,19 @@ class TestCreateTournament:
         assert t.slug == "pauper-cup"
         assert t.status == TournamentStatus.REGISTRATION
 
-    def test_raises_if_active_tournament_exists(self, svc, tournament):
+    def test_allows_second_active_tournament_in_same_chat(self, svc, tournament):
+        second = svc.create_tournament(TournamentCreate(title="Another", chat_id=100))
+        assert second.id != tournament.id
+        assert [t.id for t in svc.list_active_tournaments_for_chat(100)] == [second.id, tournament.id]
+
+    def test_raises_if_two_active_tournaments_exist(self, svc, tournament):
+        svc.create_tournament(TournamentCreate(title="Second", chat_id=100))
         with pytest.raises(TournamentAlreadyExists):
-            svc.create_tournament(TournamentCreate(title="Another", chat_id=100))
+            svc.create_tournament(TournamentCreate(title="Third", chat_id=100))
+
+    def test_current_active_tournament_is_newest(self, svc, tournament):
+        second = svc.create_tournament(TournamentCreate(title="Second", chat_id=100))
+        assert svc.get_active_tournament_for_chat(100).id == second.id
 
     def test_allows_new_tournament_after_close(self, svc, tournament):
         svc.close_tournament(tournament.id)
@@ -536,10 +546,18 @@ class TestReopenTournament:
         with pytest.raises(TournamentInvalidState):
             svc.reopen_tournament(t.id)
 
-    def test_rejects_when_chat_already_has_active(self, svc):
+    def test_allows_reopen_when_chat_has_one_active(self, svc):
         old = svc.create_tournament(TournamentCreate(title="Old", chat_id=333, slug="o333"))
         svc.close_tournament(old.id)
-        svc.create_tournament(TournamentCreate(title="New", chat_id=333, slug="n333"))
+        new = svc.create_tournament(TournamentCreate(title="New", chat_id=333, slug="n333"))
+        reopened = svc.reopen_tournament(old.id)
+        assert [t.id for t in svc.list_active_tournaments_for_chat(333)] == [new.id, reopened.id]
+
+    def test_rejects_reopen_when_chat_already_has_two_active(self, svc):
+        old = svc.create_tournament(TournamentCreate(title="Old", chat_id=336, slug="o336"))
+        svc.close_tournament(old.id)
+        svc.create_tournament(TournamentCreate(title="New 1", chat_id=336, slug="n336-1"))
+        svc.create_tournament(TournamentCreate(title="New 2", chat_id=336, slug="n336-2"))
         with pytest.raises(TournamentAlreadyExists):
             svc.reopen_tournament(old.id)
 

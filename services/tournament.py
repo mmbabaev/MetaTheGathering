@@ -25,6 +25,7 @@ from services.utils import ensure_tournament_status, get_tournament
 CONFIRM_THRESHOLD = 3  # up - down >= 3 → confirmed = True
 REJECT_THRESHOLD = 3  # down - up >= 3 → confirmed = False
 CHANGE_VOTE_COOLDOWN = timedelta(seconds=30)
+MAX_ACTIVE_TOURNAMENTS_PER_CHAT = 2
 
 
 @dataclass
@@ -82,19 +83,21 @@ class TournamentService:
 
     # ===== tournaments =====
 
-    def create_tournament(self, data: TournamentCreate) -> TournamentRead:
-        # один активный турнир на чат
-        stmt = (
-            select(models.Tournament)
-            .where(
-                models.Tournament.chat_id == data.chat_id,
+    def _ensure_active_slot(self, chat_id: int) -> None:
+        active_count = self.db.execute(
+            select(func.count(models.Tournament.id)).where(
+                models.Tournament.chat_id == chat_id,
                 models.Tournament.status != models.TournamentStatus.CLOSED,
             )
-            .limit(1)
-        )
-        active = self.db.execute(stmt).scalar_one_or_none()
-        if active:
-            raise errors.TournamentAlreadyExists(f"Chat {data.chat_id} already has active tournament #{active.id}")
+        ).scalar_one()
+        if active_count >= MAX_ACTIVE_TOURNAMENTS_PER_CHAT:
+            raise errors.TournamentAlreadyExists(
+                f"Chat {chat_id} already has {active_count} active tournaments; "
+                f"limit is {MAX_ACTIVE_TOURNAMENTS_PER_CHAT}"
+            )
+
+    def create_tournament(self, data: TournamentCreate) -> TournamentRead:
+        self._ensure_active_slot(data.chat_id)
 
         tournament = models.Tournament(
             title=data.title,
@@ -117,7 +120,7 @@ class TournamentService:
                 models.Tournament.chat_id == chat_id,
                 models.Tournament.status != models.TournamentStatus.CLOSED,
             )
-            .order_by(models.Tournament.created_at.desc())
+            .order_by(models.Tournament.created_at.desc(), models.Tournament.id.desc())
             .limit(1)
         )
         obj = self.db.execute(stmt).scalar_one_or_none()
@@ -132,7 +135,7 @@ class TournamentService:
         stmt = (
             select(models.Tournament)
             .where(models.Tournament.chat_id == chat_id)
-            .order_by(models.Tournament.created_at.desc())
+            .order_by(models.Tournament.created_at.desc(), models.Tournament.id.desc())
             .limit(limit)
             .offset(offset)
         )
@@ -147,7 +150,7 @@ class TournamentService:
                 models.Tournament.chat_id == chat_id,
                 models.Tournament.status != models.TournamentStatus.CLOSED,
             )
-            .order_by(models.Tournament.created_at.desc())
+            .order_by(models.Tournament.created_at.desc(), models.Tournament.id.desc())
         )
         rows = self.db.execute(stmt).scalars().all()
         return [TournamentRead.model_validate(t) for t in rows]
@@ -247,26 +250,10 @@ class TournamentService:
         return TournamentRead.model_validate(tournament)
 
     def reopen_tournament(self, tournament_id: int) -> TournamentRead:
-        """Возвращает закрытый турнир в регистрацию (отмена закрытия).
-
-        Инвариант «один активный турнир на чат» проверяем здесь: если в том же чате уже есть
-        незакрытый турнир, реоткрытие сделало бы их два, и `get_active_tournament_for_chat`
-        начал бы отдавать произвольный. В этом случае — `TournamentAlreadyExists`.
-        """
+        """Возвращает закрытый турнир в регистрацию, если в чате есть свободный активный слот."""
         tournament = get_tournament(self.db, tournament_id)
         ensure_tournament_status(tournament, allowed=[models.TournamentStatus.CLOSED])
-
-        other = self.db.execute(
-            select(models.Tournament)
-            .where(
-                models.Tournament.chat_id == tournament.chat_id,
-                models.Tournament.status != models.TournamentStatus.CLOSED,
-                models.Tournament.id != tournament.id,
-            )
-            .limit(1)
-        ).scalar_one_or_none()
-        if other:
-            raise errors.TournamentAlreadyExists(f"Chat {tournament.chat_id} already has active tournament #{other.id}")
+        self._ensure_active_slot(tournament.chat_id)
 
         tournament.status = models.TournamentStatus.REGISTRATION
         tournament.ended_at = None
