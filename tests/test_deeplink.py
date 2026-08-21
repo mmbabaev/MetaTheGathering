@@ -1,11 +1,16 @@
 """Tests for deck-registration deeplinks (bot/deeplink.py + handler + /start)."""
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
 from bot.deeplink import (
     deck_deeplink,
     deck_payload,
+    fill_missing_deeplink,
+    fill_missing_payload,
     parse_deck_payload,
+    parse_fill_missing_payload,
     parse_registration_payload,
     registration_deeplink,
     registration_payload,
@@ -13,6 +18,7 @@ from bot.deeplink import (
 from bot.handlers.base import HandlerResult
 from bot.handlers.player import PlayerHandler
 from bot.messages import CHOOSE_ARCHETYPE, NAME_REQUIRED_FOR_REGISTRATION, TOURNAMENT_NOT_FOUND
+from bot.telegram.common import cmd_start
 from core.schemas import TournamentCreate
 
 
@@ -41,6 +47,16 @@ class TestPayload:
 
     def test_registration_deeplink_url(self):
         assert registration_deeplink("MyBot", 7) == "https://t.me/MyBot?start=register_7"
+
+    def test_fill_missing_round_trip(self):
+        assert parse_fill_missing_payload(fill_missing_payload(42)) == 42
+
+    @pytest.mark.parametrize("bad", ["", "fill_", "fill_x", "fill_1x", "register_1", "fill_²", None])
+    def test_non_fill_missing_payloads_are_none(self, bad):
+        assert parse_fill_missing_payload(bad or "") is None
+
+    def test_fill_missing_deeplink_url(self):
+        assert fill_missing_deeplink("MyBot", 7) == "https://t.me/MyBot?start=fill_7"
 
 
 @pytest.fixture
@@ -107,9 +123,7 @@ class TestHandleDeeplinkRegistration:
 
         assert result.text == CHOOSE_ARCHETYPE
 
-    def test_registered_without_deck_goes_to_tournament_status(
-        self, player_handler, svc, user_svc, tournament
-    ):
+    def test_registered_without_deck_goes_to_tournament_status(self, player_handler, svc, user_svc, tournament):
         user = user_svc.get_or_create(tg_id=1, first_name="Алиса")
         svc.register_participant(tournament_id=tournament.id, user_id=user.id, archetype_id=None)
 
@@ -127,3 +141,16 @@ class TestHandleDeeplinkRegistration:
         assert result.text != CHOOSE_ARCHETYPE
         assert "Pauper" in result.text
         assert isinstance(result, HandlerResult)
+
+
+@pytest.mark.asyncio
+async def test_cmd_start_routes_fill_missing_deeplink():
+    update = MagicMock()
+    update.effective_user = MagicMock(id=123)
+    update.effective_message = AsyncMock()
+    context = MagicMock(args=["fill_42"], user_data={})
+
+    with patch("bot.telegram.common._start_fill_missing_deeplink", new_callable=AsyncMock) as start_fill:
+        await cmd_start(update, context)
+
+    start_fill.assert_awaited_once_with(update, context, update.effective_user, 42)

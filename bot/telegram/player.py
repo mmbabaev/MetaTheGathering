@@ -26,6 +26,7 @@ USER_DATA_PENDING_BULK_ADD = "pending_bulk_add_tournament_id"
 USER_DATA_PENDING_ADMIN_CUSTOM_ARCH = "pending_admin_custom_arch_participant_id"
 USER_DATA_OPPONENTS_MODE = "opponents_tournament_id"
 USER_DATA_PENDING_META_IMPORT = "pending_meta_import_tournament_id"
+USER_DATA_PENDING_MISSING_CUSTOM_ARCH = "pending_missing_custom_arch_participant_id"
 
 
 def _make_features(db) -> FeatureService:
@@ -199,6 +200,108 @@ async def callback_custom_archetype(update: Update, context: ContextTypes.DEFAUL
     await query.answer()
 
 
+async def callback_pick_missing_deck(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (participant_id,) = ids
+    db = SessionLocal()
+    try:
+        result = _player_handler(db).handle_pick_missing_deck(user.id, participant_id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+        await query.answer()
+    finally:
+        db.close()
+
+
+async def callback_missing_deck_more(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (participant_id,) = ids
+    db = SessionLocal()
+    try:
+        result = _player_handler(db).handle_pick_missing_deck(user.id, participant_id, expanded=True)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+        await query.answer()
+    finally:
+        db.close()
+
+
+async def callback_set_missing_deck(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 2)
+    if ids is None:
+        return
+    participant_id, archetype_id = ids
+    db = SessionLocal()
+    try:
+        participant = TournamentService(db).get_participant_by_id(participant_id)
+        target = UserService(db).get_by_id(participant.user_id) if participant else None
+        result = _player_handler(db).handle_set_missing_deck(user.id, participant_id, archetype_id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        _log(
+            "meta_police_deck_recorded",
+            user,
+            tournament_id=participant.tournament_id if participant else None,
+            participant_id=participant_id,
+            target_tg_id=target.tg_id if target else None,
+            archetype_id=archetype_id,
+        )
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+        await query.answer()
+        await announce_completion_if_ready(
+            context.bot,
+            db,
+            participant.tournament_id if participant else None,
+        )
+    finally:
+        db.close()
+
+
+async def callback_missing_custom_deck(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (participant_id,) = ids
+    db = SessionLocal()
+    try:
+        validation = _player_handler(db).handle_pick_missing_deck(user.id, participant_id)
+        if validation.is_alert:
+            await query.answer(validation.text, show_alert=True)
+            return
+        if context.user_data is None:
+            context.user_data = {}
+        context.user_data[USER_DATA_PENDING_MISSING_CUSTOM_ARCH] = participant_id
+        await query.edit_message_text(CUSTOM_ARCHETYPE_PROMPT)
+        await query.answer()
+    finally:
+        db.close()
+
+
 async def callback_tournament_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     user = update.effective_user
@@ -348,6 +451,40 @@ async def _handle_pending_admin_custom_arch(msg, user, text, context) -> bool:
     return True
 
 
+async def _handle_pending_missing_custom_arch(msg, user, text, context) -> bool:
+    participant_id = context.user_data.get(USER_DATA_PENDING_MISSING_CUSTOM_ARCH)
+    if participant_id is None:
+        return False
+    if not text:
+        await msg.reply_text("Введите непустое название архетипа.")
+        return True
+    context.user_data.pop(USER_DATA_PENDING_MISSING_CUSTOM_ARCH)
+    db = SessionLocal()
+    try:
+        participant = TournamentService(db).get_participant_by_id(participant_id)
+        target = UserService(db).get_by_id(participant.user_id) if participant else None
+        result = _player_handler(db).handle_set_missing_custom_deck(user.id, participant_id, text)
+        if not result.is_alert:
+            _log(
+                "meta_police_deck_recorded",
+                user,
+                tournament_id=participant.tournament_id if participant else None,
+                participant_id=participant_id,
+                target_tg_id=target.tg_id if target else None,
+                custom_archetype=text,
+            )
+        await msg.reply_text(result.text, reply_markup=result.keyboard)
+        if not result.is_alert:
+            await announce_completion_if_ready(
+                context.bot,
+                db,
+                participant.tournament_id if participant else None,
+            )
+    finally:
+        db.close()
+    return True
+
+
 async def _handle_pending_bulk_add(msg, user, text, context) -> bool:
     tournament_id = context.user_data.get(USER_DATA_PENDING_BULK_ADD)
     if tournament_id is None:
@@ -420,6 +557,7 @@ async def _handle_pending_meta_import(msg, user, text, context) -> bool:
 _TEXT_INPUT_HANDLERS = [
     _handle_pending_name,
     _handle_pending_settings_name,
+    _handle_pending_missing_custom_arch,
     _handle_pending_admin_custom_arch,
     _handle_pending_bulk_add,
     _handle_pending_custom_arch,

@@ -52,6 +52,10 @@ from bot.keyboards import (
     CB_EXPORT_PLAYERS,
     CB_FEATURE_INFO,
     CB_FEATURE_TOGGLE,
+    CB_FILL_MISSING_CUSTOM,
+    CB_FILL_MISSING_MORE,
+    CB_FILL_MISSING_PICK,
+    CB_FILL_MISSING_SET,
     CB_HIDE_DECKS,
     CB_LEAVE,
     CB_LEAVE_CANCEL,
@@ -299,6 +303,10 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(player.callback_defer_deck, pattern=f"^{CB_DEFER_DECK}:"))
     app.add_handler(CallbackQueryHandler(player.callback_archetype_more, pattern=f"^{CB_ARCHETYPE_MORE}:"))
     app.add_handler(CallbackQueryHandler(player.callback_custom_archetype, pattern=f"^{CB_CUSTOM_ARCHETYPE}:"))
+    app.add_handler(CallbackQueryHandler(player.callback_pick_missing_deck, pattern=f"^{CB_FILL_MISSING_PICK}:"))
+    app.add_handler(CallbackQueryHandler(player.callback_set_missing_deck, pattern=f"^{CB_FILL_MISSING_SET}:"))
+    app.add_handler(CallbackQueryHandler(player.callback_missing_deck_more, pattern=f"^{CB_FILL_MISSING_MORE}:"))
+    app.add_handler(CallbackQueryHandler(player.callback_missing_custom_deck, pattern=f"^{CB_FILL_MISSING_CUSTOM}:"))
     app.add_handler(CallbackQueryHandler(player.callback_tournament_status, pattern=f"^{CB_TSTATUS}:"))
     app.add_handler(CallbackQueryHandler(player.callback_leave_tournament, pattern=f"^{CB_LEAVE}:"))
     app.add_handler(CallbackQueryHandler(player.callback_leave_confirm, pattern=f"^{CB_LEAVE_CONFIRM}:"))

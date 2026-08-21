@@ -16,6 +16,7 @@ from bot.handlers.base import HandlerResult
 from bot.telegram.player import (
     USER_DATA_PENDING_ADMIN_CUSTOM_ARCH,
     USER_DATA_PENDING_CUSTOM,
+    USER_DATA_PENDING_MISSING_CUSTOM_ARCH,
     USER_DATA_PENDING_NAME,
     USER_DATA_PENDING_SETTINGS_NAME,
     callback_archetype,
@@ -23,7 +24,10 @@ from bot.telegram.player import (
     callback_defer_deck,
     callback_leave_confirm,
     callback_leave_tournament,
+    callback_missing_custom_deck,
+    callback_pick_missing_deck,
     callback_register,
+    callback_set_missing_deck,
     callback_tournament_select,
     cmd_tournaments,
     message_text_input,
@@ -369,6 +373,93 @@ async def test_message_text_input_admin_custom_arch_calls_handler():
         update.effective_user.id, 42, "Elves"
     )
     assert USER_DATA_PENDING_ADMIN_CUSTOM_ARCH not in ctx.user_data
+
+
+# ── meta-police community flow ───────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_callback_pick_missing_deck_calls_player_handler():
+    keyboard = MagicMock()
+    result = HandlerResult("Выберите колоду", keyboard=keyboard)
+    update = _make_callback_update("fill_pick:42")
+
+    with patch("bot.telegram.player.SessionLocal"), patch("bot.telegram.player.PlayerHandler") as mock_ph:
+        mock_ph.return_value.handle_pick_missing_deck.return_value = result
+        await callback_pick_missing_deck(update, _make_context())
+
+    mock_ph.return_value.handle_pick_missing_deck.assert_called_once_with(update.effective_user.id, 42)
+    update.callback_query.edit_message_text.assert_awaited_once_with("Выберите колоду", reply_markup=keyboard)
+
+
+@pytest.mark.asyncio
+async def test_callback_missing_custom_deck_sets_pending_participant():
+    update = _make_callback_update("fill_custom:42")
+    context = _make_context()
+
+    with patch("bot.telegram.player.SessionLocal"), patch("bot.telegram.player.PlayerHandler") as mock_ph:
+        mock_ph.return_value.handle_pick_missing_deck.return_value = HandlerResult("ok")
+        await callback_missing_custom_deck(update, context)
+
+    assert context.user_data[USER_DATA_PENDING_MISSING_CUSTOM_ARCH] == 42
+    mock_ph.return_value.handle_pick_missing_deck.assert_called_once_with(update.effective_user.id, 42)
+
+
+@pytest.mark.asyncio
+async def test_callback_set_missing_deck_logs_filler_and_target():
+    result = HandlerResult("Сохранено")
+    update = _make_callback_update("fill_set:42:7")
+    context = _make_context()
+    participant = MagicMock(id=42, user_id=5, tournament_id=9)
+    target = MagicMock(tg_id=222)
+
+    with (
+        patch("bot.telegram.player.SessionLocal"),
+        patch("bot.telegram.player.PlayerHandler") as mock_ph,
+        patch("bot.telegram.player.TournamentService") as mock_ts,
+        patch("bot.telegram.player.UserService") as mock_us,
+        patch("bot.telegram.player._log") as mock_log,
+        patch("bot.telegram.player.announce_completion_if_ready", new_callable=AsyncMock),
+    ):
+        mock_ph.return_value.handle_set_missing_deck.return_value = result
+        mock_ts.return_value.get_participant_by_id.return_value = participant
+        mock_us.return_value.get_by_id.return_value = target
+        await callback_set_missing_deck(update, context)
+
+    mock_ph.return_value.handle_set_missing_deck.assert_called_once_with(update.effective_user.id, 42, 7)
+    mock_log.assert_called_once_with(
+        "meta_police_deck_recorded",
+        update.effective_user,
+        tournament_id=9,
+        participant_id=42,
+        target_tg_id=222,
+        archetype_id=7,
+    )
+
+
+@pytest.mark.asyncio
+async def test_message_text_input_missing_custom_arch_calls_player_handler():
+    result = HandlerResult("Сохранено")
+    update = _make_update(message_text="Turbo Fog")
+    context = _make_context({USER_DATA_PENDING_MISSING_CUSTOM_ARCH: 42})
+    participant = MagicMock(id=42, user_id=5, tournament_id=9)
+
+    with (
+        patch("bot.telegram.player.SessionLocal"),
+        patch("bot.telegram.player.PlayerHandler") as mock_ph,
+        patch("bot.telegram.player.TournamentService") as mock_ts,
+        patch("bot.telegram.player.UserService") as mock_us,
+        patch("bot.telegram.player.announce_completion_if_ready", new_callable=AsyncMock),
+    ):
+        mock_ph.return_value.handle_set_missing_custom_deck.return_value = result
+        mock_ts.return_value.get_participant_by_id.return_value = participant
+        mock_us.return_value.get_by_id.return_value = MagicMock(tg_id=222)
+        await message_text_input(update, context)
+
+    mock_ph.return_value.handle_set_missing_custom_deck.assert_called_once_with(
+        update.effective_user.id, 42, "Turbo Fog"
+    )
+    assert USER_DATA_PENDING_MISSING_CUSTOM_ARCH not in context.user_data
 
 
 # ── db session always closed ──────────────────────────────────────────────────
