@@ -188,8 +188,12 @@ class CreateTournamentJob:
             try:
                 active = svc.get_active_tournament_for_chat(self.club.chat_id or 0)
                 if active:
-                    svc.close_tournament(active.id)
-                    logger.info(f"Closed previous tournament #{active.id} for '{self.club.name}'")
+                    logger.warning(
+                        "CreateTournamentJob: skipping '%s' — active tournament #%s must be closed manually",
+                        self.club.name,
+                        active.id,
+                    )
+                    return
 
                 new_t = svc.create_tournament(
                     TournamentCreate(
