@@ -44,6 +44,9 @@ BULK_ADD_PROMPT = (
 )
 BULK_ADD_EMPTY = "Список игроков пустой."
 PARTICIPANT_NOT_FOUND = "Участник не найден."
+META_POLICE_FILL_UNAVAILABLE = "Заполнение колод по этому напоминанию сейчас недоступно."
+META_POLICE_DECK_ALREADY_FILLED = "Этому игроку уже указали колоду. Выберите другого."
+META_POLICE_ALL_FILLED = "✅ Все колоды уже заполнены. Спасибо!"
 SCOREKEEPER_GRANTED = "🧙 {name} назначен метаписцем."
 SCOREKEEPER_REVOKED = "🧙 {name} снят с роли метаписца."
 POLL_ORGANIZER_GRANTED = "📊 {name} назначен организатором голосований."
@@ -181,15 +184,15 @@ def format_tournament_status(title: str, status: str, participants: list, decks_
     return "\n".join(lines)
 
 
-def format_missing_decks_reminder(title: str, participants: list) -> str:
+def format_missing_decks_reminder(title: str, participants: list, community_fill_enabled: bool = False) -> str:
     """Шуточное напоминание со списком только игроков без колоды."""
     lines = [
         "🚨👮 Вас посетила мета-полиция!",
         "На какой колоде были эти игроки?",
-        "",
-        f"🏆 {title}",
-        "Список игроков без колоды:",
     ]
+    if community_fill_enabled:
+        lines.append("Помочь заполнить пропуски может каждый — нажмите «Записать».")
+    lines.extend(["", f"🏆 {title}", "Список игроков без колоды:"])
     for participant in participants:
         if participant.archetype_id is not None:
             continue

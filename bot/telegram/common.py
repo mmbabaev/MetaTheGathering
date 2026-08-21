@@ -5,7 +5,7 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from bot.deeplink import parse_deck_payload, parse_registration_payload
+from bot.deeplink import parse_deck_payload, parse_fill_missing_payload, parse_registration_payload
 from bot.messages import HELP_TEXT, HELP_TEXT_ADMIN
 from core.database import SessionLocal
 from core.event_log import event_logger
@@ -71,6 +71,10 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if tournament_id is not None:
         await _start_registration_deeplink(update, context, user, tournament_id)
         return
+    tournament_id = parse_fill_missing_payload(payload) if payload else None
+    if tournament_id is not None:
+        await _start_fill_missing_deeplink(update, context, user, tournament_id)
+        return
 
     _log("cmd_start", user)
     db = SessionLocal()
@@ -122,6 +126,21 @@ async def _start_registration_deeplink(
             if context.user_data is None:
                 context.user_data = {}
             context.user_data[USER_DATA_PENDING_NAME] = tournament_id
+        await update.effective_message.reply_text(result.text, reply_markup=result.keyboard)
+    finally:
+        db.close()
+
+
+async def _start_fill_missing_deeplink(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, user, tournament_id: int
+) -> None:
+    """Открывает защищённый community-flow из сообщения мета-полиции."""
+    from bot.telegram.player import _player_handler  # noqa: PLC0415
+
+    _log("meta_police_open", user, tournament_id=tournament_id)
+    db = SessionLocal()
+    try:
+        result = _player_handler(db).handle_fill_missing_deeplink(tournament_id, tg_id=user.id)
         await update.effective_message.reply_text(result.text, reply_markup=result.keyboard)
     finally:
         db.close()

@@ -58,6 +58,11 @@
 
 ### В review, но ещё не в `main`
 
+- Мета-полиция из [#254](https://github.com/mmbabaev/MetaTheGathering/issues/254): под
+  `recordOpponents` любой пользователь может помочь заполнить оставшиеся пустые колоды;
+  свой пропуск имеет приоритет, заполненные записи защищены от изменения, автор записи
+  сохраняется в `deck_added_by_tg_id` и event log — PR
+  [#255](https://github.com/mmbabaev/MetaTheGathering/pull/255).
 - Pure fairness foundation перечисляет все 10 линий Bingo 4×4 и считает вероятностные
   веса/imbalance с отдельными diagnostics для строк, столбцов и диагоналей, не меняя
   horizontal-only `bingo-v1` — PR

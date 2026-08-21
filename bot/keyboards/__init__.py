@@ -14,6 +14,10 @@ CB_ARCHETYPE = "arch"
 CB_CUSTOM_ARCHETYPE = "custom"
 CB_ARCHETYPE_MORE = "arch_more"  # arch_more:{tournament_id}
 CB_DEFER_DECK = "deck_later"  # deck_later:{tournament_id}
+CB_FILL_MISSING_PICK = "fill_pick"  # fill_pick:{participant_id}
+CB_FILL_MISSING_SET = "fill_set"  # fill_set:{participant_id}:{archetype_id}
+CB_FILL_MISSING_MORE = "fill_more"  # fill_more:{participant_id}
+CB_FILL_MISSING_CUSTOM = "fill_custom"  # fill_custom:{participant_id}
 CB_TOURNAMENT = "t"
 CB_SETTINGS_NAME = "settings_name"
 CB_SETTINGS_TOGGLE_EMOJI = "settings_toggle_emoji"
@@ -175,6 +179,18 @@ def opponent_button_rows(opponents: list) -> list[list[StatusButton]]:
     return rows
 
 
+def missing_deck_button_rows(participants: list) -> list[list[StatusButton]]:
+    """Кнопки только для участников без колоды в community-flow мета-полиции."""
+    rows: list[list[StatusButton]] = []
+    for participant in participants:
+        if participant.archetype_id is not None:
+            continue
+        user = participant.user
+        name = format_participant_name(user.first_name, user.last_name) or f"id{user.tg_id}"
+        rows.append([StatusButton(f"📝 {name}", f"{CB_FILL_MISSING_PICK}:{participant.id}")])
+    return rows
+
+
 def _status_rows_to_markup(rows: list[list[StatusButton]]) -> InlineKeyboardMarkup:
     """Telegram-адаптер: чистая модель рядов → InlineKeyboardMarkup."""
     return InlineKeyboardMarkup(
@@ -183,6 +199,9 @@ def _status_rows_to_markup(rows: list[list[StatusButton]]) -> InlineKeyboardMark
 
 
 class Keyboards:
+    def missing_decks_keyboard(self, participants: list) -> InlineKeyboardMarkup:
+        return _status_rows_to_markup(missing_deck_button_rows(participants))
+
     def tournament_list_keyboard(self, tournaments: list) -> InlineKeyboardMarkup:
         buttons = [[InlineKeyboardButton(title, callback_data=f"{CB_TOURNAMENT}:{tid}")] for tid, title in tournaments]
         return InlineKeyboardMarkup(buttons)
@@ -650,6 +669,32 @@ class Keyboards:
             )
         if tournament_id is not None:
             buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_TSTATUS}:{tournament_id}")])
+        return InlineKeyboardMarkup(buttons)
+
+    def missing_deck_archetype_keyboard(
+        self,
+        participant_id: int,
+        archetypes: list,
+        has_more: bool = False,
+        show_emoji: bool = True,
+    ) -> InlineKeyboardMarkup:
+        """Выбор колоды в мета-полиции с отдельными, защищаемыми callback-префиксами."""
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    deck_emoji.format(name) if show_emoji else name,
+                    callback_data=f"{CB_FILL_MISSING_SET}:{participant_id}:{aid}",
+                )
+            ]
+            for aid, name in archetypes
+        ]
+        if has_more:
+            buttons.append(
+                [InlineKeyboardButton("... ещё колоды", callback_data=f"{CB_FILL_MISSING_MORE}:{participant_id}")]
+            )
+        buttons.append(
+            [InlineKeyboardButton("Свой вариант", callback_data=f"{CB_FILL_MISSING_CUSTOM}:{participant_id}")]
+        )
         return InlineKeyboardMarkup(buttons)
 
     def archetype_keyboard(

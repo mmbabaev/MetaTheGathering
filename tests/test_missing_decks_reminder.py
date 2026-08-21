@@ -7,6 +7,7 @@ import pytest
 from bot.scheduler import MissingDecksReminderJob
 from core import models
 from core.schemas import TournamentCreate
+from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.tournament import TournamentService
 
 MOSCOW = ZoneInfo("Europe/Moscow")
@@ -34,7 +35,7 @@ def _tournament(db, svc, *, chat_id: int = 100, event_at: datetime = EVENT_AT):
 
 
 @pytest.mark.asyncio
-async def test_sends_meta_police_to_tournament_chat_with_missing_players_and_registration_button(
+async def test_sends_meta_police_with_community_help_copy_and_fill_button(
     db, svc, user_svc, user_alice, archetype_burn
 ):
     tournament = _tournament(db, svc)
@@ -50,14 +51,31 @@ async def test_sends_meta_police_to_tournament_chat_with_missing_players_and_reg
     text = bot.send_message.call_args.kwargs["text"]
     assert text.startswith("🚨👮 Вас посетила мета-полиция!")
     assert "На какой колоде были эти игроки?" in text
+    assert "Помочь заполнить пропуски может каждый" in text
     assert "Список игроков без колоды:" in text
     assert "• Лактанов Глеб (@missing)" in text
     assert "Alice" not in text
     button = bot.send_message.call_args.kwargs["reply_markup"].inline_keyboard[0][0]
-    assert button.text == "Записаться"
-    assert button.url == f"https://t.me/TestBot?start=register_{tournament.id}"
+    assert button.text == "Записать"
+    assert button.url == f"https://t.me/TestBot?start=fill_{tournament.id}"
     row = db.get(models.Tournament, tournament.id)
     assert row.missing_decks_reminder_1d_sent_at is not None
+
+
+@pytest.mark.asyncio
+async def test_feature_disabled_keeps_legacy_registration_button(db, svc, user_alice):
+    FeatureFlagService(db).toggle(FeatureFlags.RECORD_OPPONENTS)
+    tournament = _tournament(db, svc)
+    svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id)
+    bot = _bot()
+
+    await MissingDecksReminderJob().run(bot, DAY_ONE, db=db)
+
+    text = bot.send_message.call_args.kwargs["text"]
+    assert "Помочь заполнить пропуски может каждый" not in text
+    button = bot.send_message.call_args.kwargs["reply_markup"].inline_keyboard[0][0]
+    assert button.text == "Записаться"
+    assert button.url == f"https://t.me/TestBot?start=register_{tournament.id}"
 
 
 @pytest.mark.asyncio
@@ -134,9 +152,7 @@ async def test_ignores_tournament_on_event_day(db, svc, user_alice):
 
 
 @pytest.mark.asyncio
-async def test_ignores_closed_tournament_and_tournament_with_all_decks(
-    db, svc, user_svc, user_alice, archetype_burn
-):
+async def test_ignores_closed_tournament_and_tournament_with_all_decks(db, svc, user_svc, user_alice, archetype_burn):
     complete = _tournament(db, svc)
     svc.register_participant(tournament_id=complete.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
 

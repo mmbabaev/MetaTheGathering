@@ -17,7 +17,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 from telegram.ext import Application, ContextTypes
 
 from bot.chart import build_chart, build_standings
-from bot.deeplink import registration_deeplink
+from bot.deeplink import fill_missing_deeplink, registration_deeplink
 from bot.messages import format_decks_revealed, format_meta_gather_completed, format_missing_decks_reminder
 from bot.registration_messages import RegistrationMessageRefreshJob
 from bot.registration_messages import send_registration_open as _send_registration_open
@@ -749,13 +749,23 @@ class MissingDecksReminderJob:
 
                 try:
                     me = await bot.get_me()
-                    button_url = registration_deeplink(me.username, tournament.id)
+                    community_fill_enabled = FeatureFlagService(db).is_enabled(FeatureFlags.RECORD_OPPONENTS)
+                    button_url = (
+                        fill_missing_deeplink(me.username, tournament.id)
+                        if community_fill_enabled
+                        else registration_deeplink(me.username, tournament.id)
+                    )
                 except Exception:  # noqa: BLE001 — без рабочей кнопки уведомление не считаем доставленным
                     logger.exception("MissingDecksReminderJob: get_me failed for #%s", tournament.id)
                     continue
 
-                text = format_missing_decks_reminder(tournament.title, participants)
-                keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("Записаться", url=button_url)]])
+                text = format_missing_decks_reminder(
+                    tournament.title,
+                    participants,
+                    community_fill_enabled=community_fill_enabled,
+                )
+                button_text = "Записать" if community_fill_enabled else "Записаться"
+                keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(button_text, url=button_url)]])
                 try:
                     await bot.send_message(chat_id=tournament.chat_id, text=text, reply_markup=keyboard)
                 except Exception:  # noqa: BLE001 — повторим на следующем ежедневном запуске

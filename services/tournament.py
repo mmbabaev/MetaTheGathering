@@ -338,6 +338,49 @@ class TournamentService:
         self.db.refresh(participant)
         return ParticipantRead.model_validate(participant)
 
+    def set_participant_archetype_if_missing(
+        self,
+        *,
+        participant_id: int,
+        archetype_id: int,
+        deck_added_by_tg_id: int,
+    ) -> Optional[ParticipantRead]:
+        """Атомарно записать только ещё пустую колоду.
+
+        Community-flow мета-полиции не должен перетирать уже заполненную запись даже
+        при устаревшей кнопке или двух одновременных ответах. ``None`` означает, что
+        другой пользователь успел заполнить колоду раньше.
+        """
+        now = models.utc_now()
+        updated = (
+            self.db.query(models.Participant)
+            .filter(
+                models.Participant.id == participant_id,
+                models.Participant.archetype_id.is_(None),
+            )
+            .update(
+                {
+                    models.Participant.archetype_id: archetype_id,
+                    models.Participant.deck_added_by_tg_id: deck_added_by_tg_id,
+                    models.Participant.deck_deferred: False,
+                    models.Participant.confirmed: False,
+                    models.Participant.upvotes_count: 0,
+                    models.Participant.downvotes_count: 0,
+                    models.Participant.updated_at: now,
+                },
+                synchronize_session=False,
+            )
+        )
+        if not updated:
+            self.db.rollback()
+            return None
+        self.db.query(models.Vote).filter(models.Vote.participant_id == participant_id).delete(
+            synchronize_session=False
+        )
+        self.db.commit()
+        participant = self._get_participant(participant_id)
+        return ParticipantRead.model_validate(participant)
+
     def mark_participant_deck_deferred(self, participant_id: int) -> ParticipantRead:
         """Mark an existing deckless participant as explicitly choosing «Укажу позже»."""
         participant = self._get_participant(participant_id)

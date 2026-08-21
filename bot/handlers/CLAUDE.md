@@ -71,6 +71,8 @@ State lives in `context.user_data` with named keys (defined as constants):
 |---|---|---|
 | `USER_DATA_PENDING_NAME` | `callback_register` (when `result.needs_name`) | `message_text_input` |
 | `USER_DATA_PENDING_CUSTOM` | `callback_custom_archetype` | `message_text_input` |
+| `USER_DATA_PENDING_MISSING_CUSTOM_ARCH` | `callback_missing_custom_deck` | `message_text_input` |
+| `USER_DATA_PENDING_MISSING_CUSTOM_ARCH` | `callback_missing_custom_deck` | `message_text_input` |
 | `USER_DATA_PENDING_SETTINGS_NAME` | `callback_settings_name` | `message_text_input` |
 
 All text input is routed through a single `message_text_input` handler that checks these keys in priority order.
