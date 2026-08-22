@@ -86,6 +86,10 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     SMTP_FROM: str = "MetaGatherer <noreply@example.com>"
 
+    # Получатели персональной сводки по броням колод из ячейки. Значение хранится
+    # только в env, потому что Telegram IDs координаторов не должны попадать в git.
+    CELLAR_COORDINATOR_TG_IDS: str = ""
+
     # Несекретные настройки — берутся из config/prod.py или config/debug.py
     DEBUG: bool = _app_cfg.debug
     TOURNAMENT_TIMEZONE: str = _app_cfg.tournament_timezone
@@ -104,6 +108,10 @@ class Settings(BaseSettings):
     def notify_allowed_ids(self) -> Optional[List[int]]:
         """None = все разрешены (прод). Список = только указанные (дебаг)."""
         return _app_cfg.notify_allowed_ids
+
+    @property
+    def cellar_coordinator_tg_ids(self) -> List[int]:
+        return [int(value.strip()) for value in self.CELLAR_COORDINATOR_TG_IDS.split(",") if value.strip()]
 
     @property
     def chat_ids(self) -> List[int]:
