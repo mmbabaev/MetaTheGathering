@@ -34,6 +34,7 @@ class CatalogEntry:
     notes: str | None = None
     decklist_updated_on: date | None = None
     available: bool = True
+    source_position: int | None = None
 
 
 def _clean_text(value: object) -> str | None:
@@ -103,6 +104,7 @@ def parse_cellar_workbook(workbook: BinaryIO | BytesIO) -> list[CatalogEntry]:
                 notes=notes,
                 decklist_updated_on=updated_on,
                 available=(notes or "").casefold() not in CELLAR_UNAVAILABLE_NOTES,
+                source_position=row,
             )
         )
 

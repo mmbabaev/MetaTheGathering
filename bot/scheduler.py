@@ -32,6 +32,7 @@ from core.schemas import TournamentCreate
 from services.aetherhub_import_service import MIN_TOURNAMENT_DURATION, AetherhubImportService
 from services.aetherhub_service import AetherhubService
 from services.cellar import CELLAR_CLUB_NAME, CELLAR_TIMEZONE, CellarService, format_coordinator_summary
+from services.cellar_sheet import CellarCatalogSourceError, GoogleSheetsCellarCatalog
 from services.datalens import DataLensService
 from services.deck_mapping import refresh_archetype_macro
 from services.deck_reminders import DeckReminderStage
@@ -48,6 +49,8 @@ from services.stats import StatsService
 from services.tournament import MAX_ACTIVE_TOURNAMENTS_PER_CHAT, TournamentService
 
 logger = logging.getLogger(__name__)
+
+CELLAR_CATALOG_SYNC_TIME = "23:00"
 
 
 @dataclass(frozen=True)
@@ -321,6 +324,32 @@ class CellarCoordinatorReminderJob:
                     logger.exception("Cellar coordinator reminder failed for %s", recipient_tg_id)
                     continue
                 service.finish_coordinator_delivery(delivery)
+        finally:
+            if close_db:
+                db.close()
+
+
+class CellarCatalogSyncJob:
+    """Refresh the public cellar sheet once a week without blocking the bot event loop."""
+
+    def __init__(self, source: GoogleSheetsCellarCatalog | None = None) -> None:
+        self._source = source or GoogleSheetsCellarCatalog()
+
+    async def run(self, db=None) -> tuple[int, int, int] | None:
+        close_db = db is None
+        if close_db:
+            db = SessionLocal()
+        try:
+            entries = await asyncio.to_thread(self._source.fetch)
+            result = CellarService(db).sync_catalog(entries)
+            logger.info(
+                "Каталог колод из ячейки синхронизирован: created=%s updated=%s deactivated=%s",
+                *result,
+            )
+            return result
+        except CellarCatalogSourceError:
+            logger.exception("Не удалось выполнить еженедельную синхронизацию каталога ячейки")
+            return None
         finally:
             if close_db:
                 db.close()
@@ -1313,6 +1342,18 @@ def setup_scheduler(app: Application) -> None:
     _remind_about_missing_decks.__name__ = "missing_decks_reminder"
     app.job_queue.run_daily(_remind_about_missing_decks, time=missing_decks_reminder_time)
     logger.info(f"Scheduler: MissingDecksReminderJob registered (daily {MISSING_DECKS_REMINDER_TIME})")
+
+    cellar_catalog_sync_job = CellarCatalogSyncJob()
+
+    async def _sync_cellar_catalog(_context: ContextTypes.DEFAULT_TYPE) -> None:
+        await cellar_catalog_sync_job.run()
+
+    _sync_cellar_catalog.__name__ = "cellar_catalog_sync"
+    cellar_catalog_sync_time = (
+        datetime.strptime(CELLAR_CATALOG_SYNC_TIME, "%H:%M").time().replace(tzinfo=CELLAR_TIMEZONE)
+    )
+    app.job_queue.run_daily(_sync_cellar_catalog, time=cellar_catalog_sync_time, days=(0,))
+    logger.info("Scheduler: CellarCatalogSyncJob registered (Sunday %s Europe/Moscow)", CELLAR_CATALOG_SYNC_TIME)
 
 
 def _register_schedule_jobs(app: Application) -> None:

@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from io import BytesIO
 
 import pytest
@@ -6,7 +6,7 @@ import requests
 from openpyxl import Workbook
 
 from core import models
-from services.cellar import CELLAR_CATALOG_REFRESH_INTERVAL, CellarDeckUnavailable, CellarService
+from services.cellar import CellarDeckUnavailable, CellarService
 from services.cellar_sheet import (
     CatalogEntry,
     CellarCatalogSourceError,
@@ -55,6 +55,7 @@ def test_parse_sheet_preserves_physical_copies_links_dates_and_availability():
     assert entries[1].available is False
     assert entries[2].available is False
     assert entries[3].decklist_url is None
+    assert [entry.source_position for entry in entries] == [12, 13, 14, 15]
 
 
 def test_parse_sheet_rejects_unknown_layout():
@@ -91,6 +92,7 @@ def test_catalog_sync_updates_rows_and_deactivates_removed_decks(db):
                 notes="дома",
                 decklist_updated_on=date(2026, 7, 1),
                 available=False,
+                source_position=13,
             ),
             CatalogEntry("gsheet:new:1", "New deck", "New deck"),
         ],
@@ -107,6 +109,7 @@ def test_catalog_sync_updates_rows_and_deactivates_removed_decks(db):
     assert updated["decklist_url"] == "https://example.test/new"
     assert updated["decklist_updated_on"] == date(2026, 7, 1)
     assert updated["available"] is False
+    assert updated["source_position"] == 13
     assert (
         db.execute(models.CellarDeck.__table__.select().where(models.CellarDeck.source_key == "gsheet:removed:1"))
         .mappings()
@@ -115,26 +118,21 @@ def test_catalog_sync_updates_rows_and_deactivates_removed_decks(db):
     )
 
 
-def test_catalog_refresh_uses_persisted_fifteen_minute_ttl(db):
+def test_initial_catalog_loads_sheet_once_for_empty_database(db):
     class Source:
         def __init__(self):
             self.calls = 0
 
         def fetch(self):
             self.calls += 1
-            return [CatalogEntry("gsheet:deck:1", "Deck", "Deck")]
+            return [CatalogEntry("gsheet:deck:1", "Deck", "Deck", source_position=12)]
 
     source = Source()
     service = CellarService(db)
-    now = datetime(2026, 8, 22, 10, 0)
 
-    assert service.refresh_catalog_from_sheet(now=now, source=source) == (1, 0, 0)
-    assert service.refresh_catalog_from_sheet(now=now + timedelta(minutes=14), source=source) is None
-    assert service.refresh_catalog_from_sheet(
-        now=now + CELLAR_CATALOG_REFRESH_INTERVAL,
-        source=source,
-    ) == (0, 1, 0)
-    assert source.calls == 2
+    assert service.ensure_catalog(source=source) == (1, 0, 0)
+    assert service.ensure_catalog(source=source) is None
+    assert source.calls == 1
 
 
 def test_unavailable_sheet_deck_cannot_be_reserved(db, user_svc):

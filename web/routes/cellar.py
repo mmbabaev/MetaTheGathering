@@ -48,7 +48,6 @@ async def cellar_catalog(
     dates = next_cellar_dates()
     selected_date = event_date if event_date in dates else dates[0]
     service = CellarService(db)
-    service.ensure_catalog()
     decks = service.catalog(selected_date)
     my_reservation = next(
         (
