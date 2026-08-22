@@ -114,6 +114,7 @@ from core import models
 from core.config import settings
 from core.database import SessionLocal
 from core.schemas import TournamentCreate
+from services.cellar import CellarService
 from services.feature_flags import FeatureFlagService
 from services.schedule import ScheduleService
 from services.tournament import TournamentService
@@ -174,6 +175,9 @@ async def _post_init(app: Application) -> None:
         created = ScheduleService(db).ensure_defaults()
         if created:
             logger.info("Расписание засеяно из кода: %s строк", created)
+        cellar_created = CellarService(db).ensure_bootstrap_catalog()
+        if cellar_created:
+            logger.info("Каталог колод из ячейки засеян: %s", cellar_created)
     finally:
         db.close()
     await _set_commands(app)

@@ -31,6 +31,7 @@ from core.database import SessionLocal
 from core.schemas import TournamentCreate
 from services.aetherhub_import_service import MIN_TOURNAMENT_DURATION, AetherhubImportService
 from services.aetherhub_service import AetherhubService
+from services.cellar import CELLAR_CLUB_NAME, CELLAR_TIMEZONE, CellarService, format_coordinator_summary
 from services.datalens import DataLensService
 from services.deck_mapping import refresh_archetype_macro
 from services.deck_reminders import DeckReminderStage
@@ -205,6 +206,12 @@ class CreateTournamentJob:
                         registration_close_at=_naive_utc(event_at),
                     )
                 )
+                if self.club.name == CELLAR_CLUB_NAME:
+                    try:
+                        CellarService(db).attach_event_to_tournament(event_at.date(), new_t.id)
+                    except Exception:
+                        db.rollback()
+                        logger.exception("CreateTournamentJob: cellar reservations failed for #%s", new_t.id)
                 logger.info(f"Created tournament #{new_t.id} '{title}' for '{self.club.name}'")
 
                 if bot is not None:
@@ -264,6 +271,56 @@ class PreStartReminderJob:
                 logger.exception("PreStartReminderJob: deck reminders failed for #%s", active.id)
         except Exception:
             logger.exception("PreStartReminderJob error for '%s'", self.club.name)
+        finally:
+            if close_db:
+                db.close()
+
+
+class CellarCoordinatorReminderJob:
+    """Send each configured coordinator one idempotent summary shortly before the event."""
+
+    async def run(self, bot, now: datetime, db=None) -> None:
+        if bot is None or not settings.cellar_coordinator_tg_ids:
+            return
+        close_db = db is None
+        if close_db:
+            db = SessionLocal()
+        try:
+            now_utc = _naive_utc(now)
+            tournament = db.execute(
+                select(models.Tournament)
+                .where(
+                    models.Tournament.club == CELLAR_CLUB_NAME,
+                    models.Tournament.status == models.TournamentStatus.REGISTRATION,
+                    models.Tournament.registration_close_at > now_utc,
+                    models.Tournament.registration_close_at <= now_utc + timedelta(minutes=15),
+                )
+                .order_by(models.Tournament.registration_close_at)
+                .limit(1)
+            ).scalar_one_or_none()
+            if tournament is None:
+                return
+            event_at = tournament.registration_close_at.replace(tzinfo=timezone.utc).astimezone(CELLAR_TIMEZONE)
+            service = CellarService(db)
+            reservations = service.active_reservations(event_at.date())
+            if not reservations:
+                return
+            text = format_coordinator_summary(event_at.date(), reservations)
+            allowed = settings.notify_allowed_ids
+            for recipient_tg_id in settings.cellar_coordinator_tg_ids:
+                if allowed is not None and recipient_tg_id not in allowed:
+                    logger.info("Cellar reminder skipped by notify_allowed_ids for %s", recipient_tg_id)
+                    continue
+                delivery = service.coordinator_delivery(event_at.date(), recipient_tg_id)
+                if delivery.delivered_at is not None:
+                    continue
+                try:
+                    await bot.send_message(chat_id=recipient_tg_id, text=text)
+                except Exception as exc:  # noqa: BLE001 — retry on the next minute
+                    service.finish_coordinator_delivery(delivery, error=str(exc))
+                    logger.exception("Cellar coordinator reminder failed for %s", recipient_tg_id)
+                    continue
+                service.finish_coordinator_delivery(delivery)
         finally:
             if close_db:
                 db.close()
@@ -1199,6 +1256,15 @@ def setup_scheduler(app: Application) -> None:
     _refresh_registration_messages.__name__ = "registration_message_refresh"
     app.job_queue.run_repeating(_refresh_registration_messages, interval=60, first=60)
     logger.info("Scheduler: RegistrationMessageRefreshJob registered (every 60s)")
+
+    cellar_reminder_job = CellarCoordinatorReminderJob()
+
+    async def _remind_cellar_coordinators(context: ContextTypes.DEFAULT_TYPE) -> None:
+        await cellar_reminder_job.run(context.bot, now=datetime.now(timezone.utc))
+
+    _remind_cellar_coordinators.__name__ = "cellar_coordinator_reminder"
+    app.job_queue.run_repeating(_remind_cellar_coordinators, interval=60, first=20)
+    logger.info("Scheduler: CellarCoordinatorReminderJob registered (every 60s)")
 
     final_job = AetherhubFinalReimportJob(AetherhubService())
 
