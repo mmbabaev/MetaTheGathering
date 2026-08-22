@@ -252,6 +252,8 @@ class CellarDeck(Base):
     archetype_name = Column(String(255), nullable=False)
     decklist_url = Column(String(512), nullable=True)
     notes = Column(String(512), nullable=True)
+    decklist_updated_on = Column(Date, nullable=True)
+    available = Column(Boolean, nullable=False, default=True, server_default="true")
     active = Column(Boolean, nullable=False, default=True, server_default="true", index=True)
     created_at = Column(DateTime, default=utc_now, nullable=False)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)

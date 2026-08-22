@@ -12,6 +12,7 @@ from services.cellar import (
     format_group_reservation,
     next_cellar_dates,
 )
+from services.cellar_sheet import CELLAR_SHEET_URL
 from web.auth import get_current_user, get_db
 from web.templating import templates
 from web.tg_sender import send_tg_message
@@ -47,7 +48,7 @@ async def cellar_catalog(
     dates = next_cellar_dates()
     selected_date = event_date if event_date in dates else dates[0]
     service = CellarService(db)
-    service.ensure_bootstrap_catalog()
+    service.ensure_catalog()
     decks = service.catalog(selected_date)
     my_reservation = next(
         (
@@ -68,6 +69,7 @@ async def cellar_catalog(
             "decks": decks,
             "my_reservation": my_reservation,
             "reservation_for": service.reservation_for,
+            "catalog_source_url": CELLAR_SHEET_URL,
             "message": message,
             "error": error,
         },

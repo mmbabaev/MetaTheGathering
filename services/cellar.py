@@ -2,21 +2,26 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from core import models
 from services.archetype import ArchetypeService
+from services.cellar_sheet import CatalogEntry, CellarCatalogSourceError, GoogleSheetsCellarCatalog
 from services.tournament import TournamentService
+
+logger = logging.getLogger(__name__)
 
 CELLAR_CLUB_NAME = "Edinorog"
 CELLAR_TIMEZONE = ZoneInfo("Europe/Moscow")
 CELLAR_WEEKDAY = 0  # Monday
+CELLAR_CATALOG_REFRESH_INTERVAL = timedelta(minutes=15)
 
 
 class CellarReservationError(ValueError):
@@ -45,22 +50,18 @@ class ReservationResult:
     created: bool
 
 
-@dataclass(frozen=True)
-class CatalogEntry:
-    source_key: str
-    name: str
-    archetype_name: str
-    notes: str | None = None
-
-
 def _copies(key: str, name: str, count: int, *, archetype: str | None = None, notes: str | None = None):
     for number in range(1, count + 1):
         suffix = f" #{number}" if count > 1 else ""
-        yield CatalogEntry(f"bootstrap:{key}:{number}", f"{name}{suffix}", archetype or name, notes)
+        yield CatalogEntry(
+            f"bootstrap:{key}:{number}",
+            f"{name}{suffix}",
+            archetype or name,
+            notes=notes,
+        )
 
 
-# Bootstrap until the public DataLens cellar table is published.  Physical copies have
-# stable source keys so a later DataLens sync can update URLs/notes without mixing slots.
+# Offline fallback for a completely empty database when Google Sheets is unavailable.
 BOOTSTRAP_CATALOG = [
     CatalogEntry("bootstrap:ponza:gruul-ramp", "Ponza — с надписью Gruul Ramp", "Ponza"),
     CatalogEntry("bootstrap:ponza:unsigned", "Ponza — без подписи", "Ponza"),
@@ -68,7 +69,7 @@ BOOTSTRAP_CATALOG = [
     *_copies("boggles", "Boggles", 1),
     *_copies("white-weenie", "White Weenie", 2),
     CatalogEntry("bootstrap:altar-tron:1", "Altar Tron #1", "Altar Tron"),
-    CatalogEntry("bootstrap:altar-tron:2", "Altar Tron #2", "Altar Tron", "Без камней"),
+    CatalogEntry("bootstrap:altar-tron:2", "Altar Tron #2", "Altar Tron", notes="Без камней"),
     *_copies("dredge", "Dredge", 1),
     *_copies("rakdos-madness", "Rakdos Madness", 2),
     *_copies("u-faeries", "U Faeries", 2),
@@ -131,6 +132,81 @@ class CellarService:
             self.db.commit()
         return len(rows)
 
+    def sync_catalog(self, entries: list[CatalogEntry], *, synced_at: datetime | None = None) -> tuple[int, int, int]:
+        """Upsert sheet rows and retain removed rows as inactive reservation history."""
+
+        if not entries:
+            raise CellarCatalogSourceError("Пустой каталог нельзя синхронизировать.")
+        synced_at = synced_at or models.utc_now()
+        existing = {deck.source_key: deck for deck in self.db.execute(select(models.CellarDeck)).scalars().all()}
+        seen: set[str] = set()
+        created = updated = 0
+        for entry in entries:
+            if entry.source_key in seen:
+                raise CellarCatalogSourceError(f"Дублирующийся ключ колоды: {entry.source_key}")
+            seen.add(entry.source_key)
+            deck = existing.get(entry.source_key)
+            if deck is None:
+                deck = models.CellarDeck(
+                    source_key=entry.source_key, name=entry.name, archetype_name=entry.archetype_name
+                )
+                self.db.add(deck)
+                created += 1
+            else:
+                updated += 1
+            deck.name = entry.name
+            deck.archetype_name = entry.archetype_name
+            deck.decklist_url = entry.decklist_url
+            deck.notes = entry.notes
+            deck.decklist_updated_on = entry.decklist_updated_on
+            deck.available = entry.available
+            deck.active = True
+            deck.updated_at = synced_at
+
+        deactivated = 0
+        for deck in existing.values():
+            if deck.source_key not in seen and deck.active:
+                deck.active = False
+                deactivated += 1
+        self.db.commit()
+        return created, updated, deactivated
+
+    def refresh_catalog_from_sheet(
+        self,
+        *,
+        force: bool = False,
+        now: datetime | None = None,
+        source: GoogleSheetsCellarCatalog | None = None,
+    ) -> tuple[int, int, int] | None:
+        now = now or models.utc_now()
+        last_sync = self.db.execute(
+            select(func.max(models.CellarDeck.updated_at)).where(models.CellarDeck.source_key.like("gsheet:%"))
+        ).scalar_one()
+        if not force and last_sync is not None and now - last_sync < CELLAR_CATALOG_REFRESH_INTERVAL:
+            return None
+        entries = (source or GoogleSheetsCellarCatalog()).fetch()
+        return self.sync_catalog(entries, synced_at=now)
+
+    def ensure_catalog(self, *, force_refresh: bool = False) -> tuple[int, int, int] | None:
+        """Refresh the public sheet, falling back to bootstrap only if no catalog exists."""
+
+        try:
+            return self.refresh_catalog_from_sheet(force=force_refresh)
+        except CellarCatalogSourceError:
+            logger.warning("Не удалось обновить каталог ячейки из Google Sheets", exc_info=True)
+            active_count = self.db.execute(
+                select(func.count(models.CellarDeck.id)).where(models.CellarDeck.active.is_(True))
+            ).scalar_one()
+            if active_count == 0:
+                self.ensure_bootstrap_catalog()
+            return None
+        except IntegrityError:
+            # Two web workers can observe an expired TTL and insert the same source keys.
+            # The unique index chooses the winner; the other request can use its result.
+            self.db.rollback()
+            logger.info("Каталог ячейки уже синхронизирован другим процессом")
+            return None
+
     def catalog(self, event_date: date) -> list[models.CellarDeck]:
         return (
             self.db.execute(
@@ -176,7 +252,7 @@ class CellarService:
     def reserve(self, *, deck_id: int, user_id: int, event_date: date, today: date | None = None) -> ReservationResult:
         self._validate_event_date(event_date, today=today)
         deck = self.db.get(models.CellarDeck, deck_id)
-        if deck is None or not deck.active:
+        if deck is None or not deck.active or not deck.available:
             raise CellarDeckUnavailable("Эта колода недоступна.")
 
         existing = self.db.execute(

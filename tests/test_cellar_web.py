@@ -7,6 +7,7 @@ from sqlalchemy import select
 
 from core import models
 from services.cellar import CellarService
+from services.cellar_sheet import CELLAR_SHEET_URL
 from web.app import app
 from web.routes.cellar import cancel_cellar_reservation, reserve_cellar_deck
 from web.templating import templates
@@ -87,6 +88,9 @@ def test_cellar_page_renders_availability_and_reserver(db, user_svc):
     service.ensure_bootstrap_catalog()
     decks = service.catalog(EVENT_DATE)
     service.reserve(deck_id=decks[0].id, user_id=alice.id, event_date=EVENT_DATE, today=EVENT_DATE)
+    decks[1].available = False
+    decks[1].notes = "дома"
+    db.commit()
     db.expire_all()
     decks = service.catalog(EVENT_DATE)
 
@@ -97,6 +101,7 @@ def test_cellar_page_renders_availability_and_reserver(db, user_svc):
         decks=decks,
         my_reservation=service.reservation_for(decks[0], EVENT_DATE),
         reservation_for=service.reservation_for,
+        catalog_source_url=CELLAR_SHEET_URL,
         message=None,
         error=None,
     )
@@ -104,6 +109,8 @@ def test_cellar_page_renders_availability_and_reserver(db, user_svc):
     assert "Колоды из ячейки" in html
     assert "Забронировал(а): Alice" in html
     assert "Занята" in html
+    assert "Недоступна" in html
+    assert CELLAR_SHEET_URL in html
 
 
 def test_cellar_routes_are_registered():
