@@ -107,7 +107,7 @@ def test_cellar_page_renders_availability_and_reserver(db, user_svc):
 
 
 def test_cellar_routes_are_registered():
-    paths = {path for route in app.routes if (path := getattr(route, "path", None)) is not None}
+    paths = set(app.openapi()["paths"])
     assert "/cellar" in paths
     assert "/cellar/{deck_id}/reserve" in paths
     assert "/cellar/reservations/{reservation_id}/cancel" in paths
