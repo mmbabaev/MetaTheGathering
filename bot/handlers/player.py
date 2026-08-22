@@ -26,6 +26,7 @@ from bot.messages import (
     format_participant_name,
     format_tournament_card,
     format_tournament_status,
+    format_unfilled_opponents_note,
     sort_participants,
 )
 from core import models
@@ -256,7 +257,28 @@ class PlayerHandler:
             return None
         return tournament
 
-    def _missing_decks_result(self, tournament_id: int, prefix: str | None = None) -> HandlerResult:
+    def _unfilled_opponents_note(self, tournament_id: int, tg_id: int) -> str:
+        user = self.user_svc.get_by_tg_id(tg_id)
+        if user is None:
+            return ""
+        participants = self.svc.list_participants_for_tournament(tournament_id)
+        opponents, error = self.aetherhub_svc.get_unfilled_opponents(
+            tournament_id,
+            user.id,
+            participants,
+        )
+        return "" if error else format_unfilled_opponents_note(opponents)
+
+    def _with_unfilled_opponents_note(self, text: str, tournament_id: int, tg_id: int) -> str:
+        note = self._unfilled_opponents_note(tournament_id, tg_id)
+        return f"{text}\n\n{note}" if note else text
+
+    def _missing_decks_result(
+        self,
+        tournament_id: int,
+        prefix: str | None = None,
+        viewer_tg_id: int | None = None,
+    ) -> HandlerResult:
         participants = self.svc.list_participants_for_tournament(tournament_id)
         missing = [participant for participant in participants if participant.archetype_id is None]
         if not missing:
@@ -265,6 +287,8 @@ class PlayerHandler:
         text = "Выберите игрока без колоды:"
         if prefix:
             text = f"{prefix}\n\n{text}"
+        if viewer_tg_id is not None:
+            text = self._with_unfilled_opponents_note(text, tournament_id, viewer_tg_id)
         return HandlerResult(text, keyboard=self.keyboards.missing_decks_keyboard(missing))
 
     def _missing_deck_archetype_result(
@@ -294,6 +318,7 @@ class PlayerHandler:
                 or f"id{participant.id}"
             )
             text = f"Выберите колоду для {name}:"
+        text = self._with_unfilled_opponents_note(text, participant.tournament_id, caller_tg_id)
         return HandlerResult(
             text,
             keyboard=self.keyboards.missing_deck_archetype_keyboard(
@@ -318,7 +343,7 @@ class PlayerHandler:
             own_participant = self.svc.get_participant(tournament_id, user.id)
             if own_participant is not None and own_participant.archetype_id is None:
                 return self._missing_deck_archetype_result(own_participant.id, tg_id)
-        return self._missing_decks_result(tournament_id)
+        return self._missing_decks_result(tournament_id, viewer_tg_id=tg_id)
 
     def handle_pick_missing_deck(self, tg_id: int, participant_id: int, expanded: bool = False) -> HandlerResult:
         return self._missing_deck_archetype_result(participant_id, tg_id, expanded)
@@ -355,6 +380,7 @@ class PlayerHandler:
         return self._missing_decks_result(
             participant.tournament_id,
             prefix=f"✅ {name} записан как {arch_name}.",
+            viewer_tg_id=tg_id,
         )
 
     def handle_set_missing_custom_deck(self, tg_id: int, participant_id: int, arch_name: str) -> HandlerResult:

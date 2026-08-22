@@ -414,13 +414,16 @@ async def test_callback_set_missing_deck_logs_filler_and_target():
     target = MagicMock(tg_id=222)
 
     with (
-        patch("bot.telegram.player.SessionLocal"),
+        patch("bot.telegram.player.SessionLocal") as mock_sl,
         patch("bot.telegram.player.PlayerHandler") as mock_ph,
         patch("bot.telegram.player.TournamentService") as mock_ts,
         patch("bot.telegram.player.UserService") as mock_us,
         patch("bot.telegram.player._log") as mock_log,
+        patch("bot.telegram.player.refresh_meta_police_message", new_callable=AsyncMock) as refresh_message,
         patch("bot.telegram.player.announce_completion_if_ready", new_callable=AsyncMock),
     ):
+        mock_db = MagicMock()
+        mock_sl.return_value = mock_db
         mock_ph.return_value.handle_set_missing_deck.return_value = result
         mock_ts.return_value.get_participant_by_id.return_value = participant
         mock_us.return_value.get_by_id.return_value = target
@@ -435,6 +438,7 @@ async def test_callback_set_missing_deck_logs_filler_and_target():
         target_tg_id=222,
         archetype_id=7,
     )
+    refresh_message.assert_awaited_once_with(context.bot, mock_db, 9)
 
 
 @pytest.mark.asyncio
@@ -445,12 +449,15 @@ async def test_message_text_input_missing_custom_arch_calls_player_handler():
     participant = MagicMock(id=42, user_id=5, tournament_id=9)
 
     with (
-        patch("bot.telegram.player.SessionLocal"),
+        patch("bot.telegram.player.SessionLocal") as mock_sl,
         patch("bot.telegram.player.PlayerHandler") as mock_ph,
         patch("bot.telegram.player.TournamentService") as mock_ts,
         patch("bot.telegram.player.UserService") as mock_us,
+        patch("bot.telegram.player.refresh_meta_police_message", new_callable=AsyncMock) as refresh_message,
         patch("bot.telegram.player.announce_completion_if_ready", new_callable=AsyncMock),
     ):
+        mock_db = MagicMock()
+        mock_sl.return_value = mock_db
         mock_ph.return_value.handle_set_missing_custom_deck.return_value = result
         mock_ts.return_value.get_participant_by_id.return_value = participant
         mock_us.return_value.get_by_id.return_value = MagicMock(tg_id=222)
@@ -459,6 +466,7 @@ async def test_message_text_input_missing_custom_arch_calls_player_handler():
     mock_ph.return_value.handle_set_missing_custom_deck.assert_called_once_with(
         update.effective_user.id, 42, "Turbo Fog"
     )
+    refresh_message.assert_awaited_once_with(context.bot, mock_db, 9)
     assert USER_DATA_PENDING_MISSING_CUSTOM_ARCH not in context.user_data
 
 

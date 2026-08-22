@@ -17,6 +17,7 @@ from bot.keyboards import (
     reveal_decks_confirm_keyboard,
 )
 from bot.messages import ADD_PLAYERS_USAGE, BULK_ADD_PROMPT
+from bot.meta_police_message import refresh_meta_police_message
 from bot.scheduler import format_schedule_text
 from bot.telegram.common import announce_completion_if_ready, parse_callback_ints
 from bot.telegram.common import log_event as _log
@@ -136,6 +137,7 @@ async def callback_set_participant_arch(update: Update, context: ContextTypes.DE
             await query.edit_message_text(result.text, reply_markup=result.keyboard)
             await query.answer()
         part = TournamentService(db).get_participant_by_id(participant_id)
+        await refresh_meta_police_message(context.bot, db, part.tournament_id if part else None)
         await announce_completion_if_ready(context.bot, db, part.tournament_id if part else None)
     finally:
         db.close()
