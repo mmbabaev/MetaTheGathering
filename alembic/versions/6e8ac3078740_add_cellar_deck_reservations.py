@@ -1,7 +1,7 @@
 """add cellar deck reservations
 
 Revision ID: 6e8ac3078740
-Revises: 3c1587c33ad2
+Revises: a6fbdbee0220
 Create Date: 2026-08-22
 """
 
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "6e8ac3078740"
-down_revision: Union[str, Sequence[str], None] = "3c1587c33ad2"
+down_revision: Union[str, Sequence[str], None] = "a6fbdbee0220"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

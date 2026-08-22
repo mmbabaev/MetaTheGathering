@@ -42,6 +42,7 @@ from services.magicoculus import (
     MagicOculusImportResult,
     MagicOculusTournamentCollector,
 )
+from services.meta_police_message import MetaPoliceMessageService
 from services.names import format_participant_name
 from services.schedule import ScheduleService
 from services.stats import StatsService
@@ -801,7 +802,8 @@ class MissingDecksReminderJob:
                     continue
 
                 participants = TournamentService(db).list_participants_for_tournament(tournament.id)
-                if not any(participant.archetype_id is None for participant in participants):
+                missing_participants = [participant for participant in participants if participant.archetype_id is None]
+                if not missing_participants:
                     continue
 
                 try:
@@ -818,19 +820,37 @@ class MissingDecksReminderJob:
 
                 text = format_missing_decks_reminder(
                     tournament.title,
-                    participants,
+                    missing_participants,
                     community_fill_enabled=community_fill_enabled,
                 )
                 button_text = "Записать" if community_fill_enabled else "Записаться"
                 keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(button_text, url=button_url)]])
                 try:
-                    await bot.send_message(chat_id=tournament.chat_id, text=text, reply_markup=keyboard)
+                    message = await bot.send_message(
+                        chat_id=tournament.chat_id,
+                        text=text,
+                        reply_markup=keyboard,
+                        parse_mode="HTML",
+                    )
                 except Exception:  # noqa: BLE001 — повторим на следующем ежедневном запуске
                     logger.exception("MissingDecksReminderJob: reminder failed for #%s", tournament.id)
                     continue
 
                 tournament.missing_decks_reminder_1d_sent_at = models.utc_now()
                 db.commit()
+                message_id = getattr(message, "message_id", None)
+                if community_fill_enabled and isinstance(message_id, int):
+                    try:
+                        MetaPoliceMessageService(db).upsert(
+                            tournament_id=tournament.id,
+                            chat_id=tournament.chat_id,
+                            message_id=message_id,
+                            participant_ids=[participant.id for participant in missing_participants],
+                            button_url=button_url,
+                        )
+                    except Exception:  # noqa: BLE001 — сообщение уже доставлено, повторно не шлём
+                        db.rollback()
+                        logger.exception("MissingDecksReminderJob: tracking failed for #%s", tournament.id)
         finally:
             if close_db:
                 db.close()

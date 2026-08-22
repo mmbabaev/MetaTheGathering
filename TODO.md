@@ -53,6 +53,11 @@
 - Планировщик больше не закрывает незавершённый турнир при создании следующего события:
   вместо потери финального реимпорта создание блокировалось до ручного закрытия — PR
   [#252](https://github.com/mmbabaev/MetaTheGathering/pull/252).
+- Мета-полиция из [#254](https://github.com/mmbabaev/MetaTheGathering/issues/254): под
+  `recordOpponents` любой пользователь может помочь заполнить оставшиеся пустые колоды;
+  свой пропуск имеет приоритет, заполненные записи защищены от изменения, автор записи
+  сохраняется в `deck_added_by_tg_id` и event log — PR
+  [#255](https://github.com/mmbabaev/MetaTheGathering/pull/255).
 
 Игрокам ачивки автоматически не рассылаются: текущий режим — owner-only shadow.
 
@@ -64,13 +69,13 @@
   анонсом в чат «Единорога» и адресной сводкой координаторам за 15 минут. Начальный каталог
   засевается списком issue; переключение source of truth на DataLens ждёт публикации отдельного
   chart ID и схемы колонок. Draft PR
-  [#261](https://github.com/mmbabaev/MetaTheGathering/pull/261) ждёт merge #259, чтобы связать
-  обе новые Alembic-миграции в одну цепочку.
-- Мета-полиция из [#254](https://github.com/mmbabaev/MetaTheGathering/issues/254): под
-  `recordOpponents` любой пользователь может помочь заполнить оставшиеся пустые колоды;
-  свой пропуск имеет приоритет, заполненные записи защищены от изменения, автор записи
-  сохраняется в `deck_added_by_tg_id` и event log — PR
-  [#255](https://github.com/mmbabaev/MetaTheGathering/pull/255).
+  [#261](https://github.com/mmbabaev/MetaTheGathering/pull/261) поставлен поверх #259, чтобы
+  обе новые Alembic-миграции образовывали одну цепочку.
+- Доработка мета-полиции из
+  [#258](https://github.com/mmbabaev/MetaTheGathering/issues/258): персональная подсказка
+  выделяет незаполненных оппонентов и их раунды; групповое сообщение после каждой записи
+  динамически зачёркивает заполненных и убирает кнопку, когда пропусков не осталось — PR
+  [#259](https://github.com/mmbabaev/MetaTheGathering/pull/259).
 - Pure fairness foundation перечисляет все 10 линий Bingo 4×4 и считает вероятностные
   веса/imbalance с отдельными diagnostics для строк, столбцов и диагоналей, не меняя
   horizontal-only `bingo-v1` — PR

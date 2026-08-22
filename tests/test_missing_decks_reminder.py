@@ -19,6 +19,7 @@ DAY_THREE = datetime(2026, 8, 17, 15, 0, tzinfo=MOSCOW)
 def _bot():
     bot = AsyncMock()
     bot.get_me.return_value = MagicMock(username="TestBot")
+    bot.send_message.return_value = MagicMock(message_id=321)
     return bot
 
 
@@ -60,6 +61,11 @@ async def test_sends_meta_police_with_community_help_copy_and_fill_button(
     assert button.url == f"https://t.me/TestBot?start=fill_{tournament.id}"
     row = db.get(models.Tournament, tournament.id)
     assert row.missing_decks_reminder_1d_sent_at is not None
+    tracked = db.query(models.TournamentMissingDecksReminder).one()
+    assert tracked.message_id == 321
+    assert tracked.chat_id == tournament.chat_id
+    assert tracked.participant_ids_json == f"[{svc.get_participant(tournament.id, missing_user.id).id}]"
+    assert bot.send_message.call_args.kwargs["parse_mode"] == "HTML"
 
 
 @pytest.mark.asyncio
@@ -76,6 +82,7 @@ async def test_feature_disabled_keeps_legacy_registration_button(db, svc, user_a
     button = bot.send_message.call_args.kwargs["reply_markup"].inline_keyboard[0][0]
     assert button.text == "Записаться"
     assert button.url == f"https://t.me/TestBot?start=register_{tournament.id}"
+    assert db.query(models.TournamentMissingDecksReminder).count() == 0
 
 
 @pytest.mark.asyncio

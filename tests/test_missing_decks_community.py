@@ -91,6 +91,45 @@ def test_filled_participant_sees_only_unfilled_players(
     assert "Лактанов Глеб" in result.keyboard.inline_keyboard[0][0].text
 
 
+def test_flow_highlights_current_players_unfilled_opponents(
+    player_handler, db, svc, user_svc, tournament, user_alice, archetype_burn
+):
+    bob = user_svc.get_or_create(tg_id=2002, first_name="Боб")
+    carol = user_svc.get_or_create(tg_id=2003, first_name="Кэрол")
+    svc.register_participant(
+        tournament_id=tournament.id,
+        user_id=user_alice.id,
+        archetype_id=archetype_burn.id,
+        deck_added_by_tg_id=user_alice.tg_id,
+    )
+    svc.register_participant(tournament_id=tournament.id, user_id=bob.id)
+    svc.register_participant(tournament_id=tournament.id, user_id=carol.id)
+    db.add_all(
+        [
+            models.RoundPairing(
+                tournament_id=tournament.id,
+                round_number=2,
+                player_name="Alice",
+                opponent_name="Боб",
+            ),
+            models.RoundPairing(
+                tournament_id=tournament.id,
+                round_number=4,
+                player_name="Alice",
+                opponent_name="Кэрол",
+            ),
+        ]
+    )
+    db.commit()
+    _activate(db, tournament.id)
+
+    result = player_handler.handle_fill_missing_deeplink(tournament.id, user_alice.tg_id)
+
+    assert "Твои незаполненные оппоненты:" in result.text
+    assert "• Боб — раунд 2" in result.text
+    assert "• Кэрол — раунд 4" in result.text
+
+
 def test_nonparticipant_can_help_fill_missing_player(player_handler, db, svc, user_svc, tournament, user_alice):
     missing = user_svc.get_or_create(tg_id=2002, first_name="Глеб")
     participant = svc.register_participant(tournament_id=tournament.id, user_id=missing.id)

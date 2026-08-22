@@ -145,6 +145,12 @@ class Tournament(Base):
         "TournamentRegistrationMessage", back_populates="tournament", cascade="all, delete-orphan"
     )
     cellar_reservations = relationship("CellarDeckReservation", back_populates="tournament")
+    missing_decks_reminder_message = relationship(
+        "TournamentMissingDecksReminder",
+        back_populates="tournament",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
 
 class TournamentRegistrationMessage(Base):
@@ -166,6 +172,30 @@ class TournamentRegistrationMessage(Base):
     tournament = relationship("Tournament", back_populates="registration_messages")
 
     __table_args__ = (UniqueConstraint("tournament_id", "chat_id", name="uq_tournament_registration_message_target"),)
+
+
+class TournamentMissingDecksReminder(Base):
+    """Telegram message state for the editable meta-police reminder."""
+
+    __tablename__ = "tournament_missing_decks_reminders"
+
+    id = Column(Integer, primary_key=True)
+    tournament_id = Column(
+        Integer,
+        ForeignKey("tournaments.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    chat_id = Column(BigInteger, nullable=False)
+    message_id = Column(BigInteger, nullable=False)
+    participant_ids_json = Column(Text, nullable=False)
+    button_url = Column(String(512), nullable=True)
+    edit_disabled_at = Column(DateTime, nullable=True, index=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, nullable=False)
+
+    tournament = relationship("Tournament", back_populates="missing_decks_reminder_message")
 
 
 class Archetype(Base):
