@@ -5,6 +5,7 @@
   <p class="text-sm font-medium text-violet-600 mb-1">Клуб «Единорог»</p>
   <h1 class="text-2xl font-bold text-gray-900">Колоды из ячейки</h1>
   <p class="text-sm text-gray-500 mt-2">Выберите одну колоду на понедельник. Она автоматически появится в вашей записи на турнир.</p>
+  <a href="{{ catalog_source_url }}" target="_blank" rel="noopener" class="inline-block text-sm text-blue-600 mt-1">Каталог в Google Sheets →</a>
 </div>
 
 {% if message %}<div class="mb-4 rounded-xl bg-green-50 px-4 py-3 text-sm text-green-800">{{ message }}</div>{% endif %}
@@ -36,7 +37,7 @@
 <div class="space-y-3">
 {% for deck in decks %}
 {% set reservation = reservation_for(deck, selected_date) %}
-<div class="card {% if reservation %}bg-gray-50{% endif %}">
+<div class="card {% if reservation or not deck.available %}bg-gray-50{% endif %}">
   <div class="flex items-start justify-between gap-3">
     <div>
       <p class="font-semibold text-gray-900">{{ deck.name }}</p>
@@ -44,16 +45,19 @@
       {% if deck.decklist_url %}
       <a href="{{ deck.decklist_url }}" target="_blank" rel="noopener" class="inline-block text-sm text-blue-600 mt-1">Деклист и сайдборд →</a>
       {% endif %}
+      {% if deck.decklist_updated_on %}<p class="text-xs text-gray-400 mt-1">Лист обновлён {{ deck.decklist_updated_on.strftime('%d.%m.%Y') }}</p>{% endif %}
     </div>
     {% if reservation %}
     <span class="shrink-0 rounded-full bg-gray-200 px-2 py-1 text-xs font-medium text-gray-600">Занята</span>
+    {% elif not deck.available %}
+    <span class="shrink-0 rounded-full bg-gray-200 px-2 py-1 text-xs font-medium text-gray-600">Недоступна</span>
     {% else %}
     <span class="shrink-0 rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-700">Свободна</span>
     {% endif %}
   </div>
   {% if reservation %}
   <p class="text-sm text-gray-500 mt-3">Забронировал(а): {{ user_display_name(reservation.user) }}</p>
-  {% elif not my_reservation %}
+  {% elif deck.available and not my_reservation %}
   <form method="post" action="/cellar/{{ deck.id }}/reserve" class="mt-3">
     <input type="hidden" name="event_date" value="{{ selected_date.isoformat() }}">
     <button class="btn bg-violet-600 text-white active:bg-violet-700" type="submit">Хочу эту колоду</button>

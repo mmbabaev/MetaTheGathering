@@ -175,9 +175,12 @@ async def _post_init(app: Application) -> None:
         created = ScheduleService(db).ensure_defaults()
         if created:
             logger.info("Расписание засеяно из кода: %s строк", created)
-        cellar_created = CellarService(db).ensure_bootstrap_catalog()
-        if cellar_created:
-            logger.info("Каталог колод из ячейки засеян: %s", cellar_created)
+        cellar_sync = CellarService(db).ensure_catalog(force_refresh=True)
+        if cellar_sync:
+            logger.info(
+                "Каталог колод из ячейки синхронизирован: created=%s updated=%s deactivated=%s",
+                *cellar_sync,
+            )
     finally:
         db.close()
     await _set_commands(app)
