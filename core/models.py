@@ -253,12 +253,17 @@ class CellarDeck(Base):
     decklist_url = Column(String(512), nullable=True)
     notes = Column(String(512), nullable=True)
     decklist_updated_on = Column(Date, nullable=True)
+    source_position = Column(Integer, nullable=True)
     available = Column(Boolean, nullable=False, default=True, server_default="true")
     active = Column(Boolean, nullable=False, default=True, server_default="true", index=True)
     created_at = Column(DateTime, default=utc_now, nullable=False)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
     reservations = relationship("CellarDeckReservation", back_populates="deck", cascade="all, delete-orphan")
+
+    @property
+    def display_name(self) -> str:
+        return f"{self.name} · №{self.source_position}" if self.source_position is not None else self.name
 
 
 class CellarDeckReservation(Base):

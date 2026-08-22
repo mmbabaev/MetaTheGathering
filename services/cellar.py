@@ -21,7 +21,6 @@ logger = logging.getLogger(__name__)
 CELLAR_CLUB_NAME = "Edinorog"
 CELLAR_TIMEZONE = ZoneInfo("Europe/Moscow")
 CELLAR_WEEKDAY = 0  # Monday
-CELLAR_CATALOG_REFRESH_INTERVAL = timedelta(minutes=15)
 
 
 class CellarReservationError(ValueError):
@@ -159,6 +158,7 @@ class CellarService:
             deck.decklist_url = entry.decklist_url
             deck.notes = entry.notes
             deck.decklist_updated_on = entry.decklist_updated_on
+            deck.source_position = entry.source_position
             deck.available = entry.available
             deck.active = True
             deck.updated_at = synced_at
@@ -171,38 +171,30 @@ class CellarService:
         self.db.commit()
         return created, updated, deactivated
 
-    def refresh_catalog_from_sheet(
-        self,
-        *,
-        force: bool = False,
-        now: datetime | None = None,
-        source: GoogleSheetsCellarCatalog | None = None,
-    ) -> tuple[int, int, int] | None:
-        now = now or models.utc_now()
-        last_sync = self.db.execute(
-            select(func.max(models.CellarDeck.updated_at)).where(models.CellarDeck.source_key.like("gsheet:%"))
-        ).scalar_one()
-        if not force and last_sync is not None and now - last_sync < CELLAR_CATALOG_REFRESH_INTERVAL:
-            return None
-        entries = (source or GoogleSheetsCellarCatalog()).fetch()
-        return self.sync_catalog(entries, synced_at=now)
+    def ensure_catalog(self, *, source: GoogleSheetsCellarCatalog | None = None) -> tuple[int, int, int] | None:
+        """Populate an empty database; regular refreshes are owned by the weekly job."""
 
-    def ensure_catalog(self, *, force_refresh: bool = False) -> tuple[int, int, int] | None:
-        """Refresh the public sheet, falling back to bootstrap only if no catalog exists."""
+        sheet_count, missing_positions = self.db.execute(
+            select(
+                func.count(models.CellarDeck.id),
+                func.count(models.CellarDeck.id).filter(models.CellarDeck.source_position.is_(None)),
+            ).where(
+                models.CellarDeck.active.is_(True),
+                models.CellarDeck.source_key.like("gsheet:%"),
+            )
+        ).one()
+        if sheet_count and not missing_positions:
+            return None
 
         try:
-            return self.refresh_catalog_from_sheet(force=force_refresh)
+            return self.sync_catalog((source or GoogleSheetsCellarCatalog()).fetch())
         except CellarCatalogSourceError:
             logger.warning("Не удалось обновить каталог ячейки из Google Sheets", exc_info=True)
-            active_count = self.db.execute(
-                select(func.count(models.CellarDeck.id)).where(models.CellarDeck.active.is_(True))
-            ).scalar_one()
-            if active_count == 0:
-                self.ensure_bootstrap_catalog()
+            self.ensure_bootstrap_catalog()
             return None
         except IntegrityError:
-            # Two web workers can observe an expired TTL and insert the same source keys.
-            # The unique index chooses the winner; the other request can use its result.
+            # Concurrent process startup can race while populating a new database.
+            # The unique index chooses the winner; the other process can use its result.
             self.db.rollback()
             logger.info("Каталог ячейки уже синхронизирован другим процессом")
             return None
@@ -418,17 +410,22 @@ def reservation_user_name(user: models.User) -> str:
     )
 
 
+def cellar_deck_display_name(deck: models.CellarDeck) -> str:
+    return deck.display_name
+
+
 def format_group_reservation(reservation: models.CellarDeckReservation, *, cancelled: bool = False) -> str:
     action = "отменил(а) бронь" if cancelled else "забронировал(а)"
     return (
         f"🗄 {reservation_user_name(reservation.user)} {action} колоды из ячейки:\n"
-        f"{reservation.deck.name} — {reservation.event_date.strftime('%d.%m.%Y')}"
+        f"{cellar_deck_display_name(reservation.deck)} — {reservation.event_date.strftime('%d.%m.%Y')}"
     )
 
 
 def format_coordinator_summary(event_date: date, reservations: list[models.CellarDeckReservation]) -> str:
     lines = [f"🗄 Колоды из ячейки на {event_date.strftime('%d.%m.%Y')}:"]
     lines.extend(
-        f"• {reservation.deck.name} — {reservation_user_name(reservation.user)}" for reservation in reservations
+        f"• {cellar_deck_display_name(reservation.deck)} — {reservation_user_name(reservation.user)}"
+        for reservation in reservations
     )
     return "\n".join(lines)

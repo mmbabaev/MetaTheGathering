@@ -4,11 +4,12 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy import select
 
-from bot.scheduler import CellarCoordinatorReminderJob, CreateTournamentJob
+from bot.scheduler import CellarCatalogSyncJob, CellarCoordinatorReminderJob, CreateTournamentJob
 from core import models
 from core.config import Club, ClubSchedule, settings
 from core.schemas import TournamentCreate
 from services.cellar import CellarService
+from services.cellar_sheet import CatalogEntry
 from services.tournament import TournamentService
 
 
@@ -24,6 +25,26 @@ def _reserve(db, user_svc, event_date=date(2026, 8, 24)):
         today=event_date,
     ).reservation
     return reservation
+
+
+@pytest.mark.asyncio
+async def test_weekly_catalog_job_syncs_sheet_rows(db):
+    class Source:
+        def fetch(self):
+            return [
+                CatalogEntry(
+                    "gsheet:altar:1",
+                    "Altar Tron",
+                    "Altar Tron",
+                    decklist_url="https://example.test/altar",
+                    source_position=13,
+                )
+            ]
+
+    assert await CellarCatalogSyncJob(Source()).run(db=db) == (1, 0, 0)
+    deck = CellarService(db).catalog(date(2026, 8, 24))[0]
+    assert deck.display_name == "Altar Tron · №13"
+    assert deck.decklist_url == "https://example.test/altar"
 
 
 @pytest.mark.asyncio

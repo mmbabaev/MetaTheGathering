@@ -30,7 +30,7 @@ class TestSetupScheduler:
         app = _make_app()
         with patch("bot.scheduler.settings", _mock_settings()), patch("bot.scheduler.get_clubs", return_value=[]):
             setup_scheduler(app)
-        assert app.job_queue.run_daily.call_count == 6  # 3 final-reimports + 3 global jobs
+        assert app.job_queue.run_daily.call_count == 7  # 3 final-reimports + 4 global jobs
         final_times = [call.kwargs["time"] for call in app.job_queue.run_daily.call_args_list[:3]]
         assert [(value.hour, value.minute) for value in final_times] == [(9, 0), (12, 0), (18, 0)]
         callbacks = [call.args[0].__name__ for call in app.job_queue.run_daily.call_args_list[:3]]
@@ -44,6 +44,10 @@ class TestSetupScheduler:
         assert (unclosed_call.kwargs["time"].hour, unclosed_call.kwargs["time"].minute) == (10, 0)
         missing_decks_call = jobs["missing_decks_reminder"]
         assert (missing_decks_call.kwargs["time"].hour, missing_decks_call.kwargs["time"].minute) == (15, 0)
+        cellar_sync_call = jobs["cellar_catalog_sync"]
+        assert (cellar_sync_call.kwargs["time"].hour, cellar_sync_call.kwargs["time"].minute) == (23, 0)
+        assert cellar_sync_call.kwargs["time"].tzinfo == ZoneInfo("Europe/Moscow")
+        assert cellar_sync_call.kwargs["days"] == (0,)  # PTB: Sunday
 
     def test_one_schedule_no_fetch_times_registers_one_job(self):
         app = _make_app()
@@ -58,7 +62,7 @@ class TestSetupScheduler:
         ]
         with patch("bot.scheduler.settings", _mock_settings()), patch("bot.scheduler.get_clubs", return_value=clubs):
             setup_scheduler(app)
-        assert app.job_queue.run_daily.call_count == 7  # 1 create + 3 final-reimports + 3 global jobs
+        assert app.job_queue.run_daily.call_count == 8  # 1 create + 3 final-reimports + 4 global jobs
 
     def test_fetch_times_register_extra_jobs(self):
         """Each aetherhub_fetch_time creates one extra import job."""
@@ -77,8 +81,8 @@ class TestSetupScheduler:
         ]
         with patch("bot.scheduler.settings", _mock_settings()), patch("bot.scheduler.get_clubs", return_value=clubs):
             setup_scheduler(app)
-        # 1 create + 3 import + 3 final-reimports + 3 global jobs = 10
-        assert app.job_queue.run_daily.call_count == 10
+        # 1 create + 3 import + 3 final-reimports + 4 global jobs = 11
+        assert app.job_queue.run_daily.call_count == 11
 
     def test_two_schedules_register_two_create_jobs(self):
         """Club with two weekly schedules (fri + sat) gets a create job for each."""
@@ -96,8 +100,8 @@ class TestSetupScheduler:
         ]
         with patch("bot.scheduler.settings", _mock_settings()), patch("bot.scheduler.get_clubs", return_value=clubs):
             setup_scheduler(app)
-        # 2 create + 3 final-reimports + 3 global jobs = 8
-        assert app.job_queue.run_daily.call_count == 8
+        # 2 create + 3 final-reimports + 4 global jobs = 9
+        assert app.job_queue.run_daily.call_count == 9
 
     def test_schedule_create_time_overrides_default(self):
         """ClubSchedule.create_time overrides TOURNAMENT_CREATE_TIME."""
@@ -161,7 +165,7 @@ class TestSetupScheduler:
         ]
         with patch("bot.scheduler.settings", _mock_settings()), patch("bot.scheduler.get_clubs", return_value=clubs):
             setup_scheduler(app)
-        assert app.job_queue.run_daily.call_count == 8  # 2 create + 3 final-reimports + 3 global jobs
+        assert app.job_queue.run_daily.call_count == 9  # 2 create + 3 final-reimports + 4 global jobs
 
     def test_club_jobs_use_club_local_timezone(self):
         app = _make_app()
@@ -265,6 +269,8 @@ class TestSetupScheduler:
             setup_scheduler(app)
         # Both calls (create + import) should use days=(5,) for Friday in PTB (0=Sunday)
         for call in app.job_queue.run_daily.call_args_list:
+            if call.args[0].__name__ == "cellar_catalog_sync":
+                continue
             if "days" not in call.kwargs:  # skip daily final-reimport / reveal-decks
                 continue
             assert call.kwargs["days"] == (5,)  # friday = 5 in PTB (0=Sunday)
@@ -317,7 +323,7 @@ class TestSetupScheduler:
         ]
         with patch("bot.scheduler.settings", _mock_settings()), patch("bot.scheduler.get_clubs", return_value=clubs):
             setup_scheduler(app)
-        assert app.job_queue.run_daily.call_count == 14  # 8 + 3 final-reimports + 3 global jobs
+        assert app.job_queue.run_daily.call_count == 15  # 8 + 3 final-reimports + 4 global jobs
 
 
 # ---------------------------------------------------------------------------

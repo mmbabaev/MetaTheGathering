@@ -90,6 +90,8 @@ def test_cellar_page_renders_availability_and_reserver(db, user_svc):
     service.reserve(deck_id=decks[0].id, user_id=alice.id, event_date=EVENT_DATE, today=EVENT_DATE)
     decks[1].available = False
     decks[1].notes = "дома"
+    decks[1].source_position = 14
+    decks[1].decklist_url = "https://example.test/decklist"
     db.commit()
     db.expire_all()
     decks = service.catalog(EVENT_DATE)
@@ -111,6 +113,8 @@ def test_cellar_page_renders_availability_and_reserver(db, user_svc):
     assert "Занята" in html
     assert "Недоступна" in html
     assert CELLAR_SHEET_URL in html
+    assert "№14" in html
+    assert "https://example.test/decklist" in html
 
 
 def test_cellar_routes_are_registered():
