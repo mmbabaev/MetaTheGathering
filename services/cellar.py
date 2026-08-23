@@ -51,9 +51,11 @@ def cellar_immediate_notification_recipients() -> list[int]:
     return _allowed_cellar_recipients([settings.OWNER_CHAT_ID])
 
 
-def is_cellar_coordinator(tg_id: int) -> bool:
-    """The production coordinators may inspect all upcoming reservations in `/cellar`."""
+def can_view_cellar_overview(tg_id: int) -> bool:
+    """The owner and production coordinators may inspect upcoming reservations."""
 
+    if settings.OWNER_CHAT_ID is not None and tg_id == settings.OWNER_CHAT_ID:
+        return True
     return not settings.DEBUG and tg_id in settings.cellar_coordinator_tg_ids
 
 

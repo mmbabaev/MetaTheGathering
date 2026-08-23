@@ -238,7 +238,7 @@ def test_cellar_callbacks_reject_stale_date(db):
     assert "больше недоступна" in result.text
 
 
-def test_production_coordinator_sees_upcoming_booking_names_usernames_and_decks(db, monkeypatch):
+def test_only_owner_and_production_coordinators_see_booking_overview(db, monkeypatch):
     FeatureFlagService(db).toggle(FeatureFlags.CELLAR_DECKS)
     handler = _handler(db)
     handler.handle_open(
@@ -254,6 +254,7 @@ def test_production_coordinator_sees_upcoming_booking_names_usernames_and_decks(
     handler.handle_reserve(tg_id=1001, event_date=EVENT_DATE, deck_id=deck.id, today=TODAY)
     monkeypatch.setattr(settings, "DEBUG", False)
     monkeypatch.setattr(settings, "CELLAR_COORDINATOR_TG_IDS", "111,222")
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 333)
 
     coordinator = handler.handle_open(
         tg_id=111,
@@ -269,9 +270,36 @@ def test_production_coordinator_sees_upcoming_booking_names_usernames_and_decks(
         last_name=None,
         today=TODAY,
     )
+    owner = handler.handle_open(
+        tg_id=333,
+        username="owner",
+        first_name="Owner",
+        last_name=None,
+        today=TODAY,
+    )
 
     assert f"Alice Player — @alice — {deck.display_name}" in coordinator.text
+    assert f"Alice Player — @alice — {deck.display_name}" in owner.text
     assert "Брони на ближайшие турниры" not in regular.text
+
+    monkeypatch.setattr(settings, "DEBUG", True)
+    debug_owner = handler.handle_open(
+        tg_id=333,
+        username="owner",
+        first_name="Owner",
+        last_name=None,
+        today=TODAY,
+    )
+    debug_coordinator = handler.handle_open(
+        tg_id=111,
+        username="coordinator",
+        first_name="Coordinator",
+        last_name=None,
+        today=TODAY,
+    )
+
+    assert "Брони на ближайшие турниры" in debug_owner.text
+    assert "Брони на ближайшие турниры" not in debug_coordinator.text
 
 
 @pytest.mark.asyncio
