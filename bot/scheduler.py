@@ -307,7 +307,7 @@ class CellarCoordinatorReminderJob:
                     models.Tournament.club == CELLAR_CLUB_NAME,
                     models.Tournament.status == models.TournamentStatus.REGISTRATION,
                     models.Tournament.registration_close_at > now_utc,
-                    models.Tournament.registration_close_at <= now_utc + timedelta(minutes=15),
+                    models.Tournament.registration_close_at <= now_utc + timedelta(hours=1),
                 )
                 .order_by(models.Tournament.registration_close_at)
                 .limit(1)

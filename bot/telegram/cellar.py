@@ -7,7 +7,7 @@ from telegram.ext import ContextTypes
 from bot.handlers.cellar import CellarActionResult, CellarHandler
 from bot.telegram.common import log_event
 from core.database import SessionLocal
-from services.cellar import CellarService, cellar_notification_recipients, format_group_reservation
+from services.cellar import CellarService, cellar_immediate_notification_recipients, format_group_reservation
 from services.feature_flags import FeatureFlagService
 from services.user import UserService
 
@@ -23,7 +23,7 @@ async def _announce(bot, reservation, *, cancelled: bool = False) -> bool:
 
     text = format_group_reservation(reservation, cancelled=cancelled)
     delivered = False
-    for recipient_tg_id in cellar_notification_recipients():
+    for recipient_tg_id in cellar_immediate_notification_recipients():
         try:
             await bot.send_message(chat_id=recipient_tg_id, text=text)
             delivered = True

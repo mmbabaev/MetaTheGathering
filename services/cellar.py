@@ -24,12 +24,7 @@ CELLAR_TIMEZONE = ZoneInfo("Europe/Moscow")
 CELLAR_WEEKDAY = 0  # Monday
 
 
-def cellar_notification_recipients() -> list[int]:
-    """Return the explicitly authorised DM targets for the current environment."""
-
-    candidates = (
-        [settings.OWNER_CHAT_ID] if settings.DEBUG else [*settings.cellar_coordinator_tg_ids, settings.OWNER_CHAT_ID]
-    )
+def _allowed_cellar_recipients(candidates: list[int | None]) -> list[int]:
     allowed = settings.notify_allowed_ids
     recipients: list[int] = []
     for tg_id in candidates:
@@ -39,6 +34,27 @@ def cellar_notification_recipients() -> list[int]:
             continue
         recipients.append(tg_id)
     return recipients
+
+
+def cellar_notification_recipients() -> list[int]:
+    """Recipients of the single pre-event summary for the current environment."""
+
+    candidates = (
+        [settings.OWNER_CHAT_ID] if settings.DEBUG else [*settings.cellar_coordinator_tg_ids, settings.OWNER_CHAT_ID]
+    )
+    return _allowed_cellar_recipients(candidates)
+
+
+def cellar_immediate_notification_recipients() -> list[int]:
+    """Only the owner receives immediate booking and cancellation notifications."""
+
+    return _allowed_cellar_recipients([settings.OWNER_CHAT_ID])
+
+
+def is_cellar_coordinator(tg_id: int) -> bool:
+    """The production coordinators may inspect all upcoming reservations in `/cellar`."""
+
+    return not settings.DEBUG and tg_id in settings.cellar_coordinator_tg_ids
 
 
 class CellarReservationError(ValueError):
@@ -428,6 +444,10 @@ def reservation_user_name(user: models.User) -> str:
     )
 
 
+def reservation_user_username(user: models.User) -> str:
+    return f"@{user.username}" if user.username else "без @username"
+
+
 def cellar_deck_display_name(deck: models.CellarDeck) -> str:
     return deck.display_name
 
@@ -435,7 +455,8 @@ def cellar_deck_display_name(deck: models.CellarDeck) -> str:
 def format_group_reservation(reservation: models.CellarDeckReservation, *, cancelled: bool = False) -> str:
     action = "отменил(а) бронь" if cancelled else "забронировал(а)"
     return (
-        f"🗄 {reservation_user_name(reservation.user)} {action} колоды из ячейки:\n"
+        f"🗄 {reservation_user_name(reservation.user)} "
+        f"({reservation_user_username(reservation.user)}) {action} колоды из ячейки:\n"
         f"{cellar_deck_display_name(reservation.deck)} — {reservation.event_date.strftime('%d.%m.%Y')}"
     )
 
@@ -443,7 +464,37 @@ def format_group_reservation(reservation: models.CellarDeckReservation, *, cance
 def format_coordinator_summary(event_date: date, reservations: list[models.CellarDeckReservation]) -> str:
     lines = [f"🗄 Колоды из ячейки на {event_date.strftime('%d.%m.%Y')}:"]
     lines.extend(
-        f"• {cellar_deck_display_name(reservation.deck)} — {reservation_user_name(reservation.user)}"
+        f"• {reservation_user_name(reservation.user)} — {reservation_user_username(reservation.user)} — "
+        f"{cellar_deck_display_name(reservation.deck)}"
         for reservation in reservations
     )
+    return "\n".join(lines)
+
+
+def format_coordinator_overview(
+    reservations_by_date: list[tuple[date, list[models.CellarDeckReservation]]],
+    *,
+    max_length: int = 3400,
+) -> str:
+    """Compact coordinator-only list for the `/cellar` date menu."""
+
+    rows = [
+        (
+            f"• {event_date.strftime('%d.%m.%Y')} — {reservation_user_name(reservation.user)} — "
+            f"{reservation_user_username(reservation.user)} — {cellar_deck_display_name(reservation.deck)}"
+        )
+        for event_date, reservations in reservations_by_date
+        for reservation in reservations
+    ]
+    if not rows:
+        return "Брони на ближайшие турниры: пока нет."
+
+    lines = ["Брони на ближайшие турниры:"]
+    for index, row in enumerate(rows):
+        omitted = len(rows) - index
+        suffix = f"\n… ещё {omitted}" if omitted else ""
+        if len("\n".join([*lines, row])) + len(suffix) > max_length:
+            lines.append(f"… ещё {omitted}")
+            break
+        lines.append(row)
     return "\n".join(lines)

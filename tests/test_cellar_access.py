@@ -219,11 +219,47 @@ def test_cellar_callbacks_reject_stale_date(db):
     assert "больше недоступна" in result.text
 
 
+def test_production_coordinator_sees_upcoming_booking_names_usernames_and_decks(db, monkeypatch):
+    FeatureFlagService(db).toggle(FeatureFlags.CELLAR_DECKS)
+    handler = _handler(db)
+    handler.handle_open(
+        tg_id=1001,
+        username="alice",
+        first_name="Alice",
+        last_name="Player",
+        today=TODAY,
+    )
+    deck = CellarService(db).catalog(EVENT_DATE)[0]
+    deck.source_position = 13
+    db.commit()
+    handler.handle_reserve(tg_id=1001, event_date=EVENT_DATE, deck_id=deck.id, today=TODAY)
+    monkeypatch.setattr(settings, "DEBUG", False)
+    monkeypatch.setattr(settings, "CELLAR_COORDINATOR_TG_IDS", "111,222")
+
+    coordinator = handler.handle_open(
+        tg_id=111,
+        username="coordinator",
+        first_name="Coordinator",
+        last_name=None,
+        today=TODAY,
+    )
+    regular = handler.handle_open(
+        tg_id=1002,
+        username="bob",
+        first_name="Bob",
+        last_name=None,
+        today=TODAY,
+    )
+
+    assert f"Alice Player — @alice — {deck.display_name}" in coordinator.text
+    assert "Брони на ближайшие турниры" not in regular.text
+
+
 @pytest.mark.asyncio
-async def test_telegram_reservation_notification_targets_production_coordinators_and_owner(db, user_svc, monkeypatch):
+async def test_telegram_reservation_notification_targets_only_owner_in_production(db, user_svc, monkeypatch):
     service = CellarService(db)
     service.ensure_bootstrap_catalog()
-    user = user_svc.get_or_create(tg_id=1001, first_name="Alice")
+    user = user_svc.get_or_create(tg_id=1001, username="alice", first_name="Alice")
     reservation = service.reserve(
         deck_id=service.catalog(EVENT_DATE)[0].id,
         user_id=user.id,
@@ -237,16 +273,19 @@ async def test_telegram_reservation_notification_targets_production_coordinators
     bot = AsyncMock()
 
     assert await _announce(bot, reservation) is True
+    assert await _announce(bot, reservation, cancelled=True) is True
 
-    assert [call.kwargs["chat_id"] for call in bot.send_message.await_args_list] == [111, 222, 333]
-    assert all("забронировал(а)" in call.kwargs["text"] for call in bot.send_message.await_args_list)
+    assert [call.kwargs["chat_id"] for call in bot.send_message.await_args_list] == [333, 333]
+    assert all("@alice" in call.kwargs["text"] for call in bot.send_message.await_args_list)
+    assert "забронировал(а)" in bot.send_message.await_args_list[0].kwargs["text"]
+    assert "отменил(а) бронь" in bot.send_message.await_args_list[1].kwargs["text"]
 
 
 @pytest.mark.asyncio
 async def test_telegram_reservation_notification_targets_only_owner_in_debug(db, user_svc, monkeypatch):
     service = CellarService(db)
     service.ensure_bootstrap_catalog()
-    user = user_svc.get_or_create(tg_id=1001, first_name="Alice")
+    user = user_svc.get_or_create(tg_id=1001, username="alice", first_name="Alice")
     reservation = service.reserve(
         deck_id=service.catalog(EVENT_DATE)[0].id,
         user_id=user.id,
@@ -263,4 +302,5 @@ async def test_telegram_reservation_notification_targets_only_owner_in_debug(db,
 
     bot.send_message.assert_awaited_once()
     assert bot.send_message.await_args.kwargs["chat_id"] == 333
+    assert "@alice" in bot.send_message.await_args.kwargs["text"]
     assert "отменил(а) бронь" in bot.send_message.await_args.kwargs["text"]

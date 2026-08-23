@@ -187,16 +187,18 @@ def test_messages_contain_deck_date_and_players(db, user_svc):
     service, decks = _catalog(db)
     decks[0].source_position = 13
     db.commit()
-    alice = user_svc.get_or_create(tg_id=1001, first_name="Alice")
+    alice = user_svc.get_or_create(tg_id=1001, username="alice", first_name="Alice")
     reservation = service.reserve(
         deck_id=decks[0].id, user_id=alice.id, event_date=EVENT_DATE, today=EVENT_DATE
     ).reservation
 
     assert "Alice" in format_group_reservation(reservation)
+    assert "@alice" in format_group_reservation(reservation)
     assert decks[0].name in format_group_reservation(reservation)
     assert "№13" in format_group_reservation(reservation)
     assert "24.08.2026" in format_coordinator_summary(EVENT_DATE, [reservation])
     assert "№13" in format_coordinator_summary(EVENT_DATE, [reservation])
+    assert "Alice — @alice —" in format_coordinator_summary(EVENT_DATE, [reservation])
 
 
 def test_web_account_link_preserves_cellar_reservation(db, user_svc):

@@ -1,7 +1,7 @@
 """Telegram deeplinks: `t.me/<bot>?start=<payload>`.
 
 Поддерживаются переход в запись своей колоды (`deck_<id>`), общая регистрация
-(`register_<id>`) и помощь мета-полиции (`fill_<id>`).
+(`register_<id>`), помощь мета-полиции (`fill_<id>`) и меню ячейки (`cellar`).
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ from typing import Optional
 _DECK_PREFIX = "deck_"
 _REGISTER_PREFIX = "register_"
 _FILL_MISSING_PREFIX = "fill_"
+_CELLAR_PAYLOAD = "cellar"
 
 
 def deck_payload(tournament_id: int) -> str:
@@ -69,3 +70,15 @@ def parse_fill_missing_payload(payload: str) -> Optional[int]:
 def fill_missing_deeplink(bot_username: str, tournament_id: int) -> str:
     """Ссылка из напоминания: открыть выбор своей либо чужой пустой колоды."""
     return f"https://t.me/{bot_username}?start={fill_missing_payload(tournament_id)}"
+
+
+def is_cellar_payload(payload: str) -> bool:
+    """True only for the exact cellar-menu start payload."""
+
+    return payload == _CELLAR_PAYLOAD
+
+
+def cellar_deeplink(bot_username: str) -> str:
+    """Open the bot directly in the cellar date menu."""
+
+    return f"https://t.me/{bot_username}?start={_CELLAR_PAYLOAD}"

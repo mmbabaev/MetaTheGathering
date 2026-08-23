@@ -137,8 +137,8 @@ def test_cellar_web_routes_are_gated_by_disabled_default(db):
 
 
 @pytest.mark.asyncio
-async def test_reservation_notification_targets_production_coordinators_and_owner(db, user_svc, monkeypatch):
-    user = user_svc.get_or_create(tg_id=1001, first_name="Alice")
+async def test_reservation_notification_targets_only_owner_in_production(db, user_svc, monkeypatch):
+    user = user_svc.get_or_create(tg_id=1001, username="alice", first_name="Alice")
     reservation = (
         CellarService(db)
         .reserve(
@@ -158,7 +158,9 @@ async def test_reservation_notification_targets_production_coordinators_and_owne
 
     assert await _announce(reservation) is True
 
-    assert [call.args[0] for call in send.await_args_list] == [111, 222, 333]
+    send.assert_awaited_once()
+    assert send.await_args.args[0] == 333
+    assert "@alice" in send.await_args.args[1]
 
 
 @pytest.mark.asyncio

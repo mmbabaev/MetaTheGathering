@@ -16,7 +16,13 @@ from bot.messages import (
 )
 from core import models
 from core.config import settings
-from services.cellar import CellarReservationError, CellarService, next_cellar_dates
+from services.cellar import (
+    CellarReservationError,
+    CellarService,
+    format_coordinator_overview,
+    is_cellar_coordinator,
+    next_cellar_dates,
+)
 from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.user import UserService
 from services.web_auth import create_magic_token
@@ -60,7 +66,11 @@ class CellarHandler:
         token = create_magic_token(self.db, user)
         query = urlencode({"token": token, "next": "/cellar"})
         web_url = f"{settings.WEB_BASE_URL.rstrip('/')}/auth/verify?{query}"
-        return HandlerResult(CELLAR_DATES, keyboard=cellar_dates_keyboard(dates, web_url))
+        text = CELLAR_DATES
+        if is_cellar_coordinator(tg_id):
+            reservations_by_date = [(event_date, self.cellar.active_reservations(event_date)) for event_date in dates]
+            text = f"{text}\n\n{format_coordinator_overview(reservations_by_date)}"
+        return HandlerResult(text, keyboard=cellar_dates_keyboard(dates, web_url))
 
     def handle_date(self, *, tg_id: int, event_date: date, page: int = 0, today: date | None = None) -> HandlerResult:
         guard = self._guard_callback(tg_id, event_date=event_date, today=today)

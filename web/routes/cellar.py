@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from services.cellar import (
     CellarReservationError,
     CellarService,
-    cellar_notification_recipients,
+    cellar_immediate_notification_recipients,
     format_group_reservation,
     next_cellar_dates,
 )
@@ -42,7 +42,7 @@ def _redirect(event_date: date, *, message: str | None = None, error: str | None
 async def _announce(reservation, *, cancelled: bool = False) -> bool:
     text = format_group_reservation(reservation, cancelled=cancelled)
     delivered = False
-    for recipient_tg_id in cellar_notification_recipients():
+    for recipient_tg_id in cellar_immediate_notification_recipients():
         try:
             delivered = await send_tg_message(recipient_tg_id, text) or delivered
         except Exception:  # noqa: BLE001 — one unavailable recipient must not break the booking
