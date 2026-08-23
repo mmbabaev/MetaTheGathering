@@ -39,6 +39,13 @@ from bot.keyboards import (
     CB_ARCHETYPE,
     CB_ARCHETYPE_MORE,
     CB_BULK_ADD,
+    CB_CELLAR_CANCEL,
+    CB_CELLAR_CANCEL_CONFIRM,
+    CB_CELLAR_DATE,
+    CB_CELLAR_DATES,
+    CB_CELLAR_DECK,
+    CB_CELLAR_NOOP,
+    CB_CELLAR_RESERVE,
     CB_CLOSE_TOURNAMENT,
     CB_CREATE_POLL,
     CB_CUSTOM_ARCHETYPE,
@@ -307,6 +314,16 @@ def main() -> None:
     app.add_handler(CommandHandler("delete_tournament", admin.cmd_delete_tournament, filters=private))
     app.add_handler(CommandHandler("schedule", schedule_handler.cmd_schedule, filters=private))
     app.add_handler(CommandHandler("features", features_handler.cmd_features, filters=private))
+
+    app.add_handler(CallbackQueryHandler(cellar_handler.callback_dates, pattern=f"^{CB_CELLAR_DATES}$"))
+    app.add_handler(CallbackQueryHandler(cellar_handler.callback_date, pattern=f"^{CB_CELLAR_DATE}:"))
+    app.add_handler(CallbackQueryHandler(cellar_handler.callback_deck, pattern=f"^{CB_CELLAR_DECK}:"))
+    app.add_handler(CallbackQueryHandler(cellar_handler.callback_reserve, pattern=f"^{CB_CELLAR_RESERVE}:"))
+    app.add_handler(CallbackQueryHandler(cellar_handler.callback_cancel_prompt, pattern=f"^{CB_CELLAR_CANCEL}:"))
+    app.add_handler(
+        CallbackQueryHandler(cellar_handler.callback_cancel_confirm, pattern=f"^{CB_CELLAR_CANCEL_CONFIRM}:")
+    )
+    app.add_handler(CallbackQueryHandler(cellar_handler.callback_noop, pattern=f"^{CB_CELLAR_NOOP}$"))
 
     app.add_handler(CallbackQueryHandler(player.callback_tournament_select, pattern=f"^{CB_TOURNAMENT}:"))
     app.add_handler(CallbackQueryHandler(player.callback_register, pattern=f"^{CB_REGISTER}:"))
