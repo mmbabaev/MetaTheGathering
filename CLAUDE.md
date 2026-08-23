@@ -20,6 +20,18 @@ or product decision changes.
 > - **Debug / test tooling must message ONLY the user who triggered it** — filter to `tg_id == requester` and send exclusively to that chat_id. Never deliver other players' notifications to the requester, and never DM other players from a debug action.
 > - Any new code path that calls `bot.send_message` in a loop over multiple users requires explicit confirmation from the user before it ships.
 > - Production notifications must respect the `notify_allowed_ids` gate and only target their genuine intended recipient.
+> - **Treat every destination other than the owner's private chat as high risk.** This includes DMs
+>   to any other person, club/group chats, channels, topics and any list of recipients. Do not infer
+>   permission from club membership, an existing `chat_id`, a similar old notification or general
+>   permission to implement the feature. Before shipping, explicitly confirm with the user the exact
+>   recipient classes, trigger/timing and production/debug differences.
+> - For every changed notification path, add tests that prove the complete recipient set and, where
+>   relevant, prove that other users and club chats receive nothing. Keep recipient gates,
+>   idempotency and retry behaviour explicit; never broaden a recipient set as a side effect.
+> - **Every PR description must contain a `Рассылки и уведомления` section.** If the PR does not
+>   change messaging, say so explicitly. If it adds or changes messaging, list every recipient in
+>   production and debug, all triggers/timing, fan-out behaviour, safety gates and an example of
+>   every new or changed message. Use placeholders rather than real Telegram IDs or private data.
 
 ## ⚠️ Secrets (hard rules)
 
