@@ -104,6 +104,7 @@ from bot.telegram import admin, common, player
 from bot.telegram import aetherhub as aetherhub_handler
 from bot.telegram import app_stats as app_stats_handler
 from bot.telegram import bingo as bingo_handler
+from bot.telegram import cellar as cellar_handler
 from bot.telegram import features as features_handler
 from bot.telegram import payment as payment_handler
 from bot.telegram import poll as poll_handler
@@ -115,7 +116,7 @@ from core.config import settings
 from core.database import SessionLocal
 from core.schemas import TournamentCreate
 from services.cellar import CellarService
-from services.feature_flags import FeatureFlagService
+from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.schedule import ScheduleService
 from services.tournament import TournamentService
 
@@ -144,6 +145,7 @@ if settings.DEBUG:
 _USER_COMMANDS = [
     BotCommand("tournaments", "Активные турниры и запись"),
     BotCommand("social_rating", "Социальный рейтинг"),
+    BotCommand("cellar", "Колоды из ячейки"),
     BotCommand("settings", "Настройки профиля"),
     BotCommand("help", "Справка по командам"),
 ]
@@ -175,12 +177,13 @@ async def _post_init(app: Application) -> None:
         created = ScheduleService(db).ensure_defaults()
         if created:
             logger.info("Расписание засеяно из кода: %s строк", created)
-        cellar_sync = CellarService(db).ensure_catalog()
-        if cellar_sync:
-            logger.info(
-                "Каталог колод из ячейки синхронизирован: created=%s updated=%s deactivated=%s",
-                *cellar_sync,
-            )
+        if FeatureFlagService(db).is_enabled(FeatureFlags.CELLAR_DECKS):
+            cellar_sync = CellarService(db).ensure_catalog()
+            if cellar_sync:
+                logger.info(
+                    "Каталог колод из ячейки синхронизирован: created=%s updated=%s deactivated=%s",
+                    *cellar_sync,
+                )
     finally:
         db.close()
     await _set_commands(app)
@@ -290,6 +293,7 @@ def main() -> None:
     app.add_handler(CommandHandler("help", common.cmd_help, filters=private))
     app.add_handler(CommandHandler("tournaments", player.cmd_tournaments, filters=private))
     app.add_handler(CommandHandler("social_rating", rating_handler.cmd_social_rating, filters=private))
+    app.add_handler(CommandHandler("cellar", cellar_handler.cmd_cellar, filters=private))
     app.add_handler(CommandHandler("settings", settings_handler.cmd_settings, filters=private))
     app.add_handler(CommandHandler("poll", poll_handler.cmd_poll, filters=private))
     app.add_handler(CommandHandler("app_statistics", app_stats_handler.cmd_app_statistics, filters=private))

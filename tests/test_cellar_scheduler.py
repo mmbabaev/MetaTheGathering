@@ -10,6 +10,7 @@ from core.config import Club, ClubSchedule, settings
 from core.schemas import TournamentCreate
 from services.cellar import CellarService
 from services.cellar_sheet import CatalogEntry
+from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.tournament import TournamentService
 
 
@@ -27,8 +28,21 @@ def _reserve(db, user_svc, event_date=date(2026, 8, 24)):
     return reservation
 
 
+def _enable_cellar(db):
+    FeatureFlagService(db).toggle(FeatureFlags.CELLAR_DECKS)
+
+
+def _production_recipients(monkeypatch):
+    monkeypatch.setattr(settings, "DEBUG", False)
+    monkeypatch.setattr(settings, "CELLAR_COORDINATOR_TG_IDS", "111,222")
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 333)
+    monkeypatch.setattr("core.config._app_cfg.notify_allowed_ids", None)
+
+
 @pytest.mark.asyncio
 async def test_weekly_catalog_job_syncs_sheet_rows(db):
+    _enable_cellar(db)
+
     class Source:
         def fetch(self):
             return [
@@ -49,6 +63,7 @@ async def test_weekly_catalog_job_syncs_sheet_rows(db):
 
 @pytest.mark.asyncio
 async def test_create_tournament_attaches_pending_cellar_reservation(db, user_svc):
+    _enable_cellar(db)
     event_date = date(2026, 8, 24)
     reservation = _reserve(db, user_svc, event_date)
     club = Club(
@@ -74,6 +89,7 @@ async def test_create_tournament_attaches_pending_cellar_reservation(db, user_sv
 
 @pytest.mark.asyncio
 async def test_coordinator_summary_is_targeted_and_idempotent(db, user_svc, monkeypatch):
+    _enable_cellar(db)
     event_date = date(2026, 8, 24)
     _reserve(db, user_svc, event_date)
     now = datetime(2026, 8, 24, 16, 16, tzinfo=timezone.utc)
@@ -85,22 +101,23 @@ async def test_coordinator_summary_is_targeted_and_idempotent(db, user_svc, monk
             registration_close_at=now.replace(tzinfo=None) + timedelta(minutes=14),
         )
     )
-    monkeypatch.setattr(settings, "CELLAR_COORDINATOR_TG_IDS", "111,222")
+    _production_recipients(monkeypatch)
     bot = AsyncMock()
     job = CellarCoordinatorReminderJob()
 
     await job.run(bot, now=now, db=db)
     await job.run(bot, now=now + timedelta(minutes=1), db=db)
 
-    assert [call.kwargs["chat_id"] for call in bot.send_message.await_args_list] == [111, 222]
+    assert [call.kwargs["chat_id"] for call in bot.send_message.await_args_list] == [111, 222, 333]
     assert all("Alice" in call.kwargs["text"] for call in bot.send_message.await_args_list)
     deliveries = db.execute(select(models.CellarCoordinatorReminder)).scalars().all()
-    assert len(deliveries) == 2
+    assert len(deliveries) == 3
     assert all(delivery.delivered_at is not None for delivery in deliveries)
 
 
 @pytest.mark.asyncio
 async def test_failed_coordinator_delivery_retries_without_resending_success(db, user_svc, monkeypatch):
+    _enable_cellar(db)
     event_date = date(2026, 8, 24)
     _reserve(db, user_svc, event_date)
     now = datetime(2026, 8, 24, 16, 16, tzinfo=timezone.utc)
@@ -112,7 +129,7 @@ async def test_failed_coordinator_delivery_retries_without_resending_success(db,
             registration_close_at=now.replace(tzinfo=None) + timedelta(minutes=14),
         )
     )
-    monkeypatch.setattr(settings, "CELLAR_COORDINATOR_TG_IDS", "111,222")
+    _production_recipients(monkeypatch)
     bot = AsyncMock()
     failed_once = False
 
@@ -129,18 +146,20 @@ async def test_failed_coordinator_delivery_retries_without_resending_success(db,
     await job.run(bot, now=now + timedelta(minutes=1), db=db)
 
     recipients = [call.kwargs["chat_id"] for call in bot.send_message.await_args_list]
-    assert recipients == [111, 222, 222]
+    assert recipients == [111, 222, 333, 222]
     deliveries = db.execute(
         select(models.CellarCoordinatorReminder).order_by(models.CellarCoordinatorReminder.recipient_tg_id)
     ).scalars()
     assert [(row.recipient_tg_id, row.attempts, row.delivered_at is not None) for row in deliveries] == [
         (111, 1, True),
         (222, 2, True),
+        (333, 1, True),
     ]
 
 
 @pytest.mark.asyncio
 async def test_coordinator_summary_is_not_sent_early(db, user_svc, monkeypatch):
+    _enable_cellar(db)
     _reserve(db, user_svc)
     now = datetime(2026, 8, 24, 16, 0, tzinfo=timezone.utc)
     TournamentService(db).create_tournament(
@@ -151,7 +170,7 @@ async def test_coordinator_summary_is_not_sent_early(db, user_svc, monkeypatch):
             registration_close_at=now.replace(tzinfo=None) + timedelta(minutes=30),
         )
     )
-    monkeypatch.setattr(settings, "CELLAR_COORDINATOR_TG_IDS", "111,222")
+    _production_recipients(monkeypatch)
     bot = AsyncMock()
 
     await CellarCoordinatorReminderJob().run(bot, now=now, db=db)
@@ -160,7 +179,8 @@ async def test_coordinator_summary_is_not_sent_early(db, user_svc, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_coordinator_summary_respects_debug_allow_list(db, user_svc, monkeypatch):
+async def test_debug_summary_is_sent_only_to_owner(db, user_svc, monkeypatch):
+    _enable_cellar(db)
     _reserve(db, user_svc)
     now = datetime(2026, 8, 24, 16, 16, tzinfo=timezone.utc)
     TournamentService(db).create_tournament(
@@ -172,9 +192,23 @@ async def test_coordinator_summary_respects_debug_allow_list(db, user_svc, monke
         )
     )
     monkeypatch.setattr(settings, "CELLAR_COORDINATOR_TG_IDS", "111,222")
-    monkeypatch.setattr("core.config._app_cfg.notify_allowed_ids", [111])
+    monkeypatch.setattr(settings, "DEBUG", True)
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 333)
+    monkeypatch.setattr("core.config._app_cfg.notify_allowed_ids", [333])
     bot = AsyncMock()
 
     await CellarCoordinatorReminderJob().run(bot, now=now, db=db)
 
-    assert [call.kwargs["chat_id"] for call in bot.send_message.await_args_list] == [111]
+    assert [call.kwargs["chat_id"] for call in bot.send_message.await_args_list] == [333]
+
+
+@pytest.mark.asyncio
+async def test_cellar_jobs_do_nothing_while_feature_is_disabled(db):
+    source = AsyncMock()
+    source.fetch.side_effect = AssertionError("source must not be read")
+    bot = AsyncMock()
+
+    assert await CellarCatalogSyncJob(source).run(db=db) is None
+    await CellarCoordinatorReminderJob().run(bot, now=datetime.now(timezone.utc), db=db)
+
+    bot.send_message.assert_not_awaited()

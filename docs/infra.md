@@ -166,7 +166,7 @@ Env files are **never committed** to git (`.gitignored`). They are:
 | `WEB_BASE_URL` | no | Public URL of the web UI |
 | `WEB_PORT` | no | Web UI port (default: `8080`) |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` / `SMTP_FROM` | no | SMTP config for email |
-| `CELLAR_COORDINATOR_TG_IDS` | no | Comma-separated Telegram IDs receiving the targeted cellar reservation summary 15 minutes before Edinorog Monday Pauper |
+| `CELLAR_COORDINATOR_TG_IDS` | no | Production-only comma-separated IDs for Ivan and Sergey; they and `OWNER_CHAT_ID` receive cellar booking/cancellation notices and the pre-event summary. Debug ignores the list and sends only to the owner. |
 
 `BOT_ENV=debug` is set via the systemd `Environment=` directive (not in the env file).
 

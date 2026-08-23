@@ -31,7 +31,13 @@ from core.database import SessionLocal
 from core.schemas import TournamentCreate
 from services.aetherhub_import_service import MIN_TOURNAMENT_DURATION, AetherhubImportService
 from services.aetherhub_service import AetherhubService
-from services.cellar import CELLAR_CLUB_NAME, CELLAR_TIMEZONE, CellarService, format_coordinator_summary
+from services.cellar import (
+    CELLAR_CLUB_NAME,
+    CELLAR_TIMEZONE,
+    CellarService,
+    cellar_notification_recipients,
+    format_coordinator_summary,
+)
 from services.cellar_sheet import CellarCatalogSourceError, GoogleSheetsCellarCatalog
 from services.datalens import DataLensService
 from services.deck_mapping import refresh_archetype_macro
@@ -209,7 +215,7 @@ class CreateTournamentJob:
                         registration_close_at=_naive_utc(event_at),
                     )
                 )
-                if self.club.name == CELLAR_CLUB_NAME:
+                if self.club.name == CELLAR_CLUB_NAME and FeatureFlagService(db).is_enabled(FeatureFlags.CELLAR_DECKS):
                     try:
                         CellarService(db).attach_event_to_tournament(event_at.date(), new_t.id)
                     except Exception:
@@ -283,12 +289,17 @@ class CellarCoordinatorReminderJob:
     """Send each configured coordinator one idempotent summary shortly before the event."""
 
     async def run(self, bot, now: datetime, db=None) -> None:
-        if bot is None or not settings.cellar_coordinator_tg_ids:
+        if bot is None:
             return
         close_db = db is None
         if close_db:
             db = SessionLocal()
         try:
+            if not FeatureFlagService(db).is_enabled(FeatureFlags.CELLAR_DECKS):
+                return
+            recipients = cellar_notification_recipients()
+            if not recipients:
+                return
             now_utc = _naive_utc(now)
             tournament = db.execute(
                 select(models.Tournament)
@@ -309,11 +320,7 @@ class CellarCoordinatorReminderJob:
             if not reservations:
                 return
             text = format_coordinator_summary(event_at.date(), reservations)
-            allowed = settings.notify_allowed_ids
-            for recipient_tg_id in settings.cellar_coordinator_tg_ids:
-                if allowed is not None and recipient_tg_id not in allowed:
-                    logger.info("Cellar reminder skipped by notify_allowed_ids for %s", recipient_tg_id)
-                    continue
+            for recipient_tg_id in recipients:
                 delivery = service.coordinator_delivery(event_at.date(), recipient_tg_id)
                 if delivery.delivered_at is not None:
                     continue
@@ -340,6 +347,8 @@ class CellarCatalogSyncJob:
         if close_db:
             db = SessionLocal()
         try:
+            if not FeatureFlagService(db).is_enabled(FeatureFlags.CELLAR_DECKS):
+                return None
             entries = await asyncio.to_thread(self._source.fetch)
             result = CellarService(db).sync_catalog(entries)
             logger.info(

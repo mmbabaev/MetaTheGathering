@@ -86,8 +86,9 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     SMTP_FROM: str = "MetaGatherer <noreply@example.com>"
 
-    # Получатели персональной сводки по броням колод из ячейки. Значение хранится
-    # только в env, потому что Telegram IDs координаторов не должны попадать в git.
+    # Production-координаторы, получающие личные уведомления о бронях и предтурнирную
+    # сводку. Владелец добавляется кодом; debug игнорирует этот список и пишет только владельцу.
+    # Значение хранится только в env, потому что Telegram IDs координаторов не должны попадать в git.
     CELLAR_COORDINATOR_TG_IDS: str = ""
 
     # Несекретные настройки — берутся из config/prod.py или config/debug.py

@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from core import models
+from core.config import settings
 from services.archetype import ArchetypeService
 from services.cellar_sheet import CatalogEntry, CellarCatalogSourceError, GoogleSheetsCellarCatalog
 from services.tournament import TournamentService
@@ -21,6 +22,23 @@ logger = logging.getLogger(__name__)
 CELLAR_CLUB_NAME = "Edinorog"
 CELLAR_TIMEZONE = ZoneInfo("Europe/Moscow")
 CELLAR_WEEKDAY = 0  # Monday
+
+
+def cellar_notification_recipients() -> list[int]:
+    """Return the explicitly authorised DM targets for the current environment."""
+
+    candidates = (
+        [settings.OWNER_CHAT_ID] if settings.DEBUG else [*settings.cellar_coordinator_tg_ids, settings.OWNER_CHAT_ID]
+    )
+    allowed = settings.notify_allowed_ids
+    recipients: list[int] = []
+    for tg_id in candidates:
+        if tg_id is None or tg_id in recipients:
+            continue
+        if allowed is not None and tg_id not in allowed:
+            continue
+        recipients.append(tg_id)
+    return recipients
 
 
 class CellarReservationError(ValueError):

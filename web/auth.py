@@ -1,7 +1,3 @@
-import hashlib
-import secrets
-from datetime import datetime, timedelta, timezone
-
 from fastapi import Cookie, Depends, HTTPException, Request
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from sqlalchemy import func, select
@@ -12,8 +8,6 @@ from core.config import settings
 from core.database import SessionLocal
 
 SESSION_TTL_DAYS = 90
-MAGIC_LINK_TTL_MINUTES = 15
-
 _signer = URLSafeTimedSerializer(settings.WEB_SECRET_KEY, salt="web-session")
 
 
@@ -23,34 +17,6 @@ def get_db():
         yield db
     finally:
         db.close()
-
-
-def _hash_token(token: str) -> str:
-    return hashlib.sha256(token.encode()).hexdigest()
-
-
-def create_magic_token(db: Session, user: models.User) -> str:
-    token = secrets.token_urlsafe(32)
-    expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=MAGIC_LINK_TTL_MINUTES)
-    db.add(models.WebAuthToken(user_id=user.id, token_hash=_hash_token(token), expires_at=expires_at))
-    db.commit()
-    return token
-
-
-def verify_magic_token(db: Session, token: str) -> models.User | None:
-    token_hash = _hash_token(token)
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-    stmt = select(models.WebAuthToken).where(
-        models.WebAuthToken.token_hash == token_hash,
-        models.WebAuthToken.expires_at > now,
-        models.WebAuthToken.used_at.is_(None),
-    )
-    record = db.execute(stmt).scalar_one_or_none()
-    if not record:
-        return None
-    record.used_at = now
-    db.commit()
-    return record.user
 
 
 def make_session_cookie(user_id: int) -> str:

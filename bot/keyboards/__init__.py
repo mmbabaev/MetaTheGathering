@@ -105,6 +105,10 @@ def features_keyboard(flags: list) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(buttons)
 
 
+def cellar_web_keyboard(url: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[InlineKeyboardButton("🗄 Выбрать колоду", url=url)]])
+
+
 @dataclass(frozen=True)
 class StatusButton:
     """Чистая модель кнопки статуса (без зависимости от Telegram): подпись + callback."""

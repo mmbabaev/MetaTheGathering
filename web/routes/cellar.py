@@ -1,23 +1,33 @@
+import logging
 from datetime import date
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
-from core.config import app_cfg
 from services.cellar import (
     CellarReservationError,
     CellarService,
+    cellar_notification_recipients,
     format_group_reservation,
     next_cellar_dates,
 )
 from services.cellar_sheet import CELLAR_SHEET_URL
+from services.feature_flags import FeatureFlags, FeatureFlagService
 from web.auth import get_current_user, get_db
 from web.templating import templates
 from web.tg_sender import send_tg_message
 
-router = APIRouter(prefix="/cellar")
+logger = logging.getLogger(__name__)
+
+
+def require_cellar_enabled(db: Session = Depends(get_db)) -> None:
+    if not FeatureFlagService(db).is_enabled(FeatureFlags.CELLAR_DECKS):
+        raise HTTPException(status_code=404)
+
+
+router = APIRouter(prefix="/cellar", dependencies=[Depends(require_cellar_enabled)])
 
 
 def _redirect(event_date: date, *, message: str | None = None, error: str | None = None) -> RedirectResponse:
@@ -30,10 +40,14 @@ def _redirect(event_date: date, *, message: str | None = None, error: str | None
 
 
 async def _announce(reservation, *, cancelled: bool = False) -> bool:
-    chat_id = app_cfg.edinorog_chat_id
-    if not chat_id:
-        return False
-    return await send_tg_message(chat_id, format_group_reservation(reservation, cancelled=cancelled))
+    text = format_group_reservation(reservation, cancelled=cancelled)
+    delivered = False
+    for recipient_tg_id in cellar_notification_recipients():
+        try:
+            delivered = await send_tg_message(recipient_tg_id, text) or delivered
+        except Exception:  # noqa: BLE001 — one unavailable recipient must not break the booking
+            logger.exception("Cellar reservation notification failed for %s", recipient_tg_id)
+    return delivered
 
 
 @router.get("", response_class=HTMLResponse)
