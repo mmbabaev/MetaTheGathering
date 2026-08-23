@@ -97,6 +97,7 @@ tar archive (excludes .env*, tests,
   scp env file → /tmp/.env.deploy
   │
   ssh remote:
+    debug: remove stale alembic/versions left by another PR
     extract archive → REMOTE_DIR
     mv /tmp/.env.deploy → bot/.env[.debug]
     python3 -m venv venv

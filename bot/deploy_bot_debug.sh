@@ -94,6 +94,11 @@ set -e
 
 echo "→ Разворачиваем в $REMOTE_DIR"
 mkdir -p "$REMOTE_DIR"
+# Debug переиспользует один каталог для разных PR. Удалённые в новой ветке файлы иначе
+# остаются на сервере; для Alembic это создаёт ложные дополнительные heads от прошлого PR.
+if [ "$BOT_ENV" = "debug" ]; then
+    rm -rf "$REMOTE_DIR/alembic/versions"
+fi
 tar -xzf "/tmp/$ARCHIVE_NAME" -C "$REMOTE_DIR" --warning=no-unknown-keyword
 mv /tmp/.env.deploy "$ENV_DEST"
 
