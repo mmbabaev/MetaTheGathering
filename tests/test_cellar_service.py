@@ -71,6 +71,48 @@ def test_reservation_is_exclusive_per_deck_and_user(db, user_svc):
         service.reserve(deck_id=decks[1].id, user_id=alice.id, event_date=EVENT_DATE, today=EVENT_DATE)
 
 
+def test_user_catalog_starts_with_current_booking_and_three_recent_distinct_decks(db, user_svc):
+    service, decks = _catalog(db)
+    alice = user_svc.get_or_create(tg_id=1001, first_name="Alice")
+    today = date(2026, 8, 23)
+
+    oldest = service.reserve(
+        deck_id=decks[10].id,
+        user_id=alice.id,
+        event_date=EVENT_DATE,
+        today=today,
+    ).reservation
+    service.cancel(reservation_id=oldest.id, user_id=alice.id)
+    current = service.reserve(
+        deck_id=decks[14].id,
+        user_id=alice.id,
+        event_date=EVENT_DATE,
+        today=today,
+    ).reservation
+
+    recent = []
+    for deck, event_date in zip(decks[11:14], next_cellar_dates(today)[1:], strict=True):
+        reservation = service.reserve(
+            deck_id=deck.id,
+            user_id=alice.id,
+            event_date=event_date,
+            today=today,
+        ).reservation
+        recent.append(reservation)
+        service.cancel(reservation_id=reservation.id, user_id=alice.id)
+
+    ordered = service.catalog_for_user(EVENT_DATE, alice.id)
+
+    assert [deck.id for deck in ordered[:4]] == [
+        current.deck_id,
+        recent[2].deck_id,
+        recent[1].deck_id,
+        recent[0].deck_id,
+    ]
+    assert ordered[4].id == decks[0].id
+    assert oldest.deck_id not in [deck.id for deck in ordered[:4]]
+
+
 def test_cancel_releases_deck_and_user_slot(db, user_svc):
     service, decks = _catalog(db)
     alice = user_svc.get_or_create(tg_id=1001, first_name="Alice")

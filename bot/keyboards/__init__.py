@@ -98,7 +98,7 @@ CB_CELLAR_CANCEL = "cellar_cancel"  # cellar_cancel:{reservation_id}:{page}
 CB_CELLAR_CANCEL_CONFIRM = "cellar_cancel_yes"  # cellar_cancel_yes:{reservation_id}:{page}
 CB_CELLAR_NOOP = "cellar_noop"
 
-CELLAR_PAGE_SIZE = 8
+CELLAR_PAGE_SIZE = 10
 
 
 def features_keyboard(flags: list) -> InlineKeyboardMarkup:

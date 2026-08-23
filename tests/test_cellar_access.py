@@ -117,7 +117,7 @@ def test_cellar_telegram_flow_reserves_and_cancels_deck(db):
         for button in row
         if button.callback_data and button.callback_data.startswith(f"{CB_CELLAR_DECK}:")
     ]
-    assert len(deck_callbacks) == 8
+    assert len(deck_callbacks) == 10
     assert "Свободно:" in catalog.text
     assert any(
         "№13" in button.text
@@ -132,7 +132,7 @@ def test_cellar_telegram_flow_reserves_and_cancels_deck(db):
             for row in second_page.keyboard.inline_keyboard
             for button in row
         )
-        == 8
+        == 10
     )
     assert any(button.text.startswith("2/") for row in second_page.keyboard.inline_keyboard for button in row)
 
@@ -202,6 +202,25 @@ def test_cellar_card_does_not_offer_reserved_deck_to_another_player(db):
         for row in card.keyboard.inline_keyboard
         for button in row
     )
+
+
+def test_reserving_from_later_page_returns_current_deck_at_top(db):
+    FeatureFlagService(db).toggle(FeatureFlags.CELLAR_DECKS)
+    handler = _handler(db)
+    handler.handle_open(tg_id=1001, username="alice", first_name="Alice", last_name=None, today=TODAY)
+    deck = CellarService(db).catalog(EVENT_DATE)[15]
+
+    reserved = handler.handle_reserve(
+        tg_id=1001,
+        event_date=EVENT_DATE,
+        deck_id=deck.id,
+        page=1,
+        today=TODAY,
+    )
+
+    first_button = reserved.result.keyboard.inline_keyboard[0][0]
+    assert first_button.callback_data == f"{CB_CELLAR_DECK}:{EVENT_DATE}:{deck.id}:0"
+    assert first_button.text.startswith("✅ ")
 
 
 def test_cellar_callbacks_reject_stale_date(db):

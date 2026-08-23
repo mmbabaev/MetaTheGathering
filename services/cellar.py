@@ -245,6 +245,49 @@ class CellarService:
             .all()
         )
 
+    def catalog_for_user(
+        self,
+        event_date: date,
+        user_id: int,
+        *,
+        previous_limit: int = 3,
+    ) -> list[models.CellarDeck]:
+        """Put the current booking and recent distinct deck choices before the catalog."""
+
+        decks = self.catalog(event_date)
+        reservations = (
+            self.db.execute(
+                select(models.CellarDeckReservation)
+                .where(models.CellarDeckReservation.user_id == user_id)
+                .order_by(
+                    models.CellarDeckReservation.created_at.desc(),
+                    models.CellarDeckReservation.id.desc(),
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        current_deck_id = next(
+            (
+                reservation.deck_id
+                for reservation in reservations
+                if reservation.event_date == event_date and reservation.cancelled_at is None
+            ),
+            None,
+        )
+        recent_deck_ids: list[int] = []
+        for reservation in reservations:
+            if reservation.deck_id == current_deck_id or reservation.deck_id in recent_deck_ids:
+                continue
+            if len(recent_deck_ids) < previous_limit:
+                recent_deck_ids.append(reservation.deck_id)
+
+        preferred_ids = ([current_deck_id] if current_deck_id is not None else []) + recent_deck_ids
+        priority = {deck_id: index for index, deck_id in enumerate(preferred_ids)}
+        fallback = len(priority)
+        return sorted(decks, key=lambda deck: (priority.get(deck.id, fallback), deck.name.casefold(), deck.id))
+
     @staticmethod
     def reservation_for(deck: models.CellarDeck, event_date: date) -> models.CellarDeckReservation | None:
         return next(

@@ -77,7 +77,7 @@ class CellarHandler:
         if guard is not None:
             return guard
         user = self.user_svc.get_by_tg_id(tg_id)
-        decks = self.cellar.catalog(event_date)
+        decks = self.cellar.catalog_for_user(event_date, user.id)
         return HandlerResult(
             format_cellar_catalog(event_date, decks, user.id),
             keyboard=cellar_catalog_keyboard(decks, event_date=event_date, user_id=user.id, page=page),
@@ -96,7 +96,7 @@ class CellarHandler:
         if guard is not None:
             return guard
         user = self.user_svc.get_by_tg_id(tg_id)
-        decks = self.cellar.catalog(event_date)
+        decks = self.cellar.catalog_for_user(event_date, user.id)
         deck = next((row for row in decks if row.id == deck_id), None)
         if deck is None:
             return HandlerResult("Колода не найдена.", is_alert=True)
@@ -146,7 +146,7 @@ class CellarHandler:
             )
         except CellarReservationError as exc:
             return CellarActionResult(HandlerResult(str(exc), is_alert=True))
-        result = self.handle_date(tg_id=tg_id, event_date=event_date, page=page, today=today)
+        result = self.handle_date(tg_id=tg_id, event_date=event_date, page=0, today=today)
         result.answer_text = CELLAR_RESERVED if outcome.created else "Эта колода уже забронирована вами."
         return CellarActionResult(result, reservation=outcome.reservation if outcome.created else None)
 
