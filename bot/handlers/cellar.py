@@ -67,7 +67,7 @@ class CellarHandler:
         query = urlencode({"token": token, "next": "/cellar"})
         web_url = f"{settings.WEB_BASE_URL.rstrip('/')}/auth/verify?{query}"
         text = CELLAR_DATES
-        if can_view_cellar_overview(tg_id):
+        if can_view_cellar_overview(tg_id, username):
             reservations_by_date = [(event_date, self.cellar.active_reservations(event_date)) for event_date in dates]
             text = f"{text}\n\n{format_coordinator_overview(reservations_by_date)}"
         return HandlerResult(text, keyboard=cellar_dates_keyboard(dates, web_url))

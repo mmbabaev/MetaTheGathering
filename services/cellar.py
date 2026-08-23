@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 CELLAR_CLUB_NAME = "Edinorog"
 CELLAR_TIMEZONE = ZoneInfo("Europe/Moscow")
-CELLAR_WEEKDAY = 0  # Monday
+CELLAR_WEEKDAYS = (0, 3)  # Monday and Thursday
 
 
 def _allowed_cellar_recipients(candidates: list[int | None]) -> list[int]:
@@ -36,12 +36,30 @@ def _allowed_cellar_recipients(candidates: list[int | None]) -> list[int]:
     return recipients
 
 
-def cellar_notification_recipients() -> list[int]:
+def cellar_notification_recipients(db: Session) -> list[int]:
     """Recipients of the single pre-event summary for the current environment."""
 
-    candidates = (
-        [settings.OWNER_CHAT_ID] if settings.DEBUG else [*settings.cellar_coordinator_tg_ids, settings.OWNER_CHAT_ID]
-    )
+    if settings.DEBUG:
+        return _allowed_cellar_recipients([settings.OWNER_CHAT_ID])
+
+    candidates: list[int | None] = [*settings.cellar_coordinator_tg_ids]
+    if settings.cellar_coordinator_usernames:
+        matching_ids: dict[str, set[int]] = {}
+        rows = db.execute(
+            select(func.lower(models.User.username), models.User.tg_id).where(
+                models.User.tg_id > 0,
+                func.lower(models.User.username).in_(settings.cellar_coordinator_usernames),
+            )
+        )
+        for username, tg_id in rows:
+            matching_ids.setdefault(username, set()).add(tg_id)
+        for username in settings.cellar_coordinator_usernames:
+            ids = matching_ids.get(username, set())
+            if len(ids) == 1:
+                candidates.append(next(iter(ids)))
+            elif len(ids) > 1:
+                logger.warning("Skipping ambiguous cellar coordinator username with %d matches", len(ids))
+    candidates.append(settings.OWNER_CHAT_ID)
     return _allowed_cellar_recipients(candidates)
 
 
@@ -51,12 +69,15 @@ def cellar_immediate_notification_recipients() -> list[int]:
     return _allowed_cellar_recipients([settings.OWNER_CHAT_ID])
 
 
-def can_view_cellar_overview(tg_id: int) -> bool:
+def can_view_cellar_overview(tg_id: int, username: str | None) -> bool:
     """The owner and production coordinators may inspect upcoming reservations."""
 
     if settings.OWNER_CHAT_ID is not None and tg_id == settings.OWNER_CHAT_ID:
         return True
-    return not settings.DEBUG and tg_id in settings.cellar_coordinator_tg_ids
+    if settings.DEBUG:
+        return False
+    normalized_username = username.lstrip("@").casefold() if username else None
+    return tg_id in settings.cellar_coordinator_tg_ids or normalized_username in settings.cellar_coordinator_usernames
 
 
 class CellarReservationError(ValueError):
@@ -142,9 +163,14 @@ BOOTSTRAP_CATALOG = [
 
 def next_cellar_dates(today: date | None = None, count: int = 4) -> list[date]:
     today = today or datetime.now(CELLAR_TIMEZONE).date()
-    days_until_monday = (CELLAR_WEEKDAY - today.weekday()) % 7
-    first = today + timedelta(days=days_until_monday)
-    return [first + timedelta(days=7 * offset) for offset in range(count)]
+    dates: list[date] = []
+    offset = 0
+    while len(dates) < count:
+        candidate = today + timedelta(days=offset)
+        if candidate.weekday() in CELLAR_WEEKDAYS:
+            dates.append(candidate)
+        offset += 1
+    return dates
 
 
 class CellarService:
@@ -410,7 +436,7 @@ class CellarService:
         today = today or datetime.now(CELLAR_TIMEZONE).date()
         if event_date not in next_cellar_dates(today, count=4):
             raise CellarInvalidEventDate(
-                "Колоды из ячейки можно бронировать на один из четырёх ближайших понедельников."
+                "Колоды из ячейки можно бронировать на один из четырёх ближайших турниров по понедельникам и четвергам."
             )
 
     def _event_tournament(self, event_date: date) -> models.Tournament | None:

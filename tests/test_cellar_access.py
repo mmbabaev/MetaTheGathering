@@ -253,7 +253,8 @@ def test_only_owner_and_production_coordinators_see_booking_overview(db, monkeyp
     db.commit()
     handler.handle_reserve(tg_id=1001, event_date=EVENT_DATE, deck_id=deck.id, today=TODAY)
     monkeypatch.setattr(settings, "DEBUG", False)
-    monkeypatch.setattr(settings, "CELLAR_COORDINATOR_TG_IDS", "111,222")
+    monkeypatch.setattr(settings, "CELLAR_COORDINATOR_TG_IDS", "")
+    monkeypatch.setattr(settings, "CELLAR_COORDINATOR_USERNAMES", "@coordinator,other_coordinator")
     monkeypatch.setattr(settings, "OWNER_CHAT_ID", 333)
 
     coordinator = handler.handle_open(
@@ -302,6 +303,12 @@ def test_only_owner_and_production_coordinators_see_booking_overview(db, monkeyp
     assert "Брони на ближайшие турниры" not in debug_coordinator.text
 
 
+def test_coordinator_usernames_are_normalized_and_deduplicated(monkeypatch):
+    monkeypatch.setattr(settings, "CELLAR_COORDINATOR_USERNAMES", " @Coord_One,coord_two,COORD_ONE ")
+
+    assert settings.cellar_coordinator_usernames == ["coord_one", "coord_two"]
+
+
 @pytest.mark.asyncio
 async def test_telegram_reservation_notification_targets_only_owner_in_production(db, user_svc, monkeypatch):
     service = CellarService(db)
@@ -315,6 +322,7 @@ async def test_telegram_reservation_notification_targets_only_owner_in_productio
     ).reservation
     monkeypatch.setattr(settings, "DEBUG", False)
     monkeypatch.setattr(settings, "CELLAR_COORDINATOR_TG_IDS", "111,222")
+    monkeypatch.setattr(settings, "CELLAR_COORDINATOR_USERNAMES", "coordinator,other_coordinator")
     monkeypatch.setattr(settings, "OWNER_CHAT_ID", 333)
     monkeypatch.setattr("core.config._app_cfg.notify_allowed_ids", None)
     bot = AsyncMock()
@@ -341,6 +349,7 @@ async def test_telegram_reservation_notification_targets_only_owner_in_debug(db,
     ).reservation
     monkeypatch.setattr(settings, "DEBUG", True)
     monkeypatch.setattr(settings, "CELLAR_COORDINATOR_TG_IDS", "111,222")
+    monkeypatch.setattr(settings, "CELLAR_COORDINATOR_USERNAMES", "coordinator,other_coordinator")
     monkeypatch.setattr(settings, "OWNER_CHAT_ID", 333)
     monkeypatch.setattr("core.config._app_cfg.notify_allowed_ids", [333])
     bot = AsyncMock()

@@ -86,9 +86,10 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     SMTP_FROM: str = "MetaGatherer <noreply@example.com>"
 
-    # Production-координаторы, получающие личные уведомления о бронях и предтурнирную
-    # сводку. Владелец добавляется кодом; debug игнорирует этот список и пишет только владельцу.
-    # Значение хранится только в env, потому что Telegram IDs координаторов не должны попадать в git.
+    # Production-координаторы, получающие часовую предтурнирную сводку и доступ к общему списку.
+    # Можно задавать Telegram username (предпочтительно) и/или legacy ID. Владелец добавляется
+    # кодом; debug игнорирует оба списка. Реальные значения хранятся только в env.
+    CELLAR_COORDINATOR_USERNAMES: str = ""
     CELLAR_COORDINATOR_TG_IDS: str = ""
 
     # Несекретные настройки — берутся из config/prod.py или config/debug.py
@@ -113,6 +114,16 @@ class Settings(BaseSettings):
     @property
     def cellar_coordinator_tg_ids(self) -> List[int]:
         return [int(value.strip()) for value in self.CELLAR_COORDINATOR_TG_IDS.split(",") if value.strip()]
+
+    @property
+    def cellar_coordinator_usernames(self) -> List[str]:
+        return list(
+            dict.fromkeys(
+                value.strip().lstrip("@").casefold()
+                for value in self.CELLAR_COORDINATOR_USERNAMES.split(",")
+                if value.strip().lstrip("@")
+            )
+        )
 
     @property
     def chat_ids(self) -> List[int]:

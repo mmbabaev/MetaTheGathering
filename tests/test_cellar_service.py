@@ -46,13 +46,14 @@ def test_bootstrap_catalog_is_complete_and_idempotent(db):
     assert any(deck.notes == "Без камней" for deck in service.catalog(EVENT_DATE))
 
 
-def test_next_cellar_dates_starts_with_current_or_next_monday():
-    assert next_cellar_dates(date(2026, 8, 22), count=3) == [
+def test_next_cellar_dates_returns_four_monday_and_thursday_events():
+    assert next_cellar_dates(date(2026, 8, 22)) == [
         date(2026, 8, 24),
+        date(2026, 8, 27),
         date(2026, 8, 31),
-        date(2026, 9, 7),
+        date(2026, 9, 3),
     ]
-    assert next_cellar_dates(date(2026, 8, 24), count=1) == [date(2026, 8, 24)]
+    assert next_cellar_dates(date(2026, 8, 24), count=2) == [date(2026, 8, 24), date(2026, 8, 27)]
 
 
 def test_reservation_is_exclusive_per_deck_and_user(db, user_svc):
@@ -130,13 +131,21 @@ def test_cancel_releases_deck_and_user_slot(db, user_svc):
     assert reservation.cancelled_at is not None
 
 
-def test_only_future_mondays_are_accepted(db, user_svc):
+def test_only_four_upcoming_monday_and_thursday_events_are_accepted(db, user_svc):
     service, decks = _catalog(db)
     alice = user_svc.get_or_create(tg_id=1001, first_name="Alice")
 
+    thursday = service.reserve(
+        deck_id=decks[0].id,
+        user_id=alice.id,
+        event_date=date(2026, 8, 27),
+        today=date(2026, 8, 22),
+    )
+
+    assert thursday.created is True
     with pytest.raises(CellarInvalidEventDate):
         service.reserve(
-            deck_id=decks[0].id,
+            deck_id=decks[1].id,
             user_id=alice.id,
             event_date=date(2026, 8, 25),
             today=date(2026, 8, 22),

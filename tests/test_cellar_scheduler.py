@@ -8,7 +8,7 @@ from bot.scheduler import CellarCatalogSyncJob, CellarCoordinatorReminderJob, Cr
 from core import models
 from core.config import Club, ClubSchedule, settings
 from core.schemas import TournamentCreate
-from services.cellar import CellarService
+from services.cellar import CellarService, cellar_notification_recipients
 from services.cellar_sheet import CatalogEntry
 from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.tournament import TournamentService
@@ -32,11 +32,27 @@ def _enable_cellar(db):
     FeatureFlagService(db).toggle(FeatureFlags.CELLAR_DECKS)
 
 
-def _production_recipients(monkeypatch):
+def _production_recipients(monkeypatch, user_svc):
+    user_svc.get_or_create(tg_id=111, username="coord_one", first_name="Coord One")
+    user_svc.get_or_create(tg_id=222, username="coord_two", first_name="Coord Two")
     monkeypatch.setattr(settings, "DEBUG", False)
-    monkeypatch.setattr(settings, "CELLAR_COORDINATOR_TG_IDS", "111,222")
+    monkeypatch.setattr(settings, "CELLAR_COORDINATOR_TG_IDS", "")
+    monkeypatch.setattr(settings, "CELLAR_COORDINATOR_USERNAMES", "@coord_one,COORD_TWO")
     monkeypatch.setattr(settings, "OWNER_CHAT_ID", 333)
     monkeypatch.setattr("core.config._app_cfg.notify_allowed_ids", None)
+
+
+def test_ambiguous_coordinator_username_is_not_resolved_to_multiple_recipients(db, user_svc, monkeypatch):
+    user_svc.get_or_create(tg_id=111, username="duplicate_coord", first_name="First")
+    user_svc.get_or_create(tg_id=112, username="duplicate_coord", first_name="Second")
+    user_svc.get_or_create(tg_id=222, username="unique_coord", first_name="Unique")
+    monkeypatch.setattr(settings, "DEBUG", False)
+    monkeypatch.setattr(settings, "CELLAR_COORDINATOR_TG_IDS", "")
+    monkeypatch.setattr(settings, "CELLAR_COORDINATOR_USERNAMES", "duplicate_coord,unique_coord")
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 333)
+    monkeypatch.setattr("core.config._app_cfg.notify_allowed_ids", None)
+
+    assert cellar_notification_recipients(db) == [222, 333]
 
 
 @pytest.mark.asyncio
@@ -101,7 +117,7 @@ async def test_coordinator_summary_is_targeted_and_idempotent(db, user_svc, monk
             registration_close_at=now.replace(tzinfo=None) + timedelta(minutes=59),
         )
     )
-    _production_recipients(monkeypatch)
+    _production_recipients(monkeypatch, user_svc)
     bot = AsyncMock()
     job = CellarCoordinatorReminderJob()
 
@@ -131,7 +147,7 @@ async def test_failed_coordinator_delivery_retries_without_resending_success(db,
             registration_close_at=now.replace(tzinfo=None) + timedelta(minutes=59),
         )
     )
-    _production_recipients(monkeypatch)
+    _production_recipients(monkeypatch, user_svc)
     bot = AsyncMock()
     failed_once = False
 
@@ -172,7 +188,7 @@ async def test_coordinator_summary_is_not_sent_more_than_one_hour_early(db, user
             registration_close_at=now.replace(tzinfo=None) + timedelta(minutes=61),
         )
     )
-    _production_recipients(monkeypatch)
+    _production_recipients(monkeypatch, user_svc)
     bot = AsyncMock()
 
     await CellarCoordinatorReminderJob().run(bot, now=now, db=db)
@@ -194,6 +210,7 @@ async def test_debug_summary_is_sent_only_to_owner(db, user_svc, monkeypatch):
         )
     )
     monkeypatch.setattr(settings, "CELLAR_COORDINATOR_TG_IDS", "111,222")
+    monkeypatch.setattr(settings, "CELLAR_COORDINATOR_USERNAMES", "coord_one,coord_two")
     monkeypatch.setattr(settings, "DEBUG", True)
     monkeypatch.setattr(settings, "OWNER_CHAT_ID", 333)
     monkeypatch.setattr("core.config._app_cfg.notify_allowed_ids", [333])

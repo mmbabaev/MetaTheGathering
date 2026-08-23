@@ -297,7 +297,7 @@ class CellarCoordinatorReminderJob:
         try:
             if not FeatureFlagService(db).is_enabled(FeatureFlags.CELLAR_DECKS):
                 return
-            recipients = cellar_notification_recipients()
+            recipients = cellar_notification_recipients(db)
             if not recipients:
                 return
             now_utc = _naive_utc(now)

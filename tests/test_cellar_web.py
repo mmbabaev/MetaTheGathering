@@ -153,6 +153,7 @@ async def test_reservation_notification_targets_only_owner_in_production(db, use
     monkeypatch.setattr("web.routes.cellar.send_tg_message", send)
     monkeypatch.setattr(settings, "DEBUG", False)
     monkeypatch.setattr(settings, "CELLAR_COORDINATOR_TG_IDS", "111,222")
+    monkeypatch.setattr(settings, "CELLAR_COORDINATOR_USERNAMES", "coordinator,other_coordinator")
     monkeypatch.setattr(settings, "OWNER_CHAT_ID", 333)
     monkeypatch.setattr("core.config._app_cfg.notify_allowed_ids", None)
 
@@ -180,6 +181,7 @@ async def test_reservation_notification_targets_only_owner_in_debug(db, user_svc
     monkeypatch.setattr("web.routes.cellar.send_tg_message", send)
     monkeypatch.setattr(settings, "DEBUG", True)
     monkeypatch.setattr(settings, "CELLAR_COORDINATOR_TG_IDS", "111,222")
+    monkeypatch.setattr(settings, "CELLAR_COORDINATOR_USERNAMES", "coordinator,other_coordinator")
     monkeypatch.setattr(settings, "OWNER_CHAT_ID", 333)
     monkeypatch.setattr("core.config._app_cfg.notify_allowed_ids", [333])
 
