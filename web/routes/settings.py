@@ -35,8 +35,11 @@ def _generate_code() -> str:
 
 
 def _merge_accounts(db: Session, web_user: models.User, tg_user: models.User) -> None:
-    """Transfer email and participants from web_user to tg_user, then delete web_user."""
-    tg_user.email = web_user.email
+    """Transfer email, registrations and cellar reservations, then delete web_user."""
+    email = web_user.email
+    web_user.email = None
+    db.flush()
+    tg_user.email = email
 
     # Move participants, skip on tournament conflict (tg_user already registered there)
     existing_tournaments = {
@@ -49,6 +52,33 @@ def _merge_accounts(db: Session, web_user: models.User, tg_user: models.User) ->
             models.Participant.user_id == web_user.id,
             models.Participant.tournament_id.not_in(existing_tournaments),
         )
+        .values(user_id=tg_user.id)
+    )
+
+    # Preserve lending reservations made before the email account was linked. If both
+    # identities already hold a deck for one date, keep the Telegram reservation and
+    # cancel the duplicate before moving history (the active-user/date index stays valid).
+    existing_cellar_dates = set(
+        db.execute(
+            select(models.CellarDeckReservation.event_date).where(
+                models.CellarDeckReservation.user_id == tg_user.id,
+                models.CellarDeckReservation.cancelled_at.is_(None),
+            )
+        ).scalars()
+    )
+    if existing_cellar_dates:
+        db.execute(
+            update(models.CellarDeckReservation)
+            .where(
+                models.CellarDeckReservation.user_id == web_user.id,
+                models.CellarDeckReservation.event_date.in_(existing_cellar_dates),
+                models.CellarDeckReservation.cancelled_at.is_(None),
+            )
+            .values(cancelled_at=utc_now())
+        )
+    db.execute(
+        update(models.CellarDeckReservation)
+        .where(models.CellarDeckReservation.user_id == web_user.id)
         .values(user_id=tg_user.id)
     )
 

@@ -5,7 +5,7 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from bot.deeplink import parse_deck_payload, parse_fill_missing_payload, parse_registration_payload
+from bot.deeplink import is_cellar_payload, parse_deck_payload, parse_fill_missing_payload, parse_registration_payload
 from bot.messages import HELP_TEXT, HELP_TEXT_ADMIN
 from core.database import SessionLocal
 from core.event_log import event_logger
@@ -63,6 +63,9 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     # Диплинк `?start=deck_<id>` — сразу в запись колоды на турнир (issue #136).
     payload = (context.args or [None])[0]
+    if payload and is_cellar_payload(payload):
+        await _start_cellar_deeplink(update, context)
+        return
     tournament_id = parse_deck_payload(payload) if payload else None
     if tournament_id is not None:
         await _start_deck_deeplink(update, context, user, tournament_id)
@@ -92,6 +95,14 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.effective_message.reply_text(
         greeting + "Используйте /tournaments чтобы увидеть активные турниры и записаться."
     )
+
+
+async def _start_cellar_deeplink(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Route `?start=cellar` through the same private menu as `/cellar`."""
+
+    from bot.telegram.cellar import cmd_cellar  # noqa: PLC0415 — cellar imports log_event from this module
+
+    await cmd_cellar(update, context)
 
 
 async def _start_deck_deeplink(update: Update, context: ContextTypes.DEFAULT_TYPE, user, tournament_id: int) -> None:

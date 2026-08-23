@@ -5,10 +5,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from bot.deeplink import (
+    cellar_deeplink,
     deck_deeplink,
     deck_payload,
     fill_missing_deeplink,
     fill_missing_payload,
+    is_cellar_payload,
     parse_deck_payload,
     parse_fill_missing_payload,
     parse_registration_payload,
@@ -57,6 +59,11 @@ class TestPayload:
 
     def test_fill_missing_deeplink_url(self):
         assert fill_missing_deeplink("MyBot", 7) == "https://t.me/MyBot?start=fill_7"
+
+    def test_cellar_deeplink_url_and_payload(self):
+        assert cellar_deeplink("MyBot") == "https://t.me/MyBot?start=cellar"
+        assert is_cellar_payload("cellar") is True
+        assert is_cellar_payload("cellar_extra") is False
 
 
 @pytest.fixture
@@ -154,3 +161,16 @@ async def test_cmd_start_routes_fill_missing_deeplink():
         await cmd_start(update, context)
 
     start_fill.assert_awaited_once_with(update, context, update.effective_user, 42)
+
+
+@pytest.mark.asyncio
+async def test_cmd_start_routes_cellar_deeplink():
+    update = MagicMock()
+    update.effective_user = MagicMock(id=123)
+    update.effective_message = AsyncMock()
+    context = MagicMock(args=["cellar"], user_data={})
+
+    with patch("bot.telegram.common._start_cellar_deeplink", new_callable=AsyncMock) as start_cellar:
+        await cmd_start(update, context)
+
+    start_cellar.assert_awaited_once_with(update, context)

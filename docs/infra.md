@@ -97,6 +97,7 @@ tar archive (excludes .env*, tests,
   scp env file → /tmp/.env.deploy
   │
   ssh remote:
+    debug: remove stale alembic/versions left by another PR
     extract archive → REMOTE_DIR
     mv /tmp/.env.deploy → bot/.env[.debug]
     python3 -m venv venv
@@ -166,6 +167,8 @@ Env files are **never committed** to git (`.gitignored`). They are:
 | `WEB_BASE_URL` | no | Public URL of the web UI |
 | `WEB_PORT` | no | Web UI port (default: `8080`) |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` / `SMTP_FROM` | no | SMTP config for email |
+| `CELLAR_COORDINATOR_USERNAMES` | no | Preferred production-only comma-separated Telegram usernames. They grant access to the `/cellar` booking overview and resolve to recipients of the one-hour pre-event summary. Debug ignores the list. |
+| `CELLAR_COORDINATOR_TG_IDS` | no | Optional legacy comma-separated IDs with the same production-only access. Immediate booking/cancellation notices still go only to `OWNER_CHAT_ID`. |
 
 `BOT_ENV=debug` is set via the systemd `Environment=` directive (not in the env file).
 
