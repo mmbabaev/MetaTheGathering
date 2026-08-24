@@ -308,20 +308,63 @@ def test_no_show_names_require_published_standings(db, user_svc, arch_svc):
     assert _aetherhub_no_show_names(db, t.id) == []
 
 
-async def test_owner_only_receives_registered_aetherhub_no_shows(db, user_svc, arch_svc, monkeypatch):
+async def test_unfilled_no_show_is_removed_before_results_are_published(db, user_svc, arch_svc, monkeypatch):
     monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
     t = _complete_tournament(db, user_svc, arch_svc)
-    deck = arch_svc.get_or_create_by_name("Burn")
-    _register(db, user_svc, t.id, 5, "No Show", archetype=deck)
+    no_show = _register(db, user_svc, t.id, 5, "No Show", archetype=None)
     db.commit()
     bot = AsyncMock()
 
     await maybe_announce_meta_gather_completed(bot, db, t.id)
 
-    calls = {call.kwargs["chat_id"]: call.kwargs["media"][0].caption for call in bot.send_media_group.call_args_list}
-    assert "No Show" in calls[777]
-    assert "отсутствуют в итоговых стендингах AetherHub (1)" in calls[777]
-    assert "No Show" not in calls[100]
+    assert bot.send_media_group.await_count == 2
+    assert db.query(models.Participant).filter_by(
+        tournament_id=t.id,
+        user_id=no_show.id,
+    ).one_or_none() is None
+    assert db.get(models.Tournament, t.id).status == models.TournamentStatus.CLOSED
+
+
+async def test_no_cleanup_or_publication_until_every_saved_aetherhub_player_has_a_deck(
+    db, user_svc, arch_svc, monkeypatch
+):
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    t = _complete_tournament(db, user_svc, arch_svc)
+    burn = arch_svc.get_or_create_by_name("Burn")
+    missing = _register(db, user_svc, t.id, 5, "Aether Missing", archetype=None)
+    _pairing(db, t.id, 1, "Aether Missing", None, None, None)
+    no_show = _register(db, user_svc, t.id, 6, "Bot Only", archetype=burn)
+    db.commit()
+    bot = AsyncMock()
+
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+
+    bot.send_media_group.assert_not_awaited()
+    assert db.query(models.Participant).filter_by(
+        tournament_id=t.id,
+        user_id=no_show.id,
+    ).one()
+    assert db.get(models.Tournament, t.id).status != models.TournamentStatus.CLOSED
+
+    participant = db.query(models.Participant).filter_by(
+        tournament_id=t.id,
+        user_id=missing.id,
+    ).one()
+    participant.archetype_id = burn.id
+    db.commit()
+
+    await maybe_announce_meta_gather_completed(bot, db, t.id)
+
+    assert bot.send_media_group.await_count == 2
+    assert db.query(models.Participant).filter_by(
+        tournament_id=t.id,
+        user_id=no_show.id,
+    ).one_or_none() is None
+    assert db.query(models.Participant).filter_by(
+        tournament_id=t.id,
+        user_id=missing.id,
+    ).one()
+    assert db.get(models.Tournament, t.id).status == models.TournamentStatus.CLOSED
 
 
 async def test_chart_is_rendered_off_the_event_loop_without_db(db, user_svc, arch_svc, monkeypatch):
