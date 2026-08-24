@@ -295,11 +295,27 @@ class AetherhubImportService:
         """Remove bot registrations that never appeared in a finished AetherHub event.
 
         A published standings list alone is not enough: AetherHub can temporarily return a
-        subset there. Removal is allowed only after every non-bye match has a score, and only
-        for a participant absent from players, every round, and standings. The removed names
-        are written to the application log so the automatic cleanup remains auditable.
+        subset there. Removal is allowed only after every non-bye match has a score and every
+        player observed in AetherHub has a deck in MetaGatherer. Only then may a participant
+        absent from players, every round, and standings be removed. The removed names are
+        written to the application log so the automatic cleanup remains auditable.
         """
         if not data.standings or not self.is_tournament_complete(tournament_id):
+            return []
+
+        missing_decks = 0
+        for name in self._registration_names(data):
+            user = self.find_user_by_name(name, tournament_id)
+            participant = self._get_participant(tournament_id, user.id) if user is not None else None
+            if participant is None or participant.archetype_id is None:
+                missing_decks += 1
+        if missing_decks:
+            logger.info(
+                "AetherHub final import kept no-shows in tournament #%s: "
+                "%s AetherHub players still have no deck",
+                tournament_id,
+                missing_decks,
+            )
             return []
 
         observed_keys = {

@@ -719,9 +719,20 @@ class TestImportTournament:
         assert result.already_registered == 3
 
     def test_final_import_keeps_second_round_bye_entry_and_removes_no_show(
-        self, import_svc, db, tournament, user_svc, svc, caplog
+        self, import_svc, db, tournament, user_svc, svc, arch_svc, caplog
     ):
-        """#221: a late entrant is real; a bot-only registration is not a result row."""
+        """#221: after all AetherHub decks are filled, a bot-only registration is removed."""
+        deck = arch_svc.get_or_create_by_name("Burn")
+        first = user_svc.get_or_create(
+            tg_id=22100,
+            first_name="Вадим",
+            last_name="Ашаров",
+        )
+        second = user_svc.get_or_create(
+            tg_id=22104,
+            first_name="Виталий",
+            last_name="Батуев",
+        )
         late = user_svc.get_or_create(
             tg_id=22101,
             first_name="Михаил",
@@ -732,7 +743,12 @@ class TestImportTournament:
             first_name="Владислав",
             last_name="Старостин",
         )
-        svc.register_participant(tournament_id=tournament.id, user_id=no_show.id)
+        for user in (first, second, late, no_show):
+            svc.register_participant(
+                tournament_id=tournament.id,
+                user_id=user.id,
+                archetype_id=deck.id,
+            )
         data = AetherhubTournamentData(
             url="x",
             players=["Ашаров Вадим", "Батуев Виталий"],
@@ -784,6 +800,58 @@ class TestImportTournament:
             is None
         )
         assert "Старостин Владислав" in caplog.text
+
+    def test_does_not_remove_no_show_until_every_aetherhub_player_has_a_deck(
+        self, import_svc, db, tournament, user_svc, svc, arch_svc, caplog
+    ):
+        deck = arch_svc.get_or_create_by_name("Burn")
+        filled = user_svc.get_or_create(tg_id=22105, first_name="Анна", last_name="Первая")
+        missing = user_svc.get_or_create(tg_id=22106, first_name="Борис", last_name="Второй")
+        no_show = user_svc.get_or_create(tg_id=22107, first_name="Никита", last_name="Неявившийся")
+        svc.register_participant(tournament_id=tournament.id, user_id=filled.id, archetype_id=deck.id)
+        missing_participant = svc.register_participant(tournament_id=tournament.id, user_id=missing.id)
+        svc.register_participant(tournament_id=tournament.id, user_id=no_show.id, archetype_id=deck.id)
+        data = AetherhubTournamentData(
+            url="x",
+            players=["Первая Анна", "Второй Борис"],
+            rounds=[
+                AetherhubRound(
+                    number=1,
+                    pairings=[
+                        AetherhubPairing(
+                            player="Первая Анна",
+                            opponent="Второй Борис",
+                            player_wins=2,
+                            opponent_wins=0,
+                        ),
+                        AetherhubPairing(
+                            player="Второй Борис",
+                            opponent="Первая Анна",
+                            player_wins=0,
+                            opponent_wins=2,
+                        ),
+                    ],
+                )
+            ],
+            standings=["Первая Анна", "Второй Борис"],
+        )
+
+        with caplog.at_level("INFO", logger="services.aetherhub_import_service"):
+            import_svc.import_tournament(tournament.id, data)
+
+        assert db.query(models.Participant).filter_by(
+            tournament_id=tournament.id,
+            user_id=no_show.id,
+        ).one()
+        assert "1 AetherHub players still have no deck" in caplog.text
+
+        svc.set_participant_archetype(participant_id=missing_participant.id, archetype_id=deck.id)
+        import_svc.import_tournament(tournament.id, data)
+
+        assert db.query(models.Participant).filter_by(
+            tournament_id=tournament.id,
+            user_id=no_show.id,
+        ).one_or_none() is None
 
     def test_does_not_remove_bot_only_registration_before_scores_are_complete(
         self, import_svc, db, tournament, user_svc, svc
