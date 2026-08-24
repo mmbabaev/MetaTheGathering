@@ -63,10 +63,10 @@ def cellar_notification_recipients(db: Session) -> list[int]:
     return _allowed_cellar_recipients(candidates)
 
 
-def cellar_immediate_notification_recipients() -> list[int]:
-    """Only the owner receives immediate booking and cancellation notifications."""
+def cellar_immediate_notification_recipients(db: Session) -> list[int]:
+    """Production cellar owners receive booking/cancellation DMs; debug stays owner-only."""
 
-    return _allowed_cellar_recipients([settings.OWNER_CHAT_ID])
+    return cellar_notification_recipients(db)
 
 
 def can_view_cellar_overview(tg_id: int, username: str | None) -> bool:

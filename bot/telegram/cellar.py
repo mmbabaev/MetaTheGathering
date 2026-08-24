@@ -18,12 +18,12 @@ def _handler(db) -> CellarHandler:
     return CellarHandler(db, UserService(db), FeatureFlagService(db))
 
 
-async def _announce(bot, reservation, *, cancelled: bool = False) -> bool:
+async def _announce(bot, db, reservation, *, cancelled: bool = False) -> bool:
     """Send only to the explicitly approved per-environment DM recipients."""
 
     text = format_group_reservation(reservation, cancelled=cancelled)
     delivered = False
-    for recipient_tg_id in cellar_immediate_notification_recipients():
+    for recipient_tg_id in cellar_immediate_notification_recipients(db):
         try:
             await bot.send_message(chat_id=recipient_tg_id, text=text)
             delivered = True
@@ -171,7 +171,7 @@ async def _show_action(query, context, db, action: CellarActionResult) -> None:
     await _show(query, action.result)
     if action.result.is_alert or action.reservation is None:
         return
-    delivered = await _announce(context.bot, action.reservation, cancelled=action.cancelled)
+    delivered = await _announce(context.bot, db, action.reservation, cancelled=action.cancelled)
     if delivered and not action.cancelled:
         CellarService(db).mark_group_announced(action.reservation.id)
 

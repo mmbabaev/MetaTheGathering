@@ -310,7 +310,7 @@ def test_coordinator_usernames_are_normalized_and_deduplicated(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_telegram_reservation_notification_targets_only_owner_in_production(db, user_svc, monkeypatch):
+async def test_telegram_reservation_notification_targets_cellar_owners_in_production(db, user_svc, monkeypatch):
     service = CellarService(db)
     service.ensure_bootstrap_catalog()
     user = user_svc.get_or_create(tg_id=1001, username="alice", first_name="Alice")
@@ -320,20 +320,29 @@ async def test_telegram_reservation_notification_targets_only_owner_in_productio
         event_date=EVENT_DATE,
         today=TODAY,
     ).reservation
+    user_svc.get_or_create(tg_id=111, username="coordinator", first_name="Coordinator One")
+    user_svc.get_or_create(tg_id=222, username="other_coordinator", first_name="Coordinator Two")
     monkeypatch.setattr(settings, "DEBUG", False)
-    monkeypatch.setattr(settings, "CELLAR_COORDINATOR_TG_IDS", "111,222")
+    monkeypatch.setattr(settings, "CELLAR_COORDINATOR_TG_IDS", "")
     monkeypatch.setattr(settings, "CELLAR_COORDINATOR_USERNAMES", "coordinator,other_coordinator")
     monkeypatch.setattr(settings, "OWNER_CHAT_ID", 333)
     monkeypatch.setattr("core.config._app_cfg.notify_allowed_ids", None)
     bot = AsyncMock()
 
-    assert await _announce(bot, reservation) is True
-    assert await _announce(bot, reservation, cancelled=True) is True
+    assert await _announce(bot, db, reservation) is True
+    assert await _announce(bot, db, reservation, cancelled=True) is True
 
-    assert [call.kwargs["chat_id"] for call in bot.send_message.await_args_list] == [333, 333]
+    assert [call.kwargs["chat_id"] for call in bot.send_message.await_args_list] == [
+        111,
+        222,
+        333,
+        111,
+        222,
+        333,
+    ]
     assert all("@alice" in call.kwargs["text"] for call in bot.send_message.await_args_list)
     assert "забронировал(а)" in bot.send_message.await_args_list[0].kwargs["text"]
-    assert "отменил(а) бронь" in bot.send_message.await_args_list[1].kwargs["text"]
+    assert "отменил(а) бронь" in bot.send_message.await_args_list[3].kwargs["text"]
 
 
 @pytest.mark.asyncio
@@ -354,7 +363,7 @@ async def test_telegram_reservation_notification_targets_only_owner_in_debug(db,
     monkeypatch.setattr("core.config._app_cfg.notify_allowed_ids", [333])
     bot = AsyncMock()
 
-    assert await _announce(bot, reservation, cancelled=True) is True
+    assert await _announce(bot, db, reservation, cancelled=True) is True
 
     bot.send_message.assert_awaited_once()
     assert bot.send_message.await_args.kwargs["chat_id"] == 333
