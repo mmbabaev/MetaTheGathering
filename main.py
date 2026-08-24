@@ -97,6 +97,7 @@ from bot.keyboards import (
     CB_SET_IMPORT_TIME,
     CB_SETTINGS_NAME,
     CB_SETTINGS_TOGGLE_ACHIEVEMENTS_NOTIFY,
+    CB_SETTINGS_TOGGLE_CELLAR_NOTIFY,
     CB_SETTINGS_TOGGLE_EMOJI,
     CB_SETTINGS_TOGGLE_OPPONENT_NOTIFY,
     CB_SETTINGS_TOGGLE_POLL_NOTIFY,
@@ -357,6 +358,11 @@ def main() -> None:
     app.add_handler(
         CallbackQueryHandler(
             settings_handler.callback_toggle_poll_notify, pattern=f"^{CB_SETTINGS_TOGGLE_POLL_NOTIFY}$"
+        )
+    )
+    app.add_handler(
+        CallbackQueryHandler(
+            settings_handler.callback_toggle_cellar_notify, pattern=f"^{CB_SETTINGS_TOGGLE_CELLAR_NOTIFY}$"
         )
     )
     app.add_handler(

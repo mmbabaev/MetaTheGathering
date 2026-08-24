@@ -25,6 +25,7 @@ CB_SETTINGS_TOGGLE_EMOJI = "settings_toggle_emoji"
 CB_SETTINGS_TOGGLE_OPPONENT_NOTIFY = "settings_toggle_opp_notify"
 CB_SETTINGS_TOGGLE_ACHIEVEMENTS_NOTIFY = "settings_toggle_achievements_notify"
 CB_SETTINGS_TOGGLE_POLL_NOTIFY = "settings_toggle_poll_notify"
+CB_SETTINGS_TOGGLE_CELLAR_NOTIFY = "settings_toggle_cellar_notify"
 CB_SETTINGS_TOGGLE_STATUS_PAIRINGS = "settings_toggle_status_pairings"
 CB_TSTATUS = "tstatus"
 CB_LEAVE = "leave"
@@ -653,6 +654,7 @@ class Keyboards:
         notify_opponent_rounds: bool = False,
         notify_achievements: bool = False,
         notify_poll: bool = False,
+        notify_cellar_reservations: bool | None = None,
         status_by_pairings: bool = False,
     ) -> InlineKeyboardMarkup:
         emoji_label = "🚫 Эмоджи колод: выкл" if hide_deck_emoji else "🎨 Эмоджи колод: вкл"
@@ -670,8 +672,13 @@ class Keyboards:
             [InlineKeyboardButton(notify_label, callback_data=CB_SETTINGS_TOGGLE_OPPONENT_NOTIFY)],
             [InlineKeyboardButton(achievements_label, callback_data=CB_SETTINGS_TOGGLE_ACHIEVEMENTS_NOTIFY)],
             [InlineKeyboardButton(poll_label, callback_data=CB_SETTINGS_TOGGLE_POLL_NOTIFY)],
-            [InlineKeyboardButton(pairings_label, callback_data=CB_SETTINGS_TOGGLE_STATUS_PAIRINGS)],
         ]
+        if notify_cellar_reservations is not None:
+            cellar_label = (
+                "🔔 Уведомления о ячейках: вкл" if notify_cellar_reservations else "🔕 Уведомления о ячейках: выкл"
+            )
+            rows.append([InlineKeyboardButton(cellar_label, callback_data=CB_SETTINGS_TOGGLE_CELLAR_NOTIFY)])
+        rows.append([InlineKeyboardButton(pairings_label, callback_data=CB_SETTINGS_TOGGLE_STATUS_PAIRINGS)])
         return InlineKeyboardMarkup(rows)
 
     def admin_participants_keyboard(
@@ -994,6 +1001,7 @@ def settings_keyboard(
     notify_opponent_rounds: bool = False,
     notify_achievements: bool = False,
     notify_poll: bool = False,
+    notify_cellar_reservations: bool | None = None,
     status_by_pairings: bool = False,
 ) -> InlineKeyboardMarkup:
     return _default.settings_keyboard(
@@ -1002,6 +1010,7 @@ def settings_keyboard(
         notify_opponent_rounds=notify_opponent_rounds,
         notify_achievements=notify_achievements,
         notify_poll=notify_poll,
+        notify_cellar_reservations=notify_cellar_reservations,
         status_by_pairings=status_by_pairings,
     )
 

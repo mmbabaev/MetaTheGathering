@@ -8,7 +8,7 @@ from bot.scheduler import CellarCatalogSyncJob, CellarCoordinatorReminderJob, Cr
 from core import models
 from core.config import Club, ClubSchedule, settings
 from core.schemas import TournamentCreate
-from services.cellar import CellarService, cellar_notification_recipients
+from services.cellar import CellarService, cellar_immediate_notification_recipients, cellar_notification_recipients
 from services.cellar_sheet import CatalogEntry
 from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.tournament import TournamentService
@@ -53,6 +53,16 @@ def test_ambiguous_coordinator_username_is_not_resolved_to_multiple_recipients(d
     monkeypatch.setattr("core.config._app_cfg.notify_allowed_ids", None)
 
     assert cellar_notification_recipients(db) == [222, 333]
+
+
+def test_immediate_opt_out_does_not_disable_pre_event_summary(db, user_svc, monkeypatch):
+    _production_recipients(monkeypatch, user_svc)
+    coordinator = user_svc.get_by_tg_id(111)
+    coordinator.notify_cellar_reservations = False
+    db.commit()
+
+    assert cellar_immediate_notification_recipients(db) == [222, 333]
+    assert cellar_notification_recipients(db) == [111, 222, 333]
 
 
 @pytest.mark.asyncio
