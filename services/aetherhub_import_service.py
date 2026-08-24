@@ -295,11 +295,27 @@ class AetherhubImportService:
         """Remove bot registrations that never appeared in a finished AetherHub event.
 
         A published standings list alone is not enough: AetherHub can temporarily return a
-        subset there. Removal is allowed only after every non-bye match has a score, and only
-        for a participant absent from players, every round, and standings. The removed names
-        are written to the application log so the automatic cleanup remains auditable.
+        subset there. Removal is allowed only after every non-bye match has a score and every
+        player observed in AetherHub has a deck in MetaGatherer. Only then may a participant
+        absent from players, every round, and standings be removed. The removed names are
+        written to the application log so the automatic cleanup remains auditable.
         """
         if not data.standings or not self.is_tournament_complete(tournament_id):
+            return []
+
+        missing_decks = 0
+        for name in self._registration_names(data):
+            user = self.find_user_by_name(name, tournament_id)
+            participant = self._get_participant(tournament_id, user.id) if user is not None else None
+            if participant is None or participant.archetype_id is None:
+                missing_decks += 1
+        if missing_decks:
+            logger.info(
+                "AetherHub final import kept no-shows in tournament #%s: "
+                "%s AetherHub players still have no deck",
+                tournament_id,
+                missing_decks,
+            )
             return []
 
         observed_keys = {
@@ -340,6 +356,61 @@ class AetherhubImportService:
             self.db.commit()
             logger.info(
                 "AetherHub final import removed no-shows from tournament #%s: %s",
+                tournament_id,
+                ", ".join(removed_names),
+            )
+        return removed_names
+
+    def remove_saved_no_shows_if_aetherhub_decks_complete(
+        self, tournament_id: int
+    ) -> list[str] | None:
+        """Clean the saved roster before publication once every AetherHub deck is filled.
+
+        ``None`` means cleanup is not safe yet. Published standings identify the main
+        AetherHub roster; saved pairing names additionally protect late entrants that appeared
+        in rounds without receiving a final place. Bot registrations absent from both sources
+        are confirmed no-shows and may be removed.
+        """
+        participants = self.db.execute(
+            select(models.Participant).where(models.Participant.tournament_id == tournament_id)
+        ).scalars().all()
+        observed_user_ids = {
+            participant.user_id
+            for participant in participants
+            if participant.final_place is not None
+        }
+        if not observed_user_ids:
+            return None
+
+        pairing_names = self.db.execute(
+            select(models.RoundPairing.player_name, models.RoundPairing.opponent_name).where(
+                models.RoundPairing.tournament_id == tournament_id
+            )
+        ).all()
+        for player_name, opponent_name in pairing_names:
+            for name in (player_name, opponent_name):
+                if not name or name.upper() == "BYE":
+                    continue
+                user = self.find_user_by_name(name, tournament_id)
+                if user is not None and self._get_participant(tournament_id, user.id) is not None:
+                    observed_user_ids.add(user.id)
+
+        observed = [participant for participant in participants if participant.user_id in observed_user_ids]
+        if any(participant.archetype_id is None for participant in observed):
+            return None
+
+        no_shows = [participant for participant in participants if participant.user_id not in observed_user_ids]
+        removed_names = [
+            format_participant_name(participant.user.first_name, participant.user.last_name).strip()
+            or f"participant:{participant.id}"
+            for participant in no_shows
+        ]
+        for participant in no_shows:
+            self.db.delete(participant)
+        if no_shows:
+            self.db.commit()
+            logger.info(
+                "Pre-publication cleanup removed no-shows from tournament #%s: %s",
                 tournament_id,
                 ", ".join(removed_names),
             )

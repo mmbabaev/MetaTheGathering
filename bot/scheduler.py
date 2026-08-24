@@ -929,6 +929,12 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, char
     if not svc.is_tournament_complete(tournament_id):
         return
 
+    # Перед публикацией повторяем безопасную очистку по уже сохранённым standings и парингам.
+    # Это закрывает сценарий, когда последнюю колоду дописали через бота уже после финального
+    # импорта: лишние bot-only регистрации не должны попасть в результаты или блокировать их.
+    if svc.remove_saved_no_shows_if_aetherhub_decks_complete(tournament_id) is None:
+        return
+
     # Метагейм собран только когда у ВСЕХ участников заполнена колода — неважно кем (сам
     # записался или дописали через «запись оппонентов»). Пока хоть у одного пусто — ждём.
     if not _all_decks_filled(db, tournament_id):
