@@ -178,6 +178,35 @@ def test_reservation_registers_player_in_existing_tournament_and_cancel_undoes_i
     assert TournamentService(db).get_participant(tournament.id, alice.id) is None
 
 
+def test_unregistering_from_tournament_cancels_reservation_and_releases_deck(db, user_svc):
+    service, decks = _catalog(db)
+    alice = user_svc.get_or_create(tg_id=1001, first_name="Alice")
+    bob = user_svc.get_or_create(tg_id=1002, first_name="Bob")
+    tournament = _edinorog_tournament(db)
+    reservation = service.reserve(
+        deck_id=decks[0].id,
+        user_id=alice.id,
+        event_date=EVENT_DATE,
+        today=EVENT_DATE,
+    ).reservation
+
+    TournamentService(db).unregister_participant(tournament.id, alice.id)
+
+    db.refresh(reservation)
+    assert reservation.cancelled_at is not None
+    assert reservation.participant_id is None
+    assert service.active_reservations(EVENT_DATE) == []
+    assert TournamentService(db).get_participant(tournament.id, alice.id) is None
+
+    replacement = service.reserve(
+        deck_id=decks[0].id,
+        user_id=bob.id,
+        event_date=EVENT_DATE,
+        today=EVENT_DATE,
+    ).reservation
+    assert replacement.user_id == bob.id
+
+
 def test_reservation_fills_but_does_not_remove_existing_empty_participant_on_cancel(db, user_svc):
     service, decks = _catalog(db)
     alice = user_svc.get_or_create(tg_id=1001, first_name="Alice")

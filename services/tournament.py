@@ -443,12 +443,27 @@ class TournamentService:
         return self.db.execute(stmt).scalar_one_or_none()
 
     def unregister_participant(self, tournament_id: int, user_id: int) -> None:
-        """Удалить участника из турнира. Raises ParticipantNotFound если не найден."""
+        """Удалить участника и отменить его активную бронь ячейки в этом турнире."""
         participant = self.get_participant(tournament_id, user_id)
         if participant is None:
             raise errors.ParticipantNotFound()
+        cancelled = self.db.execute(
+            update(models.CellarDeckReservation)
+            .where(
+                models.CellarDeckReservation.tournament_id == tournament_id,
+                models.CellarDeckReservation.user_id == user_id,
+                models.CellarDeckReservation.cancelled_at.is_(None),
+            )
+            .values(cancelled_at=models.utc_now(), participant_id=None)
+        )
         self.db.delete(participant)
         self.db.commit()
+        if cancelled.rowcount:
+            logger.info(
+                "Tournament unregister cancelled %s cellar reservation(s) for tournament #%s",
+                cancelled.rowcount,
+                tournament_id,
+            )
 
     def bulk_add_participants(
         self,
