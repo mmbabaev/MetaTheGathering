@@ -777,11 +777,13 @@ class UnclosedTournamentReminderJob:
                 participants = TournamentService(db).list_participants_for_tournament(tournament.id)
                 with_deck = sum(participant.archetype_id is not None for participant in participants)
                 day_word = "дня" if days == 3 else "дней"
+                aetherhub_line = f"\nAetherHub: {tournament.aetherhub_url}" if tournament.aetherhub_url else ""
                 text = (
                     f"⚠️ Турнир не закрыт уже {days} {day_word}\n\n"
                     f"{tournament.title}\n"
                     f"Участников: {len(participants)} ({with_deck} с колодой)\n"
-                    f"ID турнира: {tournament.id}\n\n"
+                    f"ID турнира: {tournament.id}"
+                    f"{aetherhub_line}\n\n"
                     "Проверь данные и закрой турнир, когда он будет готов."
                 )
                 try:
