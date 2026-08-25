@@ -12,10 +12,11 @@ from services.tournament import TournamentService
 NOW = datetime(2026, 8, 8, 10, 0, tzinfo=timezone.utc)
 
 
-def _tournament(db, svc, *, age: timedelta, chat_id: int = 100):
+def _tournament(db, svc, *, age: timedelta, chat_id: int = 100, aetherhub_url: str | None = None):
     tournament = svc.create_tournament(TournamentCreate(title="Old Pauper", chat_id=chat_id, slug=f"old-{chat_id}"))
     row = db.get(models.Tournament, tournament.id)
     row.created_at = NOW.replace(tzinfo=None) - age
+    row.aetherhub_url = aetherhub_url
     db.commit()
     return row
 
@@ -23,7 +24,12 @@ def _tournament(db, svc, *, age: timedelta, chat_id: int = 100):
 @pytest.mark.asyncio
 async def test_sends_owner_only_reminder_after_three_days(db, svc, monkeypatch):
     monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
-    tournament = _tournament(db, svc, age=timedelta(days=3))
+    tournament = _tournament(
+        db,
+        svc,
+        age=timedelta(days=3),
+        aetherhub_url="https://aetherhub.com/Tourney/RoundTourney/101230",
+    )
     bot = AsyncMock()
 
     await UnclosedTournamentReminderJob().run(bot, NOW, db=db)
@@ -33,7 +39,19 @@ async def test_sends_owner_only_reminder_after_three_days(db, svc, monkeypatch):
     text = bot.send_message.call_args.kwargs["text"]
     assert "не закрыт уже 3 дня" in text
     assert "Old Pauper" in text
+    assert "AetherHub: https://aetherhub.com/Tourney/RoundTourney/101230" in text
     assert db.get(models.Tournament, tournament.id).unclosed_reminder_3d_sent_at is not None
+
+
+@pytest.mark.asyncio
+async def test_reminder_without_aetherhub_url_does_not_show_empty_link(db, svc, monkeypatch):
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
+    _tournament(db, svc, age=timedelta(days=3))
+    bot = AsyncMock()
+
+    await UnclosedTournamentReminderJob().run(bot, NOW, db=db)
+
+    assert "AetherHub:" not in bot.send_message.call_args.kwargs["text"]
 
 
 @pytest.mark.asyncio
