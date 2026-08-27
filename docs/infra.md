@@ -56,7 +56,7 @@ Steps:
 
 Trigger: PR to `main`
 
-Jobs (test runs first, then both deploy jobs in parallel):
+Jobs run in order: tests, then one serialized debug deploy job:
 
 **test:**
 - `pip install` + `ruff check` + alembic heads check + `pytest`
@@ -65,10 +65,12 @@ Jobs (test runs first, then both deploy jobs in parallel):
 **deploy-debug** (needs: test):
 - Write `ENV_FILE_DEBUG` secret → `bot/.env.debug`
 - Run `bot/deploy_bot_debug.sh`
+- Then run `bot/deploy_web_debug.sh` in the same job
+- Uses `bot/.env.debug` installed by the successful bot deploy
 
-**deploy-debug-web** (needs: test):
-- Run `bot/deploy_web_debug.sh`
-- Requires `bot/.env.debug` to already exist on the server (deployed by the bot job or a previous run)
+The deploy job shares a GitHub Actions concurrency group with other debug deploys.
+The scripts also acquire the same environment-specific remote `flock`, so a manual
+deploy cannot mutate the directory and virtualenv concurrently with CI.
 
 ### GitHub Secrets
 
@@ -93,13 +95,14 @@ Local machine                          Server
 tar archive (excludes .env*, tests,
   __pycache__, venv, .git)
   │
-  scp archive → /tmp/
-  scp env file → /tmp/.env.deploy
+  check /tmp has archive size + 200 MiB free
+  scp archive → unique /tmp path
+  scp env file → unique /tmp path
   │
-  ssh remote:
+  ssh remote under environment deploy lock:
     debug: remove stale alembic/versions left by another PR
     extract archive → REMOTE_DIR
-    mv /tmp/.env.deploy → bot/.env[.debug]
+    mv unique env file → bot/.env[.debug]
     python3 -m venv venv
     pip install -r requirements.txt
     source bot/.env[.debug]
@@ -109,6 +112,7 @@ tar archive (excludes .env*, tests,
     systemctl restart otel-collector[-debug]
     systemctl restart meta-the-gathering[-debug]
     systemctl restart meta-the-gathering-debug-web  (debug only)
+  always delete this deploy's local and remote temporary files
 ```
 
 ### `bot/deploy_web_debug.sh`
@@ -121,9 +125,10 @@ Local machine                          Server
 tar archive (same excludes as bot,
   plus .claude/, .ruff_cache/, etc.)
   │
-  scp archive → /tmp/
+  check /tmp has archive size + 200 MiB free
+  scp archive → unique /tmp path
   │
-  ssh remote:
+  ssh remote under the same environment deploy lock:
     check bot/.env[.debug] exists (abort if not)
     extract archive → REMOTE_DIR
     pip install -r requirements.txt
@@ -131,9 +136,18 @@ tar archive (same excludes as bot,
     alembic heads check
     alembic upgrade head
     systemctl restart meta-the-gathering[-debug]-web
+  always delete this deploy's local and remote temporary files
 ```
 
-**Note:** The web deploy does not upload the env file — it expects `bot/.env.debug` to already be on the server from a previous bot deploy. In CI, the `deploy-debug` and `deploy-debug-web` jobs run in parallel after tests pass. If it's the very first deploy to a fresh server, run the bot deploy first.
+**Note:** The web deploy does not upload the env file — it expects `bot/.env.debug`
+to already be on the server. In the PR pipeline it starts only after the bot deploy;
+for a first manual deploy to a fresh server, run the bot deploy first.
+
+The debug deployment still uses one shared database for all PRs. A PR containing an
+unmerged migration can therefore change that database before another PR deploys. DB
+isolation or a deterministic reset policy is tracked separately in
+[#270](https://github.com/mmbabaev/MetaTheGathering/issues/270); deploy scripts do not
+reset shared data automatically.
 
 ---
 
