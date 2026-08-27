@@ -136,6 +136,11 @@ class Tournament(Base):
 
     # просьба в чат заполнить недостающие колоды на следующий день после турнира
     missing_decks_reminder_1d_sent_at = Column(DateTime, nullable=True)
+    missing_decks_reminder_chat_id = Column(BigInteger, nullable=True)
+    missing_decks_reminder_message_id = Column(BigInteger, nullable=True)
+    # JSON-массив participant.id: исходный список мета-полиции, который обновляется после заполнения колод
+    missing_decks_reminder_participant_ids = Column(Text, nullable=True)
+    missing_decks_reminder_button_url = Column(String(512), nullable=True)
 
     created_at = Column(DateTime, default=utc_now, nullable=False)
 

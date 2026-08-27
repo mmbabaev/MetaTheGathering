@@ -6,6 +6,7 @@
 
 import asyncio
 import io
+import json
 import logging
 from collections import Counter, defaultdict
 from dataclasses import dataclass
@@ -839,7 +840,8 @@ class MissingDecksReminderJob:
                     continue
 
                 participants = TournamentService(db).list_participants_for_tournament(tournament.id)
-                if not any(participant.archetype_id is None for participant in participants):
+                missing = [participant for participant in participants if participant.archetype_id is None]
+                if not missing:
                     continue
 
                 try:
@@ -856,22 +858,137 @@ class MissingDecksReminderJob:
 
                 text = format_missing_decks_reminder(
                     tournament.title,
-                    participants,
+                    missing,
                     community_fill_enabled=community_fill_enabled,
+                    show_filled=community_fill_enabled,
                 )
                 button_text = "Записать" if community_fill_enabled else "Записаться"
                 keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(button_text, url=button_url)]])
                 try:
-                    await bot.send_message(chat_id=tournament.chat_id, text=text, reply_markup=keyboard)
+                    sent = await bot.send_message(
+                        chat_id=tournament.chat_id,
+                        text=text,
+                        parse_mode="HTML",
+                        reply_markup=keyboard,
+                    )
                 except Exception:  # noqa: BLE001 — повторим на следующем ежедневном запуске
                     logger.exception("MissingDecksReminderJob: reminder failed for #%s", tournament.id)
                     continue
 
                 tournament.missing_decks_reminder_1d_sent_at = models.utc_now()
+                tournament.missing_decks_reminder_chat_id = tournament.chat_id
+                tournament.missing_decks_reminder_message_id = sent.message_id
+                tournament.missing_decks_reminder_participant_ids = json.dumps(
+                    [participant.id for participant in missing]
+                )
+                tournament.missing_decks_reminder_button_url = button_url
                 db.commit()
         finally:
             if close_db:
                 db.close()
+
+
+def _tracked_meta_police_participant_ids(raw: str | None) -> list[int]:
+    if not raw:
+        return []
+    try:
+        values = json.loads(raw)
+        return [int(value) for value in values if isinstance(value, int) or str(value).isdigit()]
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return []
+
+
+async def refresh_missing_decks_reminder(bot, db, tournament_id: int) -> None:
+    """Best-effort обновляет исходное сообщение мета-полиции после записи колоды."""
+    tournament = db.get(models.Tournament, tournament_id)
+    if (
+        tournament is None
+        or tournament.missing_decks_reminder_chat_id is None
+        or tournament.missing_decks_reminder_message_id is None
+        or not tournament.missing_decks_reminder_button_url
+        or not FeatureFlagService(db).is_enabled(FeatureFlags.RECORD_OPPONENTS)
+    ):
+        return
+
+    participants = TournamentService(db).list_participants_for_tournament(tournament_id)
+    by_id = {participant.id: participant for participant in participants}
+    tracked_ids = _tracked_meta_police_participant_ids(tournament.missing_decks_reminder_participant_ids)
+
+    # Если после исходной отбивки в турнире появился новый пропуск, он тоже должен попасть в live-список.
+    for participant in participants:
+        if participant.archetype_id is None and participant.id not in tracked_ids:
+            tracked_ids.append(participant.id)
+    tracked = [by_id[participant_id] for participant_id in tracked_ids if participant_id in by_id]
+    if not tracked:
+        return
+
+    has_missing = any(participant.archetype_id is None for participant in tracked)
+    text = format_missing_decks_reminder(
+        tournament.title,
+        tracked,
+        community_fill_enabled=True,
+        show_filled=True,
+    )
+    keyboard = (
+        InlineKeyboardMarkup([[InlineKeyboardButton("Записать", url=tournament.missing_decks_reminder_button_url)]])
+        if has_missing
+        else InlineKeyboardMarkup([])
+    )
+    try:
+        await bot.edit_message_text(
+            chat_id=tournament.missing_decks_reminder_chat_id,
+            message_id=tournament.missing_decks_reminder_message_id,
+            text=text,
+            parse_mode="HTML",
+            reply_markup=keyboard,
+        )
+    except Exception:  # noqa: BLE001 — запись колоды уже выполнена, Telegram edit не должен её откатывать
+        logger.exception("Meta-police reminder refresh failed for #%s", tournament_id)
+        return
+    encoded_ids = json.dumps(tracked_ids)
+    if tournament.missing_decks_reminder_participant_ids != encoded_ids:
+        tournament.missing_decks_reminder_participant_ids = encoded_ids
+        db.commit()
+
+
+async def send_debug_meta_police_preview(bot, db, tournament_id: int, requester_chat_id: int) -> int:
+    """В DEBUG отправляет live-превью только вызвавшему владельцу и привязывает edit к нему."""
+    tournament = db.get(models.Tournament, tournament_id)
+    if tournament is None:
+        raise ValueError("Турнир не найден.")
+    if tournament.status == models.TournamentStatus.CLOSED:
+        raise ValueError("Для теста нужен незакрытый турнир.")
+    if not FeatureFlagService(db).is_enabled(FeatureFlags.RECORD_OPPONENTS):
+        raise ValueError("Сначала включите feature flag recordOpponents.")
+
+    participants = TournamentService(db).list_participants_for_tournament(tournament_id)
+    missing = [participant for participant in participants if participant.archetype_id is None]
+    if not missing:
+        raise ValueError("В турнире нет игроков без колоды.")
+
+    me = await bot.get_me()
+    button_url = fill_missing_deeplink(me.username, tournament.id)
+    text = format_missing_decks_reminder(
+        tournament.title,
+        missing,
+        community_fill_enabled=True,
+        show_filled=True,
+    )
+    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("Записать", url=button_url)]])
+    sent = await bot.send_message(
+        chat_id=requester_chat_id,
+        text=text,
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+
+    tournament.missing_decks_reminder_1d_sent_at = tournament.missing_decks_reminder_1d_sent_at or models.utc_now()
+    tournament.missing_decks_reminder_chat_id = requester_chat_id
+    tournament.missing_decks_reminder_message_id = sent.message_id
+    tournament.missing_decks_reminder_participant_ids = json.dumps([participant.id for participant in missing])
+    tournament.missing_decks_reminder_button_url = button_url
+    db.commit()
+    return len(missing)
 
 
 # ---------------------------------------------------------------------------

@@ -26,6 +26,7 @@ from bot.messages import (
     format_participant_name,
     format_tournament_card,
     format_tournament_status,
+    format_unfilled_opponents_note,
     sort_participants,
 )
 from core import models
@@ -116,6 +117,7 @@ class PlayerHandler:
         is_registered = False
         is_admin = False
         has_deck = True
+        user = None
         if tg_id is not None:
             user = self.user_svc.get_by_tg_id(tg_id)
             if user:
@@ -134,6 +136,10 @@ class PlayerHandler:
             total=len(participants),
             with_deck=with_deck,
         )
+        if show_fill_opponents and is_registered and user is not None:
+            opponents, _ = self.aetherhub_svc.get_unfilled_opponents(t.id, user.id, participants)
+            if opponents:
+                text = f"{text}\n\n{format_unfilled_opponents_note(opponents)}"
         payment_enabled = self.feature_svc.is_payment_enabled()
         payment_confirmed = (
             payment_enabled

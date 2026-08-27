@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from bot.scheduler import MissingDecksReminderJob
+from bot.scheduler import MissingDecksReminderJob, refresh_missing_decks_reminder, send_debug_meta_police_preview
 from core import models
 from core.schemas import TournamentCreate
 from services.feature_flags import FeatureFlags, FeatureFlagService
@@ -19,6 +19,7 @@ DAY_THREE = datetime(2026, 8, 17, 15, 0, tzinfo=MOSCOW)
 def _bot():
     bot = AsyncMock()
     bot.get_me.return_value = MagicMock(username="TestBot")
+    bot.send_message.return_value = MagicMock(message_id=321)
     return bot
 
 
@@ -60,6 +61,8 @@ async def test_sends_meta_police_with_community_help_copy_and_fill_button(
     assert button.url == f"https://t.me/TestBot?start=fill_{tournament.id}"
     row = db.get(models.Tournament, tournament.id)
     assert row.missing_decks_reminder_1d_sent_at is not None
+    assert row.missing_decks_reminder_chat_id == 100
+    assert row.missing_decks_reminder_message_id == 321
 
 
 @pytest.mark.asyncio
@@ -112,7 +115,7 @@ async def test_failed_delivery_is_retried(db, svc, user_alice):
     tournament = _tournament(db, svc)
     svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id)
     bot = _bot()
-    bot.send_message.side_effect = [RuntimeError("Telegram unavailable"), None]
+    bot.send_message.side_effect = [RuntimeError("Telegram unavailable"), MagicMock(message_id=322)]
     job = MissingDecksReminderJob()
 
     await job.run(bot, DAY_ONE, db=db)
@@ -166,3 +169,49 @@ async def test_ignores_closed_tournament_and_tournament_with_all_decks(db, svc, 
     await MissingDecksReminderJob().run(bot, DAY_THREE, db=db)
 
     bot.send_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_live_message_strikes_filled_players_and_removes_button_when_done(db, svc, user_svc, archetype_burn):
+    tournament = _tournament(db, svc)
+    first_user = user_svc.get_or_create(tg_id=2101, username="first", first_name="Первый")
+    second_user = user_svc.get_or_create(tg_id=2102, username="second", first_name="Второй")
+    first = svc.register_participant(tournament_id=tournament.id, user_id=first_user.id)
+    second = svc.register_participant(tournament_id=tournament.id, user_id=second_user.id)
+    bot = _bot()
+    await MissingDecksReminderJob().run(bot, DAY_ONE, db=db)
+
+    svc.set_participant_archetype(participant_id=first.id, archetype_id=archetype_burn.id)
+    await refresh_missing_decks_reminder(bot, db, tournament.id)
+
+    edit = bot.edit_message_text.call_args.kwargs
+    assert edit["chat_id"] == tournament.chat_id
+    assert edit["message_id"] == 321
+    assert "<s>• Первый (@first)</s>" in edit["text"]
+    assert "• Второй (@second)" in edit["text"]
+    assert edit["reply_markup"].inline_keyboard[0][0].text == "Записать"
+
+    svc.set_participant_archetype(participant_id=second.id, archetype_id=archetype_burn.id)
+    await refresh_missing_decks_reminder(bot, db, tournament.id)
+
+    edit = bot.edit_message_text.call_args.kwargs
+    assert "<s>• Второй (@second)</s>" in edit["text"]
+    assert "✅ Все колоды заполнены." in edit["text"]
+    assert not edit["reply_markup"].inline_keyboard
+
+
+@pytest.mark.asyncio
+async def test_debug_preview_is_sent_only_to_requester(db, svc, user_svc):
+    tournament = _tournament(db, svc)
+    missing_user = user_svc.get_or_create(tg_id=2201, username="missing", first_name="Игрок")
+    svc.register_participant(tournament_id=tournament.id, user_id=missing_user.id)
+    bot = _bot()
+
+    count = await send_debug_meta_police_preview(bot, db, tournament.id, requester_chat_id=777)
+
+    assert count == 1
+    bot.send_message.assert_awaited_once()
+    assert bot.send_message.call_args.kwargs["chat_id"] == 777
+    tracked = db.get(models.Tournament, tournament.id)
+    assert tracked.missing_decks_reminder_chat_id == 777
+    assert tracked.missing_decks_reminder_message_id == 321

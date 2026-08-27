@@ -24,7 +24,12 @@ async def announce_completion_if_ready(bot, db, tournament_id: int | None) -> No
     """
     if tournament_id is None:
         return
-    from bot.scheduler import maybe_announce_meta_gather_completed  # noqa: PLC0415
+    from bot.scheduler import maybe_announce_meta_gather_completed, refresh_missing_decks_reminder  # noqa: PLC0415
+
+    try:
+        await refresh_missing_decks_reminder(bot, db, tournament_id)
+    except Exception:
+        logger.exception("refresh_missing_decks_reminder failed for #%s", tournament_id)
 
     try:
         await maybe_announce_meta_gather_completed(bot, db, tournament_id)

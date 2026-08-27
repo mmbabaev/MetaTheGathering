@@ -1,5 +1,7 @@
 # Шаблоны сообщений
 
+from html import escape
+
 # Форматирование ФИО живёт в services/names.py, чтобы одинаково работало и в картинках
 # (services-слой). Здесь — реэкспорт для существующих импортов из bot.messages.
 from services.names import family_name_sort_key, format_participant_name
@@ -250,22 +252,48 @@ def format_tournament_status(title: str, status: str, participants: list, decks_
     return "\n".join(lines)
 
 
-def format_missing_decks_reminder(title: str, participants: list, community_fill_enabled: bool = False) -> str:
-    """Шуточное напоминание со списком только игроков без колоды."""
+def format_unfilled_opponents_note(opponents: list) -> str:
+    """Персональная подсказка: кто из сыгранных оппонентов ещё не указал колоду."""
+    lines = ["Твои незаполненные оппоненты:"]
+    for opponent in opponents:
+        participant = opponent.participant
+        user = participant.user
+        name = format_participant_name(user.first_name, user.last_name) or f"id{user.tg_id}"
+        lines.append(f"• {name} — раунд {opponent.round_number}")
+    return "\n".join(lines)
+
+
+def format_missing_decks_reminder(
+    title: str,
+    participants: list,
+    community_fill_enabled: bool = False,
+    *,
+    show_filled: bool = False,
+) -> str:
+    """Сообщение мета-полиции; в live-режиме заполненные строки зачёркиваются.
+
+    Текст предназначен для отправки с ``parse_mode=HTML``, поэтому все данные из
+    БД экранируются здесь.
+    """
+    has_missing = any(participant.archetype_id is None for participant in participants)
     lines = [
         "🚨👮 Вас посетила мета-полиция!",
         "На какой колоде были эти игроки?",
     ]
-    if community_fill_enabled:
+    if community_fill_enabled and has_missing:
         lines.append("Помочь заполнить пропуски может каждый — нажмите «Записать».")
-    lines.extend(["", f"🏆 {title}", "Список игроков без колоды:"])
+    lines.extend(["", f"🏆 {escape(title)}", "Список игроков без колоды:"])
     for participant in participants:
-        if participant.archetype_id is not None:
+        is_filled = participant.archetype_id is not None
+        if is_filled and not show_filled:
             continue
         user = participant.user
         name = format_participant_name(user.first_name, user.last_name) or f"id{user.tg_id}"
         username = f" (@{user.username})" if user.username else ""
-        lines.append(f"• {name}{username}")
+        line = f"• {escape(name)}{escape(username)}"
+        lines.append(f"<s>{line}</s>" if is_filled else line)
+    if show_filled and not has_missing:
+        lines.extend(["", "✅ Все колоды заполнены."])
     return "\n".join(lines)
 
 

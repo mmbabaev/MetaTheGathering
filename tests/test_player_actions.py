@@ -94,6 +94,40 @@ class TestHandleTournamentSelect:
         assert result.text == TOURNAMENT_NOT_FOUND
         assert result.is_alert
 
+    def test_shows_current_players_unfilled_opponents(
+        self, db, handler, svc, active_tournament, user_alice, user_bob, archetype_burn
+    ):
+        svc.register_participant(
+            tournament_id=active_tournament.id,
+            user_id=user_alice.id,
+            archetype_id=archetype_burn.id,
+        )
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_bob.id)
+        db.add_all(
+            [
+                models.RoundPairing(
+                    tournament_id=active_tournament.id,
+                    round_number=2,
+                    player_name="Alice",
+                    opponent_name="Bob",
+                    table_number=1,
+                ),
+                models.RoundPairing(
+                    tournament_id=active_tournament.id,
+                    round_number=2,
+                    player_name="Bob",
+                    opponent_name="Alice",
+                    table_number=1,
+                ),
+            ]
+        )
+        db.commit()
+
+        result = handler.handle_tournament_select(active_tournament.id, tg_id=user_alice.tg_id)
+
+        assert "Твои незаполненные оппоненты:" in result.text
+        assert "• Bob — раунд 2" in result.text
+
 
 # --- handle_register ---
 
@@ -122,9 +156,7 @@ class TestHandleRegister:
         result = handler.handle_register(active_tournament.id, tg_id=99999)
         assert result.needs_name is True
 
-    def test_shows_defer_button_during_first_seven_hours(
-        self, handler, user_svc, active_tournament
-    ):
+    def test_shows_defer_button_during_first_seven_hours(self, handler, user_svc, active_tournament):
         user = user_svc.get_or_create(tg_id=5102, username="u", first_name="Иван")
 
         result = handler.handle_register(active_tournament.id, tg_id=user.tg_id)
@@ -132,9 +164,7 @@ class TestHandleRegister:
         buttons = [button for row in result.keyboard.inline_keyboard for button in row]
         assert any(button.callback_data == f"{CB_DEFER_DECK}:{active_tournament.id}" for button in buttons)
 
-    def test_hides_defer_button_after_seven_hours(
-        self, db, handler, user_svc, active_tournament
-    ):
+    def test_hides_defer_button_after_seven_hours(self, db, handler, user_svc, active_tournament):
         user = user_svc.get_or_create(tg_id=5103, username="u", first_name="Иван")
         tournament = db.get(models.Tournament, active_tournament.id)
         tournament.created_at = utc_now() - DEFER_DECK_WINDOW - timedelta(seconds=1)
@@ -159,9 +189,7 @@ class TestHandleRegister:
 
 
 class TestHandleDeferDeck:
-    def test_registers_without_deck_and_marks_explicit_defer(
-        self, handler, svc, user_svc, active_tournament
-    ):
+    def test_registers_without_deck_and_marks_explicit_defer(self, handler, svc, user_svc, active_tournament):
         result = handler.handle_defer_deck(
             tg_id=5201,
             username="later",
@@ -176,9 +204,7 @@ class TestHandleDeferDeck:
         assert participant.archetype_id is None
         assert participant.deck_deferred is True
 
-    def test_expired_defer_is_rejected_without_registration(
-        self, db, handler, svc, user_svc, active_tournament
-    ):
+    def test_expired_defer_is_rejected_without_registration(self, db, handler, svc, user_svc, active_tournament):
         tournament = db.get(models.Tournament, active_tournament.id)
         tournament.created_at = utc_now() - DEFER_DECK_WINDOW
         db.commit()
@@ -195,9 +221,7 @@ class TestHandleDeferDeck:
         assert result.is_alert
         assert user_svc.get_by_tg_id(5202) is None
 
-    def test_existing_deckless_participant_becomes_deferred(
-        self, handler, svc, user_svc, active_tournament
-    ):
+    def test_existing_deckless_participant_becomes_deferred(self, handler, svc, user_svc, active_tournament):
         user = user_svc.get_or_create(tg_id=5203, username="later", first_name="Иван")
         svc.register_participant(tournament_id=active_tournament.id, user_id=user.id)
 

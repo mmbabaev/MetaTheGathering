@@ -113,6 +113,7 @@ from bot.telegram import aetherhub as aetherhub_handler
 from bot.telegram import app_stats as app_stats_handler
 from bot.telegram import bingo as bingo_handler
 from bot.telegram import cellar as cellar_handler
+from bot.telegram import debug as debug_handler
 from bot.telegram import features as features_handler
 from bot.telegram import payment as payment_handler
 from bot.telegram import poll as poll_handler
@@ -165,6 +166,7 @@ _SCOREKEEPER_COMMANDS = _USER_COMMANDS + [
 
 _POLL_CMD = BotCommand("poll", "Меню голосований: регуляры и рассылка")
 _APP_STATS_CMD = BotCommand("app_statistics", "Статистика приложения (владелец)")
+_DEBUG_META_POLICE_CMD = BotCommand("debug_meta_police", "Тест сообщения мета-полиции")
 
 _ADMIN_COMMANDS = _SCOREKEEPER_COMMANDS + [
     BotCommand("archive", "Архив закрытых турниров"),
@@ -243,7 +245,12 @@ async def _set_commands(app: Application) -> None:
     owner_id = settings.OWNER_CHAT_ID
     for admin_id in admin_ids:
         # Владельцу — те же админ-команды плюс /app_statistics (статистика приложения).
-        cmds = _ADMIN_COMMANDS + [_APP_STATS_CMD] if admin_id == owner_id else _ADMIN_COMMANDS
+        if admin_id == owner_id:
+            cmds = _ADMIN_COMMANDS + [_APP_STATS_CMD]
+            if settings.DEBUG:
+                cmds.append(_DEBUG_META_POLICE_CMD)
+        else:
+            cmds = _ADMIN_COMMANDS
         try:
             await app.bot.set_my_commands(cmds, scope=BotCommandScopeChat(chat_id=admin_id))
         except Exception:
@@ -307,6 +314,8 @@ def main() -> None:
     app.add_handler(CommandHandler("app_statistics", app_stats_handler.cmd_app_statistics, filters=private))
     app.add_handler(CommandHandler("achievements", achievements_handler.cmd_achievements, filters=private))
     app.add_handler(CommandHandler("bingo_preview", bingo_handler.cmd_bingo_preview, filters=private))
+    if settings.DEBUG:
+        app.add_handler(CommandHandler("debug_meta_police", debug_handler.cmd_debug_meta_police, filters=private))
 
     app.add_handler(CommandHandler("add_players", admin.cmd_add_players, filters=private))
     app.add_handler(CommandHandler("tournament_status", admin.cmd_tournament_status, filters=private))
