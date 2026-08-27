@@ -64,18 +64,23 @@
   умолчанию персональный тумблер этих мгновенных DM; часовая сводка от него не зависит. Debug
   остаётся owner-only, клубные чаты и другие игроки ничего не получают — PR
   [#265](https://github.com/mmbabaev/MetaTheGathering/pull/265).
+- Первая часть этапа 0 Telegram E2E-контура из
+  [#270](https://github.com/mmbabaev/MetaTheGathering/issues/270): debug/prod deploy
+  сериализуется в GitHub Actions и на сервере, временные архивы и env получают уникальные
+  имена и удаляются даже после ошибки, а загрузка останавливается заранее при нехватке места.
+  Каждый PR получает отдельную PostgreSQL schema и не наследует Alembic revision соседнего PR —
+  PR [#271](https://github.com/mmbabaev/MetaTheGathering/pull/271).
 
 Игрокам ачивки автоматически не рассылаются: текущий режим — owner-only shadow.
 
 ### В review, но ещё не в `main`
 
-- Первая часть этапа 0 Telegram E2E-контура из
-  [#270](https://github.com/mmbabaev/MetaTheGathering/issues/270): debug/prod deploy
-  сериализуется в GitHub Actions и на сервере, временные архивы и env получают уникальные
-  имена и удаляются даже после ошибки, а загрузка останавливается заранее при нехватке места.
-  Каждый PR получает отдельную PostgreSQL schema и не наследует Alembic revision соседнего PR;
-  стабильный staging от `main`, in-process Telegram transport tests и real-bot smoke остаются
-  следующими этапами — PR [#271](https://github.com/mmbabaev/MetaTheGathering/pull/271).
+- Первая вертикаль in-process Telegram E2E из
+  [#270](https://github.com/mmbabaev/MetaTheGathering/issues/270): production wiring вынесен в
+  `build_application()` без запуска polling, recording Bot API принимает синтетические
+  `Update`, а отдельный blocking check проходит `/tournaments` → выбор турнира → карточка и
+  проверяет единственного адресата. Остальные MVP-flow и настоящий post-deploy smoke остаются
+  следующими этапами — PR [#272](https://github.com/mmbabaev/MetaTheGathering/pull/272).
 - Мета-полиция из [#254](https://github.com/mmbabaev/MetaTheGathering/issues/254): под
   `recordOpponents` любой пользователь может помочь заполнить оставшиеся пустые колоды;
   свой пропуск имеет приоритет, заполненные записи защищены от изменения, автор записи

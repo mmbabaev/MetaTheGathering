@@ -67,8 +67,11 @@ Jobs run in order: tests, then one serialized debug deploy job:
 - Write `ENV_FILE_DEBUG` secret → `bot/.env.debug`
 - Add the non-secret `DATABASE_SCHEMA=metagatherer_pr_<PR number>` override
 - Run `bot/deploy_bot_debug.sh`
-- Then run `bot/deploy_web_debug.sh` in the same job
-- Uses `bot/.env.debug` installed by the successful bot deploy
+- The bot deploy installs the full repository and restarts both debug bot and debug web
+
+The PR pipeline does not call `deploy_web_debug.sh` afterwards: that would upload and
+install the same repository twice. The standalone web script remains available for the
+path-filtered production workflow and manual web-only operations.
 
 The deploy job shares a GitHub Actions concurrency group with other debug deploys.
 The scripts also acquire the same environment-specific remote `flock`, so a manual

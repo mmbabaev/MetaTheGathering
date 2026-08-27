@@ -36,14 +36,39 @@ jobs:
           DATABASE_URL: "sqlite:///:memory:"
 
       - name: Run tests
-        run: python -m pytest tests/ -v --ignore=tests/e2e
+        run: python -m pytest tests/ -v --ignore=tests/e2e --ignore=tests/telegram_e2e
+        env:
+          TELEGRAM_BOT_TOKEN: "0000000000:test_token_for_ci"
+          DATABASE_URL: "sqlite:///:memory:"
+
+  telegram-e2e:
+    name: Telegram integration E2E
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run in-process Telegram flows
+        run: |
+          started_at=$(date +%s)
+          python -m pytest tests/telegram_e2e/ -v --durations=10
+          elapsed=$(( $(date +%s) - started_at ))
+          echo "Telegram E2E test runtime: ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
         env:
           TELEGRAM_BOT_TOKEN: "0000000000:test_token_for_ci"
           DATABASE_URL: "sqlite:///:memory:"
 
   deploy-debug:
     name: Deploy DEBUG
-    needs: test
+    needs: [test, telegram-e2e]
     runs-on: ubuntu-latest
     if: github.event.pull_request.head.repo.full_name == github.repository
     concurrency:
@@ -64,12 +89,6 @@ jobs:
 
       - name: Deploy debug bot
         run: bash bot/deploy_bot_debug.sh
-        env:
-          SSH_KEY: ~/.ssh/deploy_key
-          PREVIEW_ID: ${{ github.event.pull_request.number }}
-
-      - name: Deploy debug web
-        run: bash bot/deploy_web_debug.sh
         env:
           SSH_KEY: ~/.ssh/deploy_key
           PREVIEW_ID: ${{ github.event.pull_request.number }}
