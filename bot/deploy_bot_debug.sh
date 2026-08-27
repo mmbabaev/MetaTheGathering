@@ -5,6 +5,7 @@
 #   bash deploy_bot_debug.sh --release → PROD deploy
 
 set -Eeuo pipefail
+umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
@@ -40,6 +41,9 @@ fi
 # ── Validate ──────────────────────────────────────────────────────────────────
 [ ! -f "$ENV_FILE" ] && error "Файл $ENV_FILE не найден"
 [ ! -f "${SSH_KEY/#\~/$HOME}" ] && error "SSH-ключ $SSH_KEY не найден"
+if [ "$MODE" = "debug" ] && ! [[ "${PREVIEW_ID:-}" =~ ^[0-9]+$ ]]; then
+    error "Для debug deploy задайте числовой PREVIEW_ID (номер PR)"
+fi
 
 # ── Archive ───────────────────────────────────────────────────────────────────
 DEPLOY_ID="$(python3 -c 'import uuid; print(uuid.uuid4().hex)')"
@@ -49,13 +53,25 @@ REMOTE_ARCHIVE="/tmp/$ARCHIVE_NAME"
 REMOTE_ENV="/tmp/.env.deploy-$DEPLOY_ID"
 REMOTE_LOCK="/tmp/meta-the-gathering-${MODE}-deploy.lock"
 SSH_TARGET="${SERVER_USER}@${SERVER_IP}"
+ENV_UPLOAD="$ENV_FILE"
 
 cleanup() {
     rm -f -- "$ARCHIVE"
+    if [ "$ENV_UPLOAD" != "$ENV_FILE" ]; then
+        rm -f -- "$ENV_UPLOAD"
+    fi
     ssh -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no "$SSH_TARGET" \
         "rm -f -- '$REMOTE_ARCHIVE' '$REMOTE_ENV'" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
+
+if [ "$MODE" = "debug" ]; then
+    DATABASE_SCHEMA="metagatherer_pr_${PREVIEW_ID}"
+    ENV_UPLOAD="/tmp/.env.preview-${DEPLOY_ID}"
+    awk '!/^(export[[:space:]]+)?DATABASE_SCHEMA=/' "$ENV_FILE" > "$ENV_UPLOAD"
+    printf '\nDATABASE_SCHEMA=%s\n' "$DATABASE_SCHEMA" >> "$ENV_UPLOAD"
+    chmod 600 "$ENV_UPLOAD"
+fi
 
 info "Создаём архив: $ARCHIVE"
 
@@ -91,7 +107,7 @@ info "Копируем на сервер..."
 scp -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no \
     "$ARCHIVE" "$SSH_TARGET:$REMOTE_ARCHIVE"
 scp -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no \
-    "$ENV_FILE" "$SSH_TARGET:$REMOTE_ENV"
+    "$ENV_UPLOAD" "$SSH_TARGET:$REMOTE_ENV"
 
 # ── Remote install ────────────────────────────────────────────────────────────
 info "Устанавливаем на сервере..."

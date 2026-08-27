@@ -5,6 +5,7 @@
 #   bash deploy_web_debug.sh --release → PROD deploy  (port 8080)
 
 set -Eeuo pipefail
+umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
@@ -33,6 +34,9 @@ else
 fi
 
 [ ! -f "${SSH_KEY/#\~/$HOME}" ] && error "SSH-ключ $SSH_KEY не найден"
+if [ "$MODE" = "debug" ] && ! [[ "${PREVIEW_ID:-}" =~ ^[0-9]+$ ]]; then
+    error "Для debug deploy задайте числовой PREVIEW_ID (номер PR)"
+fi
 
 DEPLOY_ID="$(python3 -c 'import uuid; print(uuid.uuid4().hex)')"
 ARCHIVE_NAME="meta-web-deploy-${DEPLOY_ID}.tar.gz"
@@ -40,6 +44,10 @@ ARCHIVE="/tmp/$ARCHIVE_NAME"
 REMOTE_ARCHIVE="/tmp/$ARCHIVE_NAME"
 REMOTE_LOCK="/tmp/meta-the-gathering-${MODE}-deploy.lock"
 SSH_TARGET="${SERVER_USER}@${SERVER_IP}"
+EXPECTED_DATABASE_SCHEMA=""
+if [ "$MODE" = "debug" ]; then
+    EXPECTED_DATABASE_SCHEMA="metagatherer_pr_${PREVIEW_ID}"
+fi
 
 cleanup() {
     rm -f -- "$ARCHIVE"
@@ -92,6 +100,7 @@ scp -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no \
 ssh -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no "$SSH_TARGET" \
     ARCHIVE_NAME="$ARCHIVE_NAME" REMOTE_DIR="$REMOTE_DIR" SERVICE_NAME="$SERVICE_NAME" \
     SYSTEMD_SERVICE_FILE="$SYSTEMD_SERVICE_FILE" \
+    EXPECTED_DATABASE_SCHEMA="$EXPECTED_DATABASE_SCHEMA" \
     "flock -w 900 '$REMOTE_LOCK' bash -s" <<'REMOTE'
 set -Eeuo pipefail
 
@@ -102,6 +111,14 @@ trap cleanup_remote EXIT
 
 echo "→ Разворачиваем в $REMOTE_DIR"
 mkdir -p "$REMOTE_DIR"
+ENV_DEST="$REMOTE_DIR/bot/.env"
+if [ -n "$EXPECTED_DATABASE_SCHEMA" ]; then
+    ENV_DEST="$REMOTE_DIR/bot/.env.debug"
+    if ! grep -qx "DATABASE_SCHEMA=$EXPECTED_DATABASE_SCHEMA" "$ENV_DEST"; then
+        echo "ERROR: debug env принадлежит другому PR preview — web deploy остановлен"
+        exit 1
+    fi
+fi
 tar -xzf "/tmp/$ARCHIVE_NAME" -C "$REMOTE_DIR" --warning=no-unknown-keyword --exclude='.env' --exclude='bot/.env' --exclude='bot/.env.*'
 
 echo "→ Устанавливаем зависимости..."
