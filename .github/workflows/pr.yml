@@ -57,7 +57,11 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run in-process Telegram flows
-        run: python -m pytest tests/telegram_e2e/ -v
+        run: |
+          started_at=$(date +%s)
+          python -m pytest tests/telegram_e2e/ -v --durations=10
+          elapsed=$(( $(date +%s) - started_at ))
+          echo "Telegram E2E test runtime: ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
         env:
           TELEGRAM_BOT_TOKEN: "0000000000:test_token_for_ci"
           DATABASE_URL: "sqlite:///:memory:"
