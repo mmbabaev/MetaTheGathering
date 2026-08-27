@@ -1,10 +1,5 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-
 from bot.keyboards import CB_TOURNAMENT
 from bot.telegram import player
-from core.database import Base
 from core.schemas import TournamentCreate
 from main import build_application
 from services.tournament import TournamentService
@@ -16,15 +11,8 @@ from tests.telegram_e2e.harness import (
 )
 
 
-async def test_tournaments_command_routes_to_card_without_telegram_network(monkeypatch):
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    session_factory = sessionmaker(bind=engine)
-    with session_factory() as db:
+async def test_tournaments_command_routes_to_card_without_telegram_network(monkeypatch, isolated_session_factory):
+    with isolated_session_factory() as db:
         tournament = TournamentService(db).create_tournament(
             TournamentCreate(title="E2E Pauper", chat_id=-100_000_001, slug="e2e-pauper")
         )
@@ -33,10 +21,10 @@ async def test_tournaments_command_routes_to_card_without_telegram_network(monke
         )
         tournament_id = tournament.id
 
-    monkeypatch.setattr(player, "SessionLocal", session_factory)
+    monkeypatch.setattr(player, "SessionLocal", isolated_session_factory)
     monkeypatch.setattr(player, "_log", lambda *_args, **_kwargs: None)
 
-    request = RecordingRequest()
+    request = RecordingRequest(allowed_chat_ids={10_001})
     application = build_application(
         token="0000000000:dummy-not-a-real-key",
         request=request,
@@ -67,5 +55,3 @@ async def test_tournaments_command_routes_to_card_without_telegram_network(monke
         assert {call.parameters.get("chat_id") for call in outbound} == {10_001}
     finally:
         await application.shutdown()
-        Base.metadata.drop_all(engine)
-        engine.dispose()

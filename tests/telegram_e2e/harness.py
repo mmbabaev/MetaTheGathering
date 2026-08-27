@@ -21,9 +21,10 @@ class RecordedCall:
 class RecordingRequest(BaseRequest):
     """Minimal in-memory Bot API implementation used by PTB routing tests."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, allowed_chat_ids: set[int]) -> None:
         self.calls: list[RecordedCall] = []
         self._next_message_id = 100
+        self._allowed_chat_ids = frozenset(allowed_chat_ids)
 
     @property
     def read_timeout(self) -> float | None:
@@ -44,6 +45,7 @@ class RecordingRequest(BaseRequest):
     ) -> tuple[int, bytes]:
         api_method = url.rsplit("/", 1)[-1]
         parameters = dict(request_data.parameters) if request_data else {}
+        self._validate_outbound(api_method, parameters)
         result = self._result(api_method, parameters)
         self.calls.append(RecordedCall(api_method, parameters, result))
         return 200, json.dumps({"ok": True, "result": result}).encode()
@@ -62,6 +64,22 @@ class RecordingRequest(BaseRequest):
         if method in {"answerCallbackQuery", "setMyCommands", "deleteMessage"}:
             return True
         raise AssertionError(f"RecordingRequest has no response fixture for {method}")
+
+    def _validate_outbound(self, method: str, parameters: dict[str, Any]) -> None:
+        chat_id = parameters.get("chat_id")
+        if chat_id is not None and int(chat_id) not in self._allowed_chat_ids:
+            raise AssertionError(f"{method} attempted unexpected chat_id={chat_id}")
+
+        text = parameters.get("text")
+        if isinstance(text, str) and len(text) > 4096:
+            raise AssertionError(f"{method} text exceeds Telegram's 4096 character limit")
+
+        markup = parameters.get("reply_markup") or {}
+        for row in markup.get("inline_keyboard", []):
+            for button in row:
+                callback_data = button.get("callback_data")
+                if callback_data and len(callback_data.encode()) > 64:
+                    raise AssertionError("callback_data exceeds Telegram's 64 byte limit")
 
     @staticmethod
     def _message(parameters: dict[str, Any], message_id: int) -> dict[str, Any]:
