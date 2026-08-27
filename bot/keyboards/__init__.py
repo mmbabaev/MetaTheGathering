@@ -89,6 +89,7 @@ CB_PAY = "pay"  # pay:{tournament_id}
 CB_PAY_STATUS = "pay_status"  # pay_status:{tournament_id} — no-op, показывает статус оплаты
 CB_ADMIN_IMPORT_META = "adm_meta"  # adm_meta:{tournament_id}
 CB_DEBUG_ROUND_NOTIFY = "dbg_rnotify"  # dbg_rnotify:{tournament_id} — debug: DM all round notifications to presser
+CB_DEBUG_META_POLICE = "dbg_mpol"  # dbg_mpol:{tournament_id} — debug: live preview only for owner
 CB_APP_STATS_HOME = "appstat_home"  # appstat_home — меню статистики приложения (владелец)
 CB_APP_STATS_NOTIFY_ROUNDS = "appstat_nr"  # appstat_nr — список включивших уведомления о раундах
 CB_CELLAR_DATES = "cellar_dates"
@@ -350,6 +351,7 @@ class Keyboards:
         import_time: str | None = None,
         payment_enabled: bool = False,
         payment_confirmed: bool = False,
+        show_debug_meta_police: bool = False,
     ) -> InlineKeyboardMarkup:
         if is_registered:
             action_btn = InlineKeyboardButton("🚪 Выйти из турнира", callback_data=f"{CB_LEAVE}:{tournament_id}")
@@ -367,6 +369,15 @@ class Keyboards:
         if is_registered and show_fill_opponents:
             rows.append(
                 [InlineKeyboardButton("🤝 Записать оппонентов", callback_data=f"{CB_ADMIN_OPPONENTS}:{tournament_id}")]
+            )
+        if show_debug_meta_police:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        "🐞 Тест мета-полиции",
+                        callback_data=f"{CB_DEBUG_META_POLICE}:{tournament_id}",
+                    )
+                ]
             )
         if is_admin:
             aetherhub_emoji = "🔄" if aetherhub_url else "📥"
@@ -878,6 +889,7 @@ def tournament_card_keyboard(
     import_time: str | None = None,
     payment_enabled: bool = False,
     payment_confirmed: bool = False,
+    show_debug_meta_police: bool = False,
 ) -> InlineKeyboardMarkup:
     return _default.tournament_card_keyboard(
         tournament_id,
@@ -890,6 +902,7 @@ def tournament_card_keyboard(
         import_time=import_time,
         payment_enabled=payment_enabled,
         payment_confirmed=payment_confirmed,
+        show_debug_meta_police=show_debug_meta_police,
     )
 
 

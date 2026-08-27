@@ -11,6 +11,7 @@ from bot.keyboards import Keyboards
 from bot.messages import CUSTOM_ARCHETYPE_PROMPT
 from bot.telegram.common import announce_completion_if_ready, parse_callback_ints
 from bot.telegram.common import log_event as _log
+from core.config import settings
 from core.database import SessionLocal
 from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeService
@@ -42,6 +43,8 @@ def _player_handler(db) -> PlayerHandler:
         AetherhubImportService(db),
         _make_features(db),
         PaymentService(db),
+        debug=settings.DEBUG,
+        owner_tg_id=settings.OWNER_CHAT_ID,
     )
 
 

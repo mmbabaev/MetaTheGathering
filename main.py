@@ -49,6 +49,7 @@ from bot.keyboards import (
     CB_CLOSE_TOURNAMENT,
     CB_CREATE_POLL,
     CB_CUSTOM_ARCHETYPE,
+    CB_DEBUG_META_POLICE,
     CB_DEBUG_ROUND_NOTIFY,
     CB_DEFER_DECK,
     CB_DELETE_TOURNAMENT,
@@ -166,7 +167,6 @@ _SCOREKEEPER_COMMANDS = _USER_COMMANDS + [
 
 _POLL_CMD = BotCommand("poll", "Меню голосований: регуляры и рассылка")
 _APP_STATS_CMD = BotCommand("app_statistics", "Статистика приложения (владелец)")
-_DEBUG_META_POLICE_CMD = BotCommand("debug_meta_police", "Тест сообщения мета-полиции")
 
 _ADMIN_COMMANDS = _SCOREKEEPER_COMMANDS + [
     BotCommand("archive", "Архив закрытых турниров"),
@@ -247,8 +247,6 @@ async def _set_commands(app: Application) -> None:
         # Владельцу — те же админ-команды плюс /app_statistics (статистика приложения).
         if admin_id == owner_id:
             cmds = _ADMIN_COMMANDS + [_APP_STATS_CMD]
-            if settings.DEBUG:
-                cmds.append(_DEBUG_META_POLICE_CMD)
         else:
             cmds = _ADMIN_COMMANDS
         try:
@@ -314,8 +312,6 @@ def main() -> None:
     app.add_handler(CommandHandler("app_statistics", app_stats_handler.cmd_app_statistics, filters=private))
     app.add_handler(CommandHandler("achievements", achievements_handler.cmd_achievements, filters=private))
     app.add_handler(CommandHandler("bingo_preview", bingo_handler.cmd_bingo_preview, filters=private))
-    if settings.DEBUG:
-        app.add_handler(CommandHandler("debug_meta_police", debug_handler.cmd_debug_meta_police, filters=private))
 
     app.add_handler(CommandHandler("add_players", admin.cmd_add_players, filters=private))
     app.add_handler(CommandHandler("tournament_status", admin.cmd_tournament_status, filters=private))
@@ -441,6 +437,10 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(aetherhub_handler.callback_set_import_time, pattern=f"^{CB_SET_IMPORT_TIME}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_admin_more, pattern=f"^{CB_ADMIN_MORE}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_debug_round_notify, pattern=f"^{CB_DEBUG_ROUND_NOTIFY}:"))
+    if settings.DEBUG:
+        app.add_handler(
+            CallbackQueryHandler(debug_handler.callback_debug_meta_police, pattern=f"^{CB_DEBUG_META_POLICE}:")
+        )
     app.add_handler(CallbackQueryHandler(admin.callback_close_tournament, pattern=f"^{CB_CLOSE_TOURNAMENT}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_reopen_tournament, pattern=f"^{CB_REOPEN_TOURNAMENT}:"))
     app.add_handler(CallbackQueryHandler(schedule_handler.callback_schedule_list, pattern=f"^{CB_SCHEDULE_LIST}$"))

@@ -9,6 +9,7 @@ from bot.keyboards import (
     CB_ARCHETYPE,
     CB_ARCHETYPE_MORE,
     CB_CUSTOM_ARCHETYPE,
+    CB_DEBUG_META_POLICE,
     CB_REGISTER,
     CB_REOPEN_TOURNAMENT,
     CB_TOURNAMENT,
@@ -196,6 +197,17 @@ class TestTournamentCardKeyboard:
         markup = Keyboards().tournament_card_keyboard(1, is_registered=False, show_fill_opponents=True)
         texts = self._all_texts(markup)
         assert not any("оппонент" in t.lower() for t in texts)
+
+    def test_debug_meta_police_button_is_explicitly_gated(self):
+        hidden = tournament_card_keyboard(1, is_registered=False)
+        shown = tournament_card_keyboard(1, is_registered=False, show_debug_meta_police=True)
+
+        assert not any(
+            button.callback_data == f"{CB_DEBUG_META_POLICE}:1" for row in hidden.inline_keyboard for button in row
+        )
+        assert any(
+            button.callback_data == f"{CB_DEBUG_META_POLICE}:1" for row in shown.inline_keyboard for button in row
+        )
 
 
 # ── admin_more_keyboard: кнопка «Сделать активным» ───────────────────────────

@@ -104,6 +104,8 @@ class PlayerHandler:
         aetherhub_svc: AetherhubImportService,
         feature_svc: FeatureService,
         payment_svc: PaymentService | None = None,
+        debug: bool = False,
+        owner_tg_id: int | None = None,
     ) -> None:
         self.svc = svc
         self.user_svc = user_svc
@@ -112,6 +114,8 @@ class PlayerHandler:
         self.aetherhub_svc = aetherhub_svc
         self.feature_svc = feature_svc
         self.payment_svc = payment_svc
+        self.debug = debug
+        self.owner_tg_id = owner_tg_id
 
     def _tournament_card(self, t, tg_id: int | None) -> HandlerResult:
         is_registered = False
@@ -161,6 +165,7 @@ class PlayerHandler:
                 import_time=getattr(t, "aetherhub_import_time", None),
                 payment_enabled=payment_enabled,
                 payment_confirmed=payment_confirmed,
+                show_debug_meta_police=self.debug and tg_id is not None and tg_id == self.owner_tg_id,
             ),
         )
 

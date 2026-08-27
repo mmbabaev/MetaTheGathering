@@ -1,4 +1,4 @@
-"""Безопасные owner-only команды для debug-бота."""
+"""Безопасные owner-only действия для debug-бота."""
 
 import logging
 
@@ -12,32 +12,31 @@ from core.database import SessionLocal
 logger = logging.getLogger(__name__)
 
 
-async def cmd_debug_meta_police(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Показать интерактивное сообщение мета-полиции только вызвавшему владельцу."""
-    message = update.effective_message
+async def callback_debug_meta_police(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Показать интерактивное сообщение мета-полиции только нажавшему владельцу."""
+    query = update.callback_query
     user = update.effective_user
     chat = update.effective_chat
-    if message is None or user is None or chat is None:
+    if query is None or user is None or chat is None:
         return
     if not settings.DEBUG or user.id != settings.OWNER_CHAT_ID:
-        await message.reply_text("Команда доступна только владельцу в debug-боте.")
-        return
-    if len(context.args or []) != 1:
-        await message.reply_text("Формат: /debug_meta_police <ID турнира>")
+        await query.answer("Кнопка доступна только владельцу в debug-боте.", show_alert=True)
         return
     try:
-        tournament_id = int(context.args[0])
-    except (TypeError, ValueError):
-        await message.reply_text("ID турнира должен быть целым числом.")
+        tournament_id = int(query.data.split(":", 1)[1])
+    except (AttributeError, IndexError, TypeError, ValueError):
+        await query.answer("Ошибка данных.", show_alert=True)
         return
 
     db = SessionLocal()
     try:
-        await send_debug_meta_police_preview(context.bot, db, tournament_id, requester_chat_id=chat.id)
+        count = await send_debug_meta_police_preview(context.bot, db, tournament_id, requester_chat_id=chat.id)
     except ValueError as exc:
-        await message.reply_text(str(exc))
+        await query.answer(str(exc), show_alert=True)
     except Exception:  # noqa: BLE001 — debug-команда не должна падать наружу
         logger.exception("debug meta-police preview failed for #%s", tournament_id)
-        await message.reply_text("Не удалось собрать debug-превью.")
+        await query.answer("Не удалось собрать debug-превью.", show_alert=True)
+    else:
+        await query.answer(f"Отправил live-превью: {count} игроков без колоды.", show_alert=True)
     finally:
         db.close()

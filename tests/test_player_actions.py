@@ -94,6 +94,28 @@ class TestHandleTournamentSelect:
         assert result.text == TOURNAMENT_NOT_FOUND
         assert result.is_alert
 
+    def test_debug_meta_police_button_is_visible_only_to_owner(
+        self, svc, user_svc, arch_svc, keyboards, aetherhub_svc, features, active_tournament, user_alice
+    ):
+        debug_handler = PlayerHandler(
+            svc,
+            user_svc,
+            arch_svc,
+            keyboards,
+            aetherhub_svc,
+            features,
+            debug=True,
+            owner_tg_id=user_alice.tg_id,
+        )
+
+        owner_card = debug_handler.handle_tournament_select(active_tournament.id, tg_id=user_alice.tg_id)
+        other_card = debug_handler.handle_tournament_select(active_tournament.id, tg_id=999999)
+
+        owner_texts = [button.text for row in owner_card.keyboard.inline_keyboard for button in row]
+        other_texts = [button.text for row in other_card.keyboard.inline_keyboard for button in row]
+        assert "🐞 Тест мета-полиции" in owner_texts
+        assert "🐞 Тест мета-полиции" not in other_texts
+
     def test_shows_current_players_unfilled_opponents(
         self, db, handler, svc, active_tournament, user_alice, user_bob, archetype_burn
     ):
