@@ -351,7 +351,6 @@ class Keyboards:
         import_time: str | None = None,
         payment_enabled: bool = False,
         payment_confirmed: bool = False,
-        show_debug_meta_police: bool = False,
     ) -> InlineKeyboardMarkup:
         if is_registered:
             action_btn = InlineKeyboardButton("🚪 Выйти из турнира", callback_data=f"{CB_LEAVE}:{tournament_id}")
@@ -369,15 +368,6 @@ class Keyboards:
         if is_registered and show_fill_opponents:
             rows.append(
                 [InlineKeyboardButton("🤝 Записать оппонентов", callback_data=f"{CB_ADMIN_OPPONENTS}:{tournament_id}")]
-            )
-        if show_debug_meta_police:
-            rows.append(
-                [
-                    InlineKeyboardButton(
-                        "🐞 Тест мета-полиции",
-                        callback_data=f"{CB_DEBUG_META_POLICE}:{tournament_id}",
-                    )
-                ]
             )
         if is_admin:
             aetherhub_emoji = "🔄" if aetherhub_url else "📥"
@@ -424,15 +414,23 @@ class Keyboards:
         is_closed: bool = False,
         decks_hidden: bool = True,
         show_debug: bool = False,
+        show_debug_meta_police: bool = False,
     ) -> InlineKeyboardMarkup:
         rows = [
             [InlineKeyboardButton("➕ Добавить участников", callback_data=f"{CB_BULK_ADD}:{tournament_id}")],
             [InlineKeyboardButton("📋 Импорт по таблице", callback_data=f"{CB_ADMIN_IMPORT_META}:{tournament_id}")],
         ]
+        debug_buttons = []
         if show_debug:
-            rows.append(
-                [InlineKeyboardButton("🐞 Тест оповещений", callback_data=f"{CB_DEBUG_ROUND_NOTIFY}:{tournament_id}")]
+            debug_buttons.append(
+                InlineKeyboardButton("🐞 Тест оповещений", callback_data=f"{CB_DEBUG_ROUND_NOTIFY}:{tournament_id}")
             )
+        if show_debug_meta_police:
+            debug_buttons.append(
+                InlineKeyboardButton("🐞 Мета-полиция", callback_data=f"{CB_DEBUG_META_POLICE}:{tournament_id}")
+            )
+        if debug_buttons:
+            rows.append(debug_buttons)
         if decks_hidden:
             rows.append([InlineKeyboardButton("👁 Показать колоды", callback_data=f"{CB_REVEAL_DECKS}:{tournament_id}")])
         else:
@@ -889,7 +887,6 @@ def tournament_card_keyboard(
     import_time: str | None = None,
     payment_enabled: bool = False,
     payment_confirmed: bool = False,
-    show_debug_meta_police: bool = False,
 ) -> InlineKeyboardMarkup:
     return _default.tournament_card_keyboard(
         tournament_id,
@@ -902,7 +899,6 @@ def tournament_card_keyboard(
         import_time=import_time,
         payment_enabled=payment_enabled,
         payment_confirmed=payment_confirmed,
-        show_debug_meta_police=show_debug_meta_police,
     )
 
 
@@ -911,10 +907,18 @@ def export_menu_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
 
 
 def admin_more_keyboard(
-    tournament_id: int, is_closed: bool = False, decks_hidden: bool = True, show_debug: bool = False
+    tournament_id: int,
+    is_closed: bool = False,
+    decks_hidden: bool = True,
+    show_debug: bool = False,
+    show_debug_meta_police: bool = False,
 ) -> InlineKeyboardMarkup:
     return _default.admin_more_keyboard(
-        tournament_id, is_closed=is_closed, decks_hidden=decks_hidden, show_debug=show_debug
+        tournament_id,
+        is_closed=is_closed,
+        decks_hidden=decks_hidden,
+        show_debug=show_debug,
+        show_debug_meta_police=show_debug_meta_police,
     )
 
 

@@ -198,17 +198,6 @@ class TestTournamentCardKeyboard:
         texts = self._all_texts(markup)
         assert not any("оппонент" in t.lower() for t in texts)
 
-    def test_debug_meta_police_button_is_explicitly_gated(self):
-        hidden = tournament_card_keyboard(1, is_registered=False)
-        shown = tournament_card_keyboard(1, is_registered=False, show_debug_meta_police=True)
-
-        assert not any(
-            button.callback_data == f"{CB_DEBUG_META_POLICE}:1" for row in hidden.inline_keyboard for button in row
-        )
-        assert any(
-            button.callback_data == f"{CB_DEBUG_META_POLICE}:1" for row in shown.inline_keyboard for button in row
-        )
-
 
 # ── admin_more_keyboard: кнопка «Сделать активным» ───────────────────────────
 
@@ -238,3 +227,29 @@ class TestAdminMoreReopenButton:
             b for b in self._flat(Keyboards().admin_more_keyboard(42, is_closed=True)) if "Сделать активным" in b.text
         )
         assert btn.callback_data == f"{CB_REOPEN_TOURNAMENT}:42"
+
+
+class TestAdminMoreDebugButtons:
+    def test_meta_police_sits_next_to_other_debug_button(self):
+        keyboard = Keyboards().admin_more_keyboard(
+            42,
+            show_debug=True,
+            show_debug_meta_police=True,
+        )
+
+        debug_row = next(
+            row
+            for row in keyboard.inline_keyboard
+            if any(button.callback_data == f"{CB_DEBUG_META_POLICE}:42" for button in row)
+        )
+        assert [button.callback_data for button in debug_row] == [
+            "dbg_rnotify:42",
+            f"{CB_DEBUG_META_POLICE}:42",
+        ]
+
+    def test_meta_police_is_hidden_without_owner_gate(self):
+        keyboard = Keyboards().admin_more_keyboard(42, show_debug=True)
+
+        assert not any(
+            button.callback_data == f"{CB_DEBUG_META_POLICE}:42" for row in keyboard.inline_keyboard for button in row
+        )

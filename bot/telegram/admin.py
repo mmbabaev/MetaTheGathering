@@ -622,7 +622,11 @@ async def callback_admin_more(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.edit_message_text(
         "Действия с турниром:",
         reply_markup=admin_more_keyboard(
-            tournament_id, is_closed=is_closed, decks_hidden=decks_hidden, show_debug=settings.DEBUG
+            tournament_id,
+            is_closed=is_closed,
+            decks_hidden=decks_hidden,
+            show_debug=settings.DEBUG,
+            show_debug_meta_police=settings.DEBUG and user.id == settings.OWNER_CHAT_ID,
         ),
     )
     await query.answer()
@@ -722,7 +726,11 @@ async def callback_reveal_decks_cancel(update: Update, context: ContextTypes.DEF
         await query.edit_message_text(
             "Действия с турниром:",
             reply_markup=admin_more_keyboard(
-                tournament_id, is_closed=is_closed, decks_hidden=t.decks_hidden, show_debug=settings.DEBUG
+                tournament_id,
+                is_closed=is_closed,
+                decks_hidden=t.decks_hidden,
+                show_debug=settings.DEBUG,
+                show_debug_meta_police=settings.DEBUG and user.id == settings.OWNER_CHAT_ID,
             ),
         )
     except svc_errors.TournamentNotFound:
