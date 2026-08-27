@@ -39,6 +39,9 @@ checks the 4096-character message and 64-byte callback-data limits.
 
 The E2E project is not considered complete merely because the scenarios are green once.
 After the five MVP flows land, perform and publish this audit in #270.
+The report must link the tested commit and GitHub runs, distinguish cold-cache from
+warm-cache duration, state the number of attempts and failures, and include a clear
+keep/change/remove recommendation rather than only raw measurements.
 
 ### 0. Stability
 
