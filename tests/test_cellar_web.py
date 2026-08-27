@@ -1,4 +1,3 @@
-from datetime import date
 from unittest.mock import AsyncMock
 from urllib.parse import unquote
 
@@ -8,14 +7,14 @@ from sqlalchemy import select
 
 from core import models
 from core.config import settings
-from services.cellar import CellarService
+from services.cellar import CellarService, next_cellar_dates
 from services.cellar_sheet import CELLAR_SHEET_URL
 from services.feature_flags import FeatureFlags, FeatureFlagService
 from web.app import app
 from web.routes.cellar import _announce, cancel_cellar_reservation, require_cellar_enabled, reserve_cellar_deck
 from web.templating import templates
 
-EVENT_DATE = date(2026, 8, 24)
+EVENT_DATE = next_cellar_dates()[0]
 
 
 def _deck(db):
