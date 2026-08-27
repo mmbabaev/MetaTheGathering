@@ -2,6 +2,7 @@ import logging
 from datetime import date
 
 from telegram import Update
+from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 
 from bot.handlers.cellar import CellarActionResult, CellarHandler
@@ -163,7 +164,13 @@ async def _show(query, result) -> None:
     if result.is_alert:
         await query.answer(result.text, show_alert=True)
         return
-    await query.edit_message_text(result.text, reply_markup=result.keyboard)
+    try:
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+    except BadRequest as exc:
+        # Repeated taps may render the exact same card and keyboard. Telegram rejects
+        # that no-op edit; acknowledge the callback instead of showing a global error.
+        if "message is not modified" not in str(exc).casefold():
+            raise
     await query.answer(result.answer_text)
 
 

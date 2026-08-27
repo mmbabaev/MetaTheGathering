@@ -18,6 +18,17 @@ from web.templating import templates
 EVENT_DATE = date(2026, 8, 24)
 
 
+@pytest.fixture(autouse=True)
+def _fixed_cellar_dates(monkeypatch):
+    """Keep route tests deterministic after the fixture's event date has passed."""
+
+    def dates(today=None, count=4):
+        return [EVENT_DATE]
+
+    monkeypatch.setattr("services.cellar.next_cellar_dates", dates)
+    monkeypatch.setattr("web.routes.cellar.next_cellar_dates", dates)
+
+
 def _deck(db):
     service = CellarService(db)
     service.ensure_bootstrap_catalog()

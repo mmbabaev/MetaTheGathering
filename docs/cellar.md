@@ -33,7 +33,9 @@ Issue [#260](https://github.com/mmbabaev/MetaTheGathering/issues/260) добав
 ссылку на 15 минут, которая авторизует Telegram-пользователя и переводит на `/cellar`; email
 вводить не нужно. Telegram и web используют один каталог, ограничения и записи броней.
 
-Диплинк `https://t.me/MetaGathererBot?start=cellar` открывает то же меню дат напрямую.
+Production-диплинк `https://t.me/MetaTheGatheringBot?start=cellar` открывает то же меню дат
+напрямую. Повторное нажатие на кнопку уже открытой даты безопасно подтверждается без ошибки
+Telegram `Message is not modified`.
 Владелец из `OWNER_CHAT_ID` в обоих окружениях и production-координаторы из
 `CELLAR_COORDINATOR_USERNAMES` (или legacy `CELLAR_COORDINATOR_TG_IDS`) дополнительно видят в этом
 сообщении все активные брони четырёх ближайших дат в формате
