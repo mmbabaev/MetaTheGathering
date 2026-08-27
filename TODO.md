@@ -77,7 +77,8 @@
 - Доработка мета-полиции из [#258](https://github.com/mmbabaev/MetaTheGathering/issues/258):
   карточка турнира показывает игроку его незаполненных оппонентов с номерами раундов, исходное
   сообщение в клубном чате зачёркивает заполненных игроков и убирает кнопку после последней
-  колоды. Owner-only debug-команда воспроизводит live-flow только в личке инициатора.
+  колоды. Owner-only debug-команда воспроизводит live-flow только в личке инициатора — PR
+  [#268](https://github.com/mmbabaev/MetaTheGathering/pull/268).
 - Pure fairness foundation перечисляет все 10 линий Bingo 4×4 и считает вероятностные
   веса/imbalance с отдельными diagnostics для строк, столбцов и диагоналей, не меняя
   horizontal-only `bingo-v1` — PR
