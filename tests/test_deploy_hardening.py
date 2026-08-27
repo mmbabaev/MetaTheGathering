@@ -48,7 +48,7 @@ def test_debug_deploy_requires_and_propagates_pr_preview_id():
     workflow = _read(ROOT / ".github" / "workflows" / "pr.yml")
 
     assert "PREVIEW_ID: ${{ github.event.pull_request.number }}" in workflow
-    assert workflow.count("PREVIEW_ID: ${{ github.event.pull_request.number }}") == 2
+    assert workflow.count("PREVIEW_ID: ${{ github.event.pull_request.number }}") == 1
     assert "${PREVIEW_ID:-}" in bot_source
     assert "${PREVIEW_ID:-}" in web_source
     assert "DATABASE_SCHEMA=$EXPECTED_DATABASE_SCHEMA" in web_source
@@ -66,3 +66,13 @@ def test_workflows_serialize_deploys_by_environment():
 
         assert f"group: {expected_group}" in workflow
         assert "cancel-in-progress: false" in workflow
+
+
+def test_pr_deploy_does_not_upload_the_same_repository_twice():
+    workflow = _read(ROOT / ".github" / "workflows" / "pr.yml")
+    bot_source = _read(BOT_DEPLOY)
+
+    assert workflow.count("bash bot/deploy_bot_debug.sh") == 1
+    assert "bash bot/deploy_web_debug.sh" not in workflow
+    assert 'SYSTEMD_WEB_SERVICE_FILE="$REMOTE_DIR/bot/systemd/meta-the-gathering-debug-web.service"' in bot_source
+    assert 'sudo systemctl restart "$WEB_SERVICE_NAME"' in bot_source
