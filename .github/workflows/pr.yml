@@ -36,14 +36,35 @@ jobs:
           DATABASE_URL: "sqlite:///:memory:"
 
       - name: Run tests
-        run: python -m pytest tests/ -v --ignore=tests/e2e
+        run: python -m pytest tests/ -v --ignore=tests/e2e --ignore=tests/telegram_e2e
+        env:
+          TELEGRAM_BOT_TOKEN: "0000000000:test_token_for_ci"
+          DATABASE_URL: "sqlite:///:memory:"
+
+  telegram-e2e:
+    name: Telegram integration E2E
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run in-process Telegram flows
+        run: python -m pytest tests/telegram_e2e/ -v
         env:
           TELEGRAM_BOT_TOKEN: "0000000000:test_token_for_ci"
           DATABASE_URL: "sqlite:///:memory:"
 
   deploy-debug:
     name: Deploy DEBUG
-    needs: test
+    needs: [test, telegram-e2e]
     runs-on: ubuntu-latest
     if: github.event.pull_request.head.repo.full_name == github.repository
     concurrency:

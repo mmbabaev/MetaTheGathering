@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 
 from sqlalchemy import select
@@ -15,6 +16,7 @@ from telegram.ext import (
     PollAnswerHandler,
     filters,
 )
+from telegram.request import BaseRequest
 
 from bot.keyboards import (
     CB_ADMIN_ARCH_MORE,
@@ -290,9 +292,24 @@ def _debug_create_tournament() -> None:
         db.close()
 
 
-def main() -> None:
-    builder = Application.builder().token(settings.TELEGRAM_BOT_TOKEN).post_init(_post_init)
-    if settings.TELEGRAM_PROXY_URL:
+def build_application(
+    *,
+    token: str | None = None,
+    request: BaseRequest | None = None,
+    enable_scheduler: bool = True,
+    post_init: Callable[[Application], Awaitable[None]] | None = _post_init,
+) -> Application:
+    """Build the PTB application without starting polling.
+
+    Tests can inject a recording Bot API request and disable background jobs. Production
+    keeps the same defaults and calls :meth:`Application.run_polling` in ``main``.
+    """
+    builder = Application.builder().token(token or settings.TELEGRAM_BOT_TOKEN)
+    if post_init is not None:
+        builder = builder.post_init(post_init)
+    if request is not None:
+        builder = builder.request(request)
+    elif settings.TELEGRAM_PROXY_URL:
         builder = builder.proxy(settings.TELEGRAM_PROXY_URL).get_updates_proxy(settings.TELEGRAM_PROXY_URL)
     app = builder.build()
 
@@ -466,7 +483,14 @@ def main() -> None:
 
     app.add_error_handler(_error_handler)
 
-    setup_scheduler(app)
+    if enable_scheduler:
+        setup_scheduler(app)
+
+    return app
+
+
+def main() -> None:
+    app = build_application()
 
     logger.info("Bot starting (polling)...")
     app.run_polling(allowed_updates=["message", "callback_query", "poll_answer"])
