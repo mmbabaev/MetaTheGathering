@@ -59,7 +59,8 @@
 ### В review, но ещё не в `main`
 
 - Cellar-диплинк ведёт на production-бота; повторное нажатие на уже открытую дату не вызывает
-  Telegram-ошибку `Message is not modified` и не обрывает inline-flow.
+  Telegram-ошибку `Message is not modified` и не обрывает inline-flow — PR
+  [#267](https://github.com/mmbabaev/MetaTheGathering/pull/267).
 
 - Колоды из ячейки из
   [#260](https://github.com/mmbabaev/MetaTheGathering/issues/260): основной Telegram-flow
