@@ -1,7 +1,22 @@
+import re
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from core.config import settings
+
+
+def database_connect_args() -> dict[str, str]:
+    """Return safe driver arguments for an optional PostgreSQL preview schema."""
+    schema = settings.DATABASE_SCHEMA
+    if not schema:
+        return {}
+    if not re.fullmatch(r"[a-z_][a-z0-9_]*", schema):
+        raise ValueError("DATABASE_SCHEMA must be a lowercase PostgreSQL identifier")
+    if not settings.DATABASE_URL.scheme.startswith("postgresql"):
+        raise ValueError("DATABASE_SCHEMA is supported only for PostgreSQL")
+    return {"options": f"-csearch_path={schema}"}
+
 
 engine = create_engine(
     settings.DATABASE_URL.unicode_string(),
@@ -11,6 +26,7 @@ engine = create_engine(
     # Раньше это било реже — сессия была одна и жила долго; теперь их много и они короткие,
     # так что дешёвая проверка перед выдачей соединения из пула важнее.
     pool_pre_ping=True,
+    connect_args=database_connect_args(),
 )
 
 # Сессия на задачу, а не на поток. Бот асинхронный и живёт в одном потоке: с

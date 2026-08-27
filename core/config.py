@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     # In tests we don't want env requirements to block imports.
     TELEGRAM_BOT_TOKEN: str = "TEST_TOKEN" if _is_pytest_running() else ...
     DATABASE_URL: AnyUrl = "sqlite+pysqlite:///:memory:" if _is_pytest_running() else ...
+    # PR preview deployments use an isolated PostgreSQL schema. Empty keeps the
+    # database's default search_path (production and ordinary local tests).
+    DATABASE_SCHEMA: str = ""
 
     # Прокси для запросов к Telegram API. Пусто = напрямую.
     # Пример: socks5://127.0.0.1:1080

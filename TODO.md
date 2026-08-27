@@ -73,8 +73,9 @@
   [#270](https://github.com/mmbabaev/MetaTheGathering/issues/270): debug/prod deploy
   сериализуется в GitHub Actions и на сервере, временные архивы и env получают уникальные
   имена и удаляются даже после ошибки, а загрузка останавливается заранее при нехватке места.
-  Стратегия preview-БД, in-process Telegram transport tests и real-bot smoke остаются следующими
-  этапами — PR [#271](https://github.com/mmbabaev/MetaTheGathering/pull/271).
+  Каждый PR получает отдельную PostgreSQL schema и не наследует Alembic revision соседнего PR;
+  стабильный staging от `main`, in-process Telegram transport tests и real-bot smoke остаются
+  следующими этапами — PR [#271](https://github.com/mmbabaev/MetaTheGathering/pull/271).
 - Мета-полиция из [#254](https://github.com/mmbabaev/MetaTheGathering/issues/254): под
   `recordOpponents` любой пользователь может помочь заполнить оставшиеся пустые колоды;
   свой пропуск имеет приоритет, заполненные записи защищены от изменения, автор записи
