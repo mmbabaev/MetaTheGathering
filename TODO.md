@@ -76,7 +76,7 @@
 ### В review, но ещё не в `main`
 
 - Первая вертикаль in-process Telegram E2E из
-  [#270](https://github.com/mmbabaev/MetaTheGathering/issues/270): debug/prod deploy
+  [#270](https://github.com/mmbabaev/MetaTheGathering/issues/270): production wiring вынесен в
   `build_application()` без запуска polling, recording Bot API принимает синтетические
   `Update`, а отдельный blocking check проходит `/tournaments` → выбор турнира → карточка и
   проверяет единственного адресата. Остальные MVP-flow и настоящий post-deploy smoke остаются
