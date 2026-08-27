@@ -63,10 +63,19 @@ def cellar_notification_recipients(db: Session) -> list[int]:
     return _allowed_cellar_recipients(candidates)
 
 
-def cellar_immediate_notification_recipients() -> list[int]:
-    """Only the owner receives immediate booking and cancellation notifications."""
+def cellar_immediate_notification_recipients(db: Session) -> list[int]:
+    """Production cellar owners receive booking/cancellation DMs; debug stays owner-only."""
 
-    return _allowed_cellar_recipients([settings.OWNER_CHAT_ID])
+    recipients = cellar_notification_recipients(db)
+    if not recipients:
+        return []
+    preferences = dict(
+        db.execute(
+            select(models.User.tg_id, models.User.notify_cellar_reservations).where(models.User.tg_id.in_(recipients))
+        ).all()
+    )
+    # Missing legacy users keep the default-on behaviour until they open the bot.
+    return [tg_id for tg_id in recipients if preferences.get(tg_id, True)]
 
 
 def can_view_cellar_overview(tg_id: int, username: str | None) -> bool:

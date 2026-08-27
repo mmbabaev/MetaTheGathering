@@ -86,7 +86,8 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     SMTP_FROM: str = "MetaGatherer <noreply@example.com>"
 
-    # Production-координаторы, получающие часовую предтурнирную сводку и доступ к общему списку.
+    # Production-координаторы: мгновенные DM о бронях/отменах, часовая предтурнирная сводка
+    # и доступ к общему списку.
     # Можно задавать Telegram username (предпочтительно) и/или legacy ID. Владелец добавляется
     # кодом; debug игнорирует оба списка. Реальные значения хранятся только в env.
     CELLAR_COORDINATOR_USERNAMES: str = ""

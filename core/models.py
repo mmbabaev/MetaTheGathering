@@ -64,6 +64,7 @@ class User(Base):
     notify_poll = Column(
         Boolean, default=False, nullable=False, server_default="false"
     )  # опт-ин на уведомления о голосованиях
+    notify_cellar_reservations = Column(Boolean, default=True, nullable=False, server_default="true")
     status_by_pairings = Column(Boolean, default=False, nullable=False)  # статус турнира попарно по парингам
 
     created_at = Column(DateTime, default=utc_now, nullable=False)

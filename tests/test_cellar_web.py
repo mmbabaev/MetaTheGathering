@@ -37,7 +37,7 @@ async def test_web_reservation_announces_once_and_marks_delivery(db, user_svc, m
     assert "message=" in response.headers["location"]
     reservation = db.execute(select(models.CellarDeckReservation)).scalar_one()
     assert reservation.group_announced_at is not None
-    announce.assert_awaited_once_with(reservation)
+    announce.assert_awaited_once_with(db, reservation)
     assert "уже" in unquote(repeated.headers["location"])
 
 
@@ -81,7 +81,7 @@ async def test_web_cancel_releases_only_own_reservation_and_announces(db, user_s
     assert "error=" in denied.headers["location"]
     assert "message=" in response.headers["location"]
     assert reservation.cancelled_at is not None
-    announce.assert_awaited_once_with(reservation, cancelled=True)
+    announce.assert_awaited_once_with(db, reservation, cancelled=True)
 
 
 def test_cellar_page_renders_availability_and_reserver(db, user_svc):
@@ -136,7 +136,7 @@ def test_cellar_web_routes_are_gated_by_disabled_default(db):
 
 
 @pytest.mark.asyncio
-async def test_reservation_notification_targets_only_owner_in_production(db, user_svc, monkeypatch):
+async def test_reservation_notification_targets_cellar_owners_in_production(db, user_svc, monkeypatch):
     user = user_svc.get_or_create(tg_id=1001, username="alice", first_name="Alice")
     reservation = (
         CellarService(db)
@@ -148,19 +148,20 @@ async def test_reservation_notification_targets_only_owner_in_production(db, use
         )
         .reservation
     )
+    user_svc.get_or_create(tg_id=111, username="coordinator", first_name="Coordinator One")
+    user_svc.get_or_create(tg_id=222, username="other_coordinator", first_name="Coordinator Two")
     send = AsyncMock(return_value=True)
     monkeypatch.setattr("web.routes.cellar.send_tg_message", send)
     monkeypatch.setattr(settings, "DEBUG", False)
-    monkeypatch.setattr(settings, "CELLAR_COORDINATOR_TG_IDS", "111,222")
+    monkeypatch.setattr(settings, "CELLAR_COORDINATOR_TG_IDS", "")
     monkeypatch.setattr(settings, "CELLAR_COORDINATOR_USERNAMES", "coordinator,other_coordinator")
     monkeypatch.setattr(settings, "OWNER_CHAT_ID", 333)
     monkeypatch.setattr("core.config._app_cfg.notify_allowed_ids", None)
 
-    assert await _announce(reservation) is True
+    assert await _announce(db, reservation) is True
 
-    send.assert_awaited_once()
-    assert send.await_args.args[0] == 333
-    assert "@alice" in send.await_args.args[1]
+    assert [call.args[0] for call in send.await_args_list] == [111, 222, 333]
+    assert all("@alice" in call.args[1] for call in send.await_args_list)
 
 
 @pytest.mark.asyncio
@@ -184,7 +185,7 @@ async def test_reservation_notification_targets_only_owner_in_debug(db, user_svc
     monkeypatch.setattr(settings, "OWNER_CHAT_ID", 333)
     monkeypatch.setattr("core.config._app_cfg.notify_allowed_ids", [333])
 
-    assert await _announce(reservation) is True
+    assert await _announce(db, reservation) is True
 
     send.assert_awaited_once()
     assert send.await_args.args[0] == 333

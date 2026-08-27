@@ -39,10 +39,10 @@ def _redirect(event_date: date, *, message: str | None = None, error: str | None
     return RedirectResponse(f"/cellar?{'&'.join(params)}", status_code=303)
 
 
-async def _announce(reservation, *, cancelled: bool = False) -> bool:
+async def _announce(db: Session, reservation, *, cancelled: bool = False) -> bool:
     text = format_group_reservation(reservation, cancelled=cancelled)
     delivered = False
-    for recipient_tg_id in cellar_immediate_notification_recipients():
+    for recipient_tg_id in cellar_immediate_notification_recipients(db):
         try:
             delivered = await send_tg_message(recipient_tg_id, text) or delivered
         except Exception:  # noqa: BLE001 — one unavailable recipient must not break the booking
@@ -103,7 +103,7 @@ async def reserve_cellar_deck(
         return _redirect(event_date, error=str(exc))
     if not result.created:
         return _redirect(event_date, message="Эта колода уже забронирована вами.")
-    if await _announce(result.reservation):
+    if await _announce(db, result.reservation):
         service.mark_group_announced(result.reservation.id)
     return _redirect(event_date, message="Колода забронирована.")
 
@@ -120,5 +120,5 @@ async def cancel_cellar_reservation(
         reservation = service.cancel(reservation_id=reservation_id, user_id=user.id)
     except CellarReservationError as exc:
         return _redirect(event_date, error=str(exc))
-    await _announce(reservation, cancelled=True)
+    await _announce(db, reservation, cancelled=True)
     return _redirect(event_date, message="Бронь отменена.")
