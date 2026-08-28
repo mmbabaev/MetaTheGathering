@@ -6,6 +6,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Column,
+    Date,
     DateTime,
     Enum,
     ForeignKey,
@@ -63,6 +64,7 @@ class User(Base):
     notify_poll = Column(
         Boolean, default=False, nullable=False, server_default="false"
     )  # опт-ин на уведомления о голосованиях
+    notify_cellar_reservations = Column(Boolean, default=True, nullable=False, server_default="true")
     status_by_pairings = Column(Boolean, default=False, nullable=False)  # статус турнира попарно по парингам
 
     created_at = Column(DateTime, default=utc_now, nullable=False)
@@ -71,6 +73,7 @@ class User(Base):
     votes = relationship("Vote", back_populates="voter", cascade="all, delete-orphan")
     deck_history = relationship("UserDeckHistory", back_populates="user", cascade="all, delete-orphan")
     web_auth_tokens = relationship("WebAuthToken", back_populates="user", cascade="all, delete-orphan")
+    cellar_reservations = relationship("CellarDeckReservation", back_populates="user", cascade="all, delete-orphan")
 
 
 class WebLinkRequest(Base):
@@ -148,6 +151,7 @@ class Tournament(Base):
         uselist=False,
         cascade="all, delete-orphan",
     )
+    cellar_reservations = relationship("CellarDeckReservation", back_populates="tournament")
 
 
 class TournamentRegistrationMessage(Base):
@@ -236,6 +240,91 @@ class ArchetypeAlias(Base):
     archetype = relationship("Archetype", back_populates="aliases")
 
     __table_args__ = (UniqueConstraint("archetype_id", "alias", name="uq_archetype_alias"),)
+
+
+class CellarDeck(Base):
+    """One physical deck copy from the Edinorog lending cellar."""
+
+    __tablename__ = "cellar_decks"
+
+    id = Column(Integer, primary_key=True)
+    source_key = Column(String(128), nullable=False, unique=True, index=True)
+    name = Column(String(255), nullable=False)
+    archetype_name = Column(String(255), nullable=False)
+    decklist_url = Column(String(512), nullable=True)
+    notes = Column(String(512), nullable=True)
+    decklist_updated_on = Column(Date, nullable=True)
+    source_position = Column(Integer, nullable=True)
+    available = Column(Boolean, nullable=False, default=True, server_default="true")
+    active = Column(Boolean, nullable=False, default=True, server_default="true", index=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+    reservations = relationship("CellarDeckReservation", back_populates="deck", cascade="all, delete-orphan")
+
+    @property
+    def display_name(self) -> str:
+        return f"{self.name} · №{self.source_position}" if self.source_position is not None else self.name
+
+
+class CellarDeckReservation(Base):
+    """Exclusive reservation of one physical cellar deck for one event date."""
+
+    __tablename__ = "cellar_deck_reservations"
+
+    id = Column(Integer, primary_key=True)
+    deck_id = Column(Integer, ForeignKey("cellar_decks.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    tournament_id = Column(Integer, ForeignKey("tournaments.id", ondelete="SET NULL"), nullable=True, index=True)
+    participant_id = Column(Integer, ForeignKey("participants.id", ondelete="SET NULL"), nullable=True)
+    applied_archetype_id = Column(Integer, ForeignKey("archetypes.id", ondelete="SET NULL"), nullable=True)
+    previous_archetype_id = Column(Integer, ForeignKey("archetypes.id", ondelete="SET NULL"), nullable=True)
+    previous_deck_added_by_tg_id = Column(BigInteger, nullable=True)
+    previous_deck_deferred = Column(Boolean, nullable=True)
+    participant_created = Column(Boolean, nullable=False, default=False, server_default="false")
+    event_date = Column(Date, nullable=False, index=True)
+    group_announced_at = Column(DateTime, nullable=True)
+    cancelled_at = Column(DateTime, nullable=True, index=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+    deck = relationship("CellarDeck", back_populates="reservations")
+    user = relationship("User", back_populates="cellar_reservations")
+    tournament = relationship("Tournament", back_populates="cellar_reservations")
+
+    __table_args__ = (
+        Index(
+            "uq_active_cellar_deck_event",
+            "deck_id",
+            "event_date",
+            unique=True,
+            postgresql_where=cancelled_at.is_(None),
+            sqlite_where=cancelled_at.is_(None),
+        ),
+        Index(
+            "uq_active_cellar_user_event",
+            "user_id",
+            "event_date",
+            unique=True,
+            postgresql_where=cancelled_at.is_(None),
+            sqlite_where=cancelled_at.is_(None),
+        ),
+    )
+
+
+class CellarCoordinatorReminder(Base):
+    """Idempotency row for one coordinator summary delivery."""
+
+    __tablename__ = "cellar_coordinator_reminders"
+
+    id = Column(Integer, primary_key=True)
+    event_date = Column(Date, nullable=False, index=True)
+    recipient_tg_id = Column(BigInteger, nullable=False)
+    delivered_at = Column(DateTime, nullable=True)
+    attempts = Column(Integer, nullable=False, default=0)
+    last_error = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+    __table_args__ = (UniqueConstraint("event_date", "recipient_tg_id", name="uq_cellar_coordinator_event_recipient"),)
 
 
 class Participant(Base):

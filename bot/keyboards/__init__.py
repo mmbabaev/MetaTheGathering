@@ -1,6 +1,7 @@
 # Inline клавиатуры
 
 from dataclasses import dataclass
+from datetime import date
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -24,6 +25,7 @@ CB_SETTINGS_TOGGLE_EMOJI = "settings_toggle_emoji"
 CB_SETTINGS_TOGGLE_OPPONENT_NOTIFY = "settings_toggle_opp_notify"
 CB_SETTINGS_TOGGLE_ACHIEVEMENTS_NOTIFY = "settings_toggle_achievements_notify"
 CB_SETTINGS_TOGGLE_POLL_NOTIFY = "settings_toggle_poll_notify"
+CB_SETTINGS_TOGGLE_CELLAR_NOTIFY = "settings_toggle_cellar_notify"
 CB_SETTINGS_TOGGLE_STATUS_PAIRINGS = "settings_toggle_status_pairings"
 CB_TSTATUS = "tstatus"
 CB_LEAVE = "leave"
@@ -89,6 +91,15 @@ CB_ADMIN_IMPORT_META = "adm_meta"  # adm_meta:{tournament_id}
 CB_DEBUG_ROUND_NOTIFY = "dbg_rnotify"  # dbg_rnotify:{tournament_id} — debug: DM all round notifications to presser
 CB_APP_STATS_HOME = "appstat_home"  # appstat_home — меню статистики приложения (владелец)
 CB_APP_STATS_NOTIFY_ROUNDS = "appstat_nr"  # appstat_nr — список включивших уведомления о раундах
+CB_CELLAR_DATES = "cellar_dates"
+CB_CELLAR_DATE = "cellar_date"  # cellar_date:{YYYY-MM-DD}:{page}
+CB_CELLAR_DECK = "cellar_deck"  # cellar_deck:{YYYY-MM-DD}:{deck_id}:{page}
+CB_CELLAR_RESERVE = "cellar_reserve"  # cellar_reserve:{YYYY-MM-DD}:{deck_id}:{page}
+CB_CELLAR_CANCEL = "cellar_cancel"  # cellar_cancel:{reservation_id}:{page}
+CB_CELLAR_CANCEL_CONFIRM = "cellar_cancel_yes"  # cellar_cancel_yes:{reservation_id}:{page}
+CB_CELLAR_NOOP = "cellar_noop"
+
+CELLAR_PAGE_SIZE = 10
 
 
 def features_keyboard(flags: list) -> InlineKeyboardMarkup:
@@ -103,6 +114,124 @@ def features_keyboard(flags: list) -> InlineKeyboardMarkup:
             ]
         )
     return InlineKeyboardMarkup(buttons)
+
+
+def cellar_dates_keyboard(dates: list[date], web_url: str) -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton(event_date.strftime("%d.%m.%Y"), callback_data=f"{CB_CELLAR_DATE}:{event_date}:0")]
+        for event_date in dates
+    ]
+    rows.append([InlineKeyboardButton("🌐 Открыть web-версию", url=web_url)])
+    return InlineKeyboardMarkup(rows)
+
+
+def _cellar_reservation_for(deck, event_date: date):
+    return next(
+        (
+            reservation
+            for reservation in deck.reservations
+            if reservation.event_date == event_date and reservation.cancelled_at is None
+        ),
+        None,
+    )
+
+
+def cellar_catalog_keyboard(
+    decks: list,
+    *,
+    event_date: date,
+    user_id: int,
+    page: int,
+) -> InlineKeyboardMarkup:
+    page_count = max(1, (len(decks) + CELLAR_PAGE_SIZE - 1) // CELLAR_PAGE_SIZE)
+    page = min(max(page, 0), page_count - 1)
+    visible = decks[page * CELLAR_PAGE_SIZE : (page + 1) * CELLAR_PAGE_SIZE]
+    rows = []
+    for deck in visible:
+        reservation = _cellar_reservation_for(deck, event_date)
+        if not deck.available:
+            prefix = "🚫 "
+        elif reservation is None:
+            prefix = "▫️ "
+        elif reservation.user_id == user_id:
+            prefix = "✅ "
+        else:
+            prefix = "🔒 "
+        label = prefix + deck.display_name
+        if len(label) > 56:
+            label = label[:55] + "…"
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    label,
+                    callback_data=f"{CB_CELLAR_DECK}:{event_date}:{deck.id}:{page}",
+                )
+            ]
+        )
+
+    if page_count > 1:
+        navigation = []
+        if page > 0:
+            navigation.append(InlineKeyboardButton("⬅️", callback_data=f"{CB_CELLAR_DATE}:{event_date}:{page - 1}"))
+        navigation.append(InlineKeyboardButton(f"{page + 1}/{page_count}", callback_data=CB_CELLAR_NOOP))
+        if page + 1 < page_count:
+            navigation.append(InlineKeyboardButton("➡️", callback_data=f"{CB_CELLAR_DATE}:{event_date}:{page + 1}"))
+        rows.append(navigation)
+    rows.append([InlineKeyboardButton("⬅️ К датам", callback_data=CB_CELLAR_DATES)])
+    return InlineKeyboardMarkup(rows)
+
+
+def cellar_deck_keyboard(
+    *,
+    deck_id: int,
+    event_date: date,
+    page: int,
+    decklist_url: str | None,
+    can_reserve: bool,
+    own_reservation_id: int | None,
+) -> InlineKeyboardMarkup:
+    rows = []
+    if decklist_url:
+        rows.append([InlineKeyboardButton("📄 Деклист и сайдборд", url=decklist_url)])
+    if can_reserve:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    "✅ Забронировать",
+                    callback_data=f"{CB_CELLAR_RESERVE}:{event_date}:{deck_id}:{page}",
+                )
+            ]
+        )
+    if own_reservation_id is not None:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    "❌ Отменить бронь",
+                    callback_data=f"{CB_CELLAR_CANCEL}:{own_reservation_id}:{page}",
+                )
+            ]
+        )
+    rows.append([InlineKeyboardButton("⬅️ К списку", callback_data=f"{CB_CELLAR_DATE}:{event_date}:{page}")])
+    return InlineKeyboardMarkup(rows)
+
+
+def cellar_cancel_keyboard(reservation_id: int, event_date: date, deck_id: int, page: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "Да, отменить",
+                    callback_data=f"{CB_CELLAR_CANCEL_CONFIRM}:{reservation_id}:{page}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "⬅️ Не отменять",
+                    callback_data=f"{CB_CELLAR_DECK}:{event_date}:{deck_id}:{page}",
+                )
+            ],
+        ]
+    )
 
 
 @dataclass(frozen=True)
@@ -525,6 +654,7 @@ class Keyboards:
         notify_opponent_rounds: bool = False,
         notify_achievements: bool = False,
         notify_poll: bool = False,
+        notify_cellar_reservations: bool | None = None,
         status_by_pairings: bool = False,
     ) -> InlineKeyboardMarkup:
         emoji_label = "🚫 Эмоджи колод: выкл" if hide_deck_emoji else "🎨 Эмоджи колод: вкл"
@@ -542,8 +672,13 @@ class Keyboards:
             [InlineKeyboardButton(notify_label, callback_data=CB_SETTINGS_TOGGLE_OPPONENT_NOTIFY)],
             [InlineKeyboardButton(achievements_label, callback_data=CB_SETTINGS_TOGGLE_ACHIEVEMENTS_NOTIFY)],
             [InlineKeyboardButton(poll_label, callback_data=CB_SETTINGS_TOGGLE_POLL_NOTIFY)],
-            [InlineKeyboardButton(pairings_label, callback_data=CB_SETTINGS_TOGGLE_STATUS_PAIRINGS)],
         ]
+        if notify_cellar_reservations is not None:
+            cellar_label = (
+                "🔔 Уведомления о ячейках: вкл" if notify_cellar_reservations else "🔕 Уведомления о ячейках: выкл"
+            )
+            rows.append([InlineKeyboardButton(cellar_label, callback_data=CB_SETTINGS_TOGGLE_CELLAR_NOTIFY)])
+        rows.append([InlineKeyboardButton(pairings_label, callback_data=CB_SETTINGS_TOGGLE_STATUS_PAIRINGS)])
         return InlineKeyboardMarkup(rows)
 
     def admin_participants_keyboard(
@@ -866,6 +1001,7 @@ def settings_keyboard(
     notify_opponent_rounds: bool = False,
     notify_achievements: bool = False,
     notify_poll: bool = False,
+    notify_cellar_reservations: bool | None = None,
     status_by_pairings: bool = False,
 ) -> InlineKeyboardMarkup:
     return _default.settings_keyboard(
@@ -874,6 +1010,7 @@ def settings_keyboard(
         notify_opponent_rounds=notify_opponent_rounds,
         notify_achievements=notify_achievements,
         notify_poll=notify_poll,
+        notify_cellar_reservations=notify_cellar_reservations,
         status_by_pairings=status_by_pairings,
     )
 

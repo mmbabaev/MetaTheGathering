@@ -50,6 +50,9 @@ class TestFeatureFlagService:
     def test_live_registration_count_is_disabled_by_default(self, ff_svc):
         assert ff_svc.is_enabled(FeatureFlags.LIVE_REGISTRATION_COUNT) is False
 
+    def test_cellar_decks_is_disabled_by_default(self, ff_svc):
+        assert ff_svc.is_enabled(FeatureFlags.CELLAR_DECKS) is False
+
     def test_owner_board_lab_is_enabled_by_default(self, ff_svc):
         assert ff_svc.is_enabled(FeatureFlags.ACHIEVEMENT_BOARD_LAB) is True
 

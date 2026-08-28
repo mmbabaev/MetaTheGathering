@@ -456,6 +456,15 @@ class UserService:
         user = self.get_by_tg_id(tg_id)
         return bool(user and user.notify_poll)
 
+    def toggle_notify_cellar_reservations(self, tg_id: int) -> bool:
+        """Toggle immediate cellar booking/cancellation DMs (enabled by default)."""
+        user = self.get_by_tg_id(tg_id)
+        if not user:
+            return False
+        user.notify_cellar_reservations = not user.notify_cellar_reservations
+        self.db.commit()
+        return user.notify_cellar_reservations
+
     def toggle_status_by_pairings(self, tg_id: int) -> bool:
         """Инвертирует status_by_pairings. Возвращает новое значение флага."""
         user = self.get_by_tg_id(tg_id)

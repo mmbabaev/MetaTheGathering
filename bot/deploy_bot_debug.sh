@@ -4,7 +4,8 @@
 #   bash deploy_bot_debug.sh           → DEBUG deploy
 #   bash deploy_bot_debug.sh --release → PROD deploy
 
-set -e
+set -Eeuo pipefail
+umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
@@ -19,7 +20,7 @@ SERVER_USER="mbabaev"
 SERVER_IP="158.160.9.28"
 
 MODE="debug"
-if [ "$1" = "--release" ]; then
+if [ "${1:-}" = "--release" ]; then
     MODE="release"
 fi
 
@@ -40,9 +41,38 @@ fi
 # ── Validate ──────────────────────────────────────────────────────────────────
 [ ! -f "$ENV_FILE" ] && error "Файл $ENV_FILE не найден"
 [ ! -f "${SSH_KEY/#\~/$HOME}" ] && error "SSH-ключ $SSH_KEY не найден"
+if [ "$MODE" = "debug" ] && ! [[ "${PREVIEW_ID:-}" =~ ^[0-9]+$ ]]; then
+    error "Для debug deploy задайте числовой PREVIEW_ID (номер PR)"
+fi
 
 # ── Archive ───────────────────────────────────────────────────────────────────
-ARCHIVE="/tmp/meta-the-gathering-deploy-$(date +%Y%m%d%H%M%S).tar.gz"
+DEPLOY_ID="$(python3 -c 'import uuid; print(uuid.uuid4().hex)')"
+ARCHIVE_NAME="meta-the-gathering-deploy-${DEPLOY_ID}.tar.gz"
+ARCHIVE="/tmp/$ARCHIVE_NAME"
+REMOTE_ARCHIVE="/tmp/$ARCHIVE_NAME"
+REMOTE_ENV="/tmp/.env.deploy-$DEPLOY_ID"
+REMOTE_LOCK="/tmp/meta-the-gathering-${MODE}-deploy.lock"
+SSH_TARGET="${SERVER_USER}@${SERVER_IP}"
+ENV_UPLOAD="$ENV_FILE"
+
+cleanup() {
+    rm -f -- "$ARCHIVE"
+    if [ "$ENV_UPLOAD" != "$ENV_FILE" ]; then
+        rm -f -- "$ENV_UPLOAD"
+    fi
+    ssh -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no "$SSH_TARGET" \
+        "rm -f -- '$REMOTE_ARCHIVE' '$REMOTE_ENV'" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+if [ "$MODE" = "debug" ]; then
+    DATABASE_SCHEMA="metagatherer_pr_${PREVIEW_ID}"
+    ENV_UPLOAD="/tmp/.env.preview-${DEPLOY_ID}"
+    awk '!/^(export[[:space:]]+)?DATABASE_SCHEMA=/' "$ENV_FILE" > "$ENV_UPLOAD"
+    printf '\nDATABASE_SCHEMA=%s\n' "$DATABASE_SCHEMA" >> "$ENV_UPLOAD"
+    chmod 600 "$ENV_UPLOAD"
+fi
+
 info "Создаём архив: $ARCHIVE"
 
 COPYFILE_DISABLE=1 tar -czf "$ARCHIVE" \
@@ -60,16 +90,27 @@ COPYFILE_DISABLE=1 tar -czf "$ARCHIVE" \
 
 info "Архив создан: $(du -sh $ARCHIVE | cut -f1)"
 
+ARCHIVE_BYTES=$(wc -c < "$ARCHIVE" | tr -d ' ')
+MIN_FREE_BYTES=$((200 * 1024 * 1024))
+REQUIRED_BYTES=$((ARCHIVE_BYTES + MIN_FREE_BYTES))
+REMOTE_FREE_BYTES=$(ssh -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no "$SSH_TARGET" \
+    "df -Pk /tmp | awk 'NR == 2 {print \$4 * 1024}'")
+if ! [[ "$REMOTE_FREE_BYTES" =~ ^[0-9]+$ ]]; then
+    error "Не удалось определить свободное место в /tmp на сервере"
+fi
+if [ "$REMOTE_FREE_BYTES" -lt "$REQUIRED_BYTES" ]; then
+    error "Недостаточно места в /tmp: доступно $((REMOTE_FREE_BYTES / 1024 / 1024)) MiB, нужно не менее $((REQUIRED_BYTES / 1024 / 1024)) MiB"
+fi
+
 # ── Copy to server ────────────────────────────────────────────────────────────
 info "Копируем на сервер..."
 scp -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no \
-    "$ARCHIVE" "${SERVER_USER}@${SERVER_IP}:/tmp/"
+    "$ARCHIVE" "$SSH_TARGET:$REMOTE_ARCHIVE"
 scp -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no \
-    "$ENV_FILE" "${SERVER_USER}@${SERVER_IP}:/tmp/.env.deploy"
+    "$ENV_UPLOAD" "$SSH_TARGET:$REMOTE_ENV"
 
 # ── Remote install ────────────────────────────────────────────────────────────
 info "Устанавливаем на сервере..."
-ARCHIVE_NAME="$(basename "$ARCHIVE")"
 
 if [ "$MODE" = "release" ]; then
     ENV_DEST="$REMOTE_DIR/bot/.env"
@@ -84,18 +125,30 @@ else
     OTEL_SERVICE_NAME="otel-collector-debug"
 fi
 
-ssh -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no "${SERVER_USER}@${SERVER_IP}" \
+ssh -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no "$SSH_TARGET" \
     ARCHIVE_NAME="$ARCHIVE_NAME" REMOTE_DIR="$REMOTE_DIR" SERVICE_NAME="$SERVICE_NAME" \
-    ENV_DEST="$ENV_DEST" BOT_ENV="$BOT_ENV" SYSTEMD_SERVICE_FILE="$SYSTEMD_SERVICE_FILE" \
+    REMOTE_ENV="$REMOTE_ENV" ENV_DEST="$ENV_DEST" BOT_ENV="$BOT_ENV" \
+    SYSTEMD_SERVICE_FILE="$SYSTEMD_SERVICE_FILE" \
     SYSTEMD_WEB_SERVICE_FILE="${SYSTEMD_WEB_SERVICE_FILE:-}" \
     OTEL_SERVICE_FILE="$OTEL_SERVICE_FILE" OTEL_SERVICE_NAME="$OTEL_SERVICE_NAME" \
-    'bash -s' <<'REMOTE'
-set -e
+    "flock -w 900 '$REMOTE_LOCK' bash -s" <<'REMOTE'
+set -Eeuo pipefail
+
+cleanup_remote() {
+    rm -f -- "/tmp/$ARCHIVE_NAME" "$REMOTE_ENV"
+}
+trap cleanup_remote EXIT
 
 echo "→ Разворачиваем в $REMOTE_DIR"
 mkdir -p "$REMOTE_DIR"
+# Debug переиспользует один каталог для разных PR. Удалённые в новой ветке файлы иначе
+# остаются на сервере; для Alembic это создаёт ложные дополнительные heads от прошлого PR.
+if [ "$BOT_ENV" = "debug" ]; then
+    rm -rf "$REMOTE_DIR/alembic/versions"
+fi
 tar -xzf "/tmp/$ARCHIVE_NAME" -C "$REMOTE_DIR" --warning=no-unknown-keyword
-mv /tmp/.env.deploy "$ENV_DEST"
+mv "$REMOTE_ENV" "$ENV_DEST"
+chmod 600 "$ENV_DEST"
 
 echo "→ Создаём venv..."
 cd "$REMOTE_DIR"
@@ -148,7 +201,6 @@ if [ -n "$SYSTEMD_WEB_SERVICE_FILE" ]; then
     sudo systemctl restart "$WEB_SERVICE_NAME"
 fi
 
-rm -f "/tmp/$ARCHIVE_NAME"
 echo "→ Сервис $SERVICE_NAME запущен"
 REMOTE
 
@@ -161,7 +213,6 @@ info "Последние логи:"
 ssh -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no "${SERVER_USER}@${SERVER_IP}" \
     "sudo journalctl -u $SERVICE_NAME -n 20 --no-pager"
 
-rm -f "$ARCHIVE"
 info "Deploy завершён!"
 
 echo ""

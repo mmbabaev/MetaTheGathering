@@ -1,7 +1,7 @@
 """track editable meta-police message
 
 Revision ID: a6fbdbee0220
-Revises: 3c1587c33ad2
+Revises: 5132b26f0434
 Create Date: 2026-08-22
 """
 
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "a6fbdbee0220"
-down_revision: Union[str, Sequence[str], None] = "3c1587c33ad2"
+down_revision: Union[str, Sequence[str], None] = "5132b26f0434"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

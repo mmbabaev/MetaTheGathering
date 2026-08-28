@@ -13,6 +13,9 @@ jobs:
   deploy:
     name: Deploy Web PROD
     runs-on: ubuntu-latest
+    concurrency:
+      group: metagatherer-production-deploy
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
 

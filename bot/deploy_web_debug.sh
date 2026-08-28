@@ -4,7 +4,8 @@
 #   bash deploy_web_debug.sh           → DEBUG deploy (port 8081)
 #   bash deploy_web_debug.sh --release → PROD deploy  (port 8080)
 
-set -e
+set -Eeuo pipefail
+umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
@@ -18,7 +19,7 @@ SERVER_USER="mbabaev"
 SERVER_IP="158.160.9.28"
 
 MODE="debug"
-if [ "$1" = "--release" ]; then
+if [ "${1:-}" = "--release" ]; then
     MODE="release"
 fi
 
@@ -33,8 +34,28 @@ else
 fi
 
 [ ! -f "${SSH_KEY/#\~/$HOME}" ] && error "SSH-ключ $SSH_KEY не найден"
+if [ "$MODE" = "debug" ] && ! [[ "${PREVIEW_ID:-}" =~ ^[0-9]+$ ]]; then
+    error "Для debug deploy задайте числовой PREVIEW_ID (номер PR)"
+fi
 
-ARCHIVE="/tmp/meta-web-deploy-$(date +%Y%m%d%H%M%S).tar.gz"
+DEPLOY_ID="$(python3 -c 'import uuid; print(uuid.uuid4().hex)')"
+ARCHIVE_NAME="meta-web-deploy-${DEPLOY_ID}.tar.gz"
+ARCHIVE="/tmp/$ARCHIVE_NAME"
+REMOTE_ARCHIVE="/tmp/$ARCHIVE_NAME"
+REMOTE_LOCK="/tmp/meta-the-gathering-${MODE}-deploy.lock"
+SSH_TARGET="${SERVER_USER}@${SERVER_IP}"
+EXPECTED_DATABASE_SCHEMA=""
+if [ "$MODE" = "debug" ]; then
+    EXPECTED_DATABASE_SCHEMA="metagatherer_pr_${PREVIEW_ID}"
+fi
+
+cleanup() {
+    rm -f -- "$ARCHIVE"
+    ssh -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no "$SSH_TARGET" \
+        "rm -f -- '$REMOTE_ARCHIVE'" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
 info "Создаём архив: $ARCHIVE"
 
 COPYFILE_DISABLE=1 tar -czf "$ARCHIVE" \
@@ -58,21 +79,46 @@ COPYFILE_DISABLE=1 tar -czf "$ARCHIVE" \
 
 info "Архив создан: $(du -sh $ARCHIVE | cut -f1)"
 
-ARCHIVE_NAME="$(basename "$ARCHIVE")"
+ARCHIVE_BYTES=$(wc -c < "$ARCHIVE" | tr -d ' ')
+MIN_FREE_BYTES=$((200 * 1024 * 1024))
+REQUIRED_BYTES=$((ARCHIVE_BYTES + MIN_FREE_BYTES))
+REMOTE_FREE_BYTES=$(ssh -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no "$SSH_TARGET" \
+    "df -Pk /tmp | awk 'NR == 2 {print \$4 * 1024}'")
+if ! [[ "$REMOTE_FREE_BYTES" =~ ^[0-9]+$ ]]; then
+    error "Не удалось определить свободное место в /tmp на сервере"
+fi
+if [ "$REMOTE_FREE_BYTES" -lt "$REQUIRED_BYTES" ]; then
+    error "Недостаточно места в /tmp: доступно $((REMOTE_FREE_BYTES / 1024 / 1024)) MiB, нужно не менее $((REQUIRED_BYTES / 1024 / 1024)) MiB"
+fi
+
 SYSTEMD_SERVICE_FILE="$REMOTE_DIR/bot/systemd/$SERVICE_NAME.service"
 
 info "Копируем на сервер..."
 scp -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no \
-    "$ARCHIVE" "${SERVER_USER}@${SERVER_IP}:/tmp/"
+    "$ARCHIVE" "$SSH_TARGET:$REMOTE_ARCHIVE"
 
-ssh -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no "${SERVER_USER}@${SERVER_IP}" \
+ssh -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no "$SSH_TARGET" \
     ARCHIVE_NAME="$ARCHIVE_NAME" REMOTE_DIR="$REMOTE_DIR" SERVICE_NAME="$SERVICE_NAME" \
     SYSTEMD_SERVICE_FILE="$SYSTEMD_SERVICE_FILE" \
-    'bash -s' <<'REMOTE'
-set -e
+    EXPECTED_DATABASE_SCHEMA="$EXPECTED_DATABASE_SCHEMA" \
+    "flock -w 900 '$REMOTE_LOCK' bash -s" <<'REMOTE'
+set -Eeuo pipefail
+
+cleanup_remote() {
+    rm -f -- "/tmp/$ARCHIVE_NAME"
+}
+trap cleanup_remote EXIT
 
 echo "→ Разворачиваем в $REMOTE_DIR"
 mkdir -p "$REMOTE_DIR"
+ENV_DEST="$REMOTE_DIR/bot/.env"
+if [ -n "$EXPECTED_DATABASE_SCHEMA" ]; then
+    ENV_DEST="$REMOTE_DIR/bot/.env.debug"
+    if ! grep -qx "DATABASE_SCHEMA=$EXPECTED_DATABASE_SCHEMA" "$ENV_DEST"; then
+        echo "ERROR: debug env принадлежит другому PR preview — web deploy остановлен"
+        exit 1
+    fi
+fi
 tar -xzf "/tmp/$ARCHIVE_NAME" -C "$REMOTE_DIR" --warning=no-unknown-keyword --exclude='.env' --exclude='bot/.env' --exclude='bot/.env.*'
 
 echo "→ Устанавливаем зависимости..."
@@ -93,7 +139,6 @@ sudo systemctl daemon-reload
 sudo systemctl enable "$SERVICE_NAME"
 sudo systemctl restart "$SERVICE_NAME"
 
-rm -f "/tmp/$ARCHIVE_NAME"
 echo "→ Сервис $SERVICE_NAME запущен"
 REMOTE
 
@@ -101,5 +146,4 @@ info "Статус сервиса:"
 ssh -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no "${SERVER_USER}@${SERVER_IP}" \
     "sudo systemctl status $SERVICE_NAME --no-pager -l | head -20"
 
-rm -f "$ARCHIVE"
 info "Web deploy завершён!"

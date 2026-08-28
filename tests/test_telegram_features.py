@@ -60,3 +60,18 @@ async def test_toggle_off_immediately_removes_counter_from_current_message(db, u
 
     bot.edit_message_text.assert_awaited_once()
     assert bot.edit_message_text.call_args.kwargs["text"] == "Регистрация"
+
+
+async def test_toggle_on_cellar_immediately_syncs_sheet_catalog(db, user_svc):
+    admin = _admin(db, user_svc)
+    query = AsyncMock(data=f"feature_toggle:{FeatureFlags.CELLAR_DECKS}")
+    sync = AsyncMock(return_value=(38, 0, 0))
+
+    with (
+        patch("bot.telegram.features.SessionLocal", return_value=db),
+        patch("bot.telegram.features.CellarCatalogSyncJob") as job_class,
+    ):
+        job_class.return_value.run = sync
+        await callback_feature_toggle(_update(admin, query), SimpleNamespace(bot=AsyncMock()))
+
+    sync.assert_awaited_once_with(db=db)

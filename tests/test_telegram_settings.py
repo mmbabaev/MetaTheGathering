@@ -15,6 +15,7 @@ from bot.handlers.base import HandlerResult
 from bot.telegram.settings import (
     USER_DATA_PENDING_SETTINGS_NAME,
     callback_settings_name,
+    callback_toggle_cellar_notify,
     callback_toggle_emoji,
     callback_toggle_opponent_notify,
     cmd_settings,
@@ -182,3 +183,23 @@ async def test_callback_toggle_opponent_notify_no_query_does_nothing():
         await callback_toggle_opponent_notify(update, _make_context())
 
     mock_sl.assert_not_called()
+
+
+async def test_callback_toggle_cellar_notify_edits_message_and_closes_db():
+    kb = MagicMock()
+    result = HandlerResult("⚙️ Настройки", keyboard=kb)
+    update = _make_callback_update()
+
+    with (
+        patch("bot.telegram.settings.SessionLocal") as mock_sl,
+        patch("bot.telegram.settings.SettingsHandler") as mock_sh,
+    ):
+        mock_db = MagicMock()
+        mock_sl.return_value = mock_db
+        mock_sh.return_value.handle_toggle_cellar_notify.return_value = result
+        await callback_toggle_cellar_notify(update, _make_context())
+
+    mock_sh.return_value.handle_toggle_cellar_notify.assert_called_once_with(update.effective_user.id)
+    update.callback_query.edit_message_text.assert_awaited_once_with("⚙️ Настройки", reply_markup=kb)
+    update.callback_query.answer.assert_awaited_once()
+    mock_db.close.assert_called_once()

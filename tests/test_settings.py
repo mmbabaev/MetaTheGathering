@@ -5,6 +5,7 @@ import pytest
 from bot.handlers.settings import SettingsHandler
 from bot.keyboards import Keyboards
 from bot.messages import NAME_SAVED, SETTINGS_MENU
+from core.config import settings
 
 
 @pytest.fixture
@@ -77,6 +78,40 @@ class TestHandleSettings:
     def test_returns_keyboard(self, handler):
         result = handler.handle_settings(tg_id=8004)
         assert result.keyboard is not None
+
+    def test_cellar_notification_toggle_is_hidden_from_regular_users(self, handler, user_svc, monkeypatch):
+        user_svc.get_or_create(tg_id=8005, username="regular", first_name="Regular")
+        monkeypatch.setattr(settings, "DEBUG", False)
+        monkeypatch.setattr(settings, "CELLAR_COORDINATOR_TG_IDS", "")
+        monkeypatch.setattr(settings, "CELLAR_COORDINATOR_USERNAMES", "coord_one,coord_two")
+        monkeypatch.setattr(settings, "OWNER_CHAT_ID", 8999)
+
+        result = handler.handle_settings(tg_id=8005)
+        labels = [button.text for row in result.keyboard.inline_keyboard for button in row]
+
+        assert all("Уведомления о ячейках" not in label for label in labels)
+
+    def test_cellar_notification_toggle_is_default_on_for_owner(self, handler, user_svc, monkeypatch):
+        user_svc.get_or_create(tg_id=8999, username="owner", first_name="Owner")
+        monkeypatch.setattr(settings, "DEBUG", True)
+        monkeypatch.setattr(settings, "OWNER_CHAT_ID", 8999)
+
+        result = handler.handle_settings(tg_id=8999)
+        labels = [button.text for row in result.keyboard.inline_keyboard for button in row]
+
+        assert "🔔 Уведомления о ячейках: вкл" in labels
+
+    def test_cellar_notification_toggle_is_visible_to_production_coordinator(self, handler, user_svc, monkeypatch):
+        user_svc.get_or_create(tg_id=8006, username="coord_one", first_name="Coordinator")
+        monkeypatch.setattr(settings, "DEBUG", False)
+        monkeypatch.setattr(settings, "CELLAR_COORDINATOR_TG_IDS", "")
+        monkeypatch.setattr(settings, "CELLAR_COORDINATOR_USERNAMES", "coord_one,coord_two")
+        monkeypatch.setattr(settings, "OWNER_CHAT_ID", 8999)
+
+        result = handler.handle_settings(tg_id=8006)
+        labels = [button.text for row in result.keyboard.inline_keyboard for button in row]
+
+        assert "🔔 Уведомления о ячейках: вкл" in labels
 
 
 # --- handle_settings_name_text ---
@@ -273,6 +308,37 @@ class TestToggleNotifyPoll:
     def test_toggle_unknown_user_returns_false(self, user_svc):
         assert user_svc.toggle_notify_poll(99999) is False
         assert user_svc.wants_poll_notifications(99999) is False
+
+
+class TestToggleCellarNotifications:
+    def test_default_is_true_and_toggle_disables(self, user_svc):
+        user_svc.get_or_create(tg_id=9350, username="owner", first_name="Owner")
+
+        assert user_svc.get_by_tg_id(9350).notify_cellar_reservations is True
+        assert user_svc.toggle_notify_cellar_reservations(9350) is False
+        assert user_svc.get_by_tg_id(9350).notify_cellar_reservations is False
+
+    def test_handler_toggles_for_owner(self, handler, user_svc, monkeypatch):
+        user_svc.get_or_create(tg_id=9351, username="owner", first_name="Owner")
+        monkeypatch.setattr(settings, "DEBUG", True)
+        monkeypatch.setattr(settings, "OWNER_CHAT_ID", 9351)
+
+        result = handler.handle_toggle_cellar_notify(9351)
+        labels = [button.text for row in result.keyboard.inline_keyboard for button in row]
+
+        assert user_svc.get_by_tg_id(9351).notify_cellar_reservations is False
+        assert "🔕 Уведомления о ячейках: выкл" in labels
+
+    def test_handler_does_not_toggle_for_regular_user(self, handler, user_svc, monkeypatch):
+        user_svc.get_or_create(tg_id=9352, username="regular", first_name="Regular")
+        monkeypatch.setattr(settings, "DEBUG", False)
+        monkeypatch.setattr(settings, "CELLAR_COORDINATOR_TG_IDS", "")
+        monkeypatch.setattr(settings, "CELLAR_COORDINATOR_USERNAMES", "coord_one,coord_two")
+        monkeypatch.setattr(settings, "OWNER_CHAT_ID", 9351)
+
+        handler.handle_toggle_cellar_notify(9352)
+
+        assert user_svc.get_by_tg_id(9352).notify_cellar_reservations is True
 
 
 class TestHandleTogglePollNotify:

@@ -86,10 +86,76 @@ BINGO_PREVIEW_USAGE = (
 BINGO_PREVIEW_DISABLED = "Bingo preview отключён feature flag achievementBoardLab."
 BINGO_PREVIEW_FAILED = "Не удалось собрать поле с выбранными параметрами."
 
+# Cellar deck reservations
+CELLAR_UNAVAILABLE = "Колоды из ячейки пока недоступны."
+CELLAR_DATES = (
+    "🗄 Колоды из ячейки\n\nВыберите дату турнира в Единороге. Бронь автоматически попадёт в запись на турнир."
+)
+CELLAR_USER_NOT_FOUND = "Сначала откройте /cellar ещё раз."
+CELLAR_CANCELLED = "Бронь отменена."
+CELLAR_RESERVED = "Колода забронирована."
+
+
+def format_cellar_catalog(event_date, decks: list, user_id: int) -> str:
+    free = 0
+    own = None
+    for deck in decks:
+        reservation = next(
+            (row for row in deck.reservations if row.event_date == event_date and row.cancelled_at is None),
+            None,
+        )
+        if deck.available and reservation is None:
+            free += 1
+        if reservation is not None and reservation.user_id == user_id:
+            own = deck.display_name
+    lines = [
+        f"🗄 Колоды из ячейки на {event_date.strftime('%d.%m.%Y')}",
+        "",
+        f"Свободно: {free} из {len(decks)}.",
+        "▫️ свободна · 🔒 занята · 🚫 недоступна",
+    ]
+    if own:
+        lines.extend(["", f"Ваша бронь: ✅ {own}"])
+    lines.extend(["", "Выберите физическую колоду. Номер № — её строка в таблице."])
+    return "\n".join(lines)
+
+
+def format_cellar_deck(deck, reservation, user_id: int, user_has_other_reservation: bool) -> str:
+    lines = [f"🗄 {deck.display_name}", "", f"Архетип: {deck.archetype_name}"]
+    if deck.notes:
+        lines.append(f"Примечание: {deck.notes}")
+    if deck.decklist_updated_on:
+        lines.append(f"Деклист актуален на {deck.decklist_updated_on.strftime('%d.%m.%Y')}")
+    lines.append("")
+    if not deck.available:
+        lines.append("Статус: 🚫 недоступна")
+    elif reservation is None:
+        lines.append("Статус: ▫️ свободна")
+        if user_has_other_reservation:
+            lines.append("На эту дату у вас уже забронирована другая колода.")
+    elif reservation.user_id == user_id:
+        lines.append("Статус: ✅ забронирована вами")
+    else:
+        user = reservation.user
+        name = (
+            user.display_name
+            or " ".join(part for part in (user.first_name, user.last_name) if part)
+            or f"id{user.tg_id}"
+        )
+        lines.append(f"Статус: 🔒 забронировал(а) {name}")
+    return "\n".join(lines)
+
+
+def format_cellar_cancel_prompt(reservation) -> str:
+    return f"Отменить бронь?\n\n{reservation.deck.display_name} — {reservation.event_date.strftime('%d.%m.%Y')}"
+
+
 HELP_TEXT = """\
 /tournaments — посмотреть активные турниры и записаться
   Выберите турнир → укажите колоду → готово.
   Можно изменить колоду в любой момент, пока идёт регистрация.
+
+/cellar — выбрать и забронировать колоду из ячейки
 
 /settings — сохранить имя и фамилию для автоматической записи\
 """
