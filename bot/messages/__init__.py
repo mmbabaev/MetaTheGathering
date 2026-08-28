@@ -1,5 +1,7 @@
 # Шаблоны сообщений
 
+from html import escape
+
 # Форматирование ФИО живёт в services/names.py, чтобы одинаково работало и в картинках
 # (services-слой). Здесь — реэкспорт для существующих импортов из bot.messages.
 from services.names import family_name_sort_key, format_participant_name
@@ -251,21 +253,38 @@ def format_tournament_status(title: str, status: str, participants: list, decks_
 
 
 def format_missing_decks_reminder(title: str, participants: list, community_fill_enabled: bool = False) -> str:
-    """Шуточное напоминание со списком только игроков без колоды."""
+    """HTML-текст мета-полиции; заполненные после отправки строки зачёркнуты."""
+    all_filled = bool(participants) and all(participant.archetype_id is not None for participant in participants)
     lines = [
         "🚨👮 Вас посетила мета-полиция!",
         "На какой колоде были эти игроки?",
     ]
     if community_fill_enabled:
-        lines.append("Помочь заполнить пропуски может каждый — нажмите «Записать».")
-    lines.extend(["", f"🏆 {title}", "Список игроков без колоды:"])
+        lines.append(
+            "✅ Все колоды заполнены — спасибо!"
+            if all_filled
+            else "Помочь заполнить пропуски может каждый — нажмите «Записать»."
+        )
+    lines.extend(["", f"🏆 {escape(title)}", "Список игроков без колоды:"])
     for participant in participants:
-        if participant.archetype_id is not None:
-            continue
         user = participant.user
         name = format_participant_name(user.first_name, user.last_name) or f"id{user.tg_id}"
         username = f" (@{user.username})" if user.username else ""
-        lines.append(f"• {name}{username}")
+        line = f"• {escape(name)}{escape(username)}"
+        lines.append(f"<s>{line}</s>" if participant.archetype_id is not None else line)
+    return "\n".join(lines)
+
+
+def format_unfilled_opponents_note(opponents: list) -> str:
+    """Персональная подсказка: какие оппоненты пользователя всё ещё без колоды."""
+    if not opponents:
+        return ""
+    lines = ["Твои незаполненные оппоненты:"]
+    for opponent in opponents:
+        participant = opponent.participant
+        user = participant.user
+        name = format_participant_name(user.first_name, user.last_name) or f"id{user.tg_id}"
+        lines.append(f"• {name} — раунд {opponent.round_number}")
     return "\n".join(lines)
 
 

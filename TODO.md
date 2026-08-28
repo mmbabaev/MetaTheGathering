@@ -65,6 +65,12 @@
   остаётся owner-only, клубные чаты и другие игроки ничего не получают — PR
   [#265](https://github.com/mmbabaev/MetaTheGathering/pull/265).
 
+- Мета-полиция из [#254](https://github.com/mmbabaev/MetaTheGathering/issues/254): под
+  `recordOpponents` любой пользователь может помочь заполнить оставшиеся пустые колоды;
+  свой пропуск имеет приоритет, заполненные записи защищены от изменения, автор записи
+  сохраняется в `deck_added_by_tg_id` и event log — PR
+  [#255](https://github.com/mmbabaev/MetaTheGathering/pull/255).
+
 Игрокам ачивки автоматически не рассылаются: текущий режим — owner-only shadow.
 
 ### В review, но ещё не в `main`
@@ -76,11 +82,11 @@
   Каждый PR получает отдельную PostgreSQL schema и не наследует Alembic revision соседнего PR;
   стабильный staging от `main`, in-process Telegram transport tests и real-bot smoke остаются
   следующими этапами — PR [#271](https://github.com/mmbabaev/MetaTheGathering/pull/271).
-- Мета-полиция из [#254](https://github.com/mmbabaev/MetaTheGathering/issues/254): под
-  `recordOpponents` любой пользователь может помочь заполнить оставшиеся пустые колоды;
-  свой пропуск имеет приоритет, заполненные записи защищены от изменения, автор записи
-  сохраняется в `deck_added_by_tg_id` и event log — PR
-  [#255](https://github.com/mmbabaev/MetaTheGathering/pull/255).
+- Доработка мета-полиции из
+  [#258](https://github.com/mmbabaev/MetaTheGathering/issues/258): персональная подсказка
+  выделяет незаполненных оппонентов и их раунды; групповое сообщение после каждой записи
+  динамически зачёркивает заполненных и убирает кнопку, когда пропусков не осталось — PR
+  [#259](https://github.com/mmbabaev/MetaTheGathering/pull/259).
 - Pure fairness foundation перечисляет все 10 линий Bingo 4×4 и считает вероятностные
   веса/imbalance с отдельными diagnostics для строк, столбцов и диагоналей, не меняя
   horizontal-only `bingo-v1` — PR

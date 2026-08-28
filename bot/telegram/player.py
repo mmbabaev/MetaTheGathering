@@ -9,6 +9,7 @@ from bot.handlers.player import PlayerHandler
 from bot.handlers.settings import SettingsHandler
 from bot.keyboards import Keyboards
 from bot.messages import CUSTOM_ARCHETYPE_PROMPT
+from bot.meta_police_message import refresh_meta_police_message
 from bot.telegram.common import announce_completion_if_ready, parse_callback_ints
 from bot.telegram.common import log_event as _log
 from core.database import SessionLocal
@@ -134,6 +135,7 @@ async def callback_archetype(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.answer()
         card = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id)
         await query.message.reply_text(card.text, reply_markup=card.keyboard)
+        await refresh_meta_police_message(context.bot, db, tournament_id)
         await announce_completion_if_ready(context.bot, db, tournament_id)
     finally:
         db.close()
@@ -269,6 +271,11 @@ async def callback_set_missing_deck(update: Update, context: ContextTypes.DEFAUL
         )
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
+        await refresh_meta_police_message(
+            context.bot,
+            db,
+            participant.tournament_id if participant else None,
+        )
         await announce_completion_if_ready(
             context.bot,
             db,
@@ -445,6 +452,7 @@ async def _handle_pending_admin_custom_arch(msg, user, text, context) -> bool:
         await msg.reply_text(result.text, reply_markup=result.keyboard)
         if not result.is_alert:
             part = TournamentService(db).get_participant_by_id(participant_id)
+            await refresh_meta_police_message(context.bot, db, part.tournament_id if part else None)
             await announce_completion_if_ready(context.bot, db, part.tournament_id if part else None)
     finally:
         db.close()
@@ -475,6 +483,11 @@ async def _handle_pending_missing_custom_arch(msg, user, text, context) -> bool:
             )
         await msg.reply_text(result.text, reply_markup=result.keyboard)
         if not result.is_alert:
+            await refresh_meta_police_message(
+                context.bot,
+                db,
+                participant.tournament_id if participant else None,
+            )
             await announce_completion_if_ready(
                 context.bot,
                 db,
@@ -523,6 +536,7 @@ async def _handle_pending_custom_arch(msg, user, text, context) -> bool:
         if not result.is_alert:
             card = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id)
             await msg.reply_text(card.text, reply_markup=card.keyboard)
+            await refresh_meta_police_message(context.bot, db, tournament_id)
             await announce_completion_if_ready(context.bot, db, tournament_id)
     finally:
         db.close()
@@ -548,6 +562,7 @@ async def _handle_pending_meta_import(msg, user, text, context) -> bool:
             return True
         _log("meta_import_table", user, tournament_id=tournament_id)
         await msg.reply_text(result.text, reply_markup=result.keyboard, parse_mode=result.parse_mode)
+        await refresh_meta_police_message(context.bot, db, tournament_id)
         await announce_completion_if_ready(context.bot, db, tournament_id)
     finally:
         db.close()
