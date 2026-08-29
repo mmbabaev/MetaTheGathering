@@ -74,6 +74,8 @@ CB_ADMIN_SHOW_OPPONENTS = "adm_opps_p"  # adm_opps_p:{participant_id}:{tournamen
 CB_ADMIN_TOGGLE_SCOREKEEPER = "adm_sk"  # adm_sk:{participant_id}:{tournament_id}
 CB_ADMIN_TOGGLE_POLL_ORGANIZER = "adm_po"  # adm_po:{participant_id}:{tournament_id}
 CB_CLOSE_TOURNAMENT = "close_t"  # close_t:{tournament_id}
+CB_CLOSE_TOURNAMENT_CONFIRM = "close_t_yes"  # close_t_yes:{tournament_id}
+CB_CLOSE_TOURNAMENT_CANCEL = "close_t_no"  # close_t_no:{tournament_id}
 CB_REOPEN_TOURNAMENT = "reopen_t"  # reopen_t:{tournament_id} — вернуть закрытый турнир в регистрацию
 CB_ADMIN_OPPONENTS = "adm_opps"  # adm_opps:{tournament_id}
 CB_FEATURE_TOGGLE = "feat_toggle"  # feat_toggle:{flag_name}
@@ -351,6 +353,7 @@ class Keyboards:
         import_time: str | None = None,
         payment_enabled: bool = False,
         payment_confirmed: bool = False,
+        can_close: bool = False,
     ) -> InlineKeyboardMarkup:
         if is_registered:
             action_btn = InlineKeyboardButton("🚪 Выйти из турнира", callback_data=f"{CB_LEAVE}:{tournament_id}")
@@ -368,6 +371,10 @@ class Keyboards:
         if is_registered and show_fill_opponents:
             rows.append(
                 [InlineKeyboardButton("🤝 Записать оппонентов", callback_data=f"{CB_ADMIN_OPPONENTS}:{tournament_id}")]
+            )
+        if can_close:
+            rows.append(
+                [InlineKeyboardButton("🔒 Закрыть турнир", callback_data=f"{CB_CLOSE_TOURNAMENT}:{tournament_id}")]
             )
         if is_admin:
             aetherhub_emoji = "🔄" if aetherhub_url else "📥"
@@ -404,6 +411,19 @@ class Keyboards:
                 [
                     InlineKeyboardButton("❌ Отмена", callback_data=f"{CB_REVEAL_DECKS_CANCEL}:{tournament_id}"),
                     InlineKeyboardButton("👁 Показать", callback_data=f"{CB_REVEAL_DECKS_CONFIRM}:{tournament_id}"),
+                ]
+            ]
+        )
+
+    def close_tournament_confirm_keyboard(self, tournament_id: int) -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton("❌ Отмена", callback_data=f"{CB_CLOSE_TOURNAMENT_CANCEL}:{tournament_id}"),
+                    InlineKeyboardButton(
+                        "🔒 Закрыть",
+                        callback_data=f"{CB_CLOSE_TOURNAMENT_CONFIRM}:{tournament_id}",
+                    ),
                 ]
             ]
         )
@@ -887,6 +907,7 @@ def tournament_card_keyboard(
     import_time: str | None = None,
     payment_enabled: bool = False,
     payment_confirmed: bool = False,
+    can_close: bool = False,
 ) -> InlineKeyboardMarkup:
     return _default.tournament_card_keyboard(
         tournament_id,
@@ -899,6 +920,7 @@ def tournament_card_keyboard(
         import_time=import_time,
         payment_enabled=payment_enabled,
         payment_confirmed=payment_confirmed,
+        can_close=can_close,
     )
 
 
@@ -924,6 +946,10 @@ def admin_more_keyboard(
 
 def reveal_decks_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
     return _default.reveal_decks_confirm_keyboard(tournament_id)
+
+
+def close_tournament_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
+    return _default.close_tournament_confirm_keyboard(tournament_id)
 
 
 def delete_tournament_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:

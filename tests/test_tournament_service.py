@@ -67,8 +67,13 @@ class TestTournamentLifecycle:
         assert t.ended_at is not None
 
     def test_close_directly_from_registration(self, svc, tournament):
-        t = svc.close_tournament(tournament.id)
+        t = svc.close_tournament(tournament.id, closed_by_tg_id=1001)
         assert t.status == TournamentStatus.CLOSED
+        assert t.closed_by_tg_id == 1001
+
+    def test_automatic_close_has_no_actor(self, svc, tournament):
+        t = svc.close_tournament(tournament.id)
+        assert t.closed_by_tg_id is None
 
     def test_start_from_ongoing_raises(self, svc, tournament):
         svc.start_tournament(tournament.id)
@@ -526,10 +531,11 @@ class TestOpenRegistration:
 class TestReopenTournament:
     def test_closed_tournament_becomes_registration(self, svc):
         t = svc.create_tournament(TournamentCreate(title="R", chat_id=330, slug="r330"))
-        svc.close_tournament(t.id)
+        svc.close_tournament(t.id, closed_by_tg_id=1001)
         t = svc.reopen_tournament(t.id)
         assert t.status == TournamentStatus.REGISTRATION
         assert t.ended_at is None
+        assert t.closed_by_tg_id is None
         assert t.registration_open_at is not None
 
     def test_reopened_is_active_for_chat(self, svc):

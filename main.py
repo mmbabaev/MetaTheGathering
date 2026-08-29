@@ -47,6 +47,8 @@ from bot.keyboards import (
     CB_CELLAR_NOOP,
     CB_CELLAR_RESERVE,
     CB_CLOSE_TOURNAMENT,
+    CB_CLOSE_TOURNAMENT_CANCEL,
+    CB_CLOSE_TOURNAMENT_CONFIRM,
     CB_CREATE_POLL,
     CB_CUSTOM_ARCHETYPE,
     CB_DEBUG_META_POLICE,
@@ -439,6 +441,18 @@ def main() -> None:
             CallbackQueryHandler(debug_handler.callback_debug_meta_police, pattern=f"^{CB_DEBUG_META_POLICE}:")
         )
     app.add_handler(CallbackQueryHandler(admin.callback_close_tournament, pattern=f"^{CB_CLOSE_TOURNAMENT}:"))
+    app.add_handler(
+        CallbackQueryHandler(
+            admin.callback_close_tournament_confirm,
+            pattern=f"^{CB_CLOSE_TOURNAMENT_CONFIRM}:",
+        )
+    )
+    app.add_handler(
+        CallbackQueryHandler(
+            admin.callback_close_tournament_cancel,
+            pattern=f"^{CB_CLOSE_TOURNAMENT_CANCEL}:",
+        )
+    )
     app.add_handler(CallbackQueryHandler(admin.callback_reopen_tournament, pattern=f"^{CB_REOPEN_TOURNAMENT}:"))
     app.add_handler(CallbackQueryHandler(schedule_handler.callback_schedule_list, pattern=f"^{CB_SCHEDULE_LIST}$"))
     app.add_handler(CallbackQueryHandler(schedule_handler.callback_schedule_row, pattern=f"^{CB_SCHEDULE_ROW}:"))

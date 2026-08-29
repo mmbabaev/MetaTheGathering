@@ -232,7 +232,8 @@ class TournamentService:
         self.db.refresh(tournament)
         return TournamentRead.model_validate(tournament)
 
-    def close_tournament(self, tournament_id: int) -> TournamentRead:
+    def close_tournament(self, tournament_id: int, closed_by_tg_id: int | None = None) -> TournamentRead:
+        """Close a tournament and optionally audit the Telegram user who did it manually."""
         tournament = get_tournament(self.db, tournament_id)
         ensure_tournament_status(
             tournament,
@@ -244,6 +245,7 @@ class TournamentService:
 
         tournament.status = models.TournamentStatus.CLOSED
         tournament.ended_at = models.utc_now()
+        tournament.closed_by_tg_id = closed_by_tg_id
 
         self.db.commit()
         self.db.refresh(tournament)
@@ -257,6 +259,7 @@ class TournamentService:
 
         tournament.status = models.TournamentStatus.REGISTRATION
         tournament.ended_at = None
+        tournament.closed_by_tg_id = None
         tournament.registration_open_at = models.utc_now()
 
         self.db.commit()

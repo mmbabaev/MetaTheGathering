@@ -8,6 +8,9 @@ from bot.keyboards import (
     CB_ADMIN_SET_ARCH,
     CB_ARCHETYPE,
     CB_ARCHETYPE_MORE,
+    CB_CLOSE_TOURNAMENT,
+    CB_CLOSE_TOURNAMENT_CANCEL,
+    CB_CLOSE_TOURNAMENT_CONFIRM,
     CB_CUSTOM_ARCHETYPE,
     CB_DEBUG_META_POLICE,
     CB_REGISTER,
@@ -16,6 +19,7 @@ from bot.keyboards import (
     Keyboards,
     admin_archetype_select_keyboard,
     archetype_keyboard,
+    close_tournament_confirm_keyboard,
     register_button,
     tournament_card_keyboard,
     tournament_list_keyboard,
@@ -197,6 +201,22 @@ class TestTournamentCardKeyboard:
         markup = Keyboards().tournament_card_keyboard(1, is_registered=False, show_fill_opponents=True)
         texts = self._all_texts(markup)
         assert not any("оппонент" in t.lower() for t in texts)
+
+    def test_close_button_shown_when_allowed(self):
+        markup = tournament_card_keyboard(1, is_registered=False, can_close=True)
+        callbacks = [button.callback_data for row in markup.inline_keyboard for button in row]
+        assert f"{CB_CLOSE_TOURNAMENT}:1" in callbacks
+
+    def test_close_button_hidden_by_default(self):
+        markup = tournament_card_keyboard(1, is_registered=False)
+        callbacks = [button.callback_data for row in markup.inline_keyboard for button in row]
+        assert f"{CB_CLOSE_TOURNAMENT}:1" not in callbacks
+
+
+def test_close_tournament_confirm_keyboard_has_confirm_and_cancel():
+    markup = close_tournament_confirm_keyboard(42)
+    callbacks = [button.callback_data for row in markup.inline_keyboard for button in row]
+    assert callbacks == [f"{CB_CLOSE_TOURNAMENT_CANCEL}:42", f"{CB_CLOSE_TOURNAMENT_CONFIRM}:42"]
 
 
 # ── admin_more_keyboard: кнопка «Сделать активным» ───────────────────────────

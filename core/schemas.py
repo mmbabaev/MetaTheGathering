@@ -78,6 +78,7 @@ class TournamentRead(TournamentBase):
     registration_close_at: Optional[datetime] = None
     started_at: Optional[datetime] = None
     ended_at: Optional[datetime] = None
+    closed_by_tg_id: Optional[int] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
