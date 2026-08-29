@@ -75,6 +75,10 @@
   выделяет незаполненных оппонентов и их раунды; групповое сообщение после каждой записи
   динамически зачёркивает заполненных и убирает кнопку, когда пропусков не осталось — PR
   [#259](https://github.com/mmbabaev/MetaTheGathering/pull/259).
+- Owner-only debug-превью мета-полиции воспроизводит живое обновление сообщения на debug-боте,
+  не добавляя вторую схему хранения. Даже при нажатии из группы превью и все его обновления
+  адресуются только в личку владельца — PR
+  [#274](https://github.com/mmbabaev/MetaTheGathering/pull/274).
 
 Игрокам ачивки автоматически не рассылаются: текущий режим — owner-only shadow.
 
@@ -87,10 +91,9 @@
   Каждый PR получает отдельную PostgreSQL schema и не наследует Alembic revision соседнего PR;
   стабильный staging от `main`, in-process Telegram transport tests и real-bot smoke остаются
   следующими этапами — PR [#271](https://github.com/mmbabaev/MetaTheGathering/pull/271).
-- Owner-only debug-превью мета-полиции воспроизводит живое обновление сообщения на debug-боте,
-  не добавляя вторую схему хранения. Даже при нажатии из группы превью и все его обновления
-  адресуются только в личку владельца — PR
-  [#274](https://github.com/mmbabaev/MetaTheGathering/pull/274).
+- Ручная кнопка AetherHub использует ту же проверку даты игрового дня, что и плановый импорт.
+  Если точного совпадения нет, старое событие не предлагается, а админ получает ссылку на Content Feed клуба — PR
+  [#275](https://github.com/mmbabaev/MetaTheGathering/pull/275).
 - Pure fairness foundation перечисляет все 10 линий Bingo 4×4 и считает вероятностные
   веса/imbalance с отдельными diagnostics для строк, столбцов и диагоналей, не меняя
   horizontal-only `bingo-v1` — PR
