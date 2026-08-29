@@ -126,6 +126,8 @@ class Tournament(Base):
     decks_hidden = Column(Boolean, nullable=False, default=True, server_default="true")
     aetherhub_url = Column(String(512), nullable=True)
     aetherhub_import_time = Column(String(5), nullable=True)  # "HH:MM" — scheduled auto-import time
+    # owner-only DM after the second scheduled lookup could not find this event on AetherHub
+    aetherhub_not_found_notified_at = Column(DateTime, nullable=True)
 
     # момент отправки анонса «сбор метагейма завершён»; NULL = ещё не анонсировали (идемпотентность)
     completed_announced_at = Column(DateTime, nullable=True)

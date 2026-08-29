@@ -33,6 +33,15 @@ def tournament_event_date(
     return event_at.astimezone(local_timezone).date()
 
 
+def format_tournament_not_found(club_aetherhub_url: str, event_date: date) -> str:
+    """Explain the date mismatch and link the club owner's public content feed."""
+    return (
+        f"ℹ️ На AetherHub не найден Pauper-турнир клуба за {event_date.strftime('%d.%m.%Y')}.\n\n"
+        f"Content Feed клуба:\n{club_aetherhub_url}\n\n"
+        "Если нужный турнир уже создан — пришлите ссылку на него."
+    )
+
+
 class AetherhubHandler:
     def __init__(
         self,
@@ -69,12 +78,7 @@ class AetherhubHandler:
         return result
 
     def describe_tournament_not_found(self, club_aetherhub_url: str, event_date: date) -> str:
-        """Explain the date mismatch and link the club owner's public content feed."""
-        return (
-            f"ℹ️ На AetherHub не найден Pauper-турнир клуба за {event_date.strftime('%d.%m.%Y')}.\n\n"
-            f"Content Feed клуба:\n{club_aetherhub_url}\n\n"
-            "Если нужный турнир уже создан — пришлите ссылку на него."
-        )
+        return format_tournament_not_found(club_aetherhub_url, event_date)
 
     def handle_fetch_preview(self, url: str, header: str, tournament_title: str | None = None) -> AetherhubFetchResult:
         data = self._aetherhub.fetch_tournament(url)
