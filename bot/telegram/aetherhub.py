@@ -2,17 +2,19 @@
 
 import logging
 import re
+from datetime import datetime, timezone
 
 from telegram import Message, Update, User
 from telegram.ext import ContextTypes
 
-from bot.handlers.aetherhub import AetherhubHandler
+from bot.handlers.aetherhub import AetherhubHandler, tournament_event_date
 from bot.keyboards import aetherhub_confirm_keyboard
 from bot.scheduler import get_clubs
 from bot.telegram.common import announce_completion_if_ready, parse_callback_ints
 from bot.telegram.deck_reminder import send_deferred_deck_reminders
 from bot.telegram.player import _player_handler
 from bot.telegram.round_notify import send_round_notifications
+from core.config import Club, settings
 from core.database import SessionLocal
 from services.aetherhub_import_service import AetherhubImportService
 from services.aetherhub_models import AetherhubTournamentData
@@ -39,10 +41,10 @@ def _aetherhub_handler(db=None) -> AetherhubHandler:
     return AetherhubHandler(_aetherhub_service)
 
 
-def _club_aetherhub_url(club_name: str | None) -> str | None:
+def _club_config(club_name: str | None) -> Club | None:
     if not club_name:
         return None
-    return next((c.aetherhub_url for c in get_clubs() if c.name == club_name), None)
+    return next((club for club in get_clubs() if club.name == club_name), None)
 
 
 async def callback_aetherhub_import_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -64,13 +66,19 @@ async def callback_aetherhub_import_prompt(update: Update, context: ContextTypes
         try:
             t = get_tournament(db, tournament_id)
             stored_url = t.aetherhub_url
-            club_url = _club_aetherhub_url(t.club)
+            club = _club_config(t.club)
+            club_url = club.aetherhub_url if club else None
             tournament_title = t.title
+            event_date = tournament_event_date(
+                t.registration_close_at,
+                club.timezone if club and club.timezone else settings.TOURNAMENT_TIMEZONE,
+            )
         except Exception:
             logger.exception("Failed to load tournament %s", tournament_id)
             stored_url = None
             club_url = None
             tournament_title = None
+            event_date = datetime.now(timezone.utc).date()
     finally:
         db.close()
 
@@ -80,7 +88,10 @@ async def callback_aetherhub_import_prompt(update: Update, context: ContextTypes
         status_msg = await query.message.reply_text("⏳ Загружаю данные с AetherHub…")
         try:
             result = _aetherhub_handler().handle_import_prompt(
-                stored_url, club_url, tournament_title=tournament_title
+                stored_url,
+                club_url,
+                event_date=event_date,
+                tournament_title=tournament_title,
             )
         except Exception as e:
             await status_msg.edit_text(f"❌ Не удалось загрузить турнир: {e}")
@@ -90,13 +101,13 @@ async def callback_aetherhub_import_prompt(update: Update, context: ContextTypes
             context.user_data[USER_DATA_AETHERHUB_DATA] = result.data
             await status_msg.edit_text(result.preview_text, reply_markup=aetherhub_confirm_keyboard(tournament_id))
             return
-        # Сегодняшний турнир не найден — показываем список турниров клуба, а не «Игроков: 0».
+        # Турнир игрового дня не найден: не предлагаем старое событие.
         not_found_text = "Турнир сегодня не найден автоматически."
         if club_url:
             try:
-                not_found_text = _aetherhub_handler().describe_club_tournaments(club_url)
+                not_found_text = _aetherhub_handler().describe_tournament_not_found(club_url, event_date)
             except Exception:
-                logger.exception("describe_club_tournaments failed for tournament %s", tournament_id)
+                logger.exception("describe_tournament_not_found failed for tournament %s", tournament_id)
         await status_msg.edit_text(not_found_text)
 
     context.user_data[USER_DATA_PENDING_AETHERHUB_URL] = tournament_id
