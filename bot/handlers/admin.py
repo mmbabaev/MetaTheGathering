@@ -516,7 +516,7 @@ class AdminHandler:
         return HandlerResult(schedule_text)
 
     def handle_close_tournament(self, tg_id: int) -> HandlerResult:
-        if not self.user_svc.is_privileged(tg_id):
+        if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
         active, err = self._resolve_tournament()
         if err:
@@ -529,7 +529,7 @@ class AdminHandler:
         tournament_id: int,
         confirmed: bool = False,
     ) -> HandlerResult:
-        if not self.user_svc.is_privileged(tg_id):
+        if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN, is_alert=True)
         try:
             tournament = get_tournament(self.svc.db, tournament_id)

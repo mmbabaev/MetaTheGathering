@@ -122,7 +122,7 @@ class Tournament(Base):
 
     started_at = Column(DateTime, nullable=True)
     ended_at = Column(DateTime, nullable=True)
-    # Telegram id of the admin/scorekeeper who closed the tournament manually; NULL for automatic closure.
+    # Telegram id of the admin who closed the tournament manually; NULL for automatic closure.
     closed_by_tg_id = Column(BigInteger, nullable=True)
 
     decks_hidden = Column(Boolean, nullable=False, default=True, server_default="true")

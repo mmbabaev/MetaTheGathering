@@ -7,7 +7,6 @@ import pytest
 from bot.handlers.player import DEFER_DECK_WINDOW, PlayerHandler
 from bot.keyboards import (
     CB_ARCHETYPE,
-    CB_CLOSE_TOURNAMENT,
     CB_CUSTOM_ARCHETYPE,
     CB_DEFER_DECK,
     CB_LEAVE,
@@ -101,15 +100,6 @@ class TestHandleTournamentSelect:
         result = handler.handle_tournament_select(tournament_id=99999)
         assert result.text == TOURNAMENT_NOT_FOUND
         assert result.is_alert
-
-    def test_scorekeeper_card_shows_close_button(self, handler, user_svc, active_tournament):
-        scorekeeper = user_svc.get_or_create(tg_id=5101, username="keeper", first_name="Keeper")
-        user_svc.toggle_scorekeeper(scorekeeper.tg_id)
-
-        result = handler.handle_tournament_select(active_tournament.id, tg_id=scorekeeper.tg_id)
-
-        callbacks = [button.callback_data for row in result.keyboard.inline_keyboard for button in row]
-        assert f"{CB_CLOSE_TOURNAMENT}:{active_tournament.id}" in callbacks
 
 
 # --- handle_register ---
