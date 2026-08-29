@@ -8,6 +8,7 @@ from bot.keyboards import (
     CB_ADMIN_SET_ARCH,
     CB_ARCHETYPE,
     CB_ARCHETYPE_MORE,
+    CB_CLOSE_TOURNAMENT,
     CB_CLOSE_TOURNAMENT_CANCEL,
     CB_CLOSE_TOURNAMENT_CONFIRM,
     CB_CUSTOM_ARCHETYPE,
@@ -224,6 +225,11 @@ class TestAdminMoreReopenButton:
 
         kb_closed = Keyboards().admin_more_keyboard(7, is_closed=True)
         assert any("Сделать активным" in b.text for b in self._flat(kb_closed))
+
+    def test_open_tournament_has_admin_close_button(self):
+        keyboard = Keyboards().admin_more_keyboard(7, is_closed=False)
+        callbacks = [button.callback_data for button in self._flat(keyboard)]
+        assert f"{CB_CLOSE_TOURNAMENT}:7" in callbacks
 
     def test_reopen_sits_above_delete(self):
         rows = self._rows(Keyboards().admin_more_keyboard(7, is_closed=True))
