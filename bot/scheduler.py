@@ -18,6 +18,7 @@ from telegram.ext import Application, ContextTypes
 
 from bot.chart import build_chart, build_standings
 from bot.deeplink import fill_missing_deeplink, registration_deeplink
+from bot.handlers.aetherhub import format_tournament_not_found
 from bot.messages import format_decks_revealed, format_meta_gather_completed, format_missing_decks_reminder
 from bot.registration_messages import RegistrationMessageRefreshJob
 from bot.registration_messages import send_registration_open as _send_registration_open
@@ -379,11 +380,37 @@ class AetherhubImportJob:
         schedule: ClubSchedule,
         aetherhub_service: AetherhubService | None = None,
         event_day_offset: int = 0,
+        attempt_number: int = 1,
     ) -> None:
         self.club = club
         self.schedule = schedule
         self._aetherhub = aetherhub_service or AetherhubService()
         self._event_day_offset = event_day_offset
+        self._attempt_number = attempt_number
+
+    async def _notify_owner_not_found(self, bot, db, tournament: models.Tournament, event_date: date) -> None:
+        """Send one owner-only DM after the second exact-date lookup misses the event."""
+        if self._attempt_number != 2 or bot is None or tournament.aetherhub_not_found_notified_at is not None:
+            return
+
+        owner_chat_id = settings.OWNER_CHAT_ID
+        allowed_ids = settings.notify_allowed_ids
+        if not owner_chat_id or (allowed_ids is not None and owner_chat_id not in allowed_ids):
+            return
+
+        try:
+            await bot.send_message(
+                chat_id=owner_chat_id,
+                text=format_tournament_not_found(self.club.aetherhub_url, event_date),
+            )
+            tournament.aetherhub_not_found_notified_at = models.utc_now()
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception(
+                "AetherhubImportJob: failed to notify owner that no tournament was found for '%s'",
+                self.club.name,
+            )
 
     async def run(self, now: datetime, db=None, bot=None) -> None:
         logger.info(f"AetherhubImportJob: running for '{self.club.name}', now={now.strftime('%A %H:%M')}")
@@ -428,6 +455,8 @@ class AetherhubImportJob:
                     return
                 if not url:
                     logger.info(f"AetherhubImportJob: no pauper tournament found for '{self.club.name}'")
+                    if today is not None:
+                        await self._notify_owner_not_found(bot, db, tournament, event_date)
                     return
                 auto_discovered = True
 
@@ -1421,10 +1450,15 @@ def _register_schedule_jobs(app: Application) -> None:
                     f"Scheduler: pre-start reminder for '{club.name}' ({schedule.weekday}) at {schedule.reminder_time}"
                 )
 
-            for fetch_time_str in schedule.aetherhub_fetch_times:
+            for attempt_number, fetch_time_str in enumerate(schedule.aetherhub_fetch_times, start=1):
                 fetch_time = datetime.strptime(fetch_time_str, "%H:%M").time().replace(tzinfo=tz)
                 event_day_offset = _import_day_offset(schedule.aetherhub_fetch_times, fetch_time_str)
-                import_job = AetherhubImportJob(club, schedule, event_day_offset=event_day_offset)
+                import_job = AetherhubImportJob(
+                    club,
+                    schedule,
+                    event_day_offset=event_day_offset,
+                    attempt_number=attempt_number,
+                )
 
                 async def _import(context: ContextTypes.DEFAULT_TYPE, _job=import_job, _tz=tz) -> None:
                     await _job.run(now=datetime.now(_tz), bot=context.bot)

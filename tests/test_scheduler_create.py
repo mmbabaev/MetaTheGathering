@@ -298,6 +298,32 @@ class TestSetupScheduler:
         import_calls = app.job_queue.run_daily.call_args_list[1:4]
         assert [call.kwargs["days"] for call in import_calls] == [(5,), (6,), (6,)]
 
+    def test_import_jobs_receive_their_attempt_numbers(self):
+        app = _make_app()
+        clubs = [
+            Club(
+                name="Test",
+                chat_id=1,
+                aetherhub_url="https://aetherhub.com/User/Test",
+                schedules=[
+                    ClubSchedule(
+                        weekday="friday",
+                        game_time="19:45",
+                        aetherhub_fetch_times=["20:30", "21:00", "22:00"],
+                    )
+                ],
+            )
+        ]
+
+        with (
+            patch("bot.scheduler.settings", _mock_settings()),
+            patch("bot.scheduler.get_clubs", return_value=clubs),
+            patch("bot.scheduler.AetherhubImportJob") as import_job,
+        ):
+            setup_scheduler(app)
+
+        assert [call.kwargs["attempt_number"] for call in import_job.call_args_list] == [1, 2, 3]
+
     def test_goldfish_full_config_registers_correct_count(self):
         """Goldfish fri(1+3) + sat(1+2) + Edinorog mon(1) = 8 jobs."""
         app = _make_app()
