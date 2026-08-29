@@ -22,6 +22,7 @@ from bot.keyboards import (
     CB_ADMIN_SHOW_FILLED,
     CB_ADMIN_SHOW_OPPONENTS,
     CB_ADMIN_TOGGLE_SCOREKEEPER,
+    CB_CLOSE_TOURNAMENT_CONFIRM,
     CB_TSTATUS,
 )
 from bot.messages import (
@@ -203,6 +204,18 @@ class TestHandleCloseTournament:
         result = handler.handle_close_tournament(tg_id=ADMIN_TG_ID)
         assert result.text == TOURNAMENT_CLOSED_MSG
         assert svc.list_all_active_tournaments() == []
+        assert svc.db.get(m.Tournament, active_tournament.id).closed_by_tg_id == ADMIN_TG_ID
+
+    def test_tournament_with_players_requires_confirmation(
+        self, handler, svc, admin_user, active_tournament, user_alice
+    ):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+
+        result = handler.handle_close_tournament(tg_id=ADMIN_TG_ID)
+
+        assert "записано игроков: 1" in result.text
+        assert result.keyboard is not None
+        assert svc.db.get(m.Tournament, active_tournament.id).status != TournamentStatus.CLOSED
 
     def test_multiple_tournaments_returns_clarification(self, handler, svc, admin_user, active_tournament):
         svc.create_tournament(TournamentCreate(title="Second", chat_id=CHAT_ID + 1))
@@ -774,28 +787,55 @@ class TestCloseTournamentById:
         assert result.is_alert
         assert NOT_ADMIN in result.text
 
-    def test_empty_tournament_blocked_by_default(self, handler, admin_user, active_tournament):
+    def test_empty_tournament_closes_without_confirmation(self, handler, svc, admin_user, active_tournament):
         result = handler.handle_close_tournament_by_id(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
-        assert result.is_alert
-        assert "пустой" in result.text
-
-    def test_allow_empty_bypasses_check(self, handler, admin_user, active_tournament):
-        result = handler.handle_close_tournament_by_id(
-            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, allow_empty=True
-        )
         assert not result.is_alert
         assert TOURNAMENT_CLOSED_MSG in result.text
+        assert result.keyboard is None
+        assert svc.db.get(m.Tournament, active_tournament.id).closed_by_tg_id == ADMIN_TG_ID
 
-    def test_closes_tournament_with_participants(self, handler, svc, user_svc, admin_user, active_tournament):
+    def test_participants_require_confirmation(self, handler, svc, user_svc, admin_user, active_tournament):
         user = user_svc.get_or_create(tg_id=5500, username=None, first_name="Боец")
         svc.bulk_add_participants(active_tournament.id, [(user.id, "Боец")])
         result = handler.handle_close_tournament_by_id(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
         assert not result.is_alert
-        assert TOURNAMENT_CLOSED_MSG in result.text
+        assert "записано игроков: 1" in result.text
+        assert result.keyboard is not None
+        callbacks = [button.callback_data for row in result.keyboard.inline_keyboard for button in row]
+        assert f"{CB_CLOSE_TOURNAMENT_CONFIRM}:{active_tournament.id}" in callbacks
+        assert svc.db.get(m.Tournament, active_tournament.id).status != TournamentStatus.CLOSED
+
+    def test_confirm_closes_tournament_with_participants(self, handler, svc, user_svc, admin_user, active_tournament):
+        user = user_svc.get_or_create(tg_id=5500, username=None, first_name="Боец")
+        svc.bulk_add_participants(active_tournament.id, [(user.id, "Боец")])
+
+        result = handler.handle_close_tournament_by_id(
+            tg_id=ADMIN_TG_ID,
+            tournament_id=active_tournament.id,
+            confirmed=True,
+        )
+
+        assert result.text == TOURNAMENT_CLOSED_MSG
+        tournament = svc.db.get(m.Tournament, active_tournament.id)
+        assert tournament.status == TournamentStatus.CLOSED
+        assert tournament.closed_by_tg_id == ADMIN_TG_ID
 
     def test_not_found_returns_alert(self, handler, admin_user):
         result = handler.handle_close_tournament_by_id(tg_id=ADMIN_TG_ID, tournament_id=99999)
         assert result.is_alert
+
+    def test_already_closed_returns_alert_without_confirmation(
+        self, handler, svc, user_svc, admin_user, active_tournament
+    ):
+        user = user_svc.get_or_create(tg_id=5500, username=None, first_name="Боец")
+        svc.bulk_add_participants(active_tournament.id, [(user.id, "Боец")])
+        svc.close_tournament(active_tournament.id)
+
+        result = handler.handle_close_tournament_by_id(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+
+        assert result.is_alert
+        assert "уже закрыт" in result.text
+        assert result.keyboard is None
 
 
 # ── handle_archive ────────────────────────────────────────────────────────────
@@ -1194,9 +1234,27 @@ class TestScorekeeperPermissions:
         result = handler.handle_tournament_status(tg_id=SCOREKEEPER_TG_ID)
         assert result.text != NOT_ADMIN
 
-    def test_scorekeeper_cannot_close_tournament(self, handler, scorekeeper_user, active_tournament):
+    def test_scorekeeper_can_close_empty_tournament(self, handler, db, scorekeeper_user, active_tournament):
         result = handler.handle_close_tournament(tg_id=SCOREKEEPER_TG_ID)
-        assert NOT_ADMIN in result.text
+        assert result.text == TOURNAMENT_CLOSED_MSG
+        assert db.get(m.Tournament, active_tournament.id).closed_by_tg_id == SCOREKEEPER_TG_ID
+
+    def test_scorekeeper_must_confirm_closing_tournament_with_players(
+        self, handler, svc, db, scorekeeper_user, active_tournament, user_alice
+    ):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+
+        prompt = handler.handle_close_tournament(tg_id=SCOREKEEPER_TG_ID)
+        assert prompt.keyboard is not None
+        assert db.get(m.Tournament, active_tournament.id).status != TournamentStatus.CLOSED
+
+        result = handler.handle_close_tournament_by_id(
+            tg_id=SCOREKEEPER_TG_ID,
+            tournament_id=active_tournament.id,
+            confirmed=True,
+        )
+        assert result.text == TOURNAMENT_CLOSED_MSG
+        assert db.get(m.Tournament, active_tournament.id).closed_by_tg_id == SCOREKEEPER_TG_ID
 
     def test_scorekeeper_cannot_create_tournament(self, handler, scorekeeper_user):
         result = handler.handle_create_tournament(tg_id=SCOREKEEPER_TG_ID, chat_id=CHAT_ID, title="Test")
@@ -1594,9 +1652,8 @@ class TestHandleFillOpponentsEdgeCases:
 
 
 class TestCloseTournamentByIdNotFound:
-    def test_tournament_not_found_with_allow_empty(self, handler, admin_user):
-        """allow_empty=True пропускает проверку участников и доходит до close_tournament."""
-        result = handler.handle_close_tournament_by_id(tg_id=ADMIN_TG_ID, tournament_id=99999, allow_empty=True)
+    def test_tournament_not_found(self, handler, admin_user):
+        result = handler.handle_close_tournament_by_id(tg_id=ADMIN_TG_ID, tournament_id=99999)
         assert result.is_alert
         assert TOURNAMENT_NOT_FOUND in result.text
 
