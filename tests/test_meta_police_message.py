@@ -1,8 +1,8 @@
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 from telegram.error import BadRequest
 
-from bot.meta_police_message import refresh_meta_police_message
+from bot.meta_police_message import refresh_meta_police_message, send_debug_meta_police_preview
 from core import models
 from services.meta_police_message import MetaPoliceMessageService
 
@@ -60,6 +60,32 @@ def test_new_missing_participant_is_added_to_snapshot(db, svc, user_svc, tournam
 
     assert [participant.id for participant in participants] == [first.id, second.id]
     assert row.participant_ids_json == f"[{first.id}, {second.id}]"
+
+
+async def test_debug_preview_targets_only_requester_and_becomes_live(db, svc, user_alice, tournament, archetype_burn):
+    participant = svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id)
+    bot = AsyncMock()
+    bot.get_me.return_value = MagicMock(username="DebugBot")
+    bot.send_message.return_value = MagicMock(message_id=777)
+
+    count = await send_debug_meta_police_preview(bot, db, tournament.id, requester_tg_id=user_alice.tg_id)
+
+    assert count == 1
+    bot.send_message.assert_awaited_once()
+    assert bot.send_message.call_args.kwargs["chat_id"] == user_alice.tg_id
+    assert bot.send_message.call_args.kwargs["parse_mode"] == "HTML"
+    tracked = MetaPoliceMessageService(db).get_active(tournament.id)
+    assert tracked is not None
+    assert tracked.chat_id == user_alice.tg_id
+    assert tracked.message_id == 777
+    assert db.get(models.Tournament, tournament.id).missing_decks_reminder_1d_sent_at is not None
+
+    svc.set_participant_archetype(participant_id=participant.id, archetype_id=archetype_burn.id)
+    await refresh_meta_police_message(bot, db, tournament.id)
+
+    assert bot.edit_message_text.call_args.kwargs["chat_id"] == user_alice.tg_id
+    assert bot.edit_message_text.call_args.kwargs["message_id"] == 777
+    assert bot.edit_message_text.call_args.kwargs["reply_markup"] is None
 
 
 async def test_refresh_strikes_filled_player_and_keeps_button(db, svc, user_svc, tournament, archetype_burn):

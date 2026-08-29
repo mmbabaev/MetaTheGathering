@@ -89,6 +89,7 @@ CB_PAY = "pay"  # pay:{tournament_id}
 CB_PAY_STATUS = "pay_status"  # pay_status:{tournament_id} — no-op, показывает статус оплаты
 CB_ADMIN_IMPORT_META = "adm_meta"  # adm_meta:{tournament_id}
 CB_DEBUG_ROUND_NOTIFY = "dbg_rnotify"  # dbg_rnotify:{tournament_id} — debug: DM all round notifications to presser
+CB_DEBUG_META_POLICE = "dbg_mpol"  # dbg_mpol:{tournament_id} — debug: owner-only live preview
 CB_APP_STATS_HOME = "appstat_home"  # appstat_home — меню статистики приложения (владелец)
 CB_APP_STATS_NOTIFY_ROUNDS = "appstat_nr"  # appstat_nr — список включивших уведомления о раундах
 CB_CELLAR_DATES = "cellar_dates"
@@ -413,15 +414,23 @@ class Keyboards:
         is_closed: bool = False,
         decks_hidden: bool = True,
         show_debug: bool = False,
+        show_debug_meta_police: bool = False,
     ) -> InlineKeyboardMarkup:
         rows = [
             [InlineKeyboardButton("➕ Добавить участников", callback_data=f"{CB_BULK_ADD}:{tournament_id}")],
             [InlineKeyboardButton("📋 Импорт по таблице", callback_data=f"{CB_ADMIN_IMPORT_META}:{tournament_id}")],
         ]
+        debug_buttons = []
         if show_debug:
-            rows.append(
-                [InlineKeyboardButton("🐞 Тест оповещений", callback_data=f"{CB_DEBUG_ROUND_NOTIFY}:{tournament_id}")]
+            debug_buttons.append(
+                InlineKeyboardButton("🐞 Тест оповещений", callback_data=f"{CB_DEBUG_ROUND_NOTIFY}:{tournament_id}")
             )
+        if show_debug_meta_police:
+            debug_buttons.append(
+                InlineKeyboardButton("🐞 Мета-полиция", callback_data=f"{CB_DEBUG_META_POLICE}:{tournament_id}")
+            )
+        if debug_buttons:
+            rows.append(debug_buttons)
         if decks_hidden:
             rows.append([InlineKeyboardButton("👁 Показать колоды", callback_data=f"{CB_REVEAL_DECKS}:{tournament_id}")])
         else:
@@ -898,10 +907,18 @@ def export_menu_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
 
 
 def admin_more_keyboard(
-    tournament_id: int, is_closed: bool = False, decks_hidden: bool = True, show_debug: bool = False
+    tournament_id: int,
+    is_closed: bool = False,
+    decks_hidden: bool = True,
+    show_debug: bool = False,
+    show_debug_meta_police: bool = False,
 ) -> InlineKeyboardMarkup:
     return _default.admin_more_keyboard(
-        tournament_id, is_closed=is_closed, decks_hidden=decks_hidden, show_debug=show_debug
+        tournament_id,
+        is_closed=is_closed,
+        decks_hidden=decks_hidden,
+        show_debug=show_debug,
+        show_debug_meta_police=show_debug_meta_police,
     )
 
 

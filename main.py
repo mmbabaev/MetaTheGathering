@@ -49,6 +49,7 @@ from bot.keyboards import (
     CB_CLOSE_TOURNAMENT,
     CB_CREATE_POLL,
     CB_CUSTOM_ARCHETYPE,
+    CB_DEBUG_META_POLICE,
     CB_DEBUG_ROUND_NOTIFY,
     CB_DEFER_DECK,
     CB_DELETE_TOURNAMENT,
@@ -113,6 +114,7 @@ from bot.telegram import aetherhub as aetherhub_handler
 from bot.telegram import app_stats as app_stats_handler
 from bot.telegram import bingo as bingo_handler
 from bot.telegram import cellar as cellar_handler
+from bot.telegram import debug as debug_handler
 from bot.telegram import features as features_handler
 from bot.telegram import payment as payment_handler
 from bot.telegram import poll as poll_handler
@@ -432,6 +434,10 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(aetherhub_handler.callback_set_import_time, pattern=f"^{CB_SET_IMPORT_TIME}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_admin_more, pattern=f"^{CB_ADMIN_MORE}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_debug_round_notify, pattern=f"^{CB_DEBUG_ROUND_NOTIFY}:"))
+    if settings.DEBUG:
+        app.add_handler(
+            CallbackQueryHandler(debug_handler.callback_debug_meta_police, pattern=f"^{CB_DEBUG_META_POLICE}:")
+        )
     app.add_handler(CallbackQueryHandler(admin.callback_close_tournament, pattern=f"^{CB_CLOSE_TOURNAMENT}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_reopen_tournament, pattern=f"^{CB_REOPEN_TOURNAMENT}:"))
     app.add_handler(CallbackQueryHandler(schedule_handler.callback_schedule_list, pattern=f"^{CB_SCHEDULE_LIST}$"))
