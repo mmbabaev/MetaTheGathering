@@ -353,7 +353,6 @@ class Keyboards:
         import_time: str | None = None,
         payment_enabled: bool = False,
         payment_confirmed: bool = False,
-        can_close: bool = False,
     ) -> InlineKeyboardMarkup:
         if is_registered:
             action_btn = InlineKeyboardButton("🚪 Выйти из турнира", callback_data=f"{CB_LEAVE}:{tournament_id}")
@@ -371,10 +370,6 @@ class Keyboards:
         if is_registered and show_fill_opponents:
             rows.append(
                 [InlineKeyboardButton("🤝 Записать оппонентов", callback_data=f"{CB_ADMIN_OPPONENTS}:{tournament_id}")]
-            )
-        if can_close:
-            rows.append(
-                [InlineKeyboardButton("🔒 Закрыть турнир", callback_data=f"{CB_CLOSE_TOURNAMENT}:{tournament_id}")]
             )
         if is_admin:
             aetherhub_emoji = "🔄" if aetherhub_url else "📥"
@@ -907,7 +902,6 @@ def tournament_card_keyboard(
     import_time: str | None = None,
     payment_enabled: bool = False,
     payment_confirmed: bool = False,
-    can_close: bool = False,
 ) -> InlineKeyboardMarkup:
     return _default.tournament_card_keyboard(
         tournament_id,
@@ -920,7 +914,6 @@ def tournament_card_keyboard(
         import_time=import_time,
         payment_enabled=payment_enabled,
         payment_confirmed=payment_confirmed,
-        can_close=can_close,
     )
 
 

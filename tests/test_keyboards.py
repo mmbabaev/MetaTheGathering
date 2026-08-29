@@ -8,7 +8,6 @@ from bot.keyboards import (
     CB_ADMIN_SET_ARCH,
     CB_ARCHETYPE,
     CB_ARCHETYPE_MORE,
-    CB_CLOSE_TOURNAMENT,
     CB_CLOSE_TOURNAMENT_CANCEL,
     CB_CLOSE_TOURNAMENT_CONFIRM,
     CB_CUSTOM_ARCHETYPE,
@@ -201,16 +200,6 @@ class TestTournamentCardKeyboard:
         markup = Keyboards().tournament_card_keyboard(1, is_registered=False, show_fill_opponents=True)
         texts = self._all_texts(markup)
         assert not any("оппонент" in t.lower() for t in texts)
-
-    def test_close_button_shown_when_allowed(self):
-        markup = tournament_card_keyboard(1, is_registered=False, can_close=True)
-        callbacks = [button.callback_data for row in markup.inline_keyboard for button in row]
-        assert f"{CB_CLOSE_TOURNAMENT}:1" in callbacks
-
-    def test_close_button_hidden_by_default(self):
-        markup = tournament_card_keyboard(1, is_registered=False)
-        callbacks = [button.callback_data for row in markup.inline_keyboard for button in row]
-        assert f"{CB_CLOSE_TOURNAMENT}:1" not in callbacks
 
 
 def test_close_tournament_confirm_keyboard_has_confirm_and_cancel():

@@ -116,7 +116,6 @@ class PlayerHandler:
     def _tournament_card(self, t, tg_id: int | None) -> HandlerResult:
         is_registered = False
         is_admin = False
-        is_scorekeeper = False
         has_deck = True
         if tg_id is not None:
             user = self.user_svc.get_by_tg_id(tg_id)
@@ -126,7 +125,6 @@ class PlayerHandler:
                 if participant is not None:
                     has_deck = participant.archetype_id is not None
             is_admin = self.user_svc.is_admin(tg_id)
-            is_scorekeeper = self.user_svc.is_scorekeeper(tg_id)
         participants = self.svc.list_participants_for_tournament(t.id)
         with_deck = sum(1 for p in participants if p.archetype)
         has_pairings = bool(self.aetherhub_svc.get_pairings(t.id))
@@ -158,7 +156,6 @@ class PlayerHandler:
                 import_time=getattr(t, "aetherhub_import_time", None),
                 payment_enabled=payment_enabled,
                 payment_confirmed=payment_confirmed,
-                can_close=(is_scorekeeper and not is_admin and t.status != models.TournamentStatus.CLOSED),
             ),
         )
 
