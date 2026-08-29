@@ -1,6 +1,6 @@
 # MetaGatherer — живой план проекта
 
-Последнее обновление: **28 августа 2026**.
+Последнее обновление: **29 августа 2026**.
 
 Это верхнеуровневый source of truth о том, что уже находится в `main`, что сейчас
 проходит review и что ещё только запланировано. Детали и acceptance criteria живут
@@ -70,6 +70,11 @@
   свой пропуск имеет приоритет, заполненные записи защищены от изменения, автор записи
   сохраняется в `deck_added_by_tg_id` и event log — PR
   [#255](https://github.com/mmbabaev/MetaTheGathering/pull/255).
+- Доработка мета-полиции из
+  [#258](https://github.com/mmbabaev/MetaTheGathering/issues/258): персональная подсказка
+  выделяет незаполненных оппонентов и их раунды; групповое сообщение после каждой записи
+  динамически зачёркивает заполненных и убирает кнопку, когда пропусков не осталось — PR
+  [#259](https://github.com/mmbabaev/MetaTheGathering/pull/259).
 
 Игрокам ачивки автоматически не рассылаются: текущий режим — owner-only shadow.
 
@@ -82,11 +87,10 @@
   Каждый PR получает отдельную PostgreSQL schema и не наследует Alembic revision соседнего PR;
   стабильный staging от `main`, in-process Telegram transport tests и real-bot smoke остаются
   следующими этапами — PR [#271](https://github.com/mmbabaev/MetaTheGathering/pull/271).
-- Доработка мета-полиции из
-  [#258](https://github.com/mmbabaev/MetaTheGathering/issues/258): персональная подсказка
-  выделяет незаполненных оппонентов и их раунды; групповое сообщение после каждой записи
-  динамически зачёркивает заполненных и убирает кнопку, когда пропусков не осталось — PR
-  [#259](https://github.com/mmbabaev/MetaTheGathering/pull/259).
+- Owner-only debug-превью мета-полиции воспроизводит живое обновление сообщения на debug-боте,
+  не добавляя вторую схему хранения. Даже при нажатии из группы превью и все его обновления
+  адресуются только в личку владельца — PR
+  [#274](https://github.com/mmbabaev/MetaTheGathering/pull/274).
 - Pure fairness foundation перечисляет все 10 линий Bingo 4×4 и считает вероятностные
   веса/imbalance с отдельными diagnostics для строк, столбцов и диагоналей, не меняя
   horizontal-only `bingo-v1` — PR
