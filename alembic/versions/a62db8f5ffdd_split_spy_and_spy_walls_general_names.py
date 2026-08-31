@@ -1,4 +1,4 @@
-"""split Spy and Spy Walls general names
+"""split Spy, Spy Walls, and Walls Combo general names
 
 Revision ID: a62db8f5ffdd
 Revises: 1ab9c3d7dda1
@@ -19,14 +19,14 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # Исправляем только подтверждённые варианты старого кэша. Исходные name и ссылки
-    # участников не меняются: Spy/Spy Combo отделяются от Spy Walls/Walls combo.
+    # участников не меняются: Spy/Spy Combo, Spy Walls и Walls combo разделяются.
     op.execute(
         sa.text(
             "UPDATE archetypes SET general_name = CASE lower(trim(name)) "
             "WHEN 'spy' THEN 'Spy' "
             "WHEN 'spy combo' THEN 'Spy' "
             "WHEN 'spy walls' THEN 'Spy Walls' "
-            "WHEN 'walls combo' THEN 'Spy Walls' "
+            "WHEN 'walls combo' THEN 'Walls Combo' "
             "ELSE general_name END "
             "WHERE lower(trim(name)) IN ('spy', 'spy combo', 'spy walls', 'walls combo')"
         )

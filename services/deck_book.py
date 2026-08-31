@@ -7,8 +7,8 @@
 Две задачи:
 - **цвет** — там, где из названия его не вывести («Spy Walls», «Ponza»);
 - **группировка** — несколько названий сводятся в одну строку легенды и один сектор
-  («Spy» + «Spy Combo» → «Spy»; все троны → «Tron»). Spy Walls остаётся отдельной
-  колодой.
+  («Spy» + «Spy Combo» → «Spy»; все троны → «Tron»). Spy Walls и Walls Combo
+  остаются отдельными колодами.
 
 Ключи нормализованные (см. `normalize_deck_name`), поэтому регистр, дефисы и эмодзи
 в названии значения не имеют: «Flicker tron», «Flicker Tron» и «🔵 Flicker-Tron» — одна запись.
@@ -77,7 +77,7 @@ def _book(*entries: tuple[str, str, tuple[str, ...]]) -> dict[str, KnownDeck]:
 # (каноничное имя, цвета, синонимы-и-члены-группы)
 DECK_BOOK = _book(
     # --- группы: несколько названий → одна строка легенды ---
-    # Spy / Spy Combo — одна колода; Spy Walls — отдельная стратегия.
+    # Spy / Spy Combo — одна колода; Spy Walls и Walls Combo — отдельные стратегии.
     ("Spy", "BG", ("Spy Combo",)),
     ("Spy Walls", "BG", ()),
     # Все троны в одну группу. Цвет — бесцветный: у объединённой группы единого цвета нет,
@@ -100,7 +100,7 @@ DECK_BOOK = _book(
     ("Ponza", "RG", ()),
     ("Food Pestilence", "BG", ()),
     ("Tortured Existence", "B", ()),
-    ("Walls", "G", ()),
+    ("Walls Combo", "G", ("Walls",)),
     ("Slivers", "WUBRG", ()),
     ("Familiars", "WU", ()),
     ("Infect", "UG", ()),

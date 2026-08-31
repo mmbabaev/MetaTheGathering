@@ -86,6 +86,6 @@ def test_split_spy_general_names_repairs_only_classification_cache():
         (1, "Spy", "Spy", "Spy"),
         (2, "Spy Combo", "Spy", "Spy"),
         (3, "Spy Walls", "Spy Walls", "Spy"),
-        (4, "Walls combo", "Spy Walls", "Walls"),
+        (4, "Walls combo", "Walls Combo", "Walls"),
         (5, "Blue Terror", "Blue Terror", "Terror"),
     ]
