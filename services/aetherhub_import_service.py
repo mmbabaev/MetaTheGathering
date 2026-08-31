@@ -160,15 +160,19 @@ class AetherhubImportService:
         return candidate
 
     def _find_tournament_typo_candidate(self, tournament_id: int, full_name: str) -> models.User | None:
-        users = self.db.execute(
-            select(models.User)
-            .join(models.Participant, models.Participant.user_id == models.User.id)
-            .where(
-                models.Participant.tournament_id == tournament_id,
-                models.Participant.archetype_id.is_not(None),
-                models.User.tg_id > 0,
+        users = (
+            self.db.execute(
+                select(models.User)
+                .join(models.Participant, models.Participant.user_id == models.User.id)
+                .where(
+                    models.Participant.tournament_id == tournament_id,
+                    models.Participant.archetype_id.is_not(None),
+                    models.User.tg_id > 0,
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         candidates = []
         for user in users:
             candidate_name = " ".join(part for part in (user.first_name, user.last_name) if part)
@@ -245,9 +249,7 @@ class AetherhubImportService:
         ).scalar_one_or_none()
 
     def _build_place_maps(self, standings: list[str]) -> tuple[dict[str, int], dict[str, int]]:
-        direct = {
-            name: place for place, name in enumerate(standings, start=1) if name.upper() != "BYE"
-        }
+        direct = {name: place for place, name in enumerate(standings, start=1) if name.upper() != "BYE"}
         normalized = {self._normalize_import_name(name): place for name, place in direct.items()}
         return direct, normalized
 
@@ -280,18 +282,14 @@ class AetherhubImportService:
         for name in candidates:
             if not name or name.upper() == "BYE":
                 continue
-            key = tuple(
-                sorted(self._normalize_import_name(name).casefold().replace("ё", "е").split())
-            )
+            key = tuple(sorted(self._normalize_import_name(name).casefold().replace("ё", "е").split()))
             if key in seen:
                 continue
             seen.add(key)
             result.append(name)
         return result
 
-    def _remove_confirmed_no_shows(
-        self, tournament_id: int, data: AetherhubTournamentData
-    ) -> list[str]:
+    def _remove_confirmed_no_shows(self, tournament_id: int, data: AetherhubTournamentData) -> list[str]:
         """Remove bot registrations that never appeared in a finished AetherHub event.
 
         A published standings list alone is not enough: AetherHub can temporarily return a
@@ -303,34 +301,20 @@ class AetherhubImportService:
             return []
 
         observed_keys = {
-            tuple(
-                sorted(
-                    self._normalize_import_name(name)
-                    .casefold()
-                    .replace("ё", "е")
-                    .split()
-                )
-            )
+            tuple(sorted(self._normalize_import_name(name).casefold().replace("ё", "е").split()))
             for name in self._registration_names(data)
         }
-        participants = self.db.execute(
-            select(models.Participant).where(models.Participant.tournament_id == tournament_id)
-        ).scalars().all()
+        participants = (
+            self.db.execute(select(models.Participant).where(models.Participant.tournament_id == tournament_id))
+            .scalars()
+            .all()
+        )
         removed_names: list[str] = []
         for participant in participants:
             if participant.final_place is not None:
                 continue
-            name = format_participant_name(
-                participant.user.first_name, participant.user.last_name
-            ).strip()
-            key = tuple(
-                sorted(
-                    self._normalize_import_name(name)
-                    .casefold()
-                    .replace("ё", "е")
-                    .split()
-                )
-            )
+            name = format_participant_name(participant.user.first_name, participant.user.last_name).strip()
+            key = tuple(sorted(self._normalize_import_name(name).casefold().replace("ё", "е").split()))
             if key in observed_keys:
                 continue
             removed_names.append(name or f"participant:{participant.id}")
@@ -416,6 +400,8 @@ class AetherhubImportService:
         registered = 0
         already_registered = 0
         created: list[str] = []
+        registration_names = self._registration_names(data)
+        seen_at = models.utc_now() if registration_names else None
 
         place_map, normalized_place_map = self._build_place_maps(data.standings)
 
@@ -423,7 +409,7 @@ class AetherhubImportService:
         # player there while still publishing them in later rounds and final standings (issue
         # #184, tournament #65). Include all sources and de-duplicate opposite name orderings.
         processed_user_ids: set[int] = set()
-        for name in self._registration_names(data):
+        for name in registration_names:
             place = place_map.get(name) or normalized_place_map.get(self._normalize_import_name(name))
             user = self.find_user_by_name(name, tournament_id)
             was_created = False
@@ -431,12 +417,15 @@ class AetherhubImportService:
                 user, was_created = self._get_or_create_user_by_name(name)
             existing = self._get_participant(tournament_id, user.id)
             if user.id in processed_user_ids:
-                if existing is not None and place is not None:
-                    existing.final_place = place
+                if existing is not None:
+                    existing.aetherhub_seen_at = seen_at
+                    if place is not None:
+                        existing.final_place = place
                 continue
             processed_user_ids.add(user.id)
             if existing is not None:
                 already_registered += 1
+                existing.aetherhub_seen_at = seen_at
                 if place is not None:
                     existing.final_place = place
             else:
@@ -445,6 +434,7 @@ class AetherhubImportService:
                         tournament_id=tournament_id,
                         user_id=user.id,
                         final_place=place,
+                        aetherhub_seen_at=seen_at,
                     )
                 )
                 registered += 1
@@ -490,6 +480,7 @@ class AetherhubImportService:
 
     def _refresh_pairings_only(self, tournament_id: int, data: AetherhubTournamentData) -> ImportResult:
         """Обновить только паринги/счёт (для закрытого турнира). Без перерегистрации."""
+        self._mark_seen_participants(tournament_id, self._registration_names(data))
         pairings_saved = self._save_pairings(tournament_id, data.rounds)
         self._apply_final_places(tournament_id, data.standings)
         real_rounds = [r.number for r in data.rounds if r.pairings]
@@ -508,6 +499,20 @@ class AetherhubImportService:
             standings_received=standings_received,
             scores_complete=self.is_tournament_complete(tournament_id),
         )
+
+    def _mark_seen_participants(self, tournament_id: int, names: list[str]) -> None:
+        """Mark matches from a non-empty import without clearing prior observations."""
+        if not names:
+            return
+        seen_at = models.utc_now()
+        for name in names:
+            user = self.find_user_by_name(name, tournament_id)
+            if user is None:
+                continue
+            participant = self._get_participant(tournament_id, user.id)
+            if participant is not None:
+                participant.aetherhub_seen_at = seen_at
+        self.db.commit()
 
     def _delete_rounds_above(self, tournament_id: int, max_round: int) -> int:
         """Delete stored pairings for rounds greater than ``max_round`` (phantom rounds)."""

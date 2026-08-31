@@ -15,6 +15,7 @@ import pytest
 from bot.handlers.base import HandlerResult
 from bot.telegram.player import (
     USER_DATA_PENDING_ADMIN_CUSTOM_ARCH,
+    USER_DATA_PENDING_CELLAR_NAME,
     USER_DATA_PENDING_CUSTOM,
     USER_DATA_PENDING_MISSING_CUSTOM_ARCH,
     USER_DATA_PENDING_NAME,
@@ -299,6 +300,40 @@ async def test_message_text_input_pending_name_empty_restores_state():
         await message_text_input(update, ctx)
 
     assert ctx.user_data[USER_DATA_PENDING_NAME] == 10
+
+
+async def test_message_text_input_invalid_name_keeps_pending_state():
+    result = HandlerResult("Нужно указать фамилию и имя.", needs_name=True)
+    update = _make_update(message_text="🦉")
+    ctx = _make_context({USER_DATA_PENDING_NAME: 10})
+
+    with patch("bot.telegram.player.SessionLocal"), patch("bot.telegram.player.PlayerHandler") as mock_ph:
+        mock_ph.return_value.handle_save_name_then_register.return_value = result
+        await message_text_input(update, ctx)
+
+    assert ctx.user_data[USER_DATA_PENDING_NAME] == 10
+
+
+async def test_message_text_input_cellar_name_reopens_cellar_after_valid_name():
+    update = _make_update(message_text="Петров Иван")
+    ctx = _make_context({USER_DATA_PENDING_CELLAR_NAME: True})
+
+    with (
+        patch("bot.telegram.player.SessionLocal"),
+        patch("bot.telegram.player.SettingsHandler") as mock_settings,
+        patch("bot.telegram.player.CellarHandler") as mock_cellar,
+    ):
+        mock_settings.return_value.handle_settings_name_text.return_value = HandlerResult("Имя сохранено")
+        mock_cellar.return_value.handle_open.return_value = HandlerResult("Даты", keyboard=MagicMock())
+        await message_text_input(update, ctx)
+
+    assert USER_DATA_PENDING_CELLAR_NAME not in ctx.user_data
+    mock_cellar.return_value.handle_open.assert_called_once_with(
+        tg_id=update.effective_user.id,
+        username=update.effective_user.username,
+        first_name=None,
+        last_name=None,
+    )
 
 
 # ── message_text_input — pending_custom ──────────────────────────────────────

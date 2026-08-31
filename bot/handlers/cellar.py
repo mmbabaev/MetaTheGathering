@@ -10,6 +10,7 @@ from bot.messages import (
     CELLAR_RESERVED,
     CELLAR_UNAVAILABLE,
     CELLAR_USER_NOT_FOUND,
+    NAME_REQUIRED_FOR_REGISTRATION,
     format_cellar_cancel_prompt,
     format_cellar_catalog,
     format_cellar_deck,
@@ -24,6 +25,7 @@ from services.cellar import (
     next_cellar_dates,
 )
 from services.feature_flags import FeatureFlags, FeatureFlagService
+from services.names import has_complete_person_name
 from services.user import UserService
 from services.web_auth import create_magic_token
 
@@ -60,6 +62,8 @@ class CellarHandler:
             first_name=first_name,
             last_name=last_name,
         )
+        if not has_complete_person_name(user.first_name, user.last_name):
+            return HandlerResult(NAME_REQUIRED_FOR_REGISTRATION, needs_name=True)
         dates = next_cellar_dates(today)
         if not self.cellar.catalog(dates[0]):
             self.cellar.ensure_bootstrap_catalog()

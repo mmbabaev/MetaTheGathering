@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from collections import Counter
 from typing import Optional
 
@@ -29,6 +31,47 @@ _FAMILY_SUFFIXES = (
     "ова",
     "ская",
 )
+
+
+def clean_person_name_component(value: str | None) -> str | None:
+    """Trim whitespace and decorative emoji around a person-name component."""
+    if value is None:
+        return None
+    cleaned = re.sub(r"\s+", " ", value).strip()
+    while cleaned and (
+        unicodedata.category(cleaned[0]).startswith(("P", "S")) or unicodedata.category(cleaned[0]) in {"Cf", "Mn"}
+    ):
+        cleaned = cleaned[1:].lstrip()
+    while cleaned and (
+        unicodedata.category(cleaned[-1]).startswith(("P", "S")) or unicodedata.category(cleaned[-1]) in {"Cf", "Mn"}
+    ):
+        cleaned = cleaned[:-1].rstrip()
+    return re.sub(r"\s+", " ", cleaned).strip() or None
+
+
+def _valid_name_words(value: str | None) -> list[str] | None:
+    cleaned = clean_person_name_component(value)
+    if not cleaned:
+        return None
+    words = cleaned.split()
+    if len(words) < 2 or any(not any(char.isalpha() for char in word) for word in words):
+        return None
+    return words
+
+
+def parse_full_name_input(value: str) -> tuple[str, str] | None:
+    """Parse UI input in ``Фамилия Имя`` order after strict validation."""
+    words = _valid_name_words(value)
+    if words is None:
+        return None
+    return " ".join(words[1:]), words[0]
+
+
+def has_complete_person_name(first_name: str | None, last_name: str | None) -> bool:
+    """Whether stored Telegram/user fields contain at least two letter-bearing words."""
+    first = clean_person_name_component(first_name)
+    last = clean_person_name_component(last_name)
+    return _valid_name_words(" ".join(part for part in (last, first) if part)) is not None
 
 
 def looks_like_family_name(word: str) -> bool:
@@ -72,9 +115,7 @@ def is_single_word_name_typo(imported_name: str, candidate_name: str) -> bool:
         return False
     imported_diff = next(iter((Counter(imported) - shared).elements()))
     candidate_diff = next(iter((Counter(candidate) - shared).elements()))
-    return min(len(imported_diff), len(candidate_diff)) >= 5 and _is_one_edit_apart(
-        imported_diff, candidate_diff
-    )
+    return min(len(imported_diff), len(candidate_diff)) >= 5 and _is_one_edit_apart(imported_diff, candidate_diff)
 
 
 def format_participant_name(first_name: Optional[str], last_name: Optional[str]) -> str:

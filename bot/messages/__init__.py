@@ -25,7 +25,12 @@ NOT_REGISTERED_IN_TOURNAMENT = "Вы не записаны на этот тур�
 ASK_NAME = "Как вас зовут? Введите фамилию и имя через пробел (например: Иванов Иван):"
 NAME_SAVED = "Имя сохранено: {full_name}"
 NAME_REQUIRED_FOR_REGISTRATION = (
-    "Для записи на турнир нужно указать ваше имя.\n\nВведите фамилию и имя через пробел (например: Иванов Иван):"
+    "Для записи на турнир нужно указать фамилию и имя — минимум два слова с буквами.\n\n"
+    "Введите фамилию и имя через пробел (например: Иванов Иван):"
+)
+INVALID_FULL_NAME = (
+    "Нужно указать фамилию и имя — минимум два слова с буквами.\n\n"
+    "Введите фамилию и имя через пробел (например: Иванов Иван):"
 )
 
 # Settings
@@ -179,9 +184,12 @@ HELP_TEXT_ADMIN = """\
 """
 
 
-def _participant_icon(p) -> str:
-    """✅ колода указана / ⬜ колоды нет."""
-    return "✅" if p.archetype else "⬜"
+def _participant_icon(p, *, aetherhub_imported: bool = False) -> str:
+    """✅ колода указана / ⬜ колоды нет; ❓ игрок ещё не найден в AetherHub."""
+    icon = "✅" if p.archetype else "⬜"
+    if aetherhub_imported and getattr(p, "aetherhub_seen_at", None) is None:
+        icon += "❓"
+    return icon
 
 
 # Типичные окончания русских фамилий
@@ -228,9 +236,9 @@ def _status_header(title: str, status: str, participants: list) -> str:
     return header
 
 
-def format_participant_line(p, decks_hidden: bool = False) -> str:
+def format_participant_line(p, decks_hidden: bool = False, *, aetherhub_imported: bool = False) -> str:
     """Одна строка участника: «<иконка> Фамилия Имя (@ник) 🧙 — Колода». Общий для обоих режимов."""
-    icon = _participant_icon(p)
+    icon = _participant_icon(p, aetherhub_imported=aetherhub_imported)
     if p.user:
         full_name = format_participant_name(p.user.first_name, p.user.last_name) or f"id{p.user.tg_id}"
         username_hint = f" (@{p.user.username})" if p.user.username else ""
@@ -247,8 +255,11 @@ def format_participant_line(p, decks_hidden: bool = False) -> str:
 
 def format_tournament_status(title: str, status: str, participants: list, decks_hidden: bool = False) -> str:
     """Структурированный список участников турнира (плоский)."""
+    aetherhub_imported = any(getattr(p, "aetherhub_seen_at", None) is not None for p in participants)
     lines = [_status_header(title, status, participants), ""]
-    lines.extend(format_participant_line(p, decks_hidden) for p in participants)
+    lines.extend(format_participant_line(p, decks_hidden, aetherhub_imported=aetherhub_imported) for p in participants)
+    if aetherhub_imported and any(getattr(p, "aetherhub_seen_at", None) is None for p in participants):
+        lines.extend(["", "❓ — пока не найден в AetherHub"])
     return "\n".join(lines)
 
 

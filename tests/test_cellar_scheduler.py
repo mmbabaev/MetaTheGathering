@@ -18,7 +18,7 @@ def _reserve(db, user_svc, event_date=date(2026, 8, 24)):
     service = CellarService(db)
     service.ensure_bootstrap_catalog()
     deck = service.catalog(event_date)[0]
-    user = user_svc.get_or_create(tg_id=1001, username="alice", first_name="Alice")
+    user = user_svc.get_or_create(tg_id=1001, username="alice", first_name="Alice Player")
     reservation = service.reserve(
         deck_id=deck.id,
         user_id=user.id,
@@ -137,7 +137,7 @@ async def test_coordinator_summary_is_targeted_and_idempotent(db, user_svc, monk
     assert [call.kwargs["chat_id"] for call in bot.send_message.await_args_list] == [111, 222, 333]
     assert all("Alice" in call.kwargs["text"] for call in bot.send_message.await_args_list)
     assert all("@alice" in call.kwargs["text"] for call in bot.send_message.await_args_list)
-    assert all("Alice — @alice —" in call.kwargs["text"] for call in bot.send_message.await_args_list)
+    assert all("Alice Player — @alice —" in call.kwargs["text"] for call in bot.send_message.await_args_list)
     deliveries = db.execute(select(models.CellarCoordinatorReminder)).scalars().all()
     assert len(deliveries) == 3
     assert all(delivery.delivered_at is not None for delivery in deliveries)

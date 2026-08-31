@@ -25,7 +25,7 @@ def _deck(db):
 
 @pytest.mark.asyncio
 async def test_web_reservation_announces_once_and_marks_delivery(db, user_svc, monkeypatch):
-    user = user_svc.get_or_create(tg_id=1001, first_name="Alice")
+    user = user_svc.get_or_create(tg_id=1001, first_name="Alice Player")
     deck = _deck(db)
     announce = AsyncMock(return_value=True)
     monkeypatch.setattr("web.routes.cellar._announce", announce)
@@ -43,8 +43,8 @@ async def test_web_reservation_announces_once_and_marks_delivery(db, user_svc, m
 
 @pytest.mark.asyncio
 async def test_web_reservation_conflict_does_not_announce(db, user_svc, monkeypatch):
-    alice = user_svc.get_or_create(tg_id=1001, first_name="Alice")
-    bob = user_svc.get_or_create(tg_id=1002, first_name="Bob")
+    alice = user_svc.get_or_create(tg_id=1001, first_name="Alice Player")
+    bob = user_svc.get_or_create(tg_id=1002, first_name="Bob Player")
     deck = _deck(db)
     CellarService(db).reserve(deck_id=deck.id, user_id=alice.id, event_date=EVENT_DATE, today=EVENT_DATE)
     announce = AsyncMock(return_value=True)
@@ -59,8 +59,8 @@ async def test_web_reservation_conflict_does_not_announce(db, user_svc, monkeypa
 
 @pytest.mark.asyncio
 async def test_web_cancel_releases_only_own_reservation_and_announces(db, user_svc, monkeypatch):
-    alice = user_svc.get_or_create(tg_id=1001, first_name="Alice")
-    bob = user_svc.get_or_create(tg_id=1002, first_name="Bob")
+    alice = user_svc.get_or_create(tg_id=1001, first_name="Alice Player")
+    bob = user_svc.get_or_create(tg_id=1002, first_name="Bob Player")
     deck = _deck(db)
     reservation = (
         CellarService(db)
@@ -85,7 +85,7 @@ async def test_web_cancel_releases_only_own_reservation_and_announces(db, user_s
 
 
 def test_cellar_page_renders_availability_and_reserver(db, user_svc):
-    alice = user_svc.get_or_create(tg_id=1001, first_name="Alice")
+    alice = user_svc.get_or_create(tg_id=1001, first_name="Alice Player")
     service = CellarService(db)
     service.ensure_bootstrap_catalog()
     decks = service.catalog(EVENT_DATE)
@@ -111,7 +111,7 @@ def test_cellar_page_renders_availability_and_reserver(db, user_svc):
     )
 
     assert "Колоды из ячейки" in html
-    assert "Забронировал(а): Alice" in html
+    assert "Забронировал(а): Alice Player" in html
     assert "Занята" in html
     assert "Недоступна" in html
     assert CELLAR_SHEET_URL in html
@@ -137,7 +137,7 @@ def test_cellar_web_routes_are_gated_by_disabled_default(db):
 
 @pytest.mark.asyncio
 async def test_reservation_notification_targets_cellar_owners_in_production(db, user_svc, monkeypatch):
-    user = user_svc.get_or_create(tg_id=1001, username="alice", first_name="Alice")
+    user = user_svc.get_or_create(tg_id=1001, username="alice", first_name="Alice Player")
     reservation = (
         CellarService(db)
         .reserve(
@@ -166,7 +166,7 @@ async def test_reservation_notification_targets_cellar_owners_in_production(db, 
 
 @pytest.mark.asyncio
 async def test_reservation_notification_targets_only_owner_in_debug(db, user_svc, monkeypatch):
-    user = user_svc.get_or_create(tg_id=1001, first_name="Alice")
+    user = user_svc.get_or_create(tg_id=1001, first_name="Alice Player")
     reservation = (
         CellarService(db)
         .reserve(

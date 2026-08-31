@@ -118,12 +118,12 @@ class TestHandleSettings:
 
 
 class TestHandleSettingsNameText:
-    def test_saves_first_name_only(self, handler, user_svc):
+    def test_rejects_first_name_only(self, handler, user_svc):
         user_svc.get_or_create(tg_id=8010, username="u", first_name="Old")
         result = handler.handle_settings_name_text(tg_id=8010, name_text="Новое")
-        assert "Новое" in result.text
+        assert result.needs_name is True
         user = user_svc.get_by_tg_id(8010)
-        assert user.first_name == "Новое"
+        assert user.first_name == "Old"
         assert user.last_name is None
 
     def test_saves_first_and_last_name(self, handler, user_svc):
@@ -136,8 +136,14 @@ class TestHandleSettingsNameText:
         assert user.last_name == "Петров"
 
     def test_returns_name_saved_message(self, handler):
-        result = handler.handle_settings_name_text(tg_id=8012, name_text="Анна")
-        assert result.text == NAME_SAVED.format(full_name="Анна")
+        result = handler.handle_settings_name_text(tg_id=8012, name_text="Петрова Анна")
+        assert result.text == NAME_SAVED.format(full_name="Петрова Анна")
+
+    def test_trims_edge_emoji_and_whitespace(self, handler, user_svc):
+        result = handler.handle_settings_name_text(tg_id=8013, name_text="  🦉  Петрова Анна  ✅ ")
+        assert result.text == NAME_SAVED.format(full_name="Петрова Анна")
+        user = user_svc.get_by_tg_id(8013)
+        assert (user.first_name, user.last_name) == ("Анна", "Петрова")
 
 
 # --- UserService.toggle_hide_deck_emoji ---
