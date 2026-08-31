@@ -50,6 +50,11 @@
   PNG 4×4 и текст всех 16 условий. Команда доступна под feature flag
   `achievementBoardLab`, отвечает только инициатору и ничего не записывает в production
   boards — PR [#242](https://github.com/mmbabaev/MetaTheGathering/pull/242).
+- Fixture-каталог `play_deck` обновлён по production snapshot за год на 19 августа:
+  все десять актуальных архетипов получили отдельные preview-цели с ручными названиями,
+  устаревшие Kuldotha Red и Broodscale Combo удалены из preview-pool — PR
+  [#245](https://github.com/mmbabaev/MetaTheGathering/pull/245). Production season по-прежнему
+  требует отдельного frozen snapshot на дату старта.
 - Планировщик больше не закрывает незавершённый турнир при создании следующего события:
   вместо потери финального реимпорта создание блокировалось до ручного закрытия — PR
   [#252](https://github.com/mmbabaev/MetaTheGathering/pull/252).
@@ -88,6 +93,10 @@
 
 ### В review, но ещё не в `main`
 
+- Недельный top-10 за последние 365 дней заменяет зашитый порядок в меню выбора колоды.
+  Snapshot обновляется по понедельникам и после старта, а первое компактное меню игроков
+  с историей не меняется — PR [#246](https://github.com/mmbabaev/MetaTheGathering/pull/246).
+
 - Защита первой регистрации из [#273](https://github.com/mmbabaev/MetaTheGathering/issues/273):
   ФИО требует минимум два слова с буквами, пробелы и декоративные эмоджи по краям
   отбрасываются; тот же guard закрывает Telegram и web/API-бронирование Cellar.
@@ -113,10 +122,6 @@
   horizontal-only `bingo-v1` — PR
   [#250](https://github.com/mmbabaev/MetaTheGathering/pull/250). Персональный estimator и
   weighted solver с hard gate 10% остаются следующими отдельными этапами.
-- Fixture-каталог `play_deck` обновляется по production snapshot за год на 19 августа:
-  все десять актуальных архетипов получают отдельные preview-цели с ручными названиями.
-  Устаревшие Kuldotha Red и Broodscale Combo удаляются из preview-pool; production season
-  по-прежнему требует отдельного frozen snapshot на дату старта.
 - До двух незакрытых турниров на чат: поздно завершающийся Goldfish не блокирует регистрацию
   следующего события; третий активный турнир по-прежнему запрещён, а неявные операции выбирают
   самый новый.

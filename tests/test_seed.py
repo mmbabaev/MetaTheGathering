@@ -23,3 +23,13 @@ class TestSeed:
         names = {a.name for a in db.query(Archetype).all()}
         expected = {a["name"] for a in PAUPER_ARCHETYPES}
         assert names == expected
+
+    def test_seed_does_not_overwrite_weekly_meta_rank(self, db):
+        seed(db)
+        archetype = db.query(Archetype).filter_by(name="Blue Terror").one()
+        archetype.meta_rank = 7
+        db.commit()
+
+        seed(db)
+
+        assert archetype.meta_rank == 7
