@@ -25,7 +25,10 @@
 - Любой `* Tron` → `Tron`.
 - `Bogles`, включая варианты с эмодзи и опечаткой в ключевом слове, → `Bogles`.
 - Любой `* Ephemerate` → `Ephemerate`.
-- Исходные названия с маркером `Spy`, включая `Spy Combo` и `Spy Walls`, → `Spy`.
+- На уровне `general_name` `Spy`/`Spy Combo` → `Spy`, а `Spy Walls`/`Walls combo` →
+  `Spy Walls`: на картинке метагейма это две разные колоды.
+- На уровне `macro_name` исходные названия с маркером `Spy`, включая `Spy Combo` и
+  `Spy Walls`, по-прежнему объединяются в экспериментальную семью `Spy`.
 - Названия с маркером `Walls`, но без `Spy`, включая `Walls combo`, → `Walls`.
 - `Black Sacrifice` и голый `Sacrifice` → `Sacrifice`; турнирные `MonoBlack Sacrifice`
   и `Rainbow Black Sac` канонизируются как `Black Sacrifice` без изменения исходного имени.
