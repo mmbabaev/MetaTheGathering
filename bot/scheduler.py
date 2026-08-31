@@ -17,7 +17,8 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 from telegram.ext import Application, ContextTypes
 
 from bot.chart import build_chart, build_standings
-from bot.deeplink import registration_deeplink
+from bot.deeplink import fill_missing_deeplink, registration_deeplink
+from bot.handlers.aetherhub import format_tournament_not_found
 from bot.messages import format_decks_revealed, format_meta_gather_completed, format_missing_decks_reminder
 from bot.registration_messages import RegistrationMessageRefreshJob
 from bot.registration_messages import send_registration_open as _send_registration_open
@@ -31,6 +32,14 @@ from core.database import SessionLocal
 from core.schemas import TournamentCreate
 from services.aetherhub_import_service import MIN_TOURNAMENT_DURATION, AetherhubImportService
 from services.aetherhub_service import AetherhubService
+from services.cellar import (
+    CELLAR_CLUB_NAME,
+    CELLAR_TIMEZONE,
+    CellarService,
+    cellar_notification_recipients,
+    format_coordinator_summary,
+)
+from services.cellar_sheet import CellarCatalogSourceError, GoogleSheetsCellarCatalog
 from services.datalens import DataLensService
 from services.deck_mapping import refresh_archetype_macro
 from services.deck_reminders import DeckReminderStage
@@ -41,13 +50,16 @@ from services.magicoculus import (
     MagicOculusImportResult,
     MagicOculusTournamentCollector,
 )
+from services.meta_police_message import MetaPoliceMessageService
 from services.names import format_participant_name
 from services.schedule import ScheduleService
 from services.stats import StatsService
 from services.top_archetypes import TopArchetypeSnapshotService
-from services.tournament import TournamentService
+from services.tournament import MAX_ACTIVE_TOURNAMENTS_PER_CHAT, TournamentService
 
 logger = logging.getLogger(__name__)
+
+CELLAR_CATALOG_SYNC_TIME = "23:00"
 
 
 @dataclass(frozen=True)
@@ -187,10 +199,15 @@ class CreateTournamentJob:
         try:
             svc = TournamentService(db)
             try:
-                active = svc.get_active_tournament_for_chat(self.club.chat_id or 0)
-                if active:
-                    svc.close_tournament(active.id)
-                    logger.info(f"Closed previous tournament #{active.id} for '{self.club.name}'")
+                active = svc.list_active_tournaments_for_chat(self.club.chat_id or 0)
+                if len(active) >= MAX_ACTIVE_TOURNAMENTS_PER_CHAT:
+                    logger.warning(
+                        "CreateTournamentJob: skipping '%s' — active tournament limit reached (%s: %s)",
+                        self.club.name,
+                        len(active),
+                        ", ".join(f"#{t.id}" for t in active),
+                    )
+                    return
 
                 new_t = svc.create_tournament(
                     TournamentCreate(
@@ -201,6 +218,12 @@ class CreateTournamentJob:
                         registration_close_at=_naive_utc(event_at),
                     )
                 )
+                if self.club.name == CELLAR_CLUB_NAME and FeatureFlagService(db).is_enabled(FeatureFlags.CELLAR_DECKS):
+                    try:
+                        CellarService(db).attach_event_to_tournament(event_at.date(), new_t.id)
+                    except Exception:
+                        db.rollback()
+                        logger.exception("CreateTournamentJob: cellar reservations failed for #%s", new_t.id)
                 logger.info(f"Created tournament #{new_t.id} '{title}' for '{self.club.name}'")
 
                 if bot is not None:
@@ -265,6 +288,85 @@ class PreStartReminderJob:
                 db.close()
 
 
+class CellarCoordinatorReminderJob:
+    """Send each configured coordinator one idempotent summary shortly before the event."""
+
+    async def run(self, bot, now: datetime, db=None) -> None:
+        if bot is None:
+            return
+        close_db = db is None
+        if close_db:
+            db = SessionLocal()
+        try:
+            if not FeatureFlagService(db).is_enabled(FeatureFlags.CELLAR_DECKS):
+                return
+            recipients = cellar_notification_recipients(db)
+            if not recipients:
+                return
+            now_utc = _naive_utc(now)
+            tournament = db.execute(
+                select(models.Tournament)
+                .where(
+                    models.Tournament.club == CELLAR_CLUB_NAME,
+                    models.Tournament.status == models.TournamentStatus.REGISTRATION,
+                    models.Tournament.registration_close_at > now_utc,
+                    models.Tournament.registration_close_at <= now_utc + timedelta(hours=1),
+                )
+                .order_by(models.Tournament.registration_close_at)
+                .limit(1)
+            ).scalar_one_or_none()
+            if tournament is None:
+                return
+            event_at = tournament.registration_close_at.replace(tzinfo=timezone.utc).astimezone(CELLAR_TIMEZONE)
+            service = CellarService(db)
+            reservations = service.active_reservations(event_at.date())
+            if not reservations:
+                return
+            text = format_coordinator_summary(event_at.date(), reservations)
+            for recipient_tg_id in recipients:
+                delivery = service.coordinator_delivery(event_at.date(), recipient_tg_id)
+                if delivery.delivered_at is not None:
+                    continue
+                try:
+                    await bot.send_message(chat_id=recipient_tg_id, text=text)
+                except Exception as exc:  # noqa: BLE001 — retry on the next minute
+                    service.finish_coordinator_delivery(delivery, error=str(exc))
+                    logger.exception("Cellar coordinator reminder failed for %s", recipient_tg_id)
+                    continue
+                service.finish_coordinator_delivery(delivery)
+        finally:
+            if close_db:
+                db.close()
+
+
+class CellarCatalogSyncJob:
+    """Refresh the public cellar sheet once a week without blocking the bot event loop."""
+
+    def __init__(self, source: GoogleSheetsCellarCatalog | None = None) -> None:
+        self._source = source or GoogleSheetsCellarCatalog()
+
+    async def run(self, db=None) -> tuple[int, int, int] | None:
+        close_db = db is None
+        if close_db:
+            db = SessionLocal()
+        try:
+            if not FeatureFlagService(db).is_enabled(FeatureFlags.CELLAR_DECKS):
+                return None
+            entries = await asyncio.to_thread(self._source.fetch)
+            result = CellarService(db).sync_catalog(entries)
+            logger.info(
+                "Каталог колод из ячейки синхронизирован: created=%s updated=%s deactivated=%s",
+                *result,
+            )
+            return result
+        except CellarCatalogSourceError:
+            logger.exception("Не удалось выполнить еженедельную синхронизацию каталога ячейки")
+            return None
+        finally:
+            if close_db:
+                db.close()
+
+
 # ---------------------------------------------------------------------------
 # Job: AetherHub auto-import
 # ---------------------------------------------------------------------------
@@ -279,11 +381,37 @@ class AetherhubImportJob:
         schedule: ClubSchedule,
         aetherhub_service: AetherhubService | None = None,
         event_day_offset: int = 0,
+        attempt_number: int = 1,
     ) -> None:
         self.club = club
         self.schedule = schedule
         self._aetherhub = aetherhub_service or AetherhubService()
         self._event_day_offset = event_day_offset
+        self._attempt_number = attempt_number
+
+    async def _notify_owner_not_found(self, bot, db, tournament: models.Tournament, event_date: date) -> None:
+        """Send one owner-only DM after the second exact-date lookup misses the event."""
+        if self._attempt_number != 2 or bot is None or tournament.aetherhub_not_found_notified_at is not None:
+            return
+
+        owner_chat_id = settings.OWNER_CHAT_ID
+        allowed_ids = settings.notify_allowed_ids
+        if not owner_chat_id or (allowed_ids is not None and owner_chat_id not in allowed_ids):
+            return
+
+        try:
+            await bot.send_message(
+                chat_id=owner_chat_id,
+                text=format_tournament_not_found(self.club.aetherhub_url, event_date),
+            )
+            tournament.aetherhub_not_found_notified_at = models.utc_now()
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception(
+                "AetherhubImportJob: failed to notify owner that no tournament was found for '%s'",
+                self.club.name,
+            )
 
     async def run(self, now: datetime, db=None, bot=None) -> None:
         logger.info(f"AetherhubImportJob: running for '{self.club.name}', now={now.strftime('%A %H:%M')}")
@@ -328,6 +456,8 @@ class AetherhubImportJob:
                     return
                 if not url:
                     logger.info(f"AetherhubImportJob: no pauper tournament found for '{self.club.name}'")
+                    if today is not None:
+                        await self._notify_owner_not_found(bot, db, tournament, event_date)
                     return
                 auto_discovered = True
 
@@ -765,26 +895,55 @@ class MissingDecksReminderJob:
                     continue
 
                 participants = TournamentService(db).list_participants_for_tournament(tournament.id)
-                if not any(participant.archetype_id is None for participant in participants):
+                missing_participants = [participant for participant in participants if participant.archetype_id is None]
+                if not missing_participants:
                     continue
 
                 try:
                     me = await bot.get_me()
-                    button_url = registration_deeplink(me.username, tournament.id)
+                    community_fill_enabled = FeatureFlagService(db).is_enabled(FeatureFlags.RECORD_OPPONENTS)
+                    button_url = (
+                        fill_missing_deeplink(me.username, tournament.id)
+                        if community_fill_enabled
+                        else registration_deeplink(me.username, tournament.id)
+                    )
                 except Exception:  # noqa: BLE001 — без рабочей кнопки уведомление не считаем доставленным
                     logger.exception("MissingDecksReminderJob: get_me failed for #%s", tournament.id)
                     continue
 
-                text = format_missing_decks_reminder(tournament.title, participants)
-                keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("Записаться", url=button_url)]])
+                text = format_missing_decks_reminder(
+                    tournament.title,
+                    missing_participants,
+                    community_fill_enabled=community_fill_enabled,
+                )
+                button_text = "Записать" if community_fill_enabled else "Записаться"
+                keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(button_text, url=button_url)]])
                 try:
-                    await bot.send_message(chat_id=tournament.chat_id, text=text, reply_markup=keyboard)
+                    message = await bot.send_message(
+                        chat_id=tournament.chat_id,
+                        text=text,
+                        reply_markup=keyboard,
+                        parse_mode="HTML",
+                    )
                 except Exception:  # noqa: BLE001 — повторим на следующем ежедневном запуске
                     logger.exception("MissingDecksReminderJob: reminder failed for #%s", tournament.id)
                     continue
 
                 tournament.missing_decks_reminder_1d_sent_at = models.utc_now()
                 db.commit()
+                message_id = getattr(message, "message_id", None)
+                if community_fill_enabled and isinstance(message_id, int):
+                    try:
+                        MetaPoliceMessageService(db).upsert(
+                            tournament_id=tournament.id,
+                            chat_id=tournament.chat_id,
+                            message_id=message_id,
+                            participant_ids=[participant.id for participant in missing_participants],
+                            button_url=button_url,
+                        )
+                    except Exception:  # noqa: BLE001 — сообщение уже доставлено, повторно не шлём
+                        db.rollback()
+                        logger.exception("MissingDecksReminderJob: tracking failed for #%s", tournament.id)
         finally:
             if close_db:
                 db.close()
@@ -1151,7 +1310,7 @@ def _find_active_club_tournament(db, club_name: str):
             models.Tournament.club == club_name,
             models.Tournament.status != models.TournamentStatus.CLOSED,
         )
-        .order_by(models.Tournament.created_at.desc())
+        .order_by(models.Tournament.created_at.desc(), models.Tournament.id.desc())
         .limit(1)
     )
     return db.execute(stmt).scalar_one_or_none()
@@ -1210,6 +1369,15 @@ def setup_scheduler(app: Application) -> None:
     _refresh_registration_messages.__name__ = "registration_message_refresh"
     app.job_queue.run_repeating(_refresh_registration_messages, interval=60, first=60)
     logger.info("Scheduler: RegistrationMessageRefreshJob registered (every 60s)")
+
+    cellar_reminder_job = CellarCoordinatorReminderJob()
+
+    async def _remind_cellar_coordinators(context: ContextTypes.DEFAULT_TYPE) -> None:
+        await cellar_reminder_job.run(context.bot, now=datetime.now(timezone.utc))
+
+    _remind_cellar_coordinators.__name__ = "cellar_coordinator_reminder"
+    app.job_queue.run_repeating(_remind_cellar_coordinators, interval=60, first=20)
+    logger.info("Scheduler: CellarCoordinatorReminderJob registered (every 60s)")
 
     final_job = AetherhubFinalReimportJob(AetherhubService())
 
@@ -1278,6 +1446,18 @@ def setup_scheduler(app: Application) -> None:
         TOP_ARCHETYPES_REFRESH_TIME,
     )
 
+    cellar_catalog_sync_job = CellarCatalogSyncJob()
+
+    async def _sync_cellar_catalog(_context: ContextTypes.DEFAULT_TYPE) -> None:
+        await cellar_catalog_sync_job.run()
+
+    _sync_cellar_catalog.__name__ = "cellar_catalog_sync"
+    cellar_catalog_sync_time = (
+        datetime.strptime(CELLAR_CATALOG_SYNC_TIME, "%H:%M").time().replace(tzinfo=CELLAR_TIMEZONE)
+    )
+    app.job_queue.run_daily(_sync_cellar_catalog, time=cellar_catalog_sync_time, days=(0,))
+    logger.info("Scheduler: CellarCatalogSyncJob registered (Sunday %s Europe/Moscow)", CELLAR_CATALOG_SYNC_TIME)
+
 
 def _register_schedule_jobs(app: Application) -> None:
     """Вешает джобы создания/напоминания/импорта по строкам расписания (только включённым)."""
@@ -1315,10 +1495,15 @@ def _register_schedule_jobs(app: Application) -> None:
                     f"Scheduler: pre-start reminder for '{club.name}' ({schedule.weekday}) at {schedule.reminder_time}"
                 )
 
-            for fetch_time_str in schedule.aetherhub_fetch_times:
+            for attempt_number, fetch_time_str in enumerate(schedule.aetherhub_fetch_times, start=1):
                 fetch_time = datetime.strptime(fetch_time_str, "%H:%M").time().replace(tzinfo=tz)
                 event_day_offset = _import_day_offset(schedule.aetherhub_fetch_times, fetch_time_str)
-                import_job = AetherhubImportJob(club, schedule, event_day_offset=event_day_offset)
+                import_job = AetherhubImportJob(
+                    club,
+                    schedule,
+                    event_day_offset=event_day_offset,
+                    attempt_number=attempt_number,
+                )
 
                 async def _import(context: ContextTypes.DEFAULT_TYPE, _job=import_job, _tz=tz) -> None:
                     await _job.run(now=datetime.now(_tz), bot=context.bot)

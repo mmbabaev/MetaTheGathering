@@ -1,5 +1,17 @@
 """Pure contracts, fixtures and generator for seasonal bingo board previews."""
 
+from services.achievements.bingo.fairness import (
+    FAIRNESS_MODEL_VERSION,
+    FairnessConstraints,
+    FairnessDiagnostics,
+    LineDiagnostic,
+    WeightedCellDiagnostic,
+    WinningLine,
+    WinningLineKind,
+    analyze_board_fairness,
+    completion_probability_to_weight,
+    winning_lines,
+)
 from services.achievements.bingo.fixtures import (
     FIXTURE_CATALOG_VERSION,
     FIXTURE_DECK_STATS_SNAPSHOT_ID,
@@ -49,8 +61,18 @@ __all__ = [
     "InstantiatedCandidate",
     "ManifestStatus",
     "Requirement",
+    "FAIRNESS_MODEL_VERSION",
+    "FairnessConstraints",
+    "FairnessDiagnostics",
+    "LineDiagnostic",
+    "WeightedCellDiagnostic",
+    "WinningLine",
+    "WinningLineKind",
+    "analyze_board_fairness",
+    "completion_probability_to_weight",
     "fixture_candidates",
     "generate_board",
     "instantiate_play_deck_candidates",
     "play_deck_completed",
+    "winning_lines",
 ]

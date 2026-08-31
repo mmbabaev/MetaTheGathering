@@ -521,21 +521,36 @@ class AdminHandler:
         active, err = self._resolve_tournament()
         if err:
             return err
-        self.svc.close_tournament(active.id)
-        return HandlerResult(TOURNAMENT_CLOSED_MSG)
+        return self.handle_close_tournament_by_id(tg_id, active.id)
 
-    def handle_close_tournament_by_id(self, tg_id: int, tournament_id: int, allow_empty: bool = False) -> HandlerResult:
+    def handle_close_tournament_by_id(
+        self,
+        tg_id: int,
+        tournament_id: int,
+        confirmed: bool = False,
+    ) -> HandlerResult:
         if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN, is_alert=True)
-        if not allow_empty:
-            participants = self.svc.list_participants_for_tournament(tournament_id)
-            if not participants:
-                return HandlerResult("⚠️ Нельзя закрыть пустой турнир — сначала добавьте участников.", is_alert=True)
         try:
-            self.svc.close_tournament(tournament_id)
+            tournament = get_tournament(self.svc.db, tournament_id)
         except errors.TournamentNotFound:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
-        return HandlerResult(TOURNAMENT_CLOSED_MSG)
+        if tournament.status == models.TournamentStatus.CLOSED:
+            return HandlerResult("⚠️ Турнир уже закрыт.", is_alert=True)
+
+        participants = self.svc.list_participants_for_tournament(tournament_id)
+        if participants and not confirmed:
+            return HandlerResult(
+                f"⚠️ В турнире «{tournament.title}» записано игроков: {len(participants)}.\nЗакрыть турнир?",
+                keyboard=self.keyboards.close_tournament_confirm_keyboard(tournament_id),
+                tournament_id=tournament_id,
+            )
+
+        try:
+            self.svc.close_tournament(tournament_id, closed_by_tg_id=tg_id)
+        except errors.TournamentInvalidState:
+            return HandlerResult("⚠️ Турнир уже закрыт.", is_alert=True)
+        return HandlerResult(TOURNAMENT_CLOSED_MSG, tournament_id=tournament_id)
 
     def handle_reopen_tournament(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Кнопка «🔓 Сделать активным» — возвращает закрытый турнир в регистрацию."""
@@ -549,7 +564,7 @@ class AdminHandler:
             return HandlerResult("⚠️ Турнир и так активен.", is_alert=True)
         except errors.TournamentAlreadyExists:
             return HandlerResult(
-                "⚠️ В этом чате уже есть активный турнир — сначала закройте его.",
+                "⚠️ В этом чате уже открыты два турнира — сначала закройте один.",
                 is_alert=True,
             )
         return HandlerResult(f"🔓 Турнир «{t.title}» снова активен (регистрация открыта).")

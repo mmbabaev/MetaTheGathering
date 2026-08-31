@@ -2,8 +2,10 @@
 
 from bot.handlers.base import HandlerResult
 from bot.keyboards import settings_keyboard
-from bot.messages import NAME_SAVED, SETTINGS_MENU, format_participant_name
+from bot.messages import INVALID_FULL_NAME, NAME_SAVED, SETTINGS_MENU, format_participant_name
 from core.config import settings as app_settings
+from services.cellar import can_view_cellar_overview
+from services.names import parse_full_name_input
 from services.user import UserService
 
 
@@ -20,6 +22,12 @@ class SettingsHandler:
         notify_rounds = user.notify_opponent_rounds if user else False
         notify_achievements = user.notify_achievements if user else False
         notify_poll = user.notify_poll if user else False
+        can_manage_cellar_notifications = can_view_cellar_overview(tg_id, user.username if user else None)
+        notify_cellar_reservations = (
+            user.notify_cellar_reservations if user and can_manage_cellar_notifications else None
+        )
+        if can_manage_cellar_notifications and user is None:
+            notify_cellar_reservations = True
         status_pairings = user.status_by_pairings if user else False
         text = f"{SETTINGS_MENU}\n\nВаше имя: {current}\n\nВерсия: {app_settings.VERSION}"
         return HandlerResult(
@@ -30,6 +38,7 @@ class SettingsHandler:
                 notify_opponent_rounds=notify_rounds,
                 notify_achievements=notify_achievements,
                 notify_poll=notify_poll,
+                notify_cellar_reservations=notify_cellar_reservations,
                 status_by_pairings=status_pairings,
             ),
         )
@@ -50,15 +59,24 @@ class SettingsHandler:
         self.user_svc.toggle_notify_poll(tg_id)
         return self.handle_settings(tg_id)
 
+    def handle_toggle_cellar_notify(self, tg_id: int) -> HandlerResult:
+        user = self.user_svc.get_by_tg_id(tg_id)
+        if not can_view_cellar_overview(tg_id, user.username if user else None):
+            return self.handle_settings(tg_id)
+        if user is None:
+            self.user_svc.get_or_create(tg_id=tg_id)
+        self.user_svc.toggle_notify_cellar_reservations(tg_id)
+        return self.handle_settings(tg_id)
+
     def handle_toggle_status_by_pairings(self, tg_id: int) -> HandlerResult:
         self.user_svc.toggle_status_by_pairings(tg_id)
         return self.handle_settings(tg_id)
 
     def handle_settings_name_text(self, tg_id: int, name_text: str) -> HandlerResult:
-        parts = name_text.strip().split(None, 1)
-        # Input format: "Фамилия Имя" — first word is last_name, second is first_name
-        last_name = parts[0]
-        first_name = parts[1] if len(parts) > 1 else None
-        self.user_svc.update_name(tg_id, first_name or last_name, last_name if first_name else None)
-        full_name = f"{last_name} {first_name}" if first_name else last_name
+        parsed = parse_full_name_input(name_text)
+        if parsed is None:
+            return HandlerResult(INVALID_FULL_NAME, needs_name=True)
+        first_name, last_name = parsed
+        self.user_svc.update_name(tg_id, first_name, last_name)
+        full_name = f"{last_name} {first_name}"
         return HandlerResult(NAME_SAVED.format(full_name=full_name))

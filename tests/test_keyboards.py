@@ -8,13 +8,18 @@ from bot.keyboards import (
     CB_ADMIN_SET_ARCH,
     CB_ARCHETYPE,
     CB_ARCHETYPE_MORE,
+    CB_CLOSE_TOURNAMENT,
+    CB_CLOSE_TOURNAMENT_CANCEL,
+    CB_CLOSE_TOURNAMENT_CONFIRM,
     CB_CUSTOM_ARCHETYPE,
+    CB_DEBUG_META_POLICE,
     CB_REGISTER,
     CB_REOPEN_TOURNAMENT,
     CB_TOURNAMENT,
     Keyboards,
     admin_archetype_select_keyboard,
     archetype_keyboard,
+    close_tournament_confirm_keyboard,
     register_button,
     tournament_card_keyboard,
     tournament_list_keyboard,
@@ -198,6 +203,12 @@ class TestTournamentCardKeyboard:
         assert not any("оппонент" in t.lower() for t in texts)
 
 
+def test_close_tournament_confirm_keyboard_has_confirm_and_cancel():
+    markup = close_tournament_confirm_keyboard(42)
+    callbacks = [button.callback_data for row in markup.inline_keyboard for button in row]
+    assert callbacks == [f"{CB_CLOSE_TOURNAMENT_CANCEL}:42", f"{CB_CLOSE_TOURNAMENT_CONFIRM}:42"]
+
+
 # ── admin_more_keyboard: кнопка «Сделать активным» ───────────────────────────
 
 
@@ -215,6 +226,11 @@ class TestAdminMoreReopenButton:
         kb_closed = Keyboards().admin_more_keyboard(7, is_closed=True)
         assert any("Сделать активным" in b.text for b in self._flat(kb_closed))
 
+    def test_open_tournament_has_admin_close_button(self):
+        keyboard = Keyboards().admin_more_keyboard(7, is_closed=False)
+        callbacks = [button.callback_data for button in self._flat(keyboard)]
+        assert f"{CB_CLOSE_TOURNAMENT}:7" in callbacks
+
     def test_reopen_sits_above_delete(self):
         rows = self._rows(Keyboards().admin_more_keyboard(7, is_closed=True))
         reopen_i = next(i for i, r in enumerate(rows) if any("Сделать активным" in t for t in r))
@@ -226,3 +242,29 @@ class TestAdminMoreReopenButton:
             b for b in self._flat(Keyboards().admin_more_keyboard(42, is_closed=True)) if "Сделать активным" in b.text
         )
         assert btn.callback_data == f"{CB_REOPEN_TOURNAMENT}:42"
+
+
+class TestAdminMoreDebugButtons:
+    def test_meta_police_sits_next_to_other_debug_button(self):
+        keyboard = Keyboards().admin_more_keyboard(
+            42,
+            show_debug=True,
+            show_debug_meta_police=True,
+        )
+
+        debug_row = next(
+            row
+            for row in keyboard.inline_keyboard
+            if any(button.callback_data == f"{CB_DEBUG_META_POLICE}:42" for button in row)
+        )
+        assert [button.callback_data for button in debug_row] == [
+            "dbg_rnotify:42",
+            f"{CB_DEBUG_META_POLICE}:42",
+        ]
+
+    def test_meta_police_is_hidden_without_owner_gate(self):
+        keyboard = Keyboards().admin_more_keyboard(42, show_debug=True)
+
+        assert not any(
+            button.callback_data == f"{CB_DEBUG_META_POLICE}:42" for row in keyboard.inline_keyboard for button in row
+        )

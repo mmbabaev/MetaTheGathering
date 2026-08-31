@@ -1,13 +1,12 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+from sqlalchemy import engine_from_config, pool
+from sqlalchemy.schema import CreateSchema
 
-from alembic import context
-
-from core.config import settings
-from core.database import Base
 import core.models  # noqa: F401 — registers all ORM models on Base.metadata
+from alembic import context
+from core.config import settings
+from core.database import Base, database_connect_args
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -64,12 +63,14 @@ def run_migrations_online() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=database_connect_args(),
     )
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+        if settings.DATABASE_SCHEMA:
+            connection.execute(CreateSchema(settings.DATABASE_SCHEMA, if_not_exists=True))
+            connection.commit()
+        context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()

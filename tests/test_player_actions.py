@@ -5,7 +5,15 @@ from datetime import timedelta
 import pytest
 
 from bot.handlers.player import DEFER_DECK_WINDOW, PlayerHandler
-from bot.keyboards import CB_ARCHETYPE, CB_CUSTOM_ARCHETYPE, CB_DEFER_DECK, CB_LEAVE, CB_REGISTER, CB_TSTATUS
+from bot.keyboards import (
+    CB_ARCHETYPE,
+    CB_CLOSE_TOURNAMENT,
+    CB_CUSTOM_ARCHETYPE,
+    CB_DEFER_DECK,
+    CB_LEAVE,
+    CB_REGISTER,
+    CB_TSTATUS,
+)
 from bot.messages import (
     ALREADY_REGISTERED,
     CHOOSE_ARCHETYPE,
@@ -94,6 +102,15 @@ class TestHandleTournamentSelect:
         assert result.text == TOURNAMENT_NOT_FOUND
         assert result.is_alert
 
+    def test_scorekeeper_card_does_not_show_close_button(self, handler, user_svc, active_tournament):
+        scorekeeper = user_svc.get_or_create(tg_id=5101, username="keeper", first_name="Keeper")
+        user_svc.toggle_scorekeeper(scorekeeper.tg_id)
+
+        result = handler.handle_tournament_select(active_tournament.id, tg_id=scorekeeper.tg_id)
+
+        callbacks = [button.callback_data for row in result.keyboard.inline_keyboard for button in row]
+        assert f"{CB_CLOSE_TOURNAMENT}:{active_tournament.id}" not in callbacks
+
 
 # --- handle_register ---
 
@@ -106,7 +123,7 @@ class TestHandleRegister:
         assert not result.needs_name
 
     def test_returns_archetype_choice_when_user_has_name(self, handler, user_svc, active_tournament, archetype_burn):
-        user = user_svc.get_or_create(tg_id=5100, username="u", first_name="Иван")
+        user = user_svc.get_or_create(tg_id=5100, username="u", first_name="Иван", last_name="Иванов")
         result = handler.handle_register(active_tournament.id, tg_id=user.tg_id)
         assert result.text == CHOOSE_ARCHETYPE
         assert result.keyboard is not None
@@ -122,20 +139,16 @@ class TestHandleRegister:
         result = handler.handle_register(active_tournament.id, tg_id=99999)
         assert result.needs_name is True
 
-    def test_shows_defer_button_during_first_seven_hours(
-        self, handler, user_svc, active_tournament
-    ):
-        user = user_svc.get_or_create(tg_id=5102, username="u", first_name="Иван")
+    def test_shows_defer_button_during_first_seven_hours(self, handler, user_svc, active_tournament):
+        user = user_svc.get_or_create(tg_id=5102, username="u", first_name="Иван", last_name="Иванов")
 
         result = handler.handle_register(active_tournament.id, tg_id=user.tg_id)
 
         buttons = [button for row in result.keyboard.inline_keyboard for button in row]
         assert any(button.callback_data == f"{CB_DEFER_DECK}:{active_tournament.id}" for button in buttons)
 
-    def test_hides_defer_button_after_seven_hours(
-        self, db, handler, user_svc, active_tournament
-    ):
-        user = user_svc.get_or_create(tg_id=5103, username="u", first_name="Иван")
+    def test_hides_defer_button_after_seven_hours(self, db, handler, user_svc, active_tournament):
+        user = user_svc.get_or_create(tg_id=5103, username="u", first_name="Иван", last_name="Иванов")
         tournament = db.get(models.Tournament, active_tournament.id)
         tournament.created_at = utc_now() - DEFER_DECK_WINDOW - timedelta(seconds=1)
         db.commit()
@@ -146,7 +159,7 @@ class TestHandleRegister:
         assert not any(button.callback_data.startswith(CB_DEFER_DECK) for button in buttons)
 
     def test_keeps_defer_button_until_future_scheduled_start(self, db, handler, user_svc, active_tournament):
-        user = user_svc.get_or_create(tg_id=5104, username="u", first_name="Иван")
+        user = user_svc.get_or_create(tg_id=5104, username="u", first_name="Иван", last_name="Иванов")
         tournament = db.get(models.Tournament, active_tournament.id)
         tournament.created_at = utc_now() - DEFER_DECK_WINDOW - timedelta(hours=1)
         tournament.registration_close_at = utc_now() + timedelta(hours=10)
@@ -159,9 +172,7 @@ class TestHandleRegister:
 
 
 class TestHandleDeferDeck:
-    def test_registers_without_deck_and_marks_explicit_defer(
-        self, handler, svc, user_svc, active_tournament
-    ):
+    def test_registers_without_deck_and_marks_explicit_defer(self, handler, svc, user_svc, active_tournament):
         result = handler.handle_defer_deck(
             tg_id=5201,
             username="later",
@@ -176,9 +187,7 @@ class TestHandleDeferDeck:
         assert participant.archetype_id is None
         assert participant.deck_deferred is True
 
-    def test_expired_defer_is_rejected_without_registration(
-        self, db, handler, svc, user_svc, active_tournament
-    ):
+    def test_expired_defer_is_rejected_without_registration(self, db, handler, svc, user_svc, active_tournament):
         tournament = db.get(models.Tournament, active_tournament.id)
         tournament.created_at = utc_now() - DEFER_DECK_WINDOW
         db.commit()
@@ -195,9 +204,7 @@ class TestHandleDeferDeck:
         assert result.is_alert
         assert user_svc.get_by_tg_id(5202) is None
 
-    def test_existing_deckless_participant_becomes_deferred(
-        self, handler, svc, user_svc, active_tournament
-    ):
+    def test_existing_deckless_participant_becomes_deferred(self, handler, svc, user_svc, active_tournament):
         user = user_svc.get_or_create(tg_id=5203, username="later", first_name="Иван")
         svc.register_participant(tournament_id=active_tournament.id, user_id=user.id)
 
@@ -373,16 +380,25 @@ class TestHandleSaveNameThenRegister:
         assert user.first_name == "Иван"
         assert user.last_name == "Петров"
 
-    def test_first_name_only(self, handler, user_svc, active_tournament):
-        handler.handle_save_name_then_register(
+    def test_rejects_first_name_only(self, handler, user_svc, active_tournament):
+        result = handler.handle_save_name_then_register(
             tg_id=7011,
             username=None,
             name_text="Мария",
             tournament_id=active_tournament.id,
         )
-        user = user_svc.get_by_tg_id(7011)
-        assert user.first_name == "Мария"
-        assert user.last_name is None
+        assert result.needs_name is True
+        assert user_svc.get_by_tg_id(7011) is None
+
+    def test_rejects_emoji_only(self, handler, user_svc, active_tournament):
+        result = handler.handle_save_name_then_register(
+            tg_id=7012,
+            username=None,
+            name_text=" 🦉 ",
+            tournament_id=active_tournament.id,
+        )
+        assert result.needs_name is True
+        assert user_svc.get_by_tg_id(7012) is None
 
 
 # --- handle_tournaments: dynamic keyboard ---

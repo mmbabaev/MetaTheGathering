@@ -3,13 +3,12 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from core.config import settings
+from services.web_auth import create_magic_token, verify_magic_token
 from web.auth import (
-    create_magic_token,
     get_current_user_optional,
     get_db,
     get_or_create_web_user,
     make_session_cookie,
-    verify_magic_token,
 )
 from web.email import send_magic_link
 from web.templating import templates
@@ -37,7 +36,7 @@ async def login_submit(request: Request, email: str = Form(...), db: Session = D
 
 
 @router.get("/auth/verify", response_class=HTMLResponse)
-async def auth_verify(request: Request, token: str, db: Session = Depends(get_db)):
+async def auth_verify(request: Request, token: str, next: str | None = None, db: Session = Depends(get_db)):
     user = verify_magic_token(db, token)
     if not user:
         return templates.TemplateResponse(
@@ -45,7 +44,7 @@ async def auth_verify(request: Request, token: str, db: Session = Depends(get_db
         )
 
     needs_name = not (user.display_name or user.first_name)
-    redirect_to = "/settings" if needs_name else "/"
+    redirect_to = "/settings" if needs_name else "/cellar" if next == "/cellar" else "/"
 
     response = RedirectResponse(redirect_to, status_code=303)
     response.set_cookie(

@@ -1,6 +1,7 @@
 # Inline клавиатуры
 
 from dataclasses import dataclass
+from datetime import date
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -14,12 +15,17 @@ CB_ARCHETYPE = "arch"
 CB_CUSTOM_ARCHETYPE = "custom"
 CB_ARCHETYPE_MORE = "arch_more"  # arch_more:{tournament_id}
 CB_DEFER_DECK = "deck_later"  # deck_later:{tournament_id}
+CB_FILL_MISSING_PICK = "fill_pick"  # fill_pick:{participant_id}
+CB_FILL_MISSING_SET = "fill_set"  # fill_set:{participant_id}:{archetype_id}
+CB_FILL_MISSING_MORE = "fill_more"  # fill_more:{participant_id}
+CB_FILL_MISSING_CUSTOM = "fill_custom"  # fill_custom:{participant_id}
 CB_TOURNAMENT = "t"
 CB_SETTINGS_NAME = "settings_name"
 CB_SETTINGS_TOGGLE_EMOJI = "settings_toggle_emoji"
 CB_SETTINGS_TOGGLE_OPPONENT_NOTIFY = "settings_toggle_opp_notify"
 CB_SETTINGS_TOGGLE_ACHIEVEMENTS_NOTIFY = "settings_toggle_achievements_notify"
 CB_SETTINGS_TOGGLE_POLL_NOTIFY = "settings_toggle_poll_notify"
+CB_SETTINGS_TOGGLE_CELLAR_NOTIFY = "settings_toggle_cellar_notify"
 CB_SETTINGS_TOGGLE_STATUS_PAIRINGS = "settings_toggle_status_pairings"
 CB_TSTATUS = "tstatus"
 CB_LEAVE = "leave"
@@ -68,6 +74,8 @@ CB_ADMIN_SHOW_OPPONENTS = "adm_opps_p"  # adm_opps_p:{participant_id}:{tournamen
 CB_ADMIN_TOGGLE_SCOREKEEPER = "adm_sk"  # adm_sk:{participant_id}:{tournament_id}
 CB_ADMIN_TOGGLE_POLL_ORGANIZER = "adm_po"  # adm_po:{participant_id}:{tournament_id}
 CB_CLOSE_TOURNAMENT = "close_t"  # close_t:{tournament_id}
+CB_CLOSE_TOURNAMENT_CONFIRM = "close_t_yes"  # close_t_yes:{tournament_id}
+CB_CLOSE_TOURNAMENT_CANCEL = "close_t_no"  # close_t_no:{tournament_id}
 CB_REOPEN_TOURNAMENT = "reopen_t"  # reopen_t:{tournament_id} — вернуть закрытый турнир в регистрацию
 CB_ADMIN_OPPONENTS = "adm_opps"  # adm_opps:{tournament_id}
 CB_FEATURE_TOGGLE = "feat_toggle"  # feat_toggle:{flag_name}
@@ -83,8 +91,18 @@ CB_PAY = "pay"  # pay:{tournament_id}
 CB_PAY_STATUS = "pay_status"  # pay_status:{tournament_id} — no-op, показывает статус оплаты
 CB_ADMIN_IMPORT_META = "adm_meta"  # adm_meta:{tournament_id}
 CB_DEBUG_ROUND_NOTIFY = "dbg_rnotify"  # dbg_rnotify:{tournament_id} — debug: DM all round notifications to presser
+CB_DEBUG_META_POLICE = "dbg_mpol"  # dbg_mpol:{tournament_id} — debug: owner-only live preview
 CB_APP_STATS_HOME = "appstat_home"  # appstat_home — меню статистики приложения (владелец)
 CB_APP_STATS_NOTIFY_ROUNDS = "appstat_nr"  # appstat_nr — список включивших уведомления о раундах
+CB_CELLAR_DATES = "cellar_dates"
+CB_CELLAR_DATE = "cellar_date"  # cellar_date:{YYYY-MM-DD}:{page}
+CB_CELLAR_DECK = "cellar_deck"  # cellar_deck:{YYYY-MM-DD}:{deck_id}:{page}
+CB_CELLAR_RESERVE = "cellar_reserve"  # cellar_reserve:{YYYY-MM-DD}:{deck_id}:{page}
+CB_CELLAR_CANCEL = "cellar_cancel"  # cellar_cancel:{reservation_id}:{page}
+CB_CELLAR_CANCEL_CONFIRM = "cellar_cancel_yes"  # cellar_cancel_yes:{reservation_id}:{page}
+CB_CELLAR_NOOP = "cellar_noop"
+
+CELLAR_PAGE_SIZE = 10
 
 
 def features_keyboard(flags: list) -> InlineKeyboardMarkup:
@@ -99,6 +117,124 @@ def features_keyboard(flags: list) -> InlineKeyboardMarkup:
             ]
         )
     return InlineKeyboardMarkup(buttons)
+
+
+def cellar_dates_keyboard(dates: list[date], web_url: str) -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton(event_date.strftime("%d.%m.%Y"), callback_data=f"{CB_CELLAR_DATE}:{event_date}:0")]
+        for event_date in dates
+    ]
+    rows.append([InlineKeyboardButton("🌐 Открыть web-версию", url=web_url)])
+    return InlineKeyboardMarkup(rows)
+
+
+def _cellar_reservation_for(deck, event_date: date):
+    return next(
+        (
+            reservation
+            for reservation in deck.reservations
+            if reservation.event_date == event_date and reservation.cancelled_at is None
+        ),
+        None,
+    )
+
+
+def cellar_catalog_keyboard(
+    decks: list,
+    *,
+    event_date: date,
+    user_id: int,
+    page: int,
+) -> InlineKeyboardMarkup:
+    page_count = max(1, (len(decks) + CELLAR_PAGE_SIZE - 1) // CELLAR_PAGE_SIZE)
+    page = min(max(page, 0), page_count - 1)
+    visible = decks[page * CELLAR_PAGE_SIZE : (page + 1) * CELLAR_PAGE_SIZE]
+    rows = []
+    for deck in visible:
+        reservation = _cellar_reservation_for(deck, event_date)
+        if not deck.available:
+            prefix = "🚫 "
+        elif reservation is None:
+            prefix = "▫️ "
+        elif reservation.user_id == user_id:
+            prefix = "✅ "
+        else:
+            prefix = "🔒 "
+        label = prefix + deck.display_name
+        if len(label) > 56:
+            label = label[:55] + "…"
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    label,
+                    callback_data=f"{CB_CELLAR_DECK}:{event_date}:{deck.id}:{page}",
+                )
+            ]
+        )
+
+    if page_count > 1:
+        navigation = []
+        if page > 0:
+            navigation.append(InlineKeyboardButton("⬅️", callback_data=f"{CB_CELLAR_DATE}:{event_date}:{page - 1}"))
+        navigation.append(InlineKeyboardButton(f"{page + 1}/{page_count}", callback_data=CB_CELLAR_NOOP))
+        if page + 1 < page_count:
+            navigation.append(InlineKeyboardButton("➡️", callback_data=f"{CB_CELLAR_DATE}:{event_date}:{page + 1}"))
+        rows.append(navigation)
+    rows.append([InlineKeyboardButton("⬅️ К датам", callback_data=CB_CELLAR_DATES)])
+    return InlineKeyboardMarkup(rows)
+
+
+def cellar_deck_keyboard(
+    *,
+    deck_id: int,
+    event_date: date,
+    page: int,
+    decklist_url: str | None,
+    can_reserve: bool,
+    own_reservation_id: int | None,
+) -> InlineKeyboardMarkup:
+    rows = []
+    if decklist_url:
+        rows.append([InlineKeyboardButton("📄 Деклист и сайдборд", url=decklist_url)])
+    if can_reserve:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    "✅ Забронировать",
+                    callback_data=f"{CB_CELLAR_RESERVE}:{event_date}:{deck_id}:{page}",
+                )
+            ]
+        )
+    if own_reservation_id is not None:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    "❌ Отменить бронь",
+                    callback_data=f"{CB_CELLAR_CANCEL}:{own_reservation_id}:{page}",
+                )
+            ]
+        )
+    rows.append([InlineKeyboardButton("⬅️ К списку", callback_data=f"{CB_CELLAR_DATE}:{event_date}:{page}")])
+    return InlineKeyboardMarkup(rows)
+
+
+def cellar_cancel_keyboard(reservation_id: int, event_date: date, deck_id: int, page: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "Да, отменить",
+                    callback_data=f"{CB_CELLAR_CANCEL_CONFIRM}:{reservation_id}:{page}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "⬅️ Не отменять",
+                    callback_data=f"{CB_CELLAR_DECK}:{event_date}:{deck_id}:{page}",
+                )
+            ],
+        ]
+    )
 
 
 @dataclass(frozen=True)
@@ -175,6 +311,18 @@ def opponent_button_rows(opponents: list) -> list[list[StatusButton]]:
     return rows
 
 
+def missing_deck_button_rows(participants: list) -> list[list[StatusButton]]:
+    """Кнопки только для участников без колоды в community-flow мета-полиции."""
+    rows: list[list[StatusButton]] = []
+    for participant in participants:
+        if participant.archetype_id is not None:
+            continue
+        user = participant.user
+        name = format_participant_name(user.first_name, user.last_name) or f"id{user.tg_id}"
+        rows.append([StatusButton(f"📝 {name}", f"{CB_FILL_MISSING_PICK}:{participant.id}")])
+    return rows
+
+
 def _status_rows_to_markup(rows: list[list[StatusButton]]) -> InlineKeyboardMarkup:
     """Telegram-адаптер: чистая модель рядов → InlineKeyboardMarkup."""
     return InlineKeyboardMarkup(
@@ -183,6 +331,9 @@ def _status_rows_to_markup(rows: list[list[StatusButton]]) -> InlineKeyboardMark
 
 
 class Keyboards:
+    def missing_decks_keyboard(self, participants: list) -> InlineKeyboardMarkup:
+        return _status_rows_to_markup(missing_deck_button_rows(participants))
+
     def tournament_list_keyboard(self, tournaments: list) -> InlineKeyboardMarkup:
         buttons = [[InlineKeyboardButton(title, callback_data=f"{CB_TOURNAMENT}:{tid}")] for tid, title in tournaments]
         return InlineKeyboardMarkup(buttons)
@@ -259,21 +410,42 @@ class Keyboards:
             ]
         )
 
+    def close_tournament_confirm_keyboard(self, tournament_id: int) -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton("❌ Отмена", callback_data=f"{CB_CLOSE_TOURNAMENT_CANCEL}:{tournament_id}"),
+                    InlineKeyboardButton(
+                        "🔒 Закрыть",
+                        callback_data=f"{CB_CLOSE_TOURNAMENT_CONFIRM}:{tournament_id}",
+                    ),
+                ]
+            ]
+        )
+
     def admin_more_keyboard(
         self,
         tournament_id: int,
         is_closed: bool = False,
         decks_hidden: bool = True,
         show_debug: bool = False,
+        show_debug_meta_police: bool = False,
     ) -> InlineKeyboardMarkup:
         rows = [
             [InlineKeyboardButton("➕ Добавить участников", callback_data=f"{CB_BULK_ADD}:{tournament_id}")],
             [InlineKeyboardButton("📋 Импорт по таблице", callback_data=f"{CB_ADMIN_IMPORT_META}:{tournament_id}")],
         ]
+        debug_buttons = []
         if show_debug:
-            rows.append(
-                [InlineKeyboardButton("🐞 Тест оповещений", callback_data=f"{CB_DEBUG_ROUND_NOTIFY}:{tournament_id}")]
+            debug_buttons.append(
+                InlineKeyboardButton("🐞 Тест оповещений", callback_data=f"{CB_DEBUG_ROUND_NOTIFY}:{tournament_id}")
             )
+        if show_debug_meta_police:
+            debug_buttons.append(
+                InlineKeyboardButton("🐞 Мета-полиция", callback_data=f"{CB_DEBUG_META_POLICE}:{tournament_id}")
+            )
+        if debug_buttons:
+            rows.append(debug_buttons)
         if decks_hidden:
             rows.append([InlineKeyboardButton("👁 Показать колоды", callback_data=f"{CB_REVEAL_DECKS}:{tournament_id}")])
         else:
@@ -506,6 +678,7 @@ class Keyboards:
         notify_opponent_rounds: bool = False,
         notify_achievements: bool = False,
         notify_poll: bool = False,
+        notify_cellar_reservations: bool | None = None,
         status_by_pairings: bool = False,
     ) -> InlineKeyboardMarkup:
         emoji_label = "🚫 Эмоджи колод: выкл" if hide_deck_emoji else "🎨 Эмоджи колод: вкл"
@@ -523,8 +696,13 @@ class Keyboards:
             [InlineKeyboardButton(notify_label, callback_data=CB_SETTINGS_TOGGLE_OPPONENT_NOTIFY)],
             [InlineKeyboardButton(achievements_label, callback_data=CB_SETTINGS_TOGGLE_ACHIEVEMENTS_NOTIFY)],
             [InlineKeyboardButton(poll_label, callback_data=CB_SETTINGS_TOGGLE_POLL_NOTIFY)],
-            [InlineKeyboardButton(pairings_label, callback_data=CB_SETTINGS_TOGGLE_STATUS_PAIRINGS)],
         ]
+        if notify_cellar_reservations is not None:
+            cellar_label = (
+                "🔔 Уведомления о ячейках: вкл" if notify_cellar_reservations else "🔕 Уведомления о ячейках: выкл"
+            )
+            rows.append([InlineKeyboardButton(cellar_label, callback_data=CB_SETTINGS_TOGGLE_CELLAR_NOTIFY)])
+        rows.append([InlineKeyboardButton(pairings_label, callback_data=CB_SETTINGS_TOGGLE_STATUS_PAIRINGS)])
         return InlineKeyboardMarkup(rows)
 
     def admin_participants_keyboard(
@@ -652,6 +830,32 @@ class Keyboards:
             buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_TSTATUS}:{tournament_id}")])
         return InlineKeyboardMarkup(buttons)
 
+    def missing_deck_archetype_keyboard(
+        self,
+        participant_id: int,
+        archetypes: list,
+        has_more: bool = False,
+        show_emoji: bool = True,
+    ) -> InlineKeyboardMarkup:
+        """Выбор колоды в мета-полиции с отдельными, защищаемыми callback-префиксами."""
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    deck_emoji.format(name) if show_emoji else name,
+                    callback_data=f"{CB_FILL_MISSING_SET}:{participant_id}:{aid}",
+                )
+            ]
+            for aid, name in archetypes
+        ]
+        if has_more:
+            buttons.append(
+                [InlineKeyboardButton("... ещё колоды", callback_data=f"{CB_FILL_MISSING_MORE}:{participant_id}")]
+            )
+        buttons.append(
+            [InlineKeyboardButton("Свой вариант", callback_data=f"{CB_FILL_MISSING_CUSTOM}:{participant_id}")]
+        )
+        return InlineKeyboardMarkup(buttons)
+
     def archetype_keyboard(
         self,
         tournament_id: int,
@@ -718,15 +922,27 @@ def export_menu_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
 
 
 def admin_more_keyboard(
-    tournament_id: int, is_closed: bool = False, decks_hidden: bool = True, show_debug: bool = False
+    tournament_id: int,
+    is_closed: bool = False,
+    decks_hidden: bool = True,
+    show_debug: bool = False,
+    show_debug_meta_police: bool = False,
 ) -> InlineKeyboardMarkup:
     return _default.admin_more_keyboard(
-        tournament_id, is_closed=is_closed, decks_hidden=decks_hidden, show_debug=show_debug
+        tournament_id,
+        is_closed=is_closed,
+        decks_hidden=decks_hidden,
+        show_debug=show_debug,
+        show_debug_meta_police=show_debug_meta_police,
     )
 
 
 def reveal_decks_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
     return _default.reveal_decks_confirm_keyboard(tournament_id)
+
+
+def close_tournament_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
+    return _default.close_tournament_confirm_keyboard(tournament_id)
 
 
 def delete_tournament_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
@@ -821,6 +1037,7 @@ def settings_keyboard(
     notify_opponent_rounds: bool = False,
     notify_achievements: bool = False,
     notify_poll: bool = False,
+    notify_cellar_reservations: bool | None = None,
     status_by_pairings: bool = False,
 ) -> InlineKeyboardMarkup:
     return _default.settings_keyboard(
@@ -829,6 +1046,7 @@ def settings_keyboard(
         notify_opponent_rounds=notify_opponent_rounds,
         notify_achievements=notify_achievements,
         notify_poll=notify_poll,
+        notify_cellar_reservations=notify_cellar_reservations,
         status_by_pairings=status_by_pairings,
     )
 

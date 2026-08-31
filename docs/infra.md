@@ -28,6 +28,7 @@ GitHub Actions
 | Web service | `meta-the-gathering-web` | `meta-the-gathering-debug-web` |
 | OTel service | `otel-collector` | `otel-collector-debug` |
 | Env file | `bot/.env` | `bot/.env.debug` |
+| Database schema | default | `metagatherer_pr_<PR number>` |
 | Web port | `8080` (127.0.0.1) | `8081` (0.0.0.0) |
 | BOT_ENV | `prod` | `debug` |
 
@@ -56,7 +57,7 @@ Steps:
 
 Trigger: PR to `main`
 
-Jobs (test runs first, then both deploy jobs in parallel):
+Jobs run in order: tests, then one serialized debug deploy job:
 
 **test:**
 - `pip install` + `ruff check` + alembic heads check + `pytest`
@@ -64,11 +65,14 @@ Jobs (test runs first, then both deploy jobs in parallel):
 
 **deploy-debug** (needs: test):
 - Write `ENV_FILE_DEBUG` secret → `bot/.env.debug`
+- Add the non-secret `DATABASE_SCHEMA=metagatherer_pr_<PR number>` override
 - Run `bot/deploy_bot_debug.sh`
+- Then run `bot/deploy_web_debug.sh` in the same job
+- Uses `bot/.env.debug` installed by the successful bot deploy
 
-**deploy-debug-web** (needs: test):
-- Run `bot/deploy_web_debug.sh`
-- Requires `bot/.env.debug` to already exist on the server (deployed by the bot job or a previous run)
+The deploy job shares a GitHub Actions concurrency group with other debug deploys.
+The scripts also acquire the same environment-specific remote `flock`, so a manual
+deploy cannot mutate the directory and virtualenv concurrently with CI.
 
 ### GitHub Secrets
 
@@ -93,12 +97,14 @@ Local machine                          Server
 tar archive (excludes .env*, tests,
   __pycache__, venv, .git)
   │
-  scp archive → /tmp/
-  scp env file → /tmp/.env.deploy
+  check /tmp has archive size + 200 MiB free
+  scp archive → unique /tmp path
+  scp env file → unique /tmp path
   │
-  ssh remote:
+  ssh remote under environment deploy lock:
+    debug: remove stale alembic/versions left by another PR
     extract archive → REMOTE_DIR
-    mv /tmp/.env.deploy → bot/.env[.debug]
+    mv unique env file → bot/.env[.debug]
     python3 -m venv venv
     pip install -r requirements.txt
     source bot/.env[.debug]
@@ -108,6 +114,7 @@ tar archive (excludes .env*, tests,
     systemctl restart otel-collector[-debug]
     systemctl restart meta-the-gathering[-debug]
     systemctl restart meta-the-gathering-debug-web  (debug only)
+  always delete this deploy's local and remote temporary files
 ```
 
 ### `bot/deploy_web_debug.sh`
@@ -120,9 +127,10 @@ Local machine                          Server
 tar archive (same excludes as bot,
   plus .claude/, .ruff_cache/, etc.)
   │
-  scp archive → /tmp/
+  check /tmp has archive size + 200 MiB free
+  scp archive → unique /tmp path
   │
-  ssh remote:
+  ssh remote under the same environment deploy lock:
     check bot/.env[.debug] exists (abort if not)
     extract archive → REMOTE_DIR
     pip install -r requirements.txt
@@ -130,9 +138,18 @@ tar archive (same excludes as bot,
     alembic heads check
     alembic upgrade head
     systemctl restart meta-the-gathering[-debug]-web
+  always delete this deploy's local and remote temporary files
 ```
 
-**Note:** The web deploy does not upload the env file — it expects `bot/.env.debug` to already be on the server from a previous bot deploy. In CI, the `deploy-debug` and `deploy-debug-web` jobs run in parallel after tests pass. If it's the very first deploy to a fresh server, run the bot deploy first.
+**Note:** The web deploy does not upload the env file — it expects `bot/.env.debug`
+to already be on the server. In the PR pipeline it starts only after the bot deploy;
+for a first manual deploy to a fresh server, run the bot deploy first.
+
+PR previews share a PostgreSQL database server but use a separate schema per PR. An
+unmerged migration therefore cannot contaminate another PR's Alembic history. The
+legacy/default debug schema is not dropped or reset automatically. Preview-schema
+retention and a stable staging environment from `main` remain tracked in
+[#270](https://github.com/mmbabaev/MetaTheGathering/issues/270).
 
 ---
 
@@ -156,6 +173,7 @@ Env files are **never committed** to git (`.gitignored`). They are:
 |---|---|---|
 | `TELEGRAM_BOT_TOKEN` | yes | Bot token from @BotFather |
 | `DATABASE_URL` | yes | PostgreSQL DSN, e.g. `postgresql+psycopg2://user:pass@localhost/dbname` |
+| `DATABASE_SCHEMA` | no | PostgreSQL schema override; CI sets `metagatherer_pr_<PR number>` for debug previews |
 | `ADMIN_IDS` | no | Comma-separated Telegram user IDs with admin access |
 | `MONIUM_PROJECT` | no | Monium monitoring project ID |
 | `MONIUM_API_KEY` | no | Monium API key |
@@ -166,6 +184,8 @@ Env files are **never committed** to git (`.gitignored`). They are:
 | `WEB_BASE_URL` | no | Public URL of the web UI |
 | `WEB_PORT` | no | Web UI port (default: `8080`) |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` / `SMTP_FROM` | no | SMTP config for email |
+| `CELLAR_COORDINATOR_USERNAMES` | no | Preferred production-only comma-separated Telegram usernames. They receive immediate booking/cancellation DMs and the one-hour pre-event summary, and can view the `/cellar` booking overview. Debug ignores the list. |
+| `CELLAR_COORDINATOR_TG_IDS` | no | Optional legacy comma-separated IDs with the same production-only notifications and access. |
 
 `BOT_ENV=debug` is set via the systemd `Environment=` directive (not in the env file).
 
@@ -224,7 +244,7 @@ ssh mbabaev@158.160.9.28 'mkdir -p /home/mbabaev/MetaTheGathering/meta_the_gathe
 scp bot/.env.debug mbabaev@158.160.9.28:/home/mbabaev/MetaTheGathering/meta_the_gatheringDebug/bot/.env.debug
 
 # 3. Push to trigger CI, or run deploy locally:
-bash bot/deploy_bot_debug.sh      # debug
+PREVIEW_ID=271 bash bot/deploy_bot_debug.sh  # debug (use the relevant PR number)
 bash bot/deploy_bot.sh            # prod
 ```
 

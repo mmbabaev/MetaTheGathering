@@ -47,7 +47,8 @@ class TestLookupDeck:
             ("Cycle Storm", "Cycle Storm", "RG"),
             ("Turbo Fog", "Turbo Fog", "WUG"),
             ("Gates", "Gates", "WUG"),
-            ("Walls", "Walls", "G"),
+            ("Walls", "Walls Combo", "G"),
+            ("Walls combo", "Walls Combo", "G"),
             ("Slivers", "Slivers", "WUBRG"),
             ("infect", "Infect", "UG"),
             ("Ponza", "Ponza", "RG"),
@@ -58,11 +59,16 @@ class TestLookupDeck:
         deck = lookup_deck(name)
         assert (deck.display, deck.colors) == (display, colors)
 
-    @pytest.mark.parametrize("name", ["Spy", "Spy Walls", "Spy Combo"])
-    def test_spy_family_is_one_group(self, name):
-        assert lookup_deck(name) == lookup_deck("Spy Combo")
-        assert lookup_deck(name).display == "Spy Combo"
+    @pytest.mark.parametrize("name", ["Spy", "Spy Combo"])
+    def test_spy_aliases_are_one_group(self, name):
+        assert lookup_deck(name) == lookup_deck("Spy")
+        assert lookup_deck(name).display == "Spy"
         assert lookup_deck(name).colors == "BG"
+
+    def test_spy_walls_is_a_separate_group(self):
+        assert lookup_deck("Spy Walls") != lookup_deck("Spy")
+        assert lookup_deck("Spy Walls").display == "Spy Walls"
+        assert lookup_deck("Spy Walls").colors == "BG"
 
     @pytest.mark.parametrize("name", ["Tron", "Flicker Tron", "Monster Tron", "Altar Tron", "Altar tron"])
     def test_tron_family_is_one_group(self, name):

@@ -16,7 +16,8 @@ from bot.keyboards import (
     export_menu_keyboard,
     reveal_decks_confirm_keyboard,
 )
-from bot.messages import ADD_PLAYERS_USAGE, BULK_ADD_PROMPT
+from bot.messages import ADD_PLAYERS_USAGE, BULK_ADD_PROMPT, TOURNAMENT_CLOSED_MSG
+from bot.meta_police_message import refresh_meta_police_message
 from bot.scheduler import format_schedule_text
 from bot.telegram.common import announce_completion_if_ready, parse_callback_ints
 from bot.telegram.common import log_event as _log
@@ -136,6 +137,7 @@ async def callback_set_participant_arch(update: Update, context: ContextTypes.DE
             await query.edit_message_text(result.text, reply_markup=result.keyboard)
             await query.answer()
         part = TournamentService(db).get_participant_by_id(participant_id)
+        await refresh_meta_police_message(context.bot, db, part.tournament_id if part else None)
         await announce_completion_if_ready(context.bot, db, part.tournament_id if part else None)
     finally:
         db.close()
@@ -279,9 +281,9 @@ async def cmd_close_tournament(update: Update, context: ContextTypes.DEFAULT_TYP
     db = SessionLocal()
     try:
         result = _admin_handler(db).handle_close_tournament(user.id)
-        if not result.is_alert:
+        if result.text == TOURNAMENT_CLOSED_MSG:
             _log("close_tournament", user)
-        await msg.reply_text(result.text)
+        await msg.reply_text(result.text, reply_markup=result.keyboard)
     finally:
         db.close()
 
@@ -561,12 +563,60 @@ async def callback_close_tournament(update: Update, context: ContextTypes.DEFAUL
     (tournament_id,) = ids
     db = SessionLocal()
     try:
-        result = _admin_handler(db).handle_close_tournament_by_id(user.id, tournament_id, allow_empty=settings.DEBUG)
+        result = _admin_handler(db).handle_close_tournament_by_id(user.id, tournament_id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        if result.text == TOURNAMENT_CLOSED_MSG:
+            _log("close_tournament", user, tournament_id=tournament_id)
+        else:
+            _log("close_tournament_prompt", user, tournament_id=tournament_id)
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+        await query.answer()
+    finally:
+        db.close()
+
+
+async def callback_close_tournament_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Подтверждает закрытие непустого турнира."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_close_tournament_by_id(user.id, tournament_id, confirmed=True)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
         _log("close_tournament", user, tournament_id=tournament_id)
         await query.edit_message_text(result.text)
+        await query.answer()
+    finally:
+        db.close()
+
+
+async def callback_close_tournament_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Отменяет закрытие и возвращает карточку турнира."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+    db = SessionLocal()
+    try:
+        result = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
     finally:
         db.close()
@@ -622,7 +672,11 @@ async def callback_admin_more(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.edit_message_text(
         "Действия с турниром:",
         reply_markup=admin_more_keyboard(
-            tournament_id, is_closed=is_closed, decks_hidden=decks_hidden, show_debug=settings.DEBUG
+            tournament_id,
+            is_closed=is_closed,
+            decks_hidden=decks_hidden,
+            show_debug=settings.DEBUG,
+            show_debug_meta_police=settings.DEBUG and user.id == settings.OWNER_CHAT_ID,
         ),
     )
     await query.answer()
@@ -722,7 +776,11 @@ async def callback_reveal_decks_cancel(update: Update, context: ContextTypes.DEF
         await query.edit_message_text(
             "Действия с турниром:",
             reply_markup=admin_more_keyboard(
-                tournament_id, is_closed=is_closed, decks_hidden=t.decks_hidden, show_debug=settings.DEBUG
+                tournament_id,
+                is_closed=is_closed,
+                decks_hidden=t.decks_hidden,
+                show_debug=settings.DEBUG,
+                show_debug_meta_police=settings.DEBUG and user.id == settings.OWNER_CHAT_ID,
             ),
         )
     except svc_errors.TournamentNotFound:

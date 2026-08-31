@@ -13,8 +13,9 @@ class _FakeUser:
 
 
 class _FakeParticipant:
-    def __init__(self, user, archetype=None, confirmed=False):
+    def __init__(self, user, archetype=None, confirmed=False, aetherhub_seen_at=None):
         self.user, self.archetype, self.confirmed = user, archetype, confirmed
+        self.aetherhub_seen_at = aetherhub_seen_at
 
 
 class TestFormatTournamentCard:
@@ -81,6 +82,23 @@ class TestFormatTournamentStatus:
         result = format_tournament_status("Cup", "Reg", participants)
         assert "2" in result  # with deck
         assert "1" in result  # without
+
+    def test_unseen_player_gets_question_only_after_aetherhub_import(self):
+        seen = _FakeParticipant(_FakeUser("Иван"), _FakeArchetype("Burn"), aetherhub_seen_at=object())
+        unseen = _FakeParticipant(_FakeUser("Пётр"), _FakeArchetype("Walls"))
+
+        result = format_tournament_status("Cup", "Reg", [seen, unseen])
+
+        assert "✅❓ Пётр" in result
+        assert "❓ — пока не найден в AetherHub" in result
+
+    def test_no_question_before_import_or_after_all_players_seen(self):
+        participants = [self._p("Иван", "Burn"), self._p("Пётр", "Walls")]
+        assert "❓" not in format_tournament_status("Cup", "Reg", participants)
+
+        for participant in participants:
+            participant.aetherhub_seen_at = object()
+        assert "❓" not in format_tournament_status("Cup", "Reg", participants)
 
 
 class TestMessageTemplates:

@@ -1,0 +1,411 @@
+from datetime import date
+from unittest.mock import AsyncMock
+from urllib.parse import parse_qs, urlparse
+
+import pytest
+
+from bot.handlers.cellar import CellarHandler
+from bot.keyboards import (
+    CB_CELLAR_CANCEL,
+    CB_CELLAR_CANCEL_CONFIRM,
+    CB_CELLAR_DATE,
+    CB_CELLAR_DECK,
+    CB_CELLAR_RESERVE,
+)
+from bot.telegram.cellar import _announce
+from core.config import settings
+from services.cellar import CellarInvalidUserName, CellarService
+from services.feature_flags import FeatureFlags, FeatureFlagService
+from services.user import UserService
+from services.web_auth import verify_magic_token
+from web.routes.auth import auth_verify
+
+
+def _handler(db):
+    return CellarHandler(db, UserService(db), FeatureFlagService(db))
+
+
+EVENT_DATE = date(2026, 8, 24)
+TODAY = date(2026, 8, 23)
+
+
+def _web_url(result):
+    return next(button.url for row in result.keyboard.inline_keyboard for button in row if button.url)
+
+
+def test_cellar_command_is_disabled_by_default(db):
+    result = _handler(db).handle_open(
+        tg_id=1001,
+        username="alice",
+        first_name="Alice",
+        last_name=None,
+        today=TODAY,
+    )
+
+    assert "недоступны" in result.text
+    assert result.keyboard is None
+    assert UserService(db).get_by_tg_id(1001) is None
+
+
+def test_cellar_command_creates_personal_one_time_web_link(db, monkeypatch):
+    FeatureFlagService(db).toggle(FeatureFlags.CELLAR_DECKS)
+    monkeypatch.setattr(settings, "WEB_BASE_URL", "https://debug.example.test")
+
+    result = _handler(db).handle_open(
+        tg_id=1001,
+        username="alice",
+        first_name="Alice",
+        last_name="Player",
+    )
+
+    url = _web_url(result)
+    parsed = urlparse(url)
+    query = parse_qs(parsed.query)
+    assert parsed.netloc == "debug.example.test"
+    assert parsed.path == "/auth/verify"
+    assert query["next"] == ["/cellar"]
+    user = verify_magic_token(db, query["token"][0])
+    assert user is not None
+    assert user.tg_id == 1001
+    assert verify_magic_token(db, query["token"][0]) is None
+
+
+def test_cellar_requires_two_word_name_and_trims_emoji(db):
+    FeatureFlagService(db).toggle(FeatureFlags.CELLAR_DECKS)
+    handler = _handler(db)
+
+    invalid = handler.handle_open(
+        tg_id=1001,
+        username="owl",
+        first_name=" 🦉 ",
+        last_name=None,
+        today=TODAY,
+    )
+    valid = handler.handle_open(
+        tg_id=1002,
+        username="alice",
+        first_name=" 🦉 Alice ",
+        last_name=" Player ✅ ",
+        today=TODAY,
+    )
+
+    assert invalid.needs_name is True
+    assert invalid.keyboard is None
+    assert valid.needs_name is False
+    user = UserService(db).get_by_tg_id(1002)
+    assert (user.first_name, user.last_name) == ("Alice", "Player")
+
+
+def test_cellar_service_rejects_incomplete_name(db, user_svc):
+    service = CellarService(db)
+    service.ensure_bootstrap_catalog()
+    user = user_svc.get_or_create(tg_id=1003, username="owl", first_name="🦉")
+
+    with pytest.raises(CellarInvalidUserName):
+        service.reserve(
+            deck_id=service.catalog(EVENT_DATE)[0].id,
+            user_id=user.id,
+            event_date=EVENT_DATE,
+            today=TODAY,
+        )
+
+
+@pytest.mark.asyncio
+async def test_telegram_magic_link_redirects_to_cellar(db):
+    FeatureFlagService(db).toggle(FeatureFlags.CELLAR_DECKS)
+    result = _handler(db).handle_open(
+        tg_id=1001,
+        username="alice",
+        first_name="Alice",
+        last_name="Player",
+        today=TODAY,
+    )
+    token = parse_qs(urlparse(_web_url(result)).query)["token"][0]
+
+    response = await auth_verify(None, token, "/cellar", db)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/cellar"
+
+
+def test_cellar_telegram_flow_reserves_and_cancels_deck(db):
+    FeatureFlagService(db).toggle(FeatureFlags.CELLAR_DECKS)
+    handler = _handler(db)
+    opened = handler.handle_open(
+        tg_id=1001,
+        username="alice",
+        first_name="Alice",
+        last_name="Player",
+        today=TODAY,
+    )
+    date_callbacks = [
+        button.callback_data for row in opened.keyboard.inline_keyboard for button in row if button.callback_data
+    ]
+    assert len(date_callbacks) == 4
+    assert all(value.startswith(f"{CB_CELLAR_DATE}:") for value in date_callbacks)
+
+    deck = CellarService(db).catalog(EVENT_DATE)[0]
+    deck.source_position = 13
+    deck.decklist_url = "https://example.test/decklist"
+    deck.notes = "Заменить две карты в сайдборде"
+    deck.decklist_updated_on = TODAY
+    db.commit()
+    catalog = handler.handle_date(tg_id=1001, event_date=EVENT_DATE, today=TODAY)
+    deck_callbacks = [
+        button.callback_data
+        for row in catalog.keyboard.inline_keyboard
+        for button in row
+        if button.callback_data and button.callback_data.startswith(f"{CB_CELLAR_DECK}:")
+    ]
+    assert len(deck_callbacks) == 10
+    assert "Свободно:" in catalog.text
+    assert any(
+        "№13" in button.text
+        for row in catalog.keyboard.inline_keyboard
+        for button in row
+        if button.callback_data and button.callback_data.startswith(f"{CB_CELLAR_DECK}:")
+    )
+    second_page = handler.handle_date(tg_id=1001, event_date=EVENT_DATE, page=1, today=TODAY)
+    assert (
+        sum(
+            bool(button.callback_data and button.callback_data.startswith(f"{CB_CELLAR_DECK}:"))
+            for row in second_page.keyboard.inline_keyboard
+            for button in row
+        )
+        == 10
+    )
+    assert any(button.text.startswith("2/") for row in second_page.keyboard.inline_keyboard for button in row)
+
+    card = handler.handle_deck(
+        tg_id=1001,
+        event_date=EVENT_DATE,
+        deck_id=deck.id,
+        today=TODAY,
+    )
+    callbacks = [button.callback_data for row in card.keyboard.inline_keyboard for button in row]
+    assert any(value and value.startswith(f"{CB_CELLAR_RESERVE}:") for value in callbacks)
+    assert "Статус: ▫️ свободна" in card.text
+    assert "Заменить две карты" in card.text
+    assert any(button.url == "https://example.test/decklist" for row in card.keyboard.inline_keyboard for button in row)
+
+    reserved = handler.handle_reserve(
+        tg_id=1001,
+        event_date=EVENT_DATE,
+        deck_id=deck.id,
+        today=TODAY,
+    )
+    assert reserved.reservation is not None
+    assert reserved.result.answer_text == "Колода забронирована."
+    assert "Ваша бронь: ✅" in reserved.result.text
+
+    own_card = handler.handle_deck(
+        tg_id=1001,
+        event_date=EVENT_DATE,
+        deck_id=deck.id,
+        today=TODAY,
+    )
+    callbacks = [button.callback_data for row in own_card.keyboard.inline_keyboard for button in row]
+    cancel_callback = next(value for value in callbacks if value and value.startswith(f"{CB_CELLAR_CANCEL}:"))
+    reservation_id = int(cancel_callback.split(":")[1])
+    prompt = handler.handle_cancel_prompt(tg_id=1001, reservation_id=reservation_id)
+    assert "Отменить бронь?" in prompt.text
+    assert prompt.keyboard.inline_keyboard[0][0].callback_data.startswith(f"{CB_CELLAR_CANCEL_CONFIRM}:")
+
+    cancelled = handler.handle_cancel(
+        tg_id=1001,
+        reservation_id=reservation_id,
+        today=TODAY,
+    )
+    assert cancelled.cancelled is True
+    assert cancelled.result.answer_text == "Бронь отменена."
+    assert CellarService(db).active_reservations(EVENT_DATE) == []
+
+
+def test_cellar_card_does_not_offer_reserved_deck_to_another_player(db):
+    FeatureFlagService(db).toggle(FeatureFlags.CELLAR_DECKS)
+    handler = _handler(db)
+    handler.handle_open(tg_id=1001, username="alice", first_name="Alice", last_name="Player", today=TODAY)
+    handler.handle_open(tg_id=1002, username="bob", first_name="Bob", last_name="Player", today=TODAY)
+    deck = CellarService(db).catalog(EVENT_DATE)[0]
+    handler.handle_reserve(tg_id=1001, event_date=EVENT_DATE, deck_id=deck.id, today=TODAY)
+
+    card = handler.handle_deck(
+        tg_id=1002,
+        event_date=EVENT_DATE,
+        deck_id=deck.id,
+        today=TODAY,
+    )
+
+    assert "Статус: 🔒 забронировал(а) Alice Player" in card.text
+    assert not any(
+        button.callback_data and button.callback_data.startswith(f"{CB_CELLAR_RESERVE}:")
+        for row in card.keyboard.inline_keyboard
+        for button in row
+    )
+
+
+def test_reserving_from_later_page_returns_current_deck_at_top(db):
+    FeatureFlagService(db).toggle(FeatureFlags.CELLAR_DECKS)
+    handler = _handler(db)
+    handler.handle_open(tg_id=1001, username="alice", first_name="Alice", last_name="Player", today=TODAY)
+    deck = CellarService(db).catalog(EVENT_DATE)[15]
+
+    reserved = handler.handle_reserve(
+        tg_id=1001,
+        event_date=EVENT_DATE,
+        deck_id=deck.id,
+        page=1,
+        today=TODAY,
+    )
+
+    first_button = reserved.result.keyboard.inline_keyboard[0][0]
+    assert first_button.callback_data == f"{CB_CELLAR_DECK}:{EVENT_DATE}:{deck.id}:0"
+    assert first_button.text.startswith("✅ ")
+
+
+def test_cellar_callbacks_reject_stale_date(db):
+    FeatureFlagService(db).toggle(FeatureFlags.CELLAR_DECKS)
+    handler = _handler(db)
+    handler.handle_open(tg_id=1001, username="alice", first_name="Alice", last_name="Player", today=TODAY)
+
+    result = handler.handle_date(
+        tg_id=1001,
+        event_date=date(2026, 8, 17),
+        today=TODAY,
+    )
+
+    assert result.is_alert is True
+    assert "больше недоступна" in result.text
+
+
+def test_only_owner_and_production_coordinators_see_booking_overview(db, monkeypatch):
+    FeatureFlagService(db).toggle(FeatureFlags.CELLAR_DECKS)
+    handler = _handler(db)
+    handler.handle_open(
+        tg_id=1001,
+        username="alice",
+        first_name="Alice",
+        last_name="Player",
+        today=TODAY,
+    )
+    deck = CellarService(db).catalog(EVENT_DATE)[0]
+    deck.source_position = 13
+    db.commit()
+    handler.handle_reserve(tg_id=1001, event_date=EVENT_DATE, deck_id=deck.id, today=TODAY)
+    monkeypatch.setattr(settings, "DEBUG", False)
+    monkeypatch.setattr(settings, "CELLAR_COORDINATOR_TG_IDS", "")
+    monkeypatch.setattr(settings, "CELLAR_COORDINATOR_USERNAMES", "@coordinator,other_coordinator")
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 333)
+
+    coordinator = handler.handle_open(
+        tg_id=111,
+        username="coordinator",
+        first_name="Coordinator",
+        last_name="Person",
+        today=TODAY,
+    )
+    regular = handler.handle_open(
+        tg_id=1002,
+        username="bob",
+        first_name="Bob",
+        last_name="Player",
+        today=TODAY,
+    )
+    owner = handler.handle_open(
+        tg_id=333,
+        username="owner",
+        first_name="Owner",
+        last_name="Person",
+        today=TODAY,
+    )
+
+    assert f"Alice Player — @alice — {deck.display_name}" in coordinator.text
+    assert f"Alice Player — @alice — {deck.display_name}" in owner.text
+    assert "Брони на ближайшие турниры" not in regular.text
+
+    monkeypatch.setattr(settings, "DEBUG", True)
+    debug_owner = handler.handle_open(
+        tg_id=333,
+        username="owner",
+        first_name="Owner",
+        last_name="Person",
+        today=TODAY,
+    )
+    debug_coordinator = handler.handle_open(
+        tg_id=111,
+        username="coordinator",
+        first_name="Coordinator",
+        last_name="Person",
+        today=TODAY,
+    )
+
+    assert "Брони на ближайшие турниры" in debug_owner.text
+    assert "Брони на ближайшие турниры" not in debug_coordinator.text
+
+
+def test_coordinator_usernames_are_normalized_and_deduplicated(monkeypatch):
+    monkeypatch.setattr(settings, "CELLAR_COORDINATOR_USERNAMES", " @Coord_One,coord_two,COORD_ONE ")
+
+    assert settings.cellar_coordinator_usernames == ["coord_one", "coord_two"]
+
+
+@pytest.mark.asyncio
+async def test_telegram_reservation_notification_targets_cellar_owners_in_production(db, user_svc, monkeypatch):
+    service = CellarService(db)
+    service.ensure_bootstrap_catalog()
+    user = user_svc.get_or_create(tg_id=1001, username="alice", first_name="Alice", last_name="Player")
+    reservation = service.reserve(
+        deck_id=service.catalog(EVENT_DATE)[0].id,
+        user_id=user.id,
+        event_date=EVENT_DATE,
+        today=TODAY,
+    ).reservation
+    user_svc.get_or_create(tg_id=111, username="coordinator", first_name="Coordinator One")
+    user_svc.get_or_create(tg_id=222, username="other_coordinator", first_name="Coordinator Two")
+    monkeypatch.setattr(settings, "DEBUG", False)
+    monkeypatch.setattr(settings, "CELLAR_COORDINATOR_TG_IDS", "")
+    monkeypatch.setattr(settings, "CELLAR_COORDINATOR_USERNAMES", "coordinator,other_coordinator")
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 333)
+    monkeypatch.setattr("core.config._app_cfg.notify_allowed_ids", None)
+    bot = AsyncMock()
+
+    assert await _announce(bot, db, reservation) is True
+    assert await _announce(bot, db, reservation, cancelled=True) is True
+
+    assert [call.kwargs["chat_id"] for call in bot.send_message.await_args_list] == [
+        111,
+        222,
+        333,
+        111,
+        222,
+        333,
+    ]
+    assert all("@alice" in call.kwargs["text"] for call in bot.send_message.await_args_list)
+    assert "забронировал(а)" in bot.send_message.await_args_list[0].kwargs["text"]
+    assert "отменил(а) бронь" in bot.send_message.await_args_list[3].kwargs["text"]
+
+
+@pytest.mark.asyncio
+async def test_telegram_reservation_notification_targets_only_owner_in_debug(db, user_svc, monkeypatch):
+    service = CellarService(db)
+    service.ensure_bootstrap_catalog()
+    user = user_svc.get_or_create(tg_id=1001, username="alice", first_name="Alice", last_name="Player")
+    reservation = service.reserve(
+        deck_id=service.catalog(EVENT_DATE)[0].id,
+        user_id=user.id,
+        event_date=EVENT_DATE,
+        today=TODAY,
+    ).reservation
+    monkeypatch.setattr(settings, "DEBUG", True)
+    monkeypatch.setattr(settings, "CELLAR_COORDINATOR_TG_IDS", "111,222")
+    monkeypatch.setattr(settings, "CELLAR_COORDINATOR_USERNAMES", "coordinator,other_coordinator")
+    monkeypatch.setattr(settings, "OWNER_CHAT_ID", 333)
+    monkeypatch.setattr("core.config._app_cfg.notify_allowed_ids", [333])
+    bot = AsyncMock()
+
+    assert await _announce(bot, db, reservation, cancelled=True) is True
+
+    bot.send_message.assert_awaited_once()
+    assert bot.send_message.await_args.kwargs["chat_id"] == 333
+    assert "@alice" in bot.send_message.await_args.kwargs["text"]
+    assert "отменил(а) бронь" in bot.send_message.await_args.kwargs["text"]

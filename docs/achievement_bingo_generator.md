@@ -5,6 +5,13 @@
 детерминированный pure generator. Здесь ещё нет БД, Season/Board/Cell, Board Lab route,
 player UI, сохранения completion events или prize claims.
 
+> **Разделение версий.** Описанный ниже `bingo-v1` проверяет только четыре горизонтальных
+> ряда и использует статические difficulty quotas. Для production принят target `bingo-v2`:
+> все 10 линий, накопительные клетки, персональная вероятность выполнения и числовой баланс
+> линий. Полная формула и migration boundary описаны в
+> [`achievement_bingo_fairness.md`](achievement_bingo_fairness.md). Target ещё не реализован;
+> старые preview не меняются задним числом.
+
 ## Поток данных
 
 ```text
@@ -33,6 +40,10 @@ AchievementTypeManifest
   в diagnostics с reason/fallback;
 - невозможный pool завершает ограниченный backtracking с `BoardGenerationError`, а не
   уходит в случайный reroll.
+
+Эти инварианты являются контрактом воспроизводимости preview v1, а не правилами первого
+production-сезона. В частности, `RowDiagnostic` и horizontal-only placement должны быть
+заменены versioned `LineDiagnostic`/solver из ADR, а не молча менять смысл `bingo-v1`.
 
 Алгоритм использует SHA-256 ranking от `algorithmVersion + catalogVersion + seasonId +
 playerId + seed`. Порядок candidates на входе не влияет на результат. `BoardDraft.stable_json()`
@@ -105,6 +116,24 @@ Fixtures нужны только для Board Lab и fairness-тестов. Он
 Примеры: `/bingo_preview`, `/bingo_preview новичок`, `/bingo_preview regular 42`.
 Это лёгкая часть Board Lab: управление pool/quotas, реальные игроки, batch diagnostics,
 JSON export и сохранение draft остаются в #213.
+
+## Fairness foundation для всех линий
+
+`services/achievements/bingo/fairness.py` добавляет read-only анализ целевой геометрии,
+не меняя воспроизводимый `bingo-v1` и текущий `/bingo_preview`:
+
+- перечисляет 4 строки, 4 столбца и 2 диагонали в стабильном порядке `R0..D1`;
+- переводит completion probability в аддитивный вес `−log₂(p)` с явными bounds;
+- проверяет rare, peer-confirmed и доступность во всех десяти линиях;
+- считает median line weight, relative imbalance и отношение вероятностей самой лёгкой и
+  тяжёлой линии;
+- принимает player-specific probability overrides, а без них явно помечает использование
+  fixture `attainability` и independence fallback;
+- возвращает versioned stable diagnostics, не переставляя клетки и ничего не записывая.
+
+Это диагностический foundation, а не готовый weighted solver. Текущие fixtures задают всего
+четыре вероятности по статическим difficulty tiers, поэтому 10%-гейт нельзя честно включить
+до появления персонального estimator с более гранулярными frozen probabilities.
 
 Пример preview-поля каталога v1 для персоны «Регуляр», seed `42`:
 

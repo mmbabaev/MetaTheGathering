@@ -792,6 +792,7 @@ def _make_import_job(
     find_latest=False,
     aetherhub_service=None,
     event_day_offset=0,
+    attempt_number=1,
 ) -> AetherhubImportJob:
     club = Club(name="Goldfish", chat_id=0, aetherhub_url=aetherhub_url, schedules=[])
     schedule = ClubSchedule(
@@ -805,6 +806,7 @@ def _make_import_job(
         schedule,
         aetherhub_service=aetherhub_service,
         event_day_offset=event_day_offset,
+        attempt_number=attempt_number,
     )
 
 
@@ -868,6 +870,32 @@ class TestAetherhubImportJob:
         mock_svc.find_todays_pauper_tournament.assert_not_called()
         mock_svc.fetch_tournament.assert_called_once_with(stored_url)
 
+    def test_imports_newest_when_club_has_two_active_tournaments(self, db, svc):
+        old_url = "https://aetherhub.com/Tourney/RoundTourney/41"
+        new_url = "https://aetherhub.com/Tourney/RoundTourney/42"
+        source = MagicMock()
+        source.fetch_tournament.return_value = MagicMock()
+
+        old = svc.create_tournament(TournamentCreate(title="Old", chat_id=0, slug="old", club="Goldfish"))
+        svc.set_aetherhub_url(old.id, old_url)
+        new = svc.create_tournament(TournamentCreate(title="New", chat_id=0, slug="new", club="Goldfish"))
+        svc.set_aetherhub_url(new.id, new_url)
+
+        with (
+            patch("bot.scheduler.AetherhubImportService") as import_cls,
+            patch("bot.scheduler.SessionLocal", return_value=MagicMock()),
+        ):
+            import_cls.return_value.import_tournament.return_value = MagicMock(
+                registered=0,
+                already_registered=0,
+                pairings_saved=8,
+                new_round_numbers=[],
+            )
+            asyncio.run(_make_import_job(aetherhub_service=source).run(now=FRIDAY_NOW, db=db))
+
+        source.fetch_tournament.assert_called_once_with(new_url)
+        import_cls.return_value.import_tournament.assert_called_once_with(new.id, source.fetch_tournament.return_value)
+
     def test_new_second_round_triggers_deferred_deck_reminder(self, db, svc):
         stored_url = "https://aetherhub.com/Tourney/RoundTourney/218"
         source = MagicMock()
@@ -910,6 +938,59 @@ class TestAetherhubImportJob:
         asyncio.run(job.run(now=FRIDAY_NOW, db=db))
 
         mock_svc.fetch_tournament.assert_not_called()
+
+    def test_second_scheduled_miss_notifies_owner_only_once(self, db, svc):
+        mock_svc = MagicMock()
+        mock_svc.find_todays_pauper_tournament.return_value = None
+        tournament = svc.create_tournament(TournamentCreate(title="T", chat_id=0, slug="t", club="Goldfish"))
+        job = _make_import_job(aetherhub_service=mock_svc, attempt_number=2)
+        bot = AsyncMock()
+
+        with patch("bot.scheduler.settings") as mock_settings:
+            mock_settings.OWNER_CHAT_ID = 999
+            mock_settings.notify_allowed_ids = None
+            asyncio.run(job.run(now=FRIDAY_NOW, db=db, bot=bot))
+            asyncio.run(job.run(now=FRIDAY_NOW, db=db, bot=bot))
+
+        bot.send_message.assert_awaited_once_with(
+            chat_id=999,
+            text=(
+                "ℹ️ На AetherHub не найден Pauper-турнир клуба за 24.04.2026.\n\n"
+                f"Content Feed клуба:\n{job.club.aetherhub_url}\n\n"
+                "Если нужный турнир уже создан — пришлите ссылку на него."
+            ),
+        )
+        assert db.get(cm.Tournament, tournament.id).aetherhub_not_found_notified_at is not None
+
+    def test_first_scheduled_miss_does_not_notify_owner(self, db, svc):
+        mock_svc = MagicMock()
+        mock_svc.find_todays_pauper_tournament.return_value = None
+        tournament = svc.create_tournament(TournamentCreate(title="T", chat_id=0, slug="t", club="Goldfish"))
+        job = _make_import_job(aetherhub_service=mock_svc, attempt_number=1)
+        bot = AsyncMock()
+
+        with patch("bot.scheduler.settings") as mock_settings:
+            mock_settings.OWNER_CHAT_ID = 999
+            mock_settings.notify_allowed_ids = None
+            asyncio.run(job.run(now=FRIDAY_NOW, db=db, bot=bot))
+
+        bot.send_message.assert_not_awaited()
+        assert db.get(cm.Tournament, tournament.id).aetherhub_not_found_notified_at is None
+
+    def test_second_scheduled_miss_respects_notification_allowlist(self, db, svc):
+        mock_svc = MagicMock()
+        mock_svc.find_todays_pauper_tournament.return_value = None
+        tournament = svc.create_tournament(TournamentCreate(title="T", chat_id=0, slug="t", club="Goldfish"))
+        job = _make_import_job(aetherhub_service=mock_svc, attempt_number=2)
+        bot = AsyncMock()
+
+        with patch("bot.scheduler.settings") as mock_settings:
+            mock_settings.OWNER_CHAT_ID = 999
+            mock_settings.notify_allowed_ids = [111]
+            asyncio.run(job.run(now=FRIDAY_NOW, db=db, bot=bot))
+
+        bot.send_message.assert_not_awaited()
+        assert db.get(cm.Tournament, tournament.id).aetherhub_not_found_notified_at is None
 
     def test_does_not_import_or_save_auto_discovered_empty_tournament(self, db, svc):
         """An empty auto-discovered event must not become the tournament's stored URL."""
@@ -1157,13 +1238,32 @@ class TestCreateTournamentJob:
 
         assert svc.get_active_tournament_for_chat(42) is None
 
-    def test_closes_previous_active_tournament(self, db, svc):
+    def test_keeps_previous_active_tournament_and_creates_second(self, db, svc):
         job = _make_create_job(weekday="friday", chat_id=0)
         old = svc.create_tournament(TournamentCreate(title="Old", chat_id=0, slug="old", club="Goldfish"))
         bot = AsyncMock()
-        asyncio.run(job.run(bot=bot, now=FRIDAY_NOW, db=db))
+        with patch("bot.scheduler.send_registration_open", new_callable=AsyncMock) as announce:
+            asyncio.run(job.run(bot=bot, now=FRIDAY_NOW, db=db))
         old_refreshed = db.get(cm.Tournament, old.id)
-        assert old_refreshed.status == TournamentStatus.CLOSED
+        assert old_refreshed.status == TournamentStatus.REGISTRATION
+        assert old_refreshed.ended_at is None
+        assert db.query(cm.Tournament).count() == 2
+        newest = svc.get_active_tournament_for_chat(0)
+        assert newest.id != old.id
+        assert newest.title == "Goldfish Pauper 24.04.2026"
+        announce.assert_awaited_once()
+
+    def test_does_not_create_third_active_tournament(self, db, svc):
+        job = _make_create_job(weekday="friday", chat_id=0)
+        first = svc.create_tournament(TournamentCreate(title="First", chat_id=0, slug="first", club="Goldfish"))
+        second = svc.create_tournament(TournamentCreate(title="Second", chat_id=0, slug="second", club="Goldfish"))
+
+        with patch("bot.scheduler.send_registration_open", new_callable=AsyncMock) as announce:
+            asyncio.run(job.run(bot=AsyncMock(), now=FRIDAY_NOW, db=db))
+
+        assert [t.id for t in svc.list_active_tournaments_for_chat(0)] == [second.id, first.id]
+        assert db.query(cm.Tournament).count() == 2
+        announce.assert_not_awaited()
 
     def test_registration_open_goes_to_club_chat_and_owner_with_deeplink(self, db):
         job = _make_create_job(weekday="friday", chat_id=42)

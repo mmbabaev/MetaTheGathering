@@ -31,11 +31,12 @@ class FeatureFlags:
     ACHIEVEMENT_BOARD_LAB = "achievementBoardLab"
     MAGIC_OCULUS_IMPORT = "magicOculusImport"
     LIVE_REGISTRATION_COUNT = "liveRegistrationCount"
+    CELLAR_DECKS = "cellarDecks"
 
 
 KNOWN_FLAGS: dict[str, FeatureFlagMeta] = {
     FeatureFlags.RECORD_OPPONENTS: FeatureFlagMeta(
-        description="Кнопка «Записать оппонентов» на карточке турнира",
+        description="Запись чужих пустых колод: оппоненты и кнопка мета-полиции",
         value_type="bool",
         default_value="true",
     ),
@@ -71,6 +72,11 @@ KNOWN_FLAGS: dict[str, FeatureFlagMeta] = {
     ),
     FeatureFlags.LIVE_REGISTRATION_COUNT: FeatureFlagMeta(
         description="Счётчик записавшихся с редактированием сообщения о регистрации",
+        value_type="bool",
+        default_value="false",
+    ),
+    FeatureFlags.CELLAR_DECKS: FeatureFlagMeta(
+        description="Колоды из ячейки: каталог, бронирование и адресные уведомления",
         value_type="bool",
         default_value="false",
     ),

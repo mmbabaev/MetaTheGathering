@@ -1,7 +1,7 @@
 """Telegram deeplinks: `t.me/<bot>?start=<payload>`.
 
-Поддерживаются переход в запись колоды (`deck_<id>`) и общая регистрация
-(`register_<id>`). Вторая сначала проверяет, не записан ли игрок уже.
+Поддерживаются переход в запись своей колоды (`deck_<id>`), общая регистрация
+(`register_<id>`), помощь мета-полиции (`fill_<id>`) и меню ячейки (`cellar`).
 """
 
 from __future__ import annotations
@@ -10,6 +10,8 @@ from typing import Optional
 
 _DECK_PREFIX = "deck_"
 _REGISTER_PREFIX = "register_"
+_FILL_MISSING_PREFIX = "fill_"
+_CELLAR_PAYLOAD = "cellar"
 
 
 def deck_payload(tournament_id: int) -> str:
@@ -50,3 +52,33 @@ def parse_registration_payload(payload: str) -> Optional[int]:
 def registration_deeplink(bot_username: str, tournament_id: int) -> str:
     """Ссылка общей регистрации: записанным показывает статус турнира."""
     return f"https://t.me/{bot_username}?start={registration_payload(tournament_id)}"
+
+
+def fill_missing_payload(tournament_id: int) -> str:
+    """start-payload кнопки мета-полиции «Записать»."""
+    return f"{_FILL_MISSING_PREFIX}{tournament_id}"
+
+
+def parse_fill_missing_payload(payload: str) -> Optional[int]:
+    """tournament_id из deeplink мета-полиции, либо None."""
+    if not payload or not payload.startswith(_FILL_MISSING_PREFIX):
+        return None
+    rest = payload[len(_FILL_MISSING_PREFIX) :]
+    return int(rest) if rest.isascii() and rest.isdigit() else None
+
+
+def fill_missing_deeplink(bot_username: str, tournament_id: int) -> str:
+    """Ссылка из напоминания: открыть выбор своей либо чужой пустой колоды."""
+    return f"https://t.me/{bot_username}?start={fill_missing_payload(tournament_id)}"
+
+
+def is_cellar_payload(payload: str) -> bool:
+    """True only for the exact cellar-menu start payload."""
+
+    return payload == _CELLAR_PAYLOAD
+
+
+def cellar_deeplink(bot_username: str) -> str:
+    """Open the bot directly in the cellar date menu."""
+
+    return f"https://t.me/{bot_username}?start={_CELLAR_PAYLOAD}"

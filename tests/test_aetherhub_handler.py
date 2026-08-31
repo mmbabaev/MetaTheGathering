@@ -1,13 +1,19 @@
 """Tests for AetherhubHandler business logic."""
 
-from datetime import date
+from datetime import date, datetime
 from unittest.mock import MagicMock
 
 import pytest
 
-from bot.handlers.aetherhub import AetherhubFetchResult, AetherhubHandler
+from bot.handlers.aetherhub import AetherhubFetchResult, AetherhubHandler, tournament_event_date
 from services.aetherhub_import_service import expected_swiss_rounds
-from services.aetherhub_models import AetherhubTournamentData, ClubTournamentLink
+from services.aetherhub_models import AetherhubTournamentData
+
+EVENT_DATE = date(2026, 8, 29)
+
+
+def test_tournament_event_date_uses_club_timezone_for_naive_utc_timestamp():
+    assert tournament_event_date(datetime(2026, 8, 28, 23, 30), "Europe/Kaliningrad").isoformat() == "2026-08-29"
 
 
 def _make_tournament_data(url: str = "https://aetherhub.com/Tourney/RoundTourney/1") -> AetherhubTournamentData:
@@ -25,7 +31,11 @@ class TestHandleImportPrompt:
     def test_uses_stored_url_without_club_lookup(self):
         stored = "https://aetherhub.com/Tourney/RoundTourney/42"
         h = _handler(find_url="https://other.url")
-        result = h.handle_import_prompt(stored_url=stored, club_aetherhub_url="https://club.url")
+        result = h.handle_import_prompt(
+            stored_url=stored,
+            club_aetherhub_url="https://club.url",
+            event_date=EVENT_DATE,
+        )
         h._aetherhub.find_todays_pauper_tournament.assert_not_called()
         h._aetherhub.fetch_tournament.assert_called_once_with(stored)
         assert result is not None
@@ -33,31 +43,50 @@ class TestHandleImportPrompt:
     def test_stored_url_header_is_update(self):
         stored = "https://aetherhub.com/Tourney/RoundTourney/42"
         h = _handler()
-        result = h.handle_import_prompt(stored_url=stored, club_aetherhub_url=None)
+        result = h.handle_import_prompt(stored_url=stored, club_aetherhub_url=None, event_date=EVENT_DATE)
         assert "Обновление" in result.preview_text
 
     def test_auto_finds_url_when_no_stored(self):
         found = "https://aetherhub.com/Tourney/RoundTourney/99"
         h = _handler(find_url=found)
-        result = h.handle_import_prompt(stored_url=None, club_aetherhub_url="https://club.url")
-        h._aetherhub.find_todays_pauper_tournament.assert_called_once_with("https://club.url")
+        result = h.handle_import_prompt(
+            stored_url=None,
+            club_aetherhub_url="https://club.url",
+            event_date=EVENT_DATE,
+        )
+        h._aetherhub.find_todays_pauper_tournament.assert_called_once_with(
+            "https://club.url",
+            today=EVENT_DATE,
+        )
         h._aetherhub.fetch_tournament.assert_called_once_with(found)
         assert result is not None
 
     def test_auto_find_header_is_import(self):
         h = _handler(find_url="https://aetherhub.com/Tourney/RoundTourney/99")
-        result = h.handle_import_prompt(stored_url=None, club_aetherhub_url="https://club.url")
+        result = h.handle_import_prompt(
+            stored_url=None,
+            club_aetherhub_url="https://club.url",
+            event_date=EVENT_DATE,
+        )
         assert "Импорт" in result.preview_text
 
     def test_returns_none_when_no_stored_and_not_found(self):
         h = _handler(find_url=None)
-        result = h.handle_import_prompt(stored_url=None, club_aetherhub_url="https://club.url")
+        result = h.handle_import_prompt(
+            stored_url=None,
+            club_aetherhub_url="https://club.url",
+            event_date=EVENT_DATE,
+        )
         assert result is None
+        h._aetherhub.find_todays_pauper_tournament.assert_called_once_with(
+            "https://club.url",
+            today=EVENT_DATE,
+        )
         h._aetherhub.fetch_tournament.assert_not_called()
 
     def test_returns_none_when_no_stored_and_no_club_url(self):
         h = _handler()
-        result = h.handle_import_prompt(stored_url=None, club_aetherhub_url=None)
+        result = h.handle_import_prompt(stored_url=None, club_aetherhub_url=None, event_date=EVENT_DATE)
         assert result is None
         h._aetherhub.find_todays_pauper_tournament.assert_not_called()
         h._aetherhub.fetch_tournament.assert_not_called()
@@ -65,61 +94,42 @@ class TestHandleImportPrompt:
     def test_result_url_matches_fetched_tournament(self):
         url = "https://aetherhub.com/Tourney/RoundTourney/55"
         h = _handler(fetch_data=_make_tournament_data(url=url))
-        result = h.handle_import_prompt(stored_url=url, club_aetherhub_url=None)
+        result = h.handle_import_prompt(stored_url=url, club_aetherhub_url=None, event_date=EVENT_DATE)
         assert result.data.url == url
 
     def test_auto_find_empty_tournament_returns_none(self):
         """Автопоиск нашёл пустой турнир (0 игроков) → None, чтобы показать список клуба."""
         empty = AetherhubTournamentData(url="https://aetherhub.com/Tourney/RoundTourney/9", players=[], rounds=[])
         h = _handler(find_url="https://aetherhub.com/Tourney/RoundTourney/9", fetch_data=empty)
-        assert h.handle_import_prompt(stored_url=None, club_aetherhub_url="https://club.url") is None
+        assert (
+            h.handle_import_prompt(
+                stored_url=None,
+                club_aetherhub_url="https://club.url",
+                event_date=EVENT_DATE,
+            )
+            is None
+        )
 
     def test_stored_url_empty_tournament_still_shows_preview(self):
         """Явно привязанный url показываем даже пустым (это осознанный ре-импорт)."""
         empty = AetherhubTournamentData(url="https://aetherhub.com/Tourney/RoundTourney/9", players=[], rounds=[])
         h = _handler(fetch_data=empty)
-        result = h.handle_import_prompt(stored_url=empty.url, club_aetherhub_url=None)
+        result = h.handle_import_prompt(stored_url=empty.url, club_aetherhub_url=None, event_date=EVENT_DATE)
         assert result is not None
 
 
-class TestDescribeClubTournaments:
-    def _handler_with_links(self, links) -> AetherhubHandler:
-        svc = MagicMock()
-        svc.fetch_club_tournaments.return_value = links
-        return AetherhubHandler(svc)
+class TestDescribeTournamentNotFound:
+    def test_includes_expected_date_and_club_content_feed(self):
+        text = AetherhubHandler(MagicMock()).describe_tournament_not_found(
+            "https://aetherhub.com/User/HobbyGames39/",
+            EVENT_DATE,
+        )
 
-    def test_lists_club_tournament_names(self):
-        links = [
-            ClubTournamentLink(name="17.07", url="u1", date=date(2026, 7, 17), is_pauper=True),
-            ClubTournamentLink(name="Легаси 15.07.2026", url="u2", date=date(2026, 7, 15), is_pauper=False),
-        ]
-        text = self._handler_with_links(links).describe_club_tournaments("https://club.url")
-        assert "ещё не создан" in text
-        assert "Последние 3 турнира клуба" in text
-        assert "17.07" in text  # имя + дата турнира
-        assert "u1" in text
-        assert "Легаси 15.07.2026" in text
-        assert "15.07" in text  # дата второго турнира
-        assert "u2" in text
-
-    def test_lists_only_three_latest_tournaments(self):
-        links = [
-            ClubTournamentLink(name=f"Tournament {index}", url=f"u{index}", date=None)
-            for index in range(1, 5)
-        ]
-        text = self._handler_with_links(links).describe_club_tournaments("https://club.url")
-        assert "u1" in text and "u2" in text and "u3" in text
-        assert "u4" not in text
-
-    def test_no_links_message(self):
-        text = self._handler_with_links([]).describe_club_tournaments("https://club.url")
-        assert "турниров не видно" in text
-
-    def test_fetch_error_returns_header(self):
-        svc = MagicMock()
-        svc.fetch_club_tournaments.side_effect = RuntimeError("boom")
-        text = AetherhubHandler(svc).describe_club_tournaments("https://club.url")
-        assert "ещё не создан" in text
+        assert "не найден Pauper-турнир" in text
+        assert "29.08.2026" in text
+        assert "Content Feed клуба" in text
+        assert "https://aetherhub.com/User/HobbyGames39/" in text
+        assert "пришлите ссылку" in text
 
 
 class TestPreviewMessage:

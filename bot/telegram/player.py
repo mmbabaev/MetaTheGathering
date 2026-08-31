@@ -5,10 +5,12 @@ from telegram.ext import ContextTypes
 
 from bot.features import FeatureService
 from bot.handlers.admin import AdminHandler
+from bot.handlers.cellar import CellarHandler
 from bot.handlers.player import PlayerHandler
 from bot.handlers.settings import SettingsHandler
 from bot.keyboards import Keyboards
 from bot.messages import CUSTOM_ARCHETYPE_PROMPT
+from bot.meta_police_message import refresh_meta_police_message
 from bot.telegram.common import announce_completion_if_ready, parse_callback_ints
 from bot.telegram.common import log_event as _log
 from core.database import SessionLocal
@@ -22,10 +24,12 @@ from services.user import UserService
 USER_DATA_PENDING_CUSTOM = "pending_custom_archetype_tournament_id"
 USER_DATA_PENDING_NAME = "pending_name_for_tournament_id"
 USER_DATA_PENDING_SETTINGS_NAME = "pending_settings_name"
+USER_DATA_PENDING_CELLAR_NAME = "pending_cellar_name"
 USER_DATA_PENDING_BULK_ADD = "pending_bulk_add_tournament_id"
 USER_DATA_PENDING_ADMIN_CUSTOM_ARCH = "pending_admin_custom_arch_participant_id"
 USER_DATA_OPPONENTS_MODE = "opponents_tournament_id"
 USER_DATA_PENDING_META_IMPORT = "pending_meta_import_tournament_id"
+USER_DATA_PENDING_MISSING_CUSTOM_ARCH = "pending_missing_custom_arch_participant_id"
 
 
 def _make_features(db) -> FeatureService:
@@ -133,6 +137,7 @@ async def callback_archetype(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.answer()
         card = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id)
         await query.message.reply_text(card.text, reply_markup=card.keyboard)
+        await refresh_meta_police_message(context.bot, db, tournament_id)
         await announce_completion_if_ready(context.bot, db, tournament_id)
     finally:
         db.close()
@@ -197,6 +202,113 @@ async def callback_custom_archetype(update: Update, context: ContextTypes.DEFAUL
     context.user_data[USER_DATA_PENDING_CUSTOM] = tournament_id
     await query.edit_message_text(CUSTOM_ARCHETYPE_PROMPT)
     await query.answer()
+
+
+async def callback_pick_missing_deck(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (participant_id,) = ids
+    db = SessionLocal()
+    try:
+        result = _player_handler(db).handle_pick_missing_deck(user.id, participant_id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+        await query.answer()
+    finally:
+        db.close()
+
+
+async def callback_missing_deck_more(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (participant_id,) = ids
+    db = SessionLocal()
+    try:
+        result = _player_handler(db).handle_pick_missing_deck(user.id, participant_id, expanded=True)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+        await query.answer()
+    finally:
+        db.close()
+
+
+async def callback_set_missing_deck(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 2)
+    if ids is None:
+        return
+    participant_id, archetype_id = ids
+    db = SessionLocal()
+    try:
+        participant = TournamentService(db).get_participant_by_id(participant_id)
+        target = UserService(db).get_by_id(participant.user_id) if participant else None
+        result = _player_handler(db).handle_set_missing_deck(user.id, participant_id, archetype_id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        _log(
+            "meta_police_deck_recorded",
+            user,
+            tournament_id=participant.tournament_id if participant else None,
+            participant_id=participant_id,
+            target_tg_id=target.tg_id if target else None,
+            archetype_id=archetype_id,
+        )
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+        await query.answer()
+        await refresh_meta_police_message(
+            context.bot,
+            db,
+            participant.tournament_id if participant else None,
+        )
+        await announce_completion_if_ready(
+            context.bot,
+            db,
+            participant.tournament_id if participant else None,
+        )
+    finally:
+        db.close()
+
+
+async def callback_missing_custom_deck(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (participant_id,) = ids
+    db = SessionLocal()
+    try:
+        validation = _player_handler(db).handle_pick_missing_deck(user.id, participant_id)
+        if validation.is_alert:
+            await query.answer(validation.text, show_alert=True)
+            return
+        if context.user_data is None:
+            context.user_data = {}
+        context.user_data[USER_DATA_PENDING_MISSING_CUSTOM_ARCH] = participant_id
+        await query.edit_message_text(CUSTOM_ARCHETYPE_PROMPT)
+        await query.answer()
+    finally:
+        db.close()
 
 
 async def callback_tournament_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -295,7 +407,6 @@ async def _handle_pending_name(msg, user, text, context) -> bool:
     if not text:
         await msg.reply_text("Введите непустое имя.")
         return True
-    context.user_data.pop(USER_DATA_PENDING_NAME)
     db = SessionLocal()
     try:
         result = _player_handler(db).handle_save_name_then_register(
@@ -304,6 +415,8 @@ async def _handle_pending_name(msg, user, text, context) -> bool:
             text,
             tournament_id,
         )
+        if not result.needs_name:
+            context.user_data.pop(USER_DATA_PENDING_NAME, None)
         await msg.reply_text(result.text, reply_markup=result.keyboard)
     finally:
         db.close()
@@ -316,11 +429,37 @@ async def _handle_pending_settings_name(msg, user, text, context) -> bool:
     if not text:
         await msg.reply_text("Введите непустое имя.")
         return True
-    context.user_data.pop(USER_DATA_PENDING_SETTINGS_NAME)
     db = SessionLocal()
     try:
         result = _settings_handler(db).handle_settings_name_text(user.id, text)
+        if not result.needs_name:
+            context.user_data.pop(USER_DATA_PENDING_SETTINGS_NAME, None)
         await msg.reply_text(result.text)
+    finally:
+        db.close()
+    return True
+
+
+async def _handle_pending_cellar_name(msg, user, text, context) -> bool:
+    if not context.user_data.get(USER_DATA_PENDING_CELLAR_NAME):
+        return False
+    if not text:
+        await msg.reply_text("Введите непустое имя.")
+        return True
+    db = SessionLocal()
+    try:
+        saved = _settings_handler(db).handle_settings_name_text(user.id, text)
+        if saved.needs_name:
+            await msg.reply_text(saved.text)
+            return True
+        context.user_data.pop(USER_DATA_PENDING_CELLAR_NAME, None)
+        result = CellarHandler(db, UserService(db), FeatureFlagService(db)).handle_open(
+            tg_id=user.id,
+            username=user.username,
+            first_name=None,
+            last_name=None,
+        )
+        await msg.reply_text(result.text, reply_markup=result.keyboard)
     finally:
         db.close()
     return True
@@ -342,7 +481,47 @@ async def _handle_pending_admin_custom_arch(msg, user, text, context) -> bool:
         await msg.reply_text(result.text, reply_markup=result.keyboard)
         if not result.is_alert:
             part = TournamentService(db).get_participant_by_id(participant_id)
+            await refresh_meta_police_message(context.bot, db, part.tournament_id if part else None)
             await announce_completion_if_ready(context.bot, db, part.tournament_id if part else None)
+    finally:
+        db.close()
+    return True
+
+
+async def _handle_pending_missing_custom_arch(msg, user, text, context) -> bool:
+    participant_id = context.user_data.get(USER_DATA_PENDING_MISSING_CUSTOM_ARCH)
+    if participant_id is None:
+        return False
+    if not text:
+        await msg.reply_text("Введите непустое название архетипа.")
+        return True
+    context.user_data.pop(USER_DATA_PENDING_MISSING_CUSTOM_ARCH)
+    db = SessionLocal()
+    try:
+        participant = TournamentService(db).get_participant_by_id(participant_id)
+        target = UserService(db).get_by_id(participant.user_id) if participant else None
+        result = _player_handler(db).handle_set_missing_custom_deck(user.id, participant_id, text)
+        if not result.is_alert:
+            _log(
+                "meta_police_deck_recorded",
+                user,
+                tournament_id=participant.tournament_id if participant else None,
+                participant_id=participant_id,
+                target_tg_id=target.tg_id if target else None,
+                custom_archetype=text,
+            )
+        await msg.reply_text(result.text, reply_markup=result.keyboard)
+        if not result.is_alert:
+            await refresh_meta_police_message(
+                context.bot,
+                db,
+                participant.tournament_id if participant else None,
+            )
+            await announce_completion_if_ready(
+                context.bot,
+                db,
+                participant.tournament_id if participant else None,
+            )
     finally:
         db.close()
     return True
@@ -386,6 +565,7 @@ async def _handle_pending_custom_arch(msg, user, text, context) -> bool:
         if not result.is_alert:
             card = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id)
             await msg.reply_text(card.text, reply_markup=card.keyboard)
+            await refresh_meta_police_message(context.bot, db, tournament_id)
             await announce_completion_if_ready(context.bot, db, tournament_id)
     finally:
         db.close()
@@ -411,6 +591,7 @@ async def _handle_pending_meta_import(msg, user, text, context) -> bool:
             return True
         _log("meta_import_table", user, tournament_id=tournament_id)
         await msg.reply_text(result.text, reply_markup=result.keyboard, parse_mode=result.parse_mode)
+        await refresh_meta_police_message(context.bot, db, tournament_id)
         await announce_completion_if_ready(context.bot, db, tournament_id)
     finally:
         db.close()
@@ -419,7 +600,9 @@ async def _handle_pending_meta_import(msg, user, text, context) -> bool:
 
 _TEXT_INPUT_HANDLERS = [
     _handle_pending_name,
+    _handle_pending_cellar_name,
     _handle_pending_settings_name,
+    _handle_pending_missing_custom_arch,
     _handle_pending_admin_custom_arch,
     _handle_pending_bulk_add,
     _handle_pending_custom_arch,

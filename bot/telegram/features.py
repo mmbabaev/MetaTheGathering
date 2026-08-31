@@ -3,6 +3,7 @@ from telegram.ext import ContextTypes
 
 from bot.handlers.features import FeaturesHandler
 from bot.registration_messages import RegistrationMessageRefreshJob
+from bot.scheduler import CellarCatalogSyncJob
 from core.database import SessionLocal
 from services.feature_flags import KNOWN_FLAGS, FeatureFlags, FeatureFlagService
 from services.user import UserService
@@ -51,5 +52,7 @@ async def callback_feature_toggle(update: Update, context: ContextTypes.DEFAULT_
         await query.answer()
         if flag_name == FeatureFlags.LIVE_REGISTRATION_COUNT:
             await RegistrationMessageRefreshJob().run(context.bot, db=db)
+        elif flag_name == FeatureFlags.CELLAR_DECKS and FeatureFlagService(db).is_enabled(flag_name):
+            await CellarCatalogSyncJob().run(db=db)
     finally:
         db.close()

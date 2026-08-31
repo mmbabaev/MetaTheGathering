@@ -1,5 +1,7 @@
 # Шаблоны сообщений
 
+from html import escape
+
 # Форматирование ФИО живёт в services/names.py, чтобы одинаково работало и в картинках
 # (services-слой). Здесь — реэкспорт для существующих импортов из bot.messages.
 from services.names import family_name_sort_key, format_participant_name
@@ -23,7 +25,12 @@ NOT_REGISTERED_IN_TOURNAMENT = "Вы не записаны на этот тур�
 ASK_NAME = "Как вас зовут? Введите фамилию и имя через пробел (например: Иванов Иван):"
 NAME_SAVED = "Имя сохранено: {full_name}"
 NAME_REQUIRED_FOR_REGISTRATION = (
-    "Для записи на турнир нужно указать ваше имя.\n\nВведите фамилию и имя через пробел (например: Иванов Иван):"
+    "Для записи на турнир нужно указать фамилию и имя — минимум два слова с буквами.\n\n"
+    "Введите фамилию и имя через пробел (например: Иванов Иван):"
+)
+INVALID_FULL_NAME = (
+    "Нужно указать фамилию и имя — минимум два слова с буквами.\n\n"
+    "Введите фамилию и имя через пробел (например: Иванов Иван):"
 )
 
 # Settings
@@ -36,7 +43,7 @@ NO_ACTIVE_TOURNAMENT = "Нет активного турнира в этом ч�
 PLAYER_ADDED = "✅ {user} добавлен как {archetype_name}."
 TELEGRAM_USER_LOOKUP_FAILED = "Не удалось найти @{username} в Telegram. Проверьте @username."
 TOURNAMENT_CLOSED_MSG = "Турнир закрыт."
-TOURNAMENT_ALREADY_EXISTS_MSG = "В этом чате уже есть активный турнир."
+TOURNAMENT_ALREADY_EXISTS_MSG = "В этом чате уже открыты два турнира — сначала закройте один."
 MULTIPLE_TOURNAMENTS_MSG = "Активных турниров несколько. Используйте /tournament_status чтобы увидеть их ID."
 ADD_PLAYERS_USAGE = "Формат:\n/add_players\n@username1 Название колоды\n@username2 Другая колода"
 BULK_ADD_PROMPT = (
@@ -44,6 +51,9 @@ BULK_ADD_PROMPT = (
 )
 BULK_ADD_EMPTY = "Список игроков пустой."
 PARTICIPANT_NOT_FOUND = "Участник не найден."
+META_POLICE_FILL_UNAVAILABLE = "Заполнение колод по этому напоминанию сейчас недоступно."
+META_POLICE_DECK_ALREADY_FILLED = "Этому игроку уже указали колоду. Выберите другого."
+META_POLICE_ALL_FILLED = "✅ Все колоды уже заполнены. Спасибо!"
 SCOREKEEPER_GRANTED = "🧙 {name} назначен метаписцем."
 SCOREKEEPER_REVOKED = "🧙 {name} снят с роли метаписца."
 POLL_ORGANIZER_GRANTED = "📊 {name} назначен организатором голосований."
@@ -81,10 +91,76 @@ BINGO_PREVIEW_USAGE = (
 BINGO_PREVIEW_DISABLED = "Bingo preview отключён feature flag achievementBoardLab."
 BINGO_PREVIEW_FAILED = "Не удалось собрать поле с выбранными параметрами."
 
+# Cellar deck reservations
+CELLAR_UNAVAILABLE = "Колоды из ячейки пока недоступны."
+CELLAR_DATES = (
+    "🗄 Колоды из ячейки\n\nВыберите дату турнира в Единороге. Бронь автоматически попадёт в запись на турнир."
+)
+CELLAR_USER_NOT_FOUND = "Сначала откройте /cellar ещё раз."
+CELLAR_CANCELLED = "Бронь отменена."
+CELLAR_RESERVED = "Колода забронирована."
+
+
+def format_cellar_catalog(event_date, decks: list, user_id: int) -> str:
+    free = 0
+    own = None
+    for deck in decks:
+        reservation = next(
+            (row for row in deck.reservations if row.event_date == event_date and row.cancelled_at is None),
+            None,
+        )
+        if deck.available and reservation is None:
+            free += 1
+        if reservation is not None and reservation.user_id == user_id:
+            own = deck.display_name
+    lines = [
+        f"🗄 Колоды из ячейки на {event_date.strftime('%d.%m.%Y')}",
+        "",
+        f"Свободно: {free} из {len(decks)}.",
+        "▫️ свободна · 🔒 занята · 🚫 недоступна",
+    ]
+    if own:
+        lines.extend(["", f"Ваша бронь: ✅ {own}"])
+    lines.extend(["", "Выберите физическую колоду. Номер № — её строка в таблице."])
+    return "\n".join(lines)
+
+
+def format_cellar_deck(deck, reservation, user_id: int, user_has_other_reservation: bool) -> str:
+    lines = [f"🗄 {deck.display_name}", "", f"Архетип: {deck.archetype_name}"]
+    if deck.notes:
+        lines.append(f"Примечание: {deck.notes}")
+    if deck.decklist_updated_on:
+        lines.append(f"Деклист актуален на {deck.decklist_updated_on.strftime('%d.%m.%Y')}")
+    lines.append("")
+    if not deck.available:
+        lines.append("Статус: 🚫 недоступна")
+    elif reservation is None:
+        lines.append("Статус: ▫️ свободна")
+        if user_has_other_reservation:
+            lines.append("На эту дату у вас уже забронирована другая колода.")
+    elif reservation.user_id == user_id:
+        lines.append("Статус: ✅ забронирована вами")
+    else:
+        user = reservation.user
+        name = (
+            user.display_name
+            or " ".join(part for part in (user.first_name, user.last_name) if part)
+            or f"id{user.tg_id}"
+        )
+        lines.append(f"Статус: 🔒 забронировал(а) {name}")
+    return "\n".join(lines)
+
+
+def format_cellar_cancel_prompt(reservation) -> str:
+    return f"Отменить бронь?\n\n{reservation.deck.display_name} — {reservation.event_date.strftime('%d.%m.%Y')}"
+
+
 HELP_TEXT = """\
 /tournaments — посмотреть активные турниры и записаться
   Выберите турнир → укажите колоду → готово.
   Можно изменить колоду в любой момент, пока идёт регистрация.
+
+/cellar — выбрать и забронировать колоду из ячейки
 
 /settings — сохранить имя и фамилию для автоматической записи\
 """
@@ -108,9 +184,12 @@ HELP_TEXT_ADMIN = """\
 """
 
 
-def _participant_icon(p) -> str:
-    """✅ колода указана / ⬜ колоды нет."""
-    return "✅" if p.archetype else "⬜"
+def _participant_icon(p, *, aetherhub_imported: bool = False) -> str:
+    """✅ колода указана / ⬜ колоды нет; ❓ игрок ещё не найден в AetherHub."""
+    icon = "✅" if p.archetype else "⬜"
+    if aetherhub_imported and getattr(p, "aetherhub_seen_at", None) is None:
+        icon += "❓"
+    return icon
 
 
 # Типичные окончания русских фамилий
@@ -157,9 +236,9 @@ def _status_header(title: str, status: str, participants: list) -> str:
     return header
 
 
-def format_participant_line(p, decks_hidden: bool = False) -> str:
+def format_participant_line(p, decks_hidden: bool = False, *, aetherhub_imported: bool = False) -> str:
     """Одна строка участника: «<иконка> Фамилия Имя (@ник) 🧙 — Колода». Общий для обоих режимов."""
-    icon = _participant_icon(p)
+    icon = _participant_icon(p, aetherhub_imported=aetherhub_imported)
     if p.user:
         full_name = format_participant_name(p.user.first_name, p.user.last_name) or f"id{p.user.tg_id}"
         username_hint = f" (@{p.user.username})" if p.user.username else ""
@@ -176,27 +255,47 @@ def format_participant_line(p, decks_hidden: bool = False) -> str:
 
 def format_tournament_status(title: str, status: str, participants: list, decks_hidden: bool = False) -> str:
     """Структурированный список участников турнира (плоский)."""
+    aetherhub_imported = any(getattr(p, "aetherhub_seen_at", None) is not None for p in participants)
     lines = [_status_header(title, status, participants), ""]
-    lines.extend(format_participant_line(p, decks_hidden) for p in participants)
+    lines.extend(format_participant_line(p, decks_hidden, aetherhub_imported=aetherhub_imported) for p in participants)
+    if aetherhub_imported and any(getattr(p, "aetherhub_seen_at", None) is None for p in participants):
+        lines.extend(["", "❓ — пока не найден в AetherHub"])
     return "\n".join(lines)
 
 
-def format_missing_decks_reminder(title: str, participants: list) -> str:
-    """Шуточное напоминание со списком только игроков без колоды."""
+def format_missing_decks_reminder(title: str, participants: list, community_fill_enabled: bool = False) -> str:
+    """HTML-текст мета-полиции; заполненные после отправки строки зачёркнуты."""
+    all_filled = bool(participants) and all(participant.archetype_id is not None for participant in participants)
     lines = [
         "🚨👮 Вас посетила мета-полиция!",
         "На какой колоде были эти игроки?",
-        "",
-        f"🏆 {title}",
-        "Список игроков без колоды:",
     ]
+    if community_fill_enabled:
+        lines.append(
+            "✅ Все колоды заполнены — спасибо!"
+            if all_filled
+            else "Помочь заполнить пропуски может каждый — нажмите «Записать»."
+        )
+    lines.extend(["", f"🏆 {escape(title)}", "Список игроков без колоды:"])
     for participant in participants:
-        if participant.archetype_id is not None:
-            continue
         user = participant.user
         name = format_participant_name(user.first_name, user.last_name) or f"id{user.tg_id}"
         username = f" (@{user.username})" if user.username else ""
-        lines.append(f"• {name}{username}")
+        line = f"• {escape(name)}{escape(username)}"
+        lines.append(f"<s>{line}</s>" if participant.archetype_id is not None else line)
+    return "\n".join(lines)
+
+
+def format_unfilled_opponents_note(opponents: list) -> str:
+    """Персональная подсказка: какие оппоненты пользователя всё ещё без колоды."""
+    if not opponents:
+        return ""
+    lines = ["Твои незаполненные оппоненты:"]
+    for opponent in opponents:
+        participant = opponent.participant
+        user = participant.user
+        name = format_participant_name(user.first_name, user.last_name) or f"id{user.tg_id}"
+        lines.append(f"• {name} — раунд {opponent.round_number}")
     return "\n".join(lines)
 
 

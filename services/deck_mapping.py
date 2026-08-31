@@ -101,7 +101,11 @@ _FIXED = [
     # В Pauper «Gardens» — всегда BG Gardens; цветовых вариантов этой деки нет.
     # Правило намеренно сильнее написанного игроком цвета/гильдии.
     (r"gardens", "BG Gardens"),
-    (r"spy|walls", "Spy Walls"),
+    # Spy (комбо через Balustrade Spy), Spy Walls и Walls Combo — разные колоды.
+    # Более конкретный Spy Walls проверяем первым, потому что он содержит оба маркера.
+    (r"\bspy\s+walls\b", "Spy Walls"),
+    (r"\bwalls\b", "Walls Combo"),
+    (r"\bspy\b", "Spy"),
     (r"bogles", "Bogles"),
     (r"\belves\b", "Elves"),
     (r"ruby storm|rg storm", "Ruby Storm"),
@@ -151,7 +155,7 @@ _FUZZY_GENERAL_ALIASES = {
     "arcane": ("Control", False),
     "abjure": ("Control", False),
     "combo": ("Combo", False),
-    "walls": ("Spy Walls", True),
+    "walls": ("Walls Combo", True),
     "bogles": ("Bogles", True),
     "elves": ("Elves", True),
     "poison": ("Poison Storm", True),
@@ -284,11 +288,7 @@ def _strict_general_keyword(text: str, keyword: str) -> bool:
 
 def _fuzzy_general_base(low: str) -> tuple[str | None, bool]:
     """Единственная уверенная каноническая база по словам с 1–2 опечатками."""
-    candidates = {
-        target
-        for alias, target in _FUZZY_GENERAL_ALIASES.items()
-        if _strict_general_keyword(low, alias)
-    }
+    candidates = {target for alias, target in _FUZZY_GENERAL_ALIASES.items() if _strict_general_keyword(low, alias)}
     return next(iter(candidates)) if len(candidates) == 1 else (None, False)
 
 
@@ -327,8 +327,7 @@ def _fuzzy_macro_from_raw(raw_name: str | None) -> str | None:
     if (_one_typo_keyword(raw_name, "terror") or _one_typo_keyword(raw_name, "delver")) and colors in {"U", "UB"}:
         candidates.add("Terror")
     if any(
-        _one_typo_keyword(raw_name, keyword)
-        for keyword in ("faeries", "faerie", "fairies", "fairy")
+        _one_typo_keyword(raw_name, keyword) for keyword in ("faeries", "faerie", "fairies", "fairy")
     ) and colors in {"U", "UB"}:
         candidates.add("Faeries")
     return next(iter(candidates)) if len(candidates) == 1 else None
@@ -389,7 +388,7 @@ def general_archetype(name: str) -> str | None:
         for guild, code in _GUILD2.items():
             match = re.search(rf"\b{guild}\b", n, flags=re.IGNORECASE)
             if match:
-                remainder = re.sub(r"[\s_\-/]+", " ", f"{n[:match.start()]} {n[match.end():]}").strip()
+                remainder = re.sub(r"[\s_\-/]+", " ", f"{n[: match.start()]} {n[match.end() :]}").strip()
                 return f"{code} {remainder.title()}" if remainder else code
         return None
 

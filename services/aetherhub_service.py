@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import re
+import time
 from datetime import date, datetime, timedelta
 
 import cloudscraper
+import requests
 from bs4 import BeautifulSoup
 
 from services.aetherhub_models import (
@@ -19,6 +21,9 @@ PAUPER_RE = re.compile(r"pauper|паупер|пупер", re.IGNORECASE)
 _TOURNEY_LINK_RE = re.compile(r"/Tourney/\w+/\d+")
 
 _RESULT_RE = re.compile(r"(\d+)\s*[-–]\s*(\d+)")
+
+_GET_ATTEMPTS = 3
+_GET_RETRY_BACKOFF_SECONDS = 0.5
 
 
 def _parse_match_result(text: str) -> tuple[int | None, int | None]:
@@ -64,6 +69,17 @@ _MONTH_MAP = {
 class AetherhubService:
     def __init__(self, scraper=None):
         self._scraper = scraper or cloudscraper.create_scraper()
+
+    def _get_text(self, url: str) -> str:
+        """Fetch an idempotent AetherHub page with bounded transport retries."""
+        for attempt in range(_GET_ATTEMPTS):
+            try:
+                return self._scraper.get(url, timeout=30).text
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+                if attempt == _GET_ATTEMPTS - 1:
+                    raise
+                time.sleep(_GET_RETRY_BACKOFF_SECONDS * (2**attempt))
+        raise AssertionError("unreachable")
 
     def _strip_points(self, name: str) -> str:
         # Aetherhub sometimes injects points inside the player label, e.g.
@@ -288,7 +304,7 @@ class AetherhubService:
         return results
 
     def fetch_club_tournaments(self, club_url: str, today: date | None = None) -> list[ClubTournamentLink]:
-        html = self._scraper.get(club_url, timeout=30).text
+        html = self._get_text(club_url)
         return self._parse_club_page(html, today=today)
 
     def find_todays_pauper_tournament(self, club_url: str, today: date | None = None) -> str | None:
@@ -379,7 +395,7 @@ class AetherhubService:
             raise ValueError(f"Cannot extract tournament ID from URL: {url}")
         tourney_id = m.group(1)
 
-        main_html = self._scraper.get(url, timeout=30).text
+        main_html = self._get_text(url)
         max_round = self._parse_num_rounds(main_html)
 
         # `max_round` is only an upper bound: during a live event the round navigation
@@ -392,16 +408,14 @@ class AetherhubService:
         prev_signature: frozenset | None = None
         for rn in range(1, max_round + 1):
             # edinorog-формат: главная ?p=N отдаёт matchList СО счётом («Match Results»).
-            pairings = self._parse_pairings_page(self._scraper.get(f"{url}?p={rn}", timeout=30).text)
+            pairings = self._parse_pairings_page(self._get_text(f"{url}?p={rn}"))
             if not pairings:
                 # js-формат: на главной паринги подгружаются JS-ом, в серверном HTML
                 # только standings. Берём пары с публичного pairings-эндпоинта.
                 # ВАЖНО: у js-формата СЧЁТА НЕТ — у RoundTourneyPublicPairings колонка
                 # «Match Results» пустая во всех раундах (проверено), поэтому
                 # player_wins/opponent_wins останутся None. Только пары и столы.
-                pairings = self._parse_pairings_page(
-                    self._scraper.get(self._pairings_url(tourney_id, rn), timeout=30).text
-                )
+                pairings = self._parse_pairings_page(self._get_text(self._pairings_url(tourney_id, rn)))
             signature = frozenset((p.player, p.opponent) for p in pairings)
             if rn > 1 and signature and signature == prev_signature:
                 break  # clamped duplicate of the previous round → phantom, stop here

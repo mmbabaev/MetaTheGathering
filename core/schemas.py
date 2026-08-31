@@ -78,6 +78,7 @@ class TournamentRead(TournamentBase):
     registration_close_at: Optional[datetime] = None
     started_at: Optional[datetime] = None
     ended_at: Optional[datetime] = None
+    closed_by_tg_id: Optional[int] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -103,6 +104,7 @@ class ParticipantRead(ParticipantBase):
     deck_deferred: bool = False
     deck_reminder_prestart_sent_at: Optional[datetime] = None
     deck_reminder_round2_sent_at: Optional[datetime] = None
+    aetherhub_seen_at: Optional[datetime] = None
     upvotes_count: int
     downvotes_count: int
     created_at: datetime

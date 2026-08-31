@@ -5,7 +5,7 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from bot.deeplink import parse_deck_payload, parse_registration_payload
+from bot.deeplink import is_cellar_payload, parse_deck_payload, parse_fill_missing_payload, parse_registration_payload
 from bot.messages import HELP_TEXT, HELP_TEXT_ADMIN
 from core.database import SessionLocal
 from core.event_log import event_logger
@@ -63,6 +63,9 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     # Диплинк `?start=deck_<id>` — сразу в запись колоды на турнир (issue #136).
     payload = (context.args or [None])[0]
+    if payload and is_cellar_payload(payload):
+        await _start_cellar_deeplink(update, context)
+        return
     tournament_id = parse_deck_payload(payload) if payload else None
     if tournament_id is not None:
         await _start_deck_deeplink(update, context, user, tournament_id)
@@ -70,6 +73,10 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     tournament_id = parse_registration_payload(payload) if payload else None
     if tournament_id is not None:
         await _start_registration_deeplink(update, context, user, tournament_id)
+        return
+    tournament_id = parse_fill_missing_payload(payload) if payload else None
+    if tournament_id is not None:
+        await _start_fill_missing_deeplink(update, context, user, tournament_id)
         return
 
     _log("cmd_start", user)
@@ -88,6 +95,14 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.effective_message.reply_text(
         greeting + "Используйте /tournaments чтобы увидеть активные турниры и записаться."
     )
+
+
+async def _start_cellar_deeplink(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Route `?start=cellar` through the same private menu as `/cellar`."""
+
+    from bot.telegram.cellar import cmd_cellar  # noqa: PLC0415 — cellar imports log_event from this module
+
+    await cmd_cellar(update, context)
 
 
 async def _start_deck_deeplink(update: Update, context: ContextTypes.DEFAULT_TYPE, user, tournament_id: int) -> None:
@@ -122,6 +137,21 @@ async def _start_registration_deeplink(
             if context.user_data is None:
                 context.user_data = {}
             context.user_data[USER_DATA_PENDING_NAME] = tournament_id
+        await update.effective_message.reply_text(result.text, reply_markup=result.keyboard)
+    finally:
+        db.close()
+
+
+async def _start_fill_missing_deeplink(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, user, tournament_id: int
+) -> None:
+    """Открывает защищённый community-flow из сообщения мета-полиции."""
+    from bot.telegram.player import _player_handler  # noqa: PLC0415
+
+    _log("meta_police_open", user, tournament_id=tournament_id)
+    db = SessionLocal()
+    try:
+        result = _player_handler(db).handle_fill_missing_deeplink(tournament_id, tg_id=user.id)
         await update.effective_message.reply_text(result.text, reply_markup=result.keyboard)
     finally:
         db.close()

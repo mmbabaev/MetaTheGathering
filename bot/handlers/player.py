@@ -9,24 +9,32 @@ from bot.messages import (
     ALREADY_REGISTERED,
     CHOOSE_ARCHETYPE,
     DEFER_DECK_EXPIRED,
+    INVALID_FULL_NAME,
     LEAVE_CONFIRM_PROMPT,
     LEFT_TOURNAMENT,
+    META_POLICE_ALL_FILLED,
+    META_POLICE_DECK_ALREADY_FILLED,
+    META_POLICE_FILL_UNAVAILABLE,
     NAME_REQUIRED_FOR_REGISTRATION,
     NO_ACTIVE_TOURNAMENTS,
     NOT_REGISTERED_IN_TOURNAMENT,
+    PARTICIPANT_NOT_FOUND,
     REGISTERED,
     REGISTERED_AS,
     REGISTERED_DECK_LATER,
     REGISTRATION_CLOSED,
     TOURNAMENT_NOT_FOUND,
+    format_participant_name,
     format_tournament_card,
     format_tournament_status,
+    format_unfilled_opponents_note,
     sort_participants,
 )
 from core import models
 from services import errors
 from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeItem, ArchetypeService
+from services.names import has_complete_person_name, parse_full_name_input
 from services.payment_service import PaymentService
 from services.tournament import TournamentService
 from services.user import UserService
@@ -196,7 +204,7 @@ class PlayerHandler:
         """Возвращает выбор архетипа. Если имя не задано — needs_name=True."""
         if tg_id is not None:
             user = self.user_svc.get_by_tg_id(tg_id)
-            if user is None or not user.first_name:
+            if user is None or not has_complete_person_name(user.first_name, user.last_name):
                 return HandlerResult(NAME_REQUIRED_FOR_REGISTRATION, needs_name=True)
         return self._archetype_keyboard_for_player(tournament_id, tg_id)
 
@@ -238,6 +246,156 @@ class PlayerHandler:
             return self.handle_tournament_select(tournament_id, tg_id=tg_id)
         return self.handle_register(tournament_id, tg_id=tg_id)
 
+    def _meta_police_tournament(self, tournament_id: int):
+        try:
+            tournament = get_tournament(self.svc.db, tournament_id)
+        except errors.TournamentNotFound:
+            return None
+        if (
+            not self.feature_svc.can_fill_opponent_decks()
+            or tournament.status == models.TournamentStatus.CLOSED
+            or tournament.missing_decks_reminder_1d_sent_at is None
+        ):
+            return None
+        return tournament
+
+    def _unfilled_opponents_note(self, tournament_id: int, tg_id: int) -> str:
+        user = self.user_svc.get_by_tg_id(tg_id)
+        if user is None:
+            return ""
+        participants = self.svc.list_participants_for_tournament(tournament_id)
+        opponents, error = self.aetherhub_svc.get_unfilled_opponents(
+            tournament_id,
+            user.id,
+            participants,
+        )
+        return "" if error else format_unfilled_opponents_note(opponents)
+
+    def _with_unfilled_opponents_note(self, text: str, tournament_id: int, tg_id: int) -> str:
+        note = self._unfilled_opponents_note(tournament_id, tg_id)
+        return f"{text}\n\n{note}" if note else text
+
+    def _missing_decks_result(
+        self,
+        tournament_id: int,
+        prefix: str | None = None,
+        viewer_tg_id: int | None = None,
+    ) -> HandlerResult:
+        participants = self.svc.list_participants_for_tournament(tournament_id)
+        missing = [participant for participant in participants if participant.archetype_id is None]
+        if not missing:
+            text = META_POLICE_ALL_FILLED
+            return HandlerResult(f"{prefix}\n\n{text}" if prefix else text)
+        text = "Выберите игрока без колоды:"
+        if prefix:
+            text = f"{prefix}\n\n{text}"
+        if viewer_tg_id is not None:
+            text = self._with_unfilled_opponents_note(text, tournament_id, viewer_tg_id)
+        return HandlerResult(text, keyboard=self.keyboards.missing_decks_keyboard(missing))
+
+    def _missing_deck_archetype_result(
+        self, participant_id: int, caller_tg_id: int, expanded: bool = False
+    ) -> HandlerResult:
+        participant = self.svc.get_participant_by_id(participant_id)
+        if participant is None:
+            return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
+        if self._meta_police_tournament(participant.tournament_id) is None:
+            return HandlerResult(META_POLICE_FILL_UNAVAILABLE, is_alert=True)
+        if participant.archetype_id is not None:
+            return HandlerResult(META_POLICE_DECK_ALREADY_FILLED, is_alert=True)
+
+        target = self.user_svc.get_by_id(participant.user_id)
+        target_tg_id = target.tg_id if target else None
+        arch_list, has_more = build_archetype_menu(self.arch_svc, target_tg_id, expanded)
+        caller = self.user_svc.get_by_tg_id(caller_tg_id)
+        show_emoji = not (caller and caller.hide_deck_emoji)
+        if target_tg_id == caller_tg_id:
+            text = "Выберите свою колоду:"
+        else:
+            name = (
+                format_participant_name(
+                    target.first_name if target else None,
+                    target.last_name if target else None,
+                )
+                or f"id{participant.id}"
+            )
+            text = f"Выберите колоду для {name}:"
+        text = self._with_unfilled_opponents_note(text, participant.tournament_id, caller_tg_id)
+        return HandlerResult(
+            text,
+            keyboard=self.keyboards.missing_deck_archetype_keyboard(
+                participant_id,
+                arch_list,
+                has_more,
+                show_emoji,
+            ),
+        )
+
+    def handle_fill_missing_deeplink(self, tournament_id: int, tg_id: int) -> HandlerResult:
+        """Вход по кнопке мета-полиции: сначала своя пустая колода, иначе общий список."""
+        try:
+            get_tournament(self.svc.db, tournament_id)
+        except errors.TournamentNotFound:
+            return HandlerResult(TOURNAMENT_NOT_FOUND)
+        if self._meta_police_tournament(tournament_id) is None:
+            return HandlerResult(META_POLICE_FILL_UNAVAILABLE)
+
+        user = self.user_svc.get_by_tg_id(tg_id)
+        if user is not None:
+            own_participant = self.svc.get_participant(tournament_id, user.id)
+            if own_participant is not None and own_participant.archetype_id is None:
+                return self._missing_deck_archetype_result(own_participant.id, tg_id)
+        return self._missing_decks_result(tournament_id, viewer_tg_id=tg_id)
+
+    def handle_pick_missing_deck(self, tg_id: int, participant_id: int, expanded: bool = False) -> HandlerResult:
+        return self._missing_deck_archetype_result(participant_id, tg_id, expanded)
+
+    def handle_set_missing_deck(self, tg_id: int, participant_id: int, archetype_id: int) -> HandlerResult:
+        participant = self.svc.get_participant_by_id(participant_id)
+        if participant is None:
+            return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
+        if self._meta_police_tournament(participant.tournament_id) is None:
+            return HandlerResult(META_POLICE_FILL_UNAVAILABLE, is_alert=True)
+        if participant.archetype_id is not None:
+            return HandlerResult(META_POLICE_DECK_ALREADY_FILLED, is_alert=True)
+
+        archetypes = {archetype.id: archetype.name for archetype in self.arch_svc.list_archetypes()}
+        arch_name = archetypes.get(archetype_id)
+        if arch_name is None:
+            return HandlerResult("Архетип не найден.", is_alert=True)
+        saved = self.svc.set_participant_archetype_if_missing(
+            participant_id=participant_id,
+            archetype_id=archetype_id,
+            deck_added_by_tg_id=tg_id,
+        )
+        if saved is None:
+            return HandlerResult(META_POLICE_DECK_ALREADY_FILLED, is_alert=True)
+
+        target = self.user_svc.get_by_id(participant.user_id)
+        name = (
+            format_participant_name(
+                target.first_name if target else None,
+                target.last_name if target else None,
+            )
+            or f"id{participant.id}"
+        )
+        return self._missing_decks_result(
+            participant.tournament_id,
+            prefix=f"✅ {name} записан как {arch_name}.",
+            viewer_tg_id=tg_id,
+        )
+
+    def handle_set_missing_custom_deck(self, tg_id: int, participant_id: int, arch_name: str) -> HandlerResult:
+        participant = self.svc.get_participant_by_id(participant_id)
+        if participant is None:
+            return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
+        if self._meta_police_tournament(participant.tournament_id) is None:
+            return HandlerResult(META_POLICE_FILL_UNAVAILABLE, is_alert=True)
+        if participant.archetype_id is not None:
+            return HandlerResult(META_POLICE_DECK_ALREADY_FILLED, is_alert=True)
+        archetype = self.arch_svc.get_or_create_by_name(arch_name, is_custom=True)
+        return self.handle_set_missing_deck(tg_id, participant_id, archetype.id)
+
     def handle_archetype_more(self, tournament_id: int, tg_id: int) -> HandlerResult:
         """Разворачивает полный список архетипов (история + топ)."""
         return self._archetype_keyboard_for_player(tournament_id, tg_id, expanded=True)
@@ -250,12 +408,12 @@ class PlayerHandler:
         tournament_id: int,
     ) -> HandlerResult:
         """Сохраняет имя пользователя и возвращает выбор архетипа."""
-        parts = name_text.strip().split(None, 1)
-        # Input format: "Фамилия Имя" — first word is last_name, second is first_name
-        last_name = parts[0]
-        first_name = parts[1] if len(parts) > 1 else None
-        self.user_svc.update_name(tg_id, first_name or last_name, last_name if first_name else None)
-        self.user_svc.merge_placeholder_by_name(tg_id, first_name or last_name, last_name if first_name else None)
+        parsed = parse_full_name_input(name_text)
+        if parsed is None:
+            return HandlerResult(INVALID_FULL_NAME, needs_name=True)
+        first_name, last_name = parsed
+        self.user_svc.update_name(tg_id, first_name, last_name)
+        self.user_svc.merge_placeholder_by_name(tg_id, first_name, last_name)
         return self._archetype_keyboard_for_player(tournament_id, tg_id)
 
     def _register_user(
