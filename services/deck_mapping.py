@@ -101,9 +101,10 @@ _FIXED = [
     # В Pauper «Gardens» — всегда BG Gardens; цветовых вариантов этой деки нет.
     # Правило намеренно сильнее написанного игроком цвета/гильдии.
     (r"gardens", "BG Gardens"),
-    # Spy (комбо через Balustrade Spy) и Spy Walls — разные колоды. Walls проверяем
-    # первым, потому что полное название содержит оба маркера.
-    (r"\bwalls\b", "Spy Walls"),
+    # Spy (комбо через Balustrade Spy), Spy Walls и Walls Combo — разные колоды.
+    # Более конкретный Spy Walls проверяем первым, потому что он содержит оба маркера.
+    (r"\bspy\s+walls\b", "Spy Walls"),
+    (r"\bwalls\b", "Walls Combo"),
     (r"\bspy\b", "Spy"),
     (r"bogles", "Bogles"),
     (r"\belves\b", "Elves"),
@@ -154,7 +155,7 @@ _FUZZY_GENERAL_ALIASES = {
     "arcane": ("Control", False),
     "abjure": ("Control", False),
     "combo": ("Combo", False),
-    "walls": ("Spy Walls", True),
+    "walls": ("Walls Combo", True),
     "bogles": ("Bogles", True),
     "elves": ("Elves", True),
     "poison": ("Poison Storm", True),

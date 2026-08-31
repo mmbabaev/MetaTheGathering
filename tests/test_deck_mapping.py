@@ -18,7 +18,7 @@ EDINOROG_2026_08_06_GENERAL_NAMES = [
     ("Orzhov Blade", "WB Blade"),
     ("Altar Tron", "Altar Tron"),
     ("Bow Combo", "Combo"),
-    ("Walls combo", "Spy Walls"),
+    ("Walls combo", "Walls Combo"),
     ("Selesnya Turbo Initiative", "WG Turbo Initiative"),
     ("Golgari Pestilence", "BG Pestilence"),
     ("Izzet Faeries", "UR Faeries"),
@@ -157,7 +157,7 @@ def test_edinorog_2026_08_10_real_decks_general_and_macro(raw, expected_general,
         ("Spy", "Spy"),
         ("Spy Combo", "Spy"),
         ("Spy Walls", "Spy Walls"),
-        ("Walls combo", "Spy Walls"),
+        ("Walls combo", "Walls Combo"),
         # прочее
         ("Orzhov Blade", "WB Blade"),
         ("Golgari Pestilence", "BG Pestilence"),
@@ -300,5 +300,5 @@ def test_fuzzy_matching_applies_only_to_macro_archetype(raw, expected):
     assert macro_archetype(None, raw) == expected
 
 
-def test_walls_without_spy_stays_in_walls_macro_despite_shared_general_name():
-    assert macro_archetype("Spy Walls", "Walls combo") == "Walls"
+def test_walls_without_spy_stays_in_separate_walls_macro():
+    assert macro_archetype("Walls Combo", "Walls combo") == "Walls"

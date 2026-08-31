@@ -118,14 +118,18 @@ class TestBuildSectors:
 
         assert chart_svc.build_sectors(tournament.id)[0].color == PALETTE[""]
 
-    def test_spy_and_spy_walls_are_separate_decks(self, chart_svc, svc, user_svc, arch_svc, tournament):
-        """Spy/Spy Combo группируются вместе, но не склеиваются со Spy Walls."""
-        for tg_id, name in enumerate(("Spy Walls", "Spy", "Spy Combo"), start=1):
+    def test_spy_spy_walls_and_walls_combo_are_separate_decks(self, chart_svc, svc, user_svc, arch_svc, tournament):
+        """Spy/Spy Combo группируются, но Spy Walls и Walls Combo остаются отдельными."""
+        for tg_id, name in enumerate(("Spy Walls", "Walls combo", "Spy", "Spy Combo"), start=1):
             _register(svc, user_svc, arch_svc, tournament, tg_id, name)
 
         sectors = chart_svc.build_sectors(tournament.id)
 
-        assert [(s.name, s.count) for s in sectors] == [("Spy", 2), ("Spy Walls", 1)]
+        assert [(s.name, s.count) for s in sectors] == [
+            ("Spy", 2),
+            ("Spy Walls", 1),
+            ("Walls Combo", 1),
+        ]
 
     def test_case_and_guild_variants_merge_by_general_type(self, chart_svc, svc, user_svc, arch_svc, tournament):
         """«Rakdos Madness» и «Rakdos madness» → один общий тип «BR Madness»."""
