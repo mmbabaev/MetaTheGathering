@@ -78,7 +78,7 @@ def tournament(svc):
 
 class TestHandleDeeplinkDeck:
     def test_unknown_tournament(self, player_handler, user_svc):
-        u = user_svc.get_or_create(tg_id=1, first_name="Алиса")
+        u = user_svc.get_or_create(tg_id=1, first_name="Алиса", last_name="Иванова")
         assert player_handler.handle_deeplink_deck(99999, tg_id=u.tg_id).text == TOURNAMENT_NOT_FOUND
 
     def test_no_name_asks_for_name(self, player_handler, user_svc, tournament):
@@ -88,19 +88,19 @@ class TestHandleDeeplinkDeck:
         assert result.text == NAME_REQUIRED_FOR_REGISTRATION
 
     def test_no_deck_shows_archetype_choice(self, player_handler, user_svc, tournament):
-        u = user_svc.get_or_create(tg_id=1, first_name="Алиса")
+        u = user_svc.get_or_create(tg_id=1, first_name="Алиса", last_name="Иванова")
         result = player_handler.handle_deeplink_deck(tournament.id, tg_id=u.tg_id)
         assert result.text == CHOOSE_ARCHETYPE
         assert result.keyboard is not None
 
     def test_registered_without_deck_still_shows_choice(self, player_handler, svc, user_svc, tournament):
-        u = user_svc.get_or_create(tg_id=1, first_name="Алиса")
+        u = user_svc.get_or_create(tg_id=1, first_name="Алиса", last_name="Иванова")
         svc.register_participant(tournament_id=tournament.id, user_id=u.id, archetype_id=None)
         result = player_handler.handle_deeplink_deck(tournament.id, tg_id=u.tg_id)
         assert result.text == CHOOSE_ARCHETYPE
 
     def test_has_deck_shows_tournament_card(self, player_handler, svc, user_svc, arch_svc, tournament):
-        u = user_svc.get_or_create(tg_id=1, first_name="Алиса")
+        u = user_svc.get_or_create(tg_id=1, first_name="Алиса", last_name="Иванова")
         arch = arch_svc.get_or_create_by_name("Burn")
         svc.register_participant(tournament_id=tournament.id, user_id=u.id, archetype_id=arch.id)
         result = player_handler.handle_deeplink_deck(tournament.id, tg_id=u.tg_id)
@@ -111,7 +111,7 @@ class TestHandleDeeplinkDeck:
     def test_registration_closed_does_not_offer_archetype(self, player_handler, svc, user_svc, tournament):
         """Регистрация закрыта — диплинк ведёт на карточку, а не в выбор архетипа."""
         svc.close_tournament(tournament.id)
-        user = user_svc.get_or_create(tg_id=1, first_name="Алиса")
+        user = user_svc.get_or_create(tg_id=1, first_name="Алиса", last_name="Иванова")
 
         result = player_handler.handle_deeplink_deck(tournament.id, tg_id=user.tg_id)
 
@@ -120,18 +120,18 @@ class TestHandleDeeplinkDeck:
 
 class TestHandleDeeplinkRegistration:
     def test_unknown_tournament(self, player_handler, user_svc):
-        user = user_svc.get_or_create(tg_id=1, first_name="Алиса")
+        user = user_svc.get_or_create(tg_id=1, first_name="Алиса", last_name="Иванова")
         assert player_handler.handle_deeplink_registration(99999, tg_id=user.tg_id).text == TOURNAMENT_NOT_FOUND
 
     def test_new_player_starts_registration(self, player_handler, user_svc, tournament):
-        user = user_svc.get_or_create(tg_id=1, first_name="Алиса")
+        user = user_svc.get_or_create(tg_id=1, first_name="Алиса", last_name="Иванова")
 
         result = player_handler.handle_deeplink_registration(tournament.id, tg_id=user.tg_id)
 
         assert result.text == CHOOSE_ARCHETYPE
 
     def test_registered_without_deck_goes_to_tournament_status(self, player_handler, svc, user_svc, tournament):
-        user = user_svc.get_or_create(tg_id=1, first_name="Алиса")
+        user = user_svc.get_or_create(tg_id=1, first_name="Алиса", last_name="Иванова")
         svc.register_participant(tournament_id=tournament.id, user_id=user.id, archetype_id=None)
 
         result = player_handler.handle_deeplink_registration(tournament.id, tg_id=user.tg_id)
@@ -141,7 +141,7 @@ class TestHandleDeeplinkRegistration:
 
     def test_closed_registration_goes_to_tournament_status(self, player_handler, svc, user_svc, tournament):
         svc.close_tournament(tournament.id)
-        user = user_svc.get_or_create(tg_id=1, first_name="Алиса")
+        user = user_svc.get_or_create(tg_id=1, first_name="Алиса", last_name="Иванова")
 
         result = player_handler.handle_deeplink_registration(tournament.id, tg_id=user.tg_id)
 

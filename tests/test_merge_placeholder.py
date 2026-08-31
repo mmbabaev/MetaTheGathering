@@ -133,3 +133,28 @@ class TestMergePlaceholderByName:
             db.execute(select(models.Participant).where(models.Participant.user_id == real.id)).scalars().all()
         )
         assert len(participants) == 1  # без дублей
+
+    def test_conflict_preserves_aetherhub_seen_marker(self, db, placeholder, arch_svc):
+        tsvc = TournamentService(db)
+        usvc = UserService(db)
+        arch = arch_svc.get_or_create_by_name("Burn")
+        tournament = tsvc.create_tournament(TournamentCreate(title="Seen", chat_id=2, slug="seen"))
+        seen_at = models.utc_now()
+        real = models.User(tg_id=REAL_TG_ID)
+        db.add(real)
+        db.flush()
+        db.add(
+            models.Participant(
+                tournament_id=tournament.id,
+                user_id=placeholder.id,
+                archetype_id=arch.id,
+                aetherhub_seen_at=seen_at,
+            )
+        )
+        db.add(models.Participant(tournament_id=tournament.id, user_id=real.id, archetype_id=arch.id))
+        db.commit()
+
+        usvc.merge_placeholder_by_name(REAL_TG_ID, "Сергей", "Крипков")
+
+        participant = db.execute(select(models.Participant).where(models.Participant.user_id == real.id)).scalar_one()
+        assert participant.aetherhub_seen_at == seen_at

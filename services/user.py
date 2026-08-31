@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from core import models
 from core.config import settings
+from services.names import clean_person_name_component
 
 
 def _normalize_name(s: str) -> str:
@@ -51,6 +52,8 @@ class UserService:
         last_name: Optional[str] = None,
     ) -> models.User:
         """Найти пользователя по tg_id или создать нового. Обновляет username/имя при изменении."""
+        first_name = clean_person_name_component(first_name)
+        last_name = clean_person_name_component(last_name)
         user = self.get_by_tg_id(tg_id)
         if user:
             changed = False
@@ -235,13 +238,24 @@ class UserService:
         )
 
         # Переносим участие в турнирах, пропуская конфликты (тот же турнир)
-        already_in = {
-            row[0]
-            for row in self.db.execute(
-                select(models.Participant.tournament_id).where(models.Participant.user_id == real_user.id)
-            ).all()
+        target_parts = {
+            participant.tournament_id: participant
+            for participant in self.db.execute(
+                select(models.Participant).where(models.Participant.user_id == real_user.id)
+            ).scalars()
         }
+        already_in = set(target_parts)
         if already_in:
+            source_rows = self.db.execute(
+                select(models.Participant.tournament_id, models.Participant.aetherhub_seen_at).where(
+                    models.Participant.user_id == placeholder.id,
+                    models.Participant.tournament_id.in_(already_in),
+                )
+            ).all()
+            for tournament_id, seen_at in source_rows:
+                target = target_parts[tournament_id]
+                if seen_at is not None and (target.aetherhub_seen_at is None or seen_at > target.aetherhub_seen_at):
+                    target.aetherhub_seen_at = seen_at
             self.db.execute(
                 sa_delete(models.Participant).where(
                     models.Participant.user_id == placeholder.id,
@@ -322,10 +336,11 @@ class UserService:
                 models.Participant.tournament_id,
                 models.Participant.final_place,
                 models.Participant.archetype_id,
+                models.Participant.aetherhub_seen_at,
             ).where(models.Participant.user_id == source.id)
         ).all()
         drop_ids = []
-        for part_id, tournament_id, final_place, archetype_id in source_rows:
+        for part_id, tournament_id, final_place, archetype_id, aetherhub_seen_at in source_rows:
             tp = target_parts.get(tournament_id)
             if tp is None:
                 continue  # перенесётся UPDATE'ом ниже
@@ -333,6 +348,10 @@ class UserService:
                 tp.final_place = final_place
             if tp.archetype_id is None and archetype_id is not None:
                 tp.archetype_id = archetype_id
+            if aetherhub_seen_at is not None and (
+                tp.aetherhub_seen_at is None or aetherhub_seen_at > tp.aetherhub_seen_at
+            ):
+                tp.aetherhub_seen_at = aetherhub_seen_at
             drop_ids.append(part_id)
         if drop_ids:
             self.db.execute(sa_delete(models.Participant).where(models.Participant.id.in_(drop_ids)))
@@ -400,8 +419,8 @@ class UserService:
         if not user:
             user = models.User(tg_id=tg_id)
             self.db.add(user)
-        user.first_name = first_name.strip()
-        user.last_name = last_name.strip() if last_name else None
+        user.first_name = clean_person_name_component(first_name)
+        user.last_name = clean_person_name_component(last_name)
         self.db.commit()
         self.db.refresh(user)
         return user

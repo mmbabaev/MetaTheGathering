@@ -58,8 +58,8 @@ def test_next_cellar_dates_returns_four_monday_and_thursday_events():
 
 def test_reservation_is_exclusive_per_deck_and_user(db, user_svc):
     service, decks = _catalog(db)
-    alice = user_svc.get_or_create(tg_id=1001, first_name="Alice")
-    bob = user_svc.get_or_create(tg_id=1002, first_name="Bob")
+    alice = user_svc.get_or_create(tg_id=1001, first_name="Alice Player")
+    bob = user_svc.get_or_create(tg_id=1002, first_name="Bob Player")
 
     first = service.reserve(deck_id=decks[0].id, user_id=alice.id, event_date=EVENT_DATE, today=EVENT_DATE)
     repeated = service.reserve(deck_id=decks[0].id, user_id=alice.id, event_date=EVENT_DATE, today=EVENT_DATE)
@@ -74,7 +74,7 @@ def test_reservation_is_exclusive_per_deck_and_user(db, user_svc):
 
 def test_user_catalog_starts_with_current_booking_and_three_recent_distinct_decks(db, user_svc):
     service, decks = _catalog(db)
-    alice = user_svc.get_or_create(tg_id=1001, first_name="Alice")
+    alice = user_svc.get_or_create(tg_id=1001, first_name="Alice Player")
     today = date(2026, 8, 23)
 
     oldest = service.reserve(
@@ -116,8 +116,8 @@ def test_user_catalog_starts_with_current_booking_and_three_recent_distinct_deck
 
 def test_cancel_releases_deck_and_user_slot(db, user_svc):
     service, decks = _catalog(db)
-    alice = user_svc.get_or_create(tg_id=1001, first_name="Alice")
-    bob = user_svc.get_or_create(tg_id=1002, first_name="Bob")
+    alice = user_svc.get_or_create(tg_id=1001, first_name="Alice Player")
+    bob = user_svc.get_or_create(tg_id=1002, first_name="Bob Player")
     reservation = service.reserve(
         deck_id=decks[0].id, user_id=alice.id, event_date=EVENT_DATE, today=EVENT_DATE
     ).reservation
@@ -133,7 +133,7 @@ def test_cancel_releases_deck_and_user_slot(db, user_svc):
 
 def test_only_four_upcoming_monday_and_thursday_events_are_accepted(db, user_svc):
     service, decks = _catalog(db)
-    alice = user_svc.get_or_create(tg_id=1001, first_name="Alice")
+    alice = user_svc.get_or_create(tg_id=1001, first_name="Alice Player")
 
     thursday = service.reserve(
         deck_id=decks[0].id,
@@ -161,7 +161,7 @@ def test_only_four_upcoming_monday_and_thursday_events_are_accepted(db, user_svc
 
 def test_reservation_registers_player_in_existing_tournament_and_cancel_undoes_it(db, user_svc):
     service, decks = _catalog(db)
-    alice = user_svc.get_or_create(tg_id=1001, first_name="Alice")
+    alice = user_svc.get_or_create(tg_id=1001, first_name="Alice Player")
     tournament = _edinorog_tournament(db)
 
     reservation = service.reserve(
@@ -180,7 +180,7 @@ def test_reservation_registers_player_in_existing_tournament_and_cancel_undoes_i
 
 def test_reservation_fills_but_does_not_remove_existing_empty_participant_on_cancel(db, user_svc):
     service, decks = _catalog(db)
-    alice = user_svc.get_or_create(tg_id=1001, first_name="Alice")
+    alice = user_svc.get_or_create(tg_id=1001, first_name="Alice Player")
     tournament = _edinorog_tournament(db)
     participant = TournamentService(db).register_participant(tournament_id=tournament.id, user_id=alice.id)
 
@@ -198,7 +198,7 @@ def test_reservation_fills_but_does_not_remove_existing_empty_participant_on_can
 
 def test_reservation_temporarily_replaces_existing_deck_and_cancel_restores_it(db, user_svc, arch_svc):
     service, decks = _catalog(db)
-    alice = user_svc.get_or_create(tg_id=1001, first_name="Alice")
+    alice = user_svc.get_or_create(tg_id=1001, first_name="Alice Player")
     tournament = _edinorog_tournament(db)
     own_deck = arch_svc.get_or_create_by_name("Own Deck")
     TournamentService(db).register_participant(
@@ -223,7 +223,7 @@ def test_reservation_temporarily_replaces_existing_deck_and_cancel_restores_it(d
 
 def test_pending_reservation_is_attached_when_tournament_is_created(db, user_svc):
     service, decks = _catalog(db)
-    alice = user_svc.get_or_create(tg_id=1001, first_name="Alice")
+    alice = user_svc.get_or_create(tg_id=1001, first_name="Alice Player")
     reservation = service.reserve(
         deck_id=decks[0].id, user_id=alice.id, event_date=EVENT_DATE, today=EVENT_DATE
     ).reservation
@@ -238,7 +238,7 @@ def test_messages_contain_deck_date_and_players(db, user_svc):
     service, decks = _catalog(db)
     decks[0].source_position = 13
     db.commit()
-    alice = user_svc.get_or_create(tg_id=1001, username="alice", first_name="Alice")
+    alice = user_svc.get_or_create(tg_id=1001, username="alice", first_name="Alice Player")
     reservation = service.reserve(
         deck_id=decks[0].id, user_id=alice.id, event_date=EVENT_DATE, today=EVENT_DATE
     ).reservation
@@ -249,15 +249,15 @@ def test_messages_contain_deck_date_and_players(db, user_svc):
     assert "№13" in format_group_reservation(reservation)
     assert "24.08.2026" in format_coordinator_summary(EVENT_DATE, [reservation])
     assert "№13" in format_coordinator_summary(EVENT_DATE, [reservation])
-    assert "Alice — @alice —" in format_coordinator_summary(EVENT_DATE, [reservation])
+    assert "Alice Player — @alice —" in format_coordinator_summary(EVENT_DATE, [reservation])
 
 
 def test_web_account_link_preserves_cellar_reservation(db, user_svc):
     service, decks = _catalog(db)
-    web_user = models.User(tg_id=-1, email="player@example.test", first_name="Alice")
+    web_user = models.User(tg_id=-1, email="player@example.test", first_name="Alice Player")
     db.add(web_user)
     db.commit()
-    tg_user = user_svc.get_or_create(tg_id=1001, first_name="Alice")
+    tg_user = user_svc.get_or_create(tg_id=1001, first_name="Alice Player")
     reservation = service.reserve(
         deck_id=decks[0].id,
         user_id=web_user.id,
@@ -274,10 +274,10 @@ def test_web_account_link_preserves_cellar_reservation(db, user_svc):
 
 def test_web_account_link_cancels_duplicate_active_date(db, user_svc):
     service, decks = _catalog(db)
-    web_user = models.User(tg_id=-1, email="player@example.test", first_name="Alice")
+    web_user = models.User(tg_id=-1, email="player@example.test", first_name="Alice Player")
     db.add(web_user)
     db.commit()
-    tg_user = user_svc.get_or_create(tg_id=1001, first_name="Alice")
+    tg_user = user_svc.get_or_create(tg_id=1001, first_name="Alice Player")
     web_reservation = service.reserve(
         deck_id=decks[0].id,
         user_id=web_user.id,

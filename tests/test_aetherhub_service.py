@@ -108,9 +108,9 @@ def test_import_merges_safe_real_and_placeholder_duplicate(db, svc, arch_svc):
     data = _make_data(players=["Антон Ильин"], rounds_pairings=[], standings=["Антон Ильин"])
     AetherhubImportService(db).import_tournament(tournament.id, data)
 
-    participants = db.execute(
-        select(models.Participant).where(models.Participant.tournament_id == tournament.id)
-    ).scalars().all()
+    participants = (
+        db.execute(select(models.Participant).where(models.Participant.tournament_id == tournament.id)).scalars().all()
+    )
     assert len(participants) == 1
     assert participants[0].user_id == real.id
     assert participants[0].archetype_id == deck.id
@@ -151,9 +151,9 @@ def test_import_matches_unique_registered_player_with_single_name_typo(db, svc, 
 
     result = AetherhubImportService(db).import_tournament(tournament.id, data)
 
-    participants = db.execute(
-        select(models.Participant).where(models.Participant.tournament_id == tournament.id)
-    ).scalars().all()
+    participants = (
+        db.execute(select(models.Participant).where(models.Participant.tournament_id == tournament.id)).scalars().all()
+    )
     assert result.created_names == []
     assert len(participants) == 1
     assert participants[0].user_id == real.id
@@ -213,9 +213,9 @@ def test_import_does_not_guess_when_single_typo_match_is_ambiguous(db, svc, arch
 
     result = AetherhubImportService(db).import_tournament(tournament.id, data)
 
-    participants = db.execute(
-        select(models.Participant).where(models.Participant.tournament_id == tournament.id)
-    ).scalars().all()
+    participants = (
+        db.execute(select(models.Participant).where(models.Participant.tournament_id == tournament.id)).scalars().all()
+    )
     assert result.created_names == ["Иванова Мариа"]
     assert len(participants) == 3
     assert sum(participant.user.tg_id < 0 for participant in participants) == 1
@@ -640,9 +640,7 @@ class TestImportTournament:
         assert result.registered == 1
         assert "Ghost User" in result.created_names
 
-    def test_registers_player_present_only_in_final_standings(
-        self, import_svc, db, tournament, user_svc
-    ):
+    def test_registers_player_present_only_in_final_standings(self, import_svc, db, tournament, user_svc):
         """Issue #184: round-one roster had 23 names while final standings had 24."""
         missing = user_svc.get_or_create(
             tg_id=396,
@@ -658,17 +656,19 @@ class TestImportTournament:
 
         result = import_svc.import_tournament(tournament.id, data)
 
-        participant = db.query(models.Participant).filter_by(
-            tournament_id=tournament.id,
-            user_id=missing.id,
-        ).one()
+        participant = (
+            db.query(models.Participant)
+            .filter_by(
+                tournament_id=tournament.id,
+                user_id=missing.id,
+            )
+            .one()
+        )
         assert participant.final_place == 2
         assert result.players_received == 2
         assert result.registered == 2
 
-    def test_registers_late_entry_from_second_round_with_loss(
-        self, import_svc, db, tournament, user_svc
-    ):
+    def test_registers_late_entry_from_second_round_with_loss(self, import_svc, db, tournament, user_svc):
         """#65: опоздун отсутствует в roster/R1 и впервые появляется в R2 со счётом 0:2."""
         missing = user_svc.get_or_create(
             tg_id=396,
@@ -677,24 +677,30 @@ class TestImportTournament:
         )
         result = import_svc.import_tournament(tournament.id, _late_entry_data())
 
-        participant = db.query(models.Participant).filter_by(
-            tournament_id=tournament.id,
-            user_id=missing.id,
-        ).one()
+        participant = (
+            db.query(models.Participant)
+            .filter_by(
+                tournament_id=tournament.id,
+                user_id=missing.id,
+            )
+            .one()
+        )
         assert participant.final_place is None
         assert result.players_received == 3
         assert result.registered == 3
         assert db.query(models.Participant).filter_by(tournament_id=tournament.id).count() == 3
-        pairing = db.query(models.RoundPairing).filter_by(
-            tournament_id=tournament.id,
-            round_number=2,
-            player_name="Вуйцицкий Владимир",
-        ).one()
+        pairing = (
+            db.query(models.RoundPairing)
+            .filter_by(
+                tournament_id=tournament.id,
+                round_number=2,
+                player_name="Вуйцицкий Владимир",
+            )
+            .one()
+        )
         assert (pairing.player_wins, pairing.opponent_wins) == (0, 2)
 
-    def test_final_standings_update_same_late_entry_without_duplicate(
-        self, import_svc, db, tournament, user_svc
-    ):
+    def test_final_standings_update_same_late_entry_without_duplicate(self, import_svc, db, tournament, user_svc):
         missing = user_svc.get_or_create(
             tg_id=396,
             first_name="Владимир",
@@ -704,15 +710,17 @@ class TestImportTournament:
 
         result = import_svc.import_tournament(
             tournament.id,
-            _late_entry_data(
-                standings=["Хрипков Сергей", "Вуйцицкий Владимир", "Гасанлы Фарид"]
-            ),
+            _late_entry_data(standings=["Хрипков Сергей", "Вуйцицкий Владимир", "Гасанлы Фарид"]),
         )
 
-        participants = db.query(models.Participant).filter_by(
-            tournament_id=tournament.id,
-            user_id=missing.id,
-        ).all()
+        participants = (
+            db.query(models.Participant)
+            .filter_by(
+                tournament_id=tournament.id,
+                user_id=missing.id,
+            )
+            .all()
+        )
         assert len(participants) == 1
         assert participants[0].final_place == 2
         assert result.registered == 0
@@ -772,15 +780,17 @@ class TestImportTournament:
         with caplog.at_level("INFO", logger="services.aetherhub_import_service"):
             import_svc.import_tournament(tournament.id, data)
 
-        late_participant = db.query(models.Participant).filter_by(
-            tournament_id=tournament.id,
-            user_id=late.id,
-        ).one()
+        late_participant = (
+            db.query(models.Participant)
+            .filter_by(
+                tournament_id=tournament.id,
+                user_id=late.id,
+            )
+            .one()
+        )
         assert late_participant.final_place == 2
         assert (
-            db.query(models.Participant)
-            .filter_by(tournament_id=tournament.id, user_id=no_show.id)
-            .one_or_none()
+            db.query(models.Participant).filter_by(tournament_id=tournament.id, user_id=no_show.id).one_or_none()
             is None
         )
         assert "Старостин Владислав" in caplog.text
@@ -813,14 +823,16 @@ class TestImportTournament:
 
         import_svc.import_tournament(tournament.id, data)
 
-        assert db.query(models.Participant).filter_by(
-            tournament_id=tournament.id,
-            user_id=no_show.id,
-        ).one()
+        assert (
+            db.query(models.Participant)
+            .filter_by(
+                tournament_id=tournament.id,
+                user_id=no_show.id,
+            )
+            .one()
+        )
 
-    def test_players_and_standings_name_order_does_not_double_count(
-        self, import_svc, tournament, user_svc
-    ):
+    def test_players_and_standings_name_order_does_not_double_count(self, import_svc, tournament, user_svc):
         user_svc.get_or_create(tg_id=396, first_name="Владимир", last_name="Вуйцицкий")
         data = AetherhubTournamentData(
             url="x",
@@ -840,6 +852,43 @@ class TestImportTournament:
         result = import_svc.import_tournament(tournament.id, data)
         assert result.registered == 0
         assert result.already_registered == 1
+
+    def test_tracks_seen_players_without_marking_absent_registration(
+        self, import_svc, svc, db, tournament, user_alice, user_svc
+    ):
+        absent = user_svc.get_or_create(tg_id=27301, first_name="Owl", last_name="Player")
+        svc.register_participant(tournament_id=tournament.id, user_id=absent.id)
+
+        import_svc.import_tournament(
+            tournament.id,
+            _make_data(players=["Alice"], rounds_pairings=[[("Alice", None)]]),
+        )
+
+        seen_participant = svc.get_participant(tournament.id, user_alice.id)
+        absent_participant = svc.get_participant(tournament.id, absent.id)
+        assert seen_participant.aetherhub_seen_at is not None
+        assert absent_participant.aetherhub_seen_at is None
+
+    def test_later_import_marks_player_and_partial_import_does_not_clear(
+        self, import_svc, svc, db, tournament, user_alice, user_svc
+    ):
+        late = user_svc.get_or_create(tg_id=27302, first_name="Late", last_name="Player")
+        svc.register_participant(tournament_id=tournament.id, user_id=late.id)
+        import_svc.import_tournament(
+            tournament.id,
+            _make_data(players=["Alice"], rounds_pairings=[[("Alice", None)]]),
+        )
+        assert svc.get_participant(tournament.id, late.id).aetherhub_seen_at is None
+
+        import_svc.import_tournament(
+            tournament.id,
+            _make_data(players=["Alice", "Late Player"], rounds_pairings=[]),
+        )
+        marked_at = svc.get_participant(tournament.id, late.id).aetherhub_seen_at
+        assert marked_at is not None
+
+        import_svc.import_tournament(tournament.id, _make_data(players=[], rounds_pairings=[]))
+        assert svc.get_participant(tournament.id, late.id).aetherhub_seen_at == marked_at
 
     def test_pairings_saved_for_all_rounds(self, import_svc, tournament):
         data = _make_data(

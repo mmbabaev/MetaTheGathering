@@ -15,6 +15,7 @@ from core import models
 from core.config import settings
 from services.archetype import ArchetypeService
 from services.cellar_sheet import CatalogEntry, CellarCatalogSourceError, GoogleSheetsCellarCatalog
+from services.names import has_complete_person_name
 from services.tournament import TournamentService
 
 logger = logging.getLogger(__name__)
@@ -98,6 +99,10 @@ class CellarDeckUnavailable(CellarReservationError):
 
 
 class CellarUserAlreadyReserved(CellarReservationError):
+    pass
+
+
+class CellarInvalidUserName(CellarReservationError):
     pass
 
 
@@ -360,6 +365,9 @@ class CellarService:
         deck = self.db.get(models.CellarDeck, deck_id)
         if deck is None or not deck.active or not deck.available:
             raise CellarDeckUnavailable("Эта колода недоступна.")
+        user = self.db.get(models.User, user_id)
+        if user is None or not has_complete_person_name(user.first_name, user.last_name):
+            raise CellarInvalidUserName("Для бронирования укажите фамилию и имя в настройках бота.")
 
         existing = self.db.execute(
             select(models.CellarDeckReservation).where(
@@ -468,6 +476,8 @@ class CellarService:
     def _apply_to_tournament(self, reservation: models.CellarDeckReservation, tournament_id: int) -> bool:
         tournament = self.db.get(models.Tournament, tournament_id)
         if tournament is None or tournament.status != models.TournamentStatus.REGISTRATION:
+            return False
+        if not has_complete_person_name(reservation.user.first_name, reservation.user.last_name):
             return False
         participant_svc = TournamentService(self.db)
         participant = participant_svc.get_participant(tournament_id, reservation.user_id)

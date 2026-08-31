@@ -9,6 +9,7 @@ from bot.messages import (
     ALREADY_REGISTERED,
     CHOOSE_ARCHETYPE,
     DEFER_DECK_EXPIRED,
+    INVALID_FULL_NAME,
     LEAVE_CONFIRM_PROMPT,
     LEFT_TOURNAMENT,
     META_POLICE_ALL_FILLED,
@@ -33,6 +34,7 @@ from core import models
 from services import errors
 from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeItem, ArchetypeService
+from services.names import has_complete_person_name, parse_full_name_input
 from services.payment_service import PaymentService
 from services.tournament import TournamentService
 from services.user import UserService
@@ -202,7 +204,7 @@ class PlayerHandler:
         """Возвращает выбор архетипа. Если имя не задано — needs_name=True."""
         if tg_id is not None:
             user = self.user_svc.get_by_tg_id(tg_id)
-            if user is None or not user.first_name:
+            if user is None or not has_complete_person_name(user.first_name, user.last_name):
                 return HandlerResult(NAME_REQUIRED_FOR_REGISTRATION, needs_name=True)
         return self._archetype_keyboard_for_player(tournament_id, tg_id)
 
@@ -406,12 +408,12 @@ class PlayerHandler:
         tournament_id: int,
     ) -> HandlerResult:
         """Сохраняет имя пользователя и возвращает выбор архетипа."""
-        parts = name_text.strip().split(None, 1)
-        # Input format: "Фамилия Имя" — first word is last_name, second is first_name
-        last_name = parts[0]
-        first_name = parts[1] if len(parts) > 1 else None
-        self.user_svc.update_name(tg_id, first_name or last_name, last_name if first_name else None)
-        self.user_svc.merge_placeholder_by_name(tg_id, first_name or last_name, last_name if first_name else None)
+        parsed = parse_full_name_input(name_text)
+        if parsed is None:
+            return HandlerResult(INVALID_FULL_NAME, needs_name=True)
+        first_name, last_name = parsed
+        self.user_svc.update_name(tg_id, first_name, last_name)
+        self.user_svc.merge_placeholder_by_name(tg_id, first_name, last_name)
         return self._archetype_keyboard_for_player(tournament_id, tg_id)
 
     def _register_user(

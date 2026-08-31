@@ -2,9 +2,10 @@
 
 from bot.handlers.base import HandlerResult
 from bot.keyboards import settings_keyboard
-from bot.messages import NAME_SAVED, SETTINGS_MENU, format_participant_name
+from bot.messages import INVALID_FULL_NAME, NAME_SAVED, SETTINGS_MENU, format_participant_name
 from core.config import settings as app_settings
 from services.cellar import can_view_cellar_overview
+from services.names import parse_full_name_input
 from services.user import UserService
 
 
@@ -72,10 +73,10 @@ class SettingsHandler:
         return self.handle_settings(tg_id)
 
     def handle_settings_name_text(self, tg_id: int, name_text: str) -> HandlerResult:
-        parts = name_text.strip().split(None, 1)
-        # Input format: "Фамилия Имя" — first word is last_name, second is first_name
-        last_name = parts[0]
-        first_name = parts[1] if len(parts) > 1 else None
-        self.user_svc.update_name(tg_id, first_name or last_name, last_name if first_name else None)
-        full_name = f"{last_name} {first_name}" if first_name else last_name
+        parsed = parse_full_name_input(name_text)
+        if parsed is None:
+            return HandlerResult(INVALID_FULL_NAME, needs_name=True)
+        first_name, last_name = parsed
+        self.user_svc.update_name(tg_id, first_name, last_name)
+        full_name = f"{last_name} {first_name}"
         return HandlerResult(NAME_SAVED.format(full_name=full_name))

@@ -12,6 +12,7 @@ from services.feature_flags import FeatureFlagService
 from services.user import UserService
 
 logger = logging.getLogger(__name__)
+USER_DATA_PENDING_CELLAR_NAME = "pending_cellar_name"
 
 
 def _handler(db) -> CellarHandler:
@@ -46,6 +47,8 @@ async def cmd_cellar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             first_name=user.first_name,
             last_name=user.last_name,
         )
+        if result.needs_name:
+            context.user_data[USER_DATA_PENDING_CELLAR_NAME] = True
         await message.reply_text(result.text, reply_markup=result.keyboard)
     finally:
         db.close()
@@ -64,6 +67,8 @@ async def callback_dates(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             first_name=user.first_name,
             last_name=user.last_name,
         )
+        if result.needs_name:
+            context.user_data[USER_DATA_PENDING_CELLAR_NAME] = True
         await _show(query, result)
     finally:
         db.close()

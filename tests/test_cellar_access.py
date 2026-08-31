@@ -14,7 +14,7 @@ from bot.keyboards import (
 )
 from bot.telegram.cellar import _announce
 from core.config import settings
-from services.cellar import CellarService
+from services.cellar import CellarInvalidUserName, CellarService
 from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.user import UserService
 from services.web_auth import verify_magic_token
@@ -55,7 +55,7 @@ def test_cellar_command_creates_personal_one_time_web_link(db, monkeypatch):
         tg_id=1001,
         username="alice",
         first_name="Alice",
-        last_name=None,
+        last_name="Player",
     )
 
     url = _web_url(result)
@@ -70,6 +70,46 @@ def test_cellar_command_creates_personal_one_time_web_link(db, monkeypatch):
     assert verify_magic_token(db, query["token"][0]) is None
 
 
+def test_cellar_requires_two_word_name_and_trims_emoji(db):
+    FeatureFlagService(db).toggle(FeatureFlags.CELLAR_DECKS)
+    handler = _handler(db)
+
+    invalid = handler.handle_open(
+        tg_id=1001,
+        username="owl",
+        first_name=" 🦉 ",
+        last_name=None,
+        today=TODAY,
+    )
+    valid = handler.handle_open(
+        tg_id=1002,
+        username="alice",
+        first_name=" 🦉 Alice ",
+        last_name=" Player ✅ ",
+        today=TODAY,
+    )
+
+    assert invalid.needs_name is True
+    assert invalid.keyboard is None
+    assert valid.needs_name is False
+    user = UserService(db).get_by_tg_id(1002)
+    assert (user.first_name, user.last_name) == ("Alice", "Player")
+
+
+def test_cellar_service_rejects_incomplete_name(db, user_svc):
+    service = CellarService(db)
+    service.ensure_bootstrap_catalog()
+    user = user_svc.get_or_create(tg_id=1003, username="owl", first_name="🦉")
+
+    with pytest.raises(CellarInvalidUserName):
+        service.reserve(
+            deck_id=service.catalog(EVENT_DATE)[0].id,
+            user_id=user.id,
+            event_date=EVENT_DATE,
+            today=TODAY,
+        )
+
+
 @pytest.mark.asyncio
 async def test_telegram_magic_link_redirects_to_cellar(db):
     FeatureFlagService(db).toggle(FeatureFlags.CELLAR_DECKS)
@@ -77,7 +117,7 @@ async def test_telegram_magic_link_redirects_to_cellar(db):
         tg_id=1001,
         username="alice",
         first_name="Alice",
-        last_name=None,
+        last_name="Player",
         today=TODAY,
     )
     token = parse_qs(urlparse(_web_url(result)).query)["token"][0]
@@ -95,7 +135,7 @@ def test_cellar_telegram_flow_reserves_and_cancels_deck(db):
         tg_id=1001,
         username="alice",
         first_name="Alice",
-        last_name=None,
+        last_name="Player",
         today=TODAY,
     )
     date_callbacks = [
@@ -184,8 +224,8 @@ def test_cellar_telegram_flow_reserves_and_cancels_deck(db):
 def test_cellar_card_does_not_offer_reserved_deck_to_another_player(db):
     FeatureFlagService(db).toggle(FeatureFlags.CELLAR_DECKS)
     handler = _handler(db)
-    handler.handle_open(tg_id=1001, username="alice", first_name="Alice", last_name=None, today=TODAY)
-    handler.handle_open(tg_id=1002, username="bob", first_name="Bob", last_name=None, today=TODAY)
+    handler.handle_open(tg_id=1001, username="alice", first_name="Alice", last_name="Player", today=TODAY)
+    handler.handle_open(tg_id=1002, username="bob", first_name="Bob", last_name="Player", today=TODAY)
     deck = CellarService(db).catalog(EVENT_DATE)[0]
     handler.handle_reserve(tg_id=1001, event_date=EVENT_DATE, deck_id=deck.id, today=TODAY)
 
@@ -196,7 +236,7 @@ def test_cellar_card_does_not_offer_reserved_deck_to_another_player(db):
         today=TODAY,
     )
 
-    assert "Статус: 🔒 забронировал(а) Alice" in card.text
+    assert "Статус: 🔒 забронировал(а) Alice Player" in card.text
     assert not any(
         button.callback_data and button.callback_data.startswith(f"{CB_CELLAR_RESERVE}:")
         for row in card.keyboard.inline_keyboard
@@ -207,7 +247,7 @@ def test_cellar_card_does_not_offer_reserved_deck_to_another_player(db):
 def test_reserving_from_later_page_returns_current_deck_at_top(db):
     FeatureFlagService(db).toggle(FeatureFlags.CELLAR_DECKS)
     handler = _handler(db)
-    handler.handle_open(tg_id=1001, username="alice", first_name="Alice", last_name=None, today=TODAY)
+    handler.handle_open(tg_id=1001, username="alice", first_name="Alice", last_name="Player", today=TODAY)
     deck = CellarService(db).catalog(EVENT_DATE)[15]
 
     reserved = handler.handle_reserve(
@@ -226,7 +266,7 @@ def test_reserving_from_later_page_returns_current_deck_at_top(db):
 def test_cellar_callbacks_reject_stale_date(db):
     FeatureFlagService(db).toggle(FeatureFlags.CELLAR_DECKS)
     handler = _handler(db)
-    handler.handle_open(tg_id=1001, username="alice", first_name="Alice", last_name=None, today=TODAY)
+    handler.handle_open(tg_id=1001, username="alice", first_name="Alice", last_name="Player", today=TODAY)
 
     result = handler.handle_date(
         tg_id=1001,
@@ -261,21 +301,21 @@ def test_only_owner_and_production_coordinators_see_booking_overview(db, monkeyp
         tg_id=111,
         username="coordinator",
         first_name="Coordinator",
-        last_name=None,
+        last_name="Person",
         today=TODAY,
     )
     regular = handler.handle_open(
         tg_id=1002,
         username="bob",
         first_name="Bob",
-        last_name=None,
+        last_name="Player",
         today=TODAY,
     )
     owner = handler.handle_open(
         tg_id=333,
         username="owner",
         first_name="Owner",
-        last_name=None,
+        last_name="Person",
         today=TODAY,
     )
 
@@ -288,14 +328,14 @@ def test_only_owner_and_production_coordinators_see_booking_overview(db, monkeyp
         tg_id=333,
         username="owner",
         first_name="Owner",
-        last_name=None,
+        last_name="Person",
         today=TODAY,
     )
     debug_coordinator = handler.handle_open(
         tg_id=111,
         username="coordinator",
         first_name="Coordinator",
-        last_name=None,
+        last_name="Person",
         today=TODAY,
     )
 
@@ -313,7 +353,7 @@ def test_coordinator_usernames_are_normalized_and_deduplicated(monkeypatch):
 async def test_telegram_reservation_notification_targets_cellar_owners_in_production(db, user_svc, monkeypatch):
     service = CellarService(db)
     service.ensure_bootstrap_catalog()
-    user = user_svc.get_or_create(tg_id=1001, username="alice", first_name="Alice")
+    user = user_svc.get_or_create(tg_id=1001, username="alice", first_name="Alice", last_name="Player")
     reservation = service.reserve(
         deck_id=service.catalog(EVENT_DATE)[0].id,
         user_id=user.id,
@@ -349,7 +389,7 @@ async def test_telegram_reservation_notification_targets_cellar_owners_in_produc
 async def test_telegram_reservation_notification_targets_only_owner_in_debug(db, user_svc, monkeypatch):
     service = CellarService(db)
     service.ensure_bootstrap_catalog()
-    user = user_svc.get_or_create(tg_id=1001, username="alice", first_name="Alice")
+    user = user_svc.get_or_create(tg_id=1001, username="alice", first_name="Alice", last_name="Player")
     reservation = service.reserve(
         deck_id=service.catalog(EVENT_DATE)[0].id,
         user_id=user.id,

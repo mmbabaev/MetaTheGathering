@@ -5,6 +5,7 @@ from telegram.ext import ContextTypes
 
 from bot.features import FeatureService
 from bot.handlers.admin import AdminHandler
+from bot.handlers.cellar import CellarHandler
 from bot.handlers.player import PlayerHandler
 from bot.handlers.settings import SettingsHandler
 from bot.keyboards import Keyboards
@@ -23,6 +24,7 @@ from services.user import UserService
 USER_DATA_PENDING_CUSTOM = "pending_custom_archetype_tournament_id"
 USER_DATA_PENDING_NAME = "pending_name_for_tournament_id"
 USER_DATA_PENDING_SETTINGS_NAME = "pending_settings_name"
+USER_DATA_PENDING_CELLAR_NAME = "pending_cellar_name"
 USER_DATA_PENDING_BULK_ADD = "pending_bulk_add_tournament_id"
 USER_DATA_PENDING_ADMIN_CUSTOM_ARCH = "pending_admin_custom_arch_participant_id"
 USER_DATA_OPPONENTS_MODE = "opponents_tournament_id"
@@ -405,7 +407,6 @@ async def _handle_pending_name(msg, user, text, context) -> bool:
     if not text:
         await msg.reply_text("Введите непустое имя.")
         return True
-    context.user_data.pop(USER_DATA_PENDING_NAME)
     db = SessionLocal()
     try:
         result = _player_handler(db).handle_save_name_then_register(
@@ -414,6 +415,8 @@ async def _handle_pending_name(msg, user, text, context) -> bool:
             text,
             tournament_id,
         )
+        if not result.needs_name:
+            context.user_data.pop(USER_DATA_PENDING_NAME, None)
         await msg.reply_text(result.text, reply_markup=result.keyboard)
     finally:
         db.close()
@@ -426,11 +429,37 @@ async def _handle_pending_settings_name(msg, user, text, context) -> bool:
     if not text:
         await msg.reply_text("Введите непустое имя.")
         return True
-    context.user_data.pop(USER_DATA_PENDING_SETTINGS_NAME)
     db = SessionLocal()
     try:
         result = _settings_handler(db).handle_settings_name_text(user.id, text)
+        if not result.needs_name:
+            context.user_data.pop(USER_DATA_PENDING_SETTINGS_NAME, None)
         await msg.reply_text(result.text)
+    finally:
+        db.close()
+    return True
+
+
+async def _handle_pending_cellar_name(msg, user, text, context) -> bool:
+    if not context.user_data.get(USER_DATA_PENDING_CELLAR_NAME):
+        return False
+    if not text:
+        await msg.reply_text("Введите непустое имя.")
+        return True
+    db = SessionLocal()
+    try:
+        saved = _settings_handler(db).handle_settings_name_text(user.id, text)
+        if saved.needs_name:
+            await msg.reply_text(saved.text)
+            return True
+        context.user_data.pop(USER_DATA_PENDING_CELLAR_NAME, None)
+        result = CellarHandler(db, UserService(db), FeatureFlagService(db)).handle_open(
+            tg_id=user.id,
+            username=user.username,
+            first_name=None,
+            last_name=None,
+        )
+        await msg.reply_text(result.text, reply_markup=result.keyboard)
     finally:
         db.close()
     return True
@@ -571,6 +600,7 @@ async def _handle_pending_meta_import(msg, user, text, context) -> bool:
 
 _TEXT_INPUT_HANDLERS = [
     _handle_pending_name,
+    _handle_pending_cellar_name,
     _handle_pending_settings_name,
     _handle_pending_missing_custom_arch,
     _handle_pending_admin_custom_arch,

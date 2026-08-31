@@ -403,7 +403,7 @@ class TestHandleRegisterArchetypeMenu:
             svc.register_participant(tournament_id=t_other.id, user_id=u.id, archetype_id=popular.id)
 
         # Наш новый игрок — имя уже есть, история — нет
-        user_svc.get_or_create(tg_id=PLAYER_TG_ID, username=None, first_name="NewPlayer")
+        user_svc.get_or_create(tg_id=PLAYER_TG_ID, username=None, first_name="New Player")
         result = player_handler.handle_register(active_tournament.id, tg_id=PLAYER_TG_ID)
 
         btn_names = [b.text for row in result.keyboard.inline_keyboard for b in row]
@@ -412,7 +412,7 @@ class TestHandleRegisterArchetypeMenu:
     def test_new_player_no_more_button(self, svc, user_svc, player_handler, active_tournament, arch_svc):
         """Без истории кнопки «... ещё» нет."""
         arch_svc.get_or_create_by_name("Burn")
-        user_svc.get_or_create(tg_id=PLAYER_TG_ID, username=None, first_name="NewPlayer")
+        user_svc.get_or_create(tg_id=PLAYER_TG_ID, username=None, first_name="New Player")
         result = player_handler.handle_register(active_tournament.id, tg_id=PLAYER_TG_ID)
 
         btn_callbacks = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
@@ -421,7 +421,7 @@ class TestHandleRegisterArchetypeMenu:
     def test_player_with_history_shows_collapsed(self, svc, user_svc, player_handler, active_tournament, arch_svc):
         """Игрок с историей видит ARCHETYPE_COLLAPSED_COUNT колод + «... ещё»."""
         archs = [arch_svc.get_or_create_by_name(f"Deck{i}") for i in range(1, 6)]
-        u = user_svc.get_or_create(tg_id=PLAYER_TG_ID, username=None, first_name="Player")
+        u = user_svc.get_or_create(tg_id=PLAYER_TG_ID, username=None, first_name="Test Player")
         for i, arch in enumerate(archs):
             t = svc.create_tournament(TournamentCreate(title=f"T{i}", chat_id=CHAT_ID + 51 + i))
             svc.register_participant(tournament_id=t.id, user_id=u.id, archetype_id=arch.id)
@@ -441,7 +441,7 @@ class TestHandleRegisterArchetypeMenu:
         self, svc, user_svc, player_handler, active_tournament, arch_svc
     ):
         burn = arch_svc.get_or_create_by_name("Burn")
-        u = user_svc.get_or_create(tg_id=PLAYER_TG_ID, username=None, first_name="Player")
+        u = user_svc.get_or_create(tg_id=PLAYER_TG_ID, username=None, first_name="Test Player")
         t = svc.create_tournament(TournamentCreate(title="T", chat_id=CHAT_ID + 60))
         svc.register_participant(tournament_id=t.id, user_id=u.id, archetype_id=burn.id)
 
@@ -460,7 +460,7 @@ class TestHandleArchetypeMore:
     @pytest.fixture
     def player_with_history(self, svc, user_svc, arch_svc, active_tournament):
         archs = [arch_svc.get_or_create_by_name(f"Deck{i}") for i in range(1, 6)]
-        u = user_svc.get_or_create(tg_id=PLAYER_TG_ID, username=None, first_name="Player")
+        u = user_svc.get_or_create(tg_id=PLAYER_TG_ID, username=None, first_name="Test Player")
         for i, arch in enumerate(archs):
             t = svc.create_tournament(TournamentCreate(title=f"HT{i}", chat_id=CHAT_ID + 70 + i))
             svc.register_participant(tournament_id=t.id, user_id=u.id, archetype_id=arch.id)

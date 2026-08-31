@@ -1878,6 +1878,19 @@ class TestUserServiceMergeUsersById:
         assert tp.final_place == 9  # место добрано из source
         assert user_svc.get_by_id(source.id) is None
 
+    def test_merge_fills_aetherhub_seen_marker(self, user_svc, svc, db, active_tournament):
+        source = user_svc.get_or_create(tg_id=6191, first_name="Src")
+        target = user_svc.get_or_create(tg_id=6192, first_name="Tgt")
+        svc.register_participant(tournament_id=active_tournament.id, user_id=source.id)
+        svc.register_participant(tournament_id=active_tournament.id, user_id=target.id)
+        seen_at = m.utc_now()
+        svc.get_participant(active_tournament.id, source.id).aetherhub_seen_at = seen_at
+        db.commit()
+
+        user_svc.merge_users_by_id(source.id, target.id, adopt_name=False)
+
+        assert svc.get_participant(active_tournament.id, target.id).aetherhub_seen_at == seen_at
+
     def test_merge_does_not_override_existing_target_fields(self, user_svc, svc, db, active_tournament, arch_svc):
         source = user_svc.get_or_create(tg_id=6103, first_name="Src")
         target = user_svc.get_or_create(tg_id=6104, first_name="Tgt")
