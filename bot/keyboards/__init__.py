@@ -7,7 +7,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from bot.deck_emoji import deck_emoji
 from bot.messages import format_participant_name
-from services.schedule import WEEKDAY_RU, WEEKDAYS
+from services.schedule import MAX_CREATE_DAYS_BEFORE, WEEKDAY_RU, WEEKDAYS, create_offset_label
 
 # Callback data prefixes (max 64 bytes in Telegram)
 CB_REGISTER = "reg"
@@ -86,6 +86,8 @@ CB_SCHEDULE_EDIT_FIELD = "sched_ef"  # sched_ef:{row_id}:{field_idx} — пра�
 CB_SCHEDULE_IMPORTS = "sched_imp"  # sched_imp:{row_id} — правка времён импорта
 CB_SCHEDULE_WEEKDAY = "sched_wd"  # sched_wd:{row_id} — пикер дня недели
 CB_SCHEDULE_SET_WEEKDAY = "sched_swd"  # sched_swd:{row_id}:{weekday_idx} — задать день недели
+CB_SCHEDULE_CREATE_OFFSET = "sched_cday"  # sched_cday:{row_id} — пикер дня создания
+CB_SCHEDULE_SET_CREATE_OFFSET = "sched_scday"  # sched_scday:{row_id}:{days_before}
 CB_FEATURE_INFO = "feat_info"  # feat_info:{flag_name}
 CB_PAY = "pay"  # pay:{tournament_id}
 CB_PAY_STATUS = "pay_status"  # pay_status:{tournament_id} — no-op, показывает статус оплаты
@@ -605,6 +607,7 @@ class Keyboards:
         row_id: int,
         enabled: bool,
         create_time: str = "",
+        create_days_before: int = 0,
         game_time: str = "",
         reminder_time: str | None = None,
         imports_summary: str = "",
@@ -617,10 +620,25 @@ class Keyboards:
             [
                 [
                     InlineKeyboardButton(
-                        f"🕐 Создание: {create_time}", callback_data=f"{CB_SCHEDULE_EDIT_FIELD}:{row_id}:0"
+                        f"🎮 День турнира: {weekday_ru}", callback_data=f"{CB_SCHEDULE_WEEKDAY}:{row_id}"
                     )
                 ],
-                [InlineKeyboardButton(f"🎮 Игра: {game_time}", callback_data=f"{CB_SCHEDULE_EDIT_FIELD}:{row_id}:1")],
+                [
+                    InlineKeyboardButton(
+                        f"🎮 Время турнира: {game_time}", callback_data=f"{CB_SCHEDULE_EDIT_FIELD}:{row_id}:1"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        f"📣 Создавать: {create_offset_label(create_days_before)}",
+                        callback_data=f"{CB_SCHEDULE_CREATE_OFFSET}:{row_id}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        f"🕐 Время создания: {create_time}", callback_data=f"{CB_SCHEDULE_EDIT_FIELD}:{row_id}:0"
+                    )
+                ],
                 [
                     InlineKeyboardButton(
                         f"🔔 Напоминание: {reminder_label}", callback_data=f"{CB_SCHEDULE_EDIT_FIELD}:{row_id}:2"
@@ -631,7 +649,6 @@ class Keyboards:
                         f"🔄 Импорты: {imports_summary}", callback_data=f"{CB_SCHEDULE_IMPORTS}:{row_id}"
                     )
                 ],
-                [InlineKeyboardButton(f"📆 День: {weekday_ru}", callback_data=f"{CB_SCHEDULE_WEEKDAY}:{row_id}")],
                 [InlineKeyboardButton(toggle_label, callback_data=f"{CB_SCHEDULE_TOGGLE}:{row_id}")],
                 [InlineKeyboardButton("⬅️ Назад", callback_data=CB_SCHEDULE_LIST)],
             ]
@@ -645,6 +662,21 @@ class Keyboards:
             buttons.append(
                 InlineKeyboardButton(
                     f"{mark}{WEEKDAY_RU[wd]}", callback_data=f"{CB_SCHEDULE_SET_WEEKDAY}:{row_id}:{idx}"
+                )
+            )
+        rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
+        rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_SCHEDULE_ROW}:{row_id}")])
+        return InlineKeyboardMarkup(rows)
+
+    def schedule_create_offset_keyboard(self, row_id: int, current_days_before: int) -> InlineKeyboardMarkup:
+        """Picker for creating a tournament on the event day or up to six days earlier."""
+        buttons = []
+        for days_before in range(MAX_CREATE_DAYS_BEFORE + 1):
+            mark = "✅ " if days_before == current_days_before else ""
+            buttons.append(
+                InlineKeyboardButton(
+                    f"{mark}{create_offset_label(days_before)}",
+                    callback_data=f"{CB_SCHEDULE_SET_CREATE_OFFSET}:{row_id}:{days_before}",
                 )
             )
         rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
@@ -1003,6 +1035,7 @@ def schedule_row_keyboard(
     row_id: int,
     enabled: bool,
     create_time: str = "",
+    create_days_before: int = 0,
     game_time: str = "",
     reminder_time: str | None = None,
     imports_summary: str = "",
@@ -1012,11 +1045,16 @@ def schedule_row_keyboard(
         row_id,
         enabled,
         create_time=create_time,
+        create_days_before=create_days_before,
         game_time=game_time,
         reminder_time=reminder_time,
         imports_summary=imports_summary,
         weekday_ru=weekday_ru,
     )
+
+
+def schedule_create_offset_keyboard(row_id: int, current_days_before: int) -> InlineKeyboardMarkup:
+    return _default.schedule_create_offset_keyboard(row_id, current_days_before)
 
 
 def schedule_weekday_keyboard(row_id: int, current_weekday: str) -> InlineKeyboardMarkup:

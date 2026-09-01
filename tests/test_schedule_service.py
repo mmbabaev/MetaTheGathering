@@ -3,10 +3,23 @@
 import pytest
 
 from bot.handlers.schedule import SCHEDULE_ROW_NOT_FOUND, ScheduleHandler
-from bot.keyboards import CB_SCHEDULE_ROW, CB_SCHEDULE_TOGGLE, Keyboards
+from bot.keyboards import (
+    CB_SCHEDULE_CREATE_OFFSET,
+    CB_SCHEDULE_ROW,
+    CB_SCHEDULE_SET_CREATE_OFFSET,
+    CB_SCHEDULE_TOGGLE,
+    Keyboards,
+)
 from bot.messages import NOT_ADMIN
 from core.models import ClubScheduleRow
-from services.schedule import WEEKDAYS, ScheduleService, format_import_times, parse_import_times
+from services.schedule import (
+    WEEKDAYS,
+    ScheduleService,
+    create_offset_label,
+    create_weekday,
+    format_import_times,
+    parse_import_times,
+)
 from services.user import UserService
 
 ADMIN_TG_ID = 7777
@@ -61,6 +74,18 @@ class TestImportTimesCsv:
 
     def test_strips_and_drops_blanks(self):
         assert parse_import_times(" 20:00 , ,20:30, ") == ["20:00", "20:30"]
+
+
+class TestCreateDayFormatting:
+    def test_offset_labels(self):
+        assert create_offset_label(0) == "в день турнира"
+        assert create_offset_label(1) == "накануне"
+        assert create_offset_label(3) == "за 3 дня"
+        assert create_offset_label(6) == "за 6 дней"
+
+    def test_actual_create_weekday_wraps_to_previous_week(self):
+        assert create_weekday("tuesday", 1) == "monday"
+        assert create_weekday("monday", 2) == "saturday"
 
 
 # ── ensure_defaults ──────────────────────────────────────────────────────────
@@ -209,8 +234,8 @@ class TestScheduleHandler:
         schedule = handler.handle_schedule_list(ADMIN_TG_ID)
         card = handler.handle_schedule_row(ADMIN_TG_ID, row.id)
 
-        assert "создание накануне 18:30" in schedule.text
-        assert "Создание турнира: накануне в 18:30" in card.text
+        assert "создание: понедельник 18:30 (накануне)" in schedule.text
+        assert "Создание: понедельник, 18:30 (накануне)" in card.text
 
     def test_empty_schedule_has_no_keyboard(self, handler, admin_user):
         result = handler.handle_schedule_list(ADMIN_TG_ID)
@@ -222,6 +247,16 @@ class TestScheduleHandler:
         assert "12:00" in result.text
         assert "19:45" in result.text
         assert "20:00" in result.text
+        create_offset = next(
+            button
+            for keyboard_row in result.keyboard.inline_keyboard
+            for button in keyboard_row
+            if button.callback_data == f"{CB_SCHEDULE_CREATE_OFFSET}:{row.id}"
+        )
+        assert "в день турнира" in create_offset.text
+        labels = [button.text for keyboard_row in result.keyboard.inline_keyboard for button in keyboard_row]
+        assert "🎮 День турнира: пятница" in labels
+        assert "🎮 Время турнира: 19:45" in labels
 
     def test_row_card_missing_row_alerts(self, handler, admin_user):
         result = handler.handle_schedule_row(ADMIN_TG_ID, 99999)
@@ -345,10 +380,21 @@ class TestSetTimeFields:
         sched_svc.set_import_times(row.id, [])
         assert sched_svc.get_row(row.id).import_times == ""
 
+    def test_set_create_days_before(self, sched_svc, db):
+        row = _row(db)
+        assert sched_svc.set_create_days_before(row.id, 3) is True
+        assert sched_svc.get_row(row.id).create_days_before == 3
+
+    def test_set_create_days_before_rejects_out_of_range(self, sched_svc, db):
+        row = _row(db)
+        with pytest.raises(ValueError):
+            sched_svc.set_create_days_before(row.id, 7)
+
     def test_setters_missing_row(self, sched_svc):
         assert sched_svc.set_time_field(999, "create", "10:00") is False
         assert sched_svc.set_reminder(999, None) is False
         assert sched_svc.set_import_times(999, []) is False
+        assert sched_svc.set_create_days_before(999, 1) is False
 
 
 class TestSetWeekday:
@@ -446,3 +492,30 @@ class TestHandlerEdit:
         result = handler.handle_set_weekday(ADMIN_TG_ID, thu.id, mon_idx)
         assert result.is_alert
         assert result.text == WEEKDAY_TAKEN
+
+    def test_create_offset_picker_marks_current_value(self, handler, admin_user, db):
+        row = _row(db)
+        row.create_days_before = 1
+        db.commit()
+
+        result = handler.handle_create_offset_picker(ADMIN_TG_ID, row.id)
+
+        buttons = [button for keyboard_row in result.keyboard.inline_keyboard for button in keyboard_row]
+        assert any(
+            button.text == "✅ накануне" and button.callback_data == f"{CB_SCHEDULE_SET_CREATE_OFFSET}:{row.id}:1"
+            for button in buttons
+        )
+
+    def test_set_create_offset_updates_card_and_service(self, handler, admin_user, db):
+        row = _row(db, weekday="friday")
+
+        result = handler.handle_set_create_offset(ADMIN_TG_ID, row.id, 2)
+
+        assert ScheduleService(handler.schedule_svc.db).get_row(row.id).create_days_before == 2
+        assert "Создание: среда, 12:00 (за 2 дня)" in result.text
+
+    def test_set_create_offset_rejects_invalid_value(self, handler, admin_user, db):
+        row = _row(db)
+        result = handler.handle_set_create_offset(ADMIN_TG_ID, row.id, 7)
+        assert result.is_alert
+        assert ScheduleService(handler.schedule_svc.db).get_row(row.id).create_days_before == 0
