@@ -151,10 +151,12 @@ from bot.keyboards import (
     CB_ROUND_SUMMARY,
     CB_ROUND_VIEW,
     CB_ROUND_VIEW_TOGGLE,
+    CB_SCHEDULE_CREATE_OFFSET,
     CB_SCHEDULE_EDIT_FIELD,
     CB_SCHEDULE_IMPORTS,
     CB_SCHEDULE_LIST,
     CB_SCHEDULE_ROW,
+    CB_SCHEDULE_SET_CREATE_OFFSET,
     CB_SCHEDULE_SET_WEEKDAY,
     CB_SCHEDULE_TOGGLE,
     CB_SCHEDULE_WEEKDAY,
@@ -746,6 +748,18 @@ def main() -> None:
     )
     app.add_handler(
         CallbackQueryHandler(schedule_handler.callback_schedule_set_weekday, pattern=f"^{CB_SCHEDULE_SET_WEEKDAY}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(
+            schedule_handler.callback_schedule_create_offset,
+            pattern=f"^{CB_SCHEDULE_CREATE_OFFSET}:",
+        )
+    )
+    app.add_handler(
+        CallbackQueryHandler(
+            schedule_handler.callback_schedule_set_create_offset,
+            pattern=f"^{CB_SCHEDULE_SET_CREATE_OFFSET}:",
+        )
     )
     app.add_handler(CallbackQueryHandler(admin.callback_fill_opponents, pattern=f"^{CB_ADMIN_OPPONENTS}:"))
     app.add_handler(CallbackQueryHandler(app_stats_handler.callback_app_stats_home, pattern=f"^{CB_APP_STATS_HOME}$"))
