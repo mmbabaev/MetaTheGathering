@@ -422,7 +422,12 @@ def schedule_row_label(row) -> str:
 def format_schedule_rows(rows, tz: str) -> str:
     """Текст /schedule по строкам из БД — включая выключенные (их в планировщике нет)."""
     from core.clubs import club_identities  # noqa: PLC0415 — иначе цикл импортов
-    from services.schedule import WEEKDAY_RU, parse_import_times  # noqa: PLC0415
+    from services.schedule import (  # noqa: PLC0415
+        WEEKDAY_RU,
+        create_offset_label,
+        create_weekday,
+        parse_import_times,
+    )
 
     if not rows:
         return "📅 Расписание пусто."
@@ -439,8 +444,10 @@ def format_schedule_rows(rows, tz: str) -> str:
         day = WEEKDAY_RU.get(row.weekday, row.weekday)
         status = "" if row.enabled else "  ⏸ выключено"
         days_before = getattr(row, "create_days_before", 0)
-        create_day = " накануне" if days_before == 1 else (f" за {days_before} дн." if days_before else "")
-        lines.append(f"  {day}: создание{create_day} {row.create_time}, игра {row.game_time}{status}")
+        creation_day = WEEKDAY_RU.get(create_weekday(row.weekday, days_before), row.weekday)
+        offset = create_offset_label(days_before)
+        lines.append(f"  турнир: {day} {row.game_time}{status}")
+        lines.append(f"    создание: {creation_day} {row.create_time} ({offset})")
         if row.reminder_time:
             lines.append(f"    напоминание: {row.reminder_time}")
         times = parse_import_times(row.import_times)

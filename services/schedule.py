@@ -16,6 +16,7 @@ from core.clubs import ClubIdentity, club_identities, default_schedules
 from core.config import Club, ClubSchedule
 
 WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+MAX_CREATE_DAYS_BEFORE = 6
 
 # Индекс поля времени в callback карточки строки → имя (порядок стабилен, менять нельзя).
 EDITABLE_TIME_FIELDS = ["create", "game", "reminder"]
@@ -29,6 +30,22 @@ WEEKDAY_RU = {
     "saturday": "суббота",
     "sunday": "воскресенье",
 }
+
+
+def create_offset_label(days_before: int) -> str:
+    if days_before == 0:
+        return "в день турнира"
+    if days_before == 1:
+        return "накануне"
+    suffix = "дня" if 2 <= days_before <= 4 else "дней"
+    return f"за {days_before} {suffix}"
+
+
+def create_weekday(weekday: str, days_before: int) -> str:
+    """Weekday on which the create job runs for an event weekday and offset."""
+    if weekday not in WEEKDAYS:
+        return weekday
+    return WEEKDAYS[(WEEKDAYS.index(weekday) - days_before) % len(WEEKDAYS)]
 
 
 def normalize_time(value: str) -> str | None:
@@ -159,6 +176,17 @@ class ScheduleService:
         if row is None:
             return False
         row.reminder_time = value
+        self.db.commit()
+        return True
+
+    def set_create_days_before(self, row_id: int, days_before: int) -> bool:
+        """Set how many days before the event its tournament is created."""
+        if not 0 <= days_before <= MAX_CREATE_DAYS_BEFORE:
+            raise ValueError(f"days_before must be between 0 and {MAX_CREATE_DAYS_BEFORE}")
+        row = self.get_row(row_id)
+        if row is None:
+            return False
+        row.create_days_before = days_before
         self.db.commit()
         return True
 

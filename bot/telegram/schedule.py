@@ -208,6 +208,52 @@ async def callback_schedule_set_weekday(update: Update, context: ContextTypes.DE
     await query.answer(applied)
 
 
+async def callback_schedule_create_offset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show the picker for how many days before the event to create its tournament."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (row_id,) = ids
+    db = SessionLocal()
+    try:
+        result = _schedule_handler(db).handle_create_offset_picker(user.id, row_id)
+    finally:
+        db.close()
+    if result.is_alert:
+        await query.answer(result.text, show_alert=True)
+        return
+    await query.edit_message_text(result.text, reply_markup=result.keyboard)
+    await query.answer()
+
+
+async def callback_schedule_set_create_offset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Apply the create-day offset and immediately reload schedule jobs."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 2)
+    if ids is None:
+        return
+    row_id, days_before = ids
+    db = SessionLocal()
+    try:
+        result = _schedule_handler(db).handle_set_create_offset(user.id, row_id, days_before)
+    finally:
+        db.close()
+    if result.is_alert:
+        await query.answer(result.text, show_alert=True)
+        return
+    applied = _reload_jobs(context, user, row_id)
+    _log("schedule_set_create_offset", user, row_id=row_id, days_before=days_before)
+    await query.edit_message_text(result.text, reply_markup=result.keyboard)
+    await query.answer(applied)
+
+
 async def handle_pending_schedule_edit(msg: Message, user: User, text: str, context) -> bool:
     """Обрабатывает ввод времени/импортов для расписания. True если обработал."""
     pending = context.user_data.get(USER_DATA_PENDING_SCHEDULE_EDIT)

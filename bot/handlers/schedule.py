@@ -6,9 +6,12 @@ from bot.messages import NOT_ADMIN, format_schedule_rows, schedule_row_label
 from core.config import settings
 from services.schedule import (
     EDITABLE_TIME_FIELDS,
+    MAX_CREATE_DAYS_BEFORE,
     WEEKDAY_RU,
     WEEKDAYS,
     ScheduleService,
+    create_offset_label,
+    create_weekday,
     generate_import_times,
     normalize_time,
     parse_import_times,
@@ -19,6 +22,7 @@ SCHEDULE_ROW_NOT_FOUND = "Строка расписания не найдена.
 BAD_TIME = "❌ Неверный формат. Пришли время как ЧЧ:ММ (например 12:30)."
 BAD_IMPORTS = "❌ Неверный формат. Пришли начало-конец/шаг, например 20:00-00:30/30, или «выкл»."
 WEEKDAY_TAKEN = "⚠️ У этого клуба уже есть расписание на этот день."
+INVALID_CREATE_OFFSET = "Некорректный день создания турнира."
 
 _DISABLE_WORDS = {"выкл", "выключить", "-", "нет", "off"}
 
@@ -162,6 +166,28 @@ class ScheduleHandler:
             return HandlerResult(WEEKDAY_TAKEN, is_alert=True)
         return self._card_result(self.schedule_svc.get_row(row_id))
 
+    # --- день создания относительно турнира ---
+
+    def handle_create_offset_picker(self, tg_id: int, row_id: int) -> HandlerResult:
+        if not self.user_svc.is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN, is_alert=True)
+        row = self.schedule_svc.get_row(row_id)
+        if row is None:
+            return HandlerResult(SCHEDULE_ROW_NOT_FOUND, is_alert=True)
+        return HandlerResult(
+            f"📆 {row.club_name}: когда создавать турнир?",
+            keyboard=self.keyboards.schedule_create_offset_keyboard(row_id, row.create_days_before),
+        )
+
+    def handle_set_create_offset(self, tg_id: int, row_id: int, days_before: int) -> HandlerResult:
+        if not self.user_svc.is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN, is_alert=True)
+        if not 0 <= days_before <= MAX_CREATE_DAYS_BEFORE:
+            return HandlerResult(INVALID_CREATE_OFFSET, is_alert=True)
+        if not self.schedule_svc.set_create_days_before(row_id, days_before):
+            return HandlerResult(SCHEDULE_ROW_NOT_FOUND, is_alert=True)
+        return self._card_result(self.schedule_svc.get_row(row_id))
+
     # --- общий рендер карточки ---
 
     def _card_result(self, row) -> HandlerResult:
@@ -169,6 +195,7 @@ class ScheduleHandler:
             row.id,
             row.enabled,
             create_time=row.create_time,
+            create_days_before=row.create_days_before,
             game_time=row.game_time,
             reminder_time=row.reminder_time,
             imports_summary=imports_summary(parse_import_times(row.import_times)),
@@ -196,12 +223,13 @@ def _row_card_text(row) -> str:
     status = "✅ включено" if row.enabled else "⏸ выключено"
     times = parse_import_times(row.import_times)
     days_before = getattr(row, "create_days_before", 0)
-    create_day = "накануне в " if days_before == 1 else (f"за {days_before} дн. в " if days_before else "")
+    creation_weekday = WEEKDAY_RU.get(create_weekday(row.weekday, days_before), row.weekday)
+    offset = create_offset_label(days_before)
     lines = [
         f"📅 {row.club_name} · {day} — {status}",
         "",
-        f"🕐 Создание турнира: {create_day}{row.create_time}",
-        f"🎮 Время игры: {row.game_time}",
+        f"📣 Создание: {creation_weekday}, {row.create_time} ({offset})",
+        f"🎮 Турнир: {day}, {row.game_time}",
         f"🔔 Напоминание: {row.reminder_time or 'выключено'}",
         f"🔄 Импорты: {', '.join(times) if times else 'выключены'}",
     ]
