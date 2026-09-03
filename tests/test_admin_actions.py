@@ -1562,13 +1562,13 @@ class TestHandleCreateTournament:
             chat_id=CHAT_ID,
             club="Endstep-ru",
             is_online=True,
-            title_prefix="🎮 ⏭️ ",
+            title_prefix="⏭️🦶 ",
         )
 
         tournament = handler.svc.db.get(m.Tournament, result.tournament_id)
         assert tournament.club == "Endstep-ru"
         assert tournament.is_online is True
-        assert tournament.title.startswith("🎮 ⏭️ Endstep-ru Pauper ")
+        assert tournament.title.startswith("⏭️🦶 Endstep-ru Pauper ")
 
     def test_second_active_tournament_is_created(self, handler, admin_user, active_tournament):
         result = handler.handle_create_tournament(tg_id=ADMIN_TG_ID, chat_id=CHAT_ID, title="Second")
