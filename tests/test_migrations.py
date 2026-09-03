@@ -7,6 +7,7 @@ the bot fails to start and CI breaks. These tests catch it locally before pushin
 
 import re
 import runpy
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import sqlalchemy as sa
@@ -69,6 +70,33 @@ def test_tournament_online_marker_backfills_existing_rows_as_offline():
         rows = connection.execute(sa.select(migrated.c.id, migrated.c.is_online).order_by(migrated.c.id)).all()
 
     assert rows == [(1, False), (2, False)]
+
+
+def test_tournament_creation_plan_migration_defaults_to_pending():
+    metadata = sa.MetaData()
+    sa.Table("tournaments", metadata, sa.Column("id", sa.Integer, primary_key=True))
+    engine = sa.create_engine("sqlite://")
+    metadata.create_all(engine)
+    migration = runpy.run_path(str(VERSIONS_DIR / "4953faa801dd_add_tournament_creation_plans.py"))
+
+    with engine.begin() as connection:
+        context = MigrationContext.configure(connection)
+        with Operations.context(context):
+            migration["upgrade"]()
+        plans = sa.Table("tournament_creation_plans", sa.MetaData(), autoload_with=connection)
+        now = datetime(2026, 9, 4)
+        connection.execute(
+            plans.insert().values(
+                id=1,
+                club_name="Endstep-ru",
+                created_by_tg_id=1,
+                announce_at=now,
+                event_at=now + timedelta(days=1),
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        assert connection.execute(sa.select(plans.c.status)).scalar_one() == "pending"
 
 
 def test_split_spy_general_names_repairs_only_classification_cache():
