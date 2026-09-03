@@ -44,6 +44,7 @@ def test_wizard_builds_immediate_plan_in_club_timezone(db):
     draft = {}
     confirmation = _complete_draft(handler, draft)
     assert "сразу после подтверждения" in confirmation.text
+    assert "Чат для объявления: https://t.me/metathegatheringtestgroup" in confirmation.text
 
     result = handler.handle_confirm(ADMIN_ID, draft, now=NOW)
     plan = TournamentCreationPlanService(db).get(result.creation_plan_id)

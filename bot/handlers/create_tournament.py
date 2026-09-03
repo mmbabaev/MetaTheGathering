@@ -222,6 +222,7 @@ class CreateTournamentWizardHandler:
             "Проверьте создание турнира:\n\n"
             f"Клуб: {identity.title_prefix}{identity.name}\n"
             f"Объявление в чат: {publication}\n"
+            f"Чат для объявления: {identity.chat_url or f'Telegram ID {identity.chat_id}'}\n"
             f"Турнир: {self._date_label(event_date)} в {draft['event_time']}\n"
             f"Часовой пояс: {identity.timezone}"
         )
