@@ -3,6 +3,7 @@
 from bot.handlers.base import HandlerResult
 from bot.keyboards import Keyboards
 from bot.messages import NOT_ADMIN, format_schedule_rows, schedule_row_label
+from core.clubs import club_identities
 from core.config import settings
 from services.schedule import (
     EDITABLE_TIME_FIELDS,
@@ -16,6 +17,7 @@ from services.schedule import (
 from services.user import UserService
 
 SCHEDULE_ROW_NOT_FOUND = "Строка расписания не найдена."
+CLUB_SETTINGS_NOT_FOUND = "Настройки клуба не найдены."
 BAD_TIME = "❌ Неверный формат. Пришли время как ЧЧ:ММ (например 12:30)."
 BAD_IMPORTS = "❌ Неверный формат. Пришли начало-конец/шаг, например 20:00-00:30/30, или «выкл»."
 WEEKDAY_TAKEN = "⚠️ У этого клуба уже есть расписание на этот день."
@@ -56,10 +58,46 @@ class ScheduleHandler:
             return HandlerResult(NOT_ADMIN)
         rows = self.schedule_svc.list_rows()
         text = format_schedule_rows(rows, settings.TOURNAMENT_TIMEZONE)
-        if not rows:
-            return HandlerResult(text)
         buttons = [(r.id, schedule_row_label(r)) for r in rows]
         return HandlerResult(text, keyboard=self.keyboards.schedule_list_keyboard(buttons))
+
+    def handle_club_settings_list(self, tg_id: int) -> HandlerResult:
+        if not self.user_svc.is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN, is_alert=True)
+        self.schedule_svc.ensure_club_settings()
+        rows = self.schedule_svc.list_club_settings()
+        prefixes = {identity.name: identity.title_prefix for identity in club_identities()}
+        buttons = [
+            (
+                row.id,
+                f"{prefixes.get(row.club_name, '')}{row.club_name} · "
+                f"паринги {'вкл' if row.publish_pairings else 'выкл'}",
+            )
+            for row in rows
+        ]
+        return HandlerResult(
+            "⚙️ Настройки клубов\n\nПубликация парингов в чат по умолчанию выключена.",
+            keyboard=self.keyboards.club_settings_list_keyboard(buttons),
+        )
+
+    def handle_club_settings(self, tg_id: int, settings_id: int) -> HandlerResult:
+        if not self.user_svc.is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN, is_alert=True)
+        row = self.schedule_svc.get_club_settings(settings_id)
+        if row is None:
+            return HandlerResult(CLUB_SETTINGS_NOT_FOUND, is_alert=True)
+        state = "включена" if row.publish_pairings else "выключена"
+        return HandlerResult(
+            f"⚙️ {row.club_name}\n\nПубликация новых парингов в чат: {state}.",
+            keyboard=self.keyboards.club_settings_keyboard(row.id, row.publish_pairings),
+        )
+
+    def handle_toggle_pairings_publication(self, tg_id: int, settings_id: int) -> HandlerResult:
+        if not self.user_svc.is_admin(tg_id):
+            return HandlerResult(NOT_ADMIN, is_alert=True)
+        if self.schedule_svc.toggle_pairings_publication(settings_id) is None:
+            return HandlerResult(CLUB_SETTINGS_NOT_FOUND, is_alert=True)
+        return self.handle_club_settings(tg_id, settings_id)
 
     # --- карточка строки ---
 

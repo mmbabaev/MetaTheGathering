@@ -2,11 +2,19 @@
 
 from bot.handlers.base import HandlerResult
 from bot.keyboards import settings_keyboard
-from bot.messages import INVALID_FULL_NAME, NAME_SAVED, SETTINGS_MENU, format_participant_name
+from bot.messages import (
+    ENDSTEP_USERNAME_INVALID,
+    ENDSTEP_USERNAME_SAVED,
+    ENDSTEP_USERNAME_TAKEN,
+    INVALID_FULL_NAME,
+    NAME_SAVED,
+    SETTINGS_MENU,
+    format_participant_name,
+)
 from core.config import settings as app_settings
 from services.cellar import can_view_cellar_overview
 from services.names import parse_full_name_input
-from services.user import UserService
+from services.user import EndstepUsernameInvalid, EndstepUsernameTaken, UserService
 
 
 class SettingsHandler:
@@ -29,7 +37,10 @@ class SettingsHandler:
         if can_manage_cellar_notifications and user is None:
             notify_cellar_reservations = True
         status_pairings = user.status_by_pairings if user else False
-        text = f"{SETTINGS_MENU}\n\nВаше имя: {current}\n\nВерсия: {app_settings.VERSION}"
+        endstep_username = user.endstep_username if user and user.endstep_username else "не указан"
+        text = (
+            f"{SETTINGS_MENU}\n\nВаше имя: {current}\nНик Endstep: {endstep_username}\n\nВерсия: {app_settings.VERSION}"
+        )
         return HandlerResult(
             text,
             keyboard=settings_keyboard(
@@ -80,3 +91,12 @@ class SettingsHandler:
         self.user_svc.update_name(tg_id, first_name, last_name)
         full_name = f"{last_name} {first_name}"
         return HandlerResult(NAME_SAVED.format(full_name=full_name))
+
+    def handle_settings_endstep_username_text(self, tg_id: int, username_text: str) -> HandlerResult:
+        try:
+            user = self.user_svc.update_endstep_username(tg_id, username_text)
+        except EndstepUsernameInvalid:
+            return HandlerResult(ENDSTEP_USERNAME_INVALID, needs_endstep_username=True)
+        except EndstepUsernameTaken:
+            return HandlerResult(ENDSTEP_USERNAME_TAKEN, needs_endstep_username=True)
+        return HandlerResult(ENDSTEP_USERNAME_SAVED.format(username=user.endstep_username))

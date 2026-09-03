@@ -61,6 +61,61 @@ async def callback_schedule_list(update: Update, context: ContextTypes.DEFAULT_T
     await query.answer()
 
 
+async def callback_club_settings_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user = update.effective_user
+    if not query or not user:
+        return
+    db = SessionLocal()
+    try:
+        result = _schedule_handler(db).handle_club_settings_list(user.id)
+    finally:
+        db.close()
+    await query.edit_message_text(result.text, reply_markup=result.keyboard)
+    await query.answer()
+
+
+async def callback_club_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user = update.effective_user
+    if not query or not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    db = SessionLocal()
+    try:
+        result = _schedule_handler(db).handle_club_settings(user.id, ids[0])
+    finally:
+        db.close()
+    if result.is_alert:
+        await query.answer(result.text, show_alert=True)
+        return
+    await query.edit_message_text(result.text, reply_markup=result.keyboard)
+    await query.answer()
+
+
+async def callback_club_toggle_pairings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user = update.effective_user
+    if not query or not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    db = SessionLocal()
+    try:
+        result = _schedule_handler(db).handle_toggle_pairings_publication(user.id, ids[0])
+    finally:
+        db.close()
+    if result.is_alert:
+        await query.answer(result.text, show_alert=True)
+        return
+    _log("club_toggle_pairings", user, club_settings_id=ids[0])
+    await query.edit_message_text(result.text, reply_markup=result.keyboard)
+    await query.answer()
+
+
 async def callback_schedule_row(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Тап по строке расписания — карточка."""
     query = update.callback_query

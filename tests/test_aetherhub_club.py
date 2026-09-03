@@ -905,9 +905,11 @@ class TestAetherhubImportJob:
         job = _make_import_job(aetherhub_service=source)
         bot = AsyncMock()
         reminder = AsyncMock()
+        club_pairings = AsyncMock()
 
         with (
             patch("bot.scheduler.AetherhubImportService") as import_cls,
+            patch("bot.scheduler.send_club_pairings", club_pairings),
             patch("bot.scheduler.send_round_notifications", AsyncMock()),
             patch("bot.scheduler.send_deferred_deck_reminders", reminder),
             patch("bot.scheduler.maybe_announce_meta_gather_completed", AsyncMock()),
@@ -927,6 +929,7 @@ class TestAetherhubImportJob:
             tournament.id,
             DeckReminderStage.ROUND2,
         )
+        club_pairings.assert_awaited_once_with(bot, db, tournament.id, [2])
 
     def test_stops_gracefully_when_club_page_has_no_tournament(self, db, svc):
         """If find_todays_pauper_tournament returns None, import is skipped."""

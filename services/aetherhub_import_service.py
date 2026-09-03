@@ -147,6 +147,12 @@ class AetherhubImportService:
         full_name = self._normalize_import_name(full_name)
         if not full_name:
             return None
+        if tournament_id is not None:
+            tournament = self.db.get(models.Tournament, tournament_id)
+            if tournament is not None and tournament.is_online:
+                by_endstep_username = self._user_svc.get_by_endstep_username(full_name)
+                if by_endstep_username is not None:
+                    return by_endstep_username
         exact = self._user_svc.resolve_and_merge_import_name(full_name)
         if tournament_id is None or (exact is not None and exact.tg_id > 0):
             return exact

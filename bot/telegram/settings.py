@@ -4,7 +4,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from bot.handlers.settings import SettingsHandler
-from bot.messages import SETTINGS_CHANGE_NAME_PROMPT
+from bot.messages import SETTINGS_CHANGE_ENDSTEP_USERNAME_PROMPT, SETTINGS_CHANGE_NAME_PROMPT
 from bot.telegram.common import log_event as _log
 from core.database import SessionLocal
 from services.user import UserService
@@ -15,6 +15,7 @@ def _settings_handler(db) -> SettingsHandler:
 
 
 USER_DATA_PENDING_SETTINGS_NAME = "pending_settings_name"
+USER_DATA_PENDING_SETTINGS_ENDSTEP_USERNAME = "pending_settings_endstep_username"
 
 
 async def cmd_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -41,6 +42,19 @@ async def callback_settings_name(update: Update, context: ContextTypes.DEFAULT_T
         context.user_data = {}
     context.user_data[USER_DATA_PENDING_SETTINGS_NAME] = True
     await query.edit_message_text(SETTINGS_CHANGE_NAME_PROMPT)
+    await query.answer()
+
+
+async def callback_settings_endstep_username(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user = update.effective_user
+    if not query or not user:
+        return
+    _log("settings_endstep_username_start", user)
+    if context.user_data is None:
+        context.user_data = {}
+    context.user_data[USER_DATA_PENDING_SETTINGS_ENDSTEP_USERNAME] = True
+    await query.edit_message_text(SETTINGS_CHANGE_ENDSTEP_USERNAME_PROMPT)
     await query.answer()
 
 

@@ -52,6 +52,7 @@ class User(Base):
     last_name = Column(String(255), nullable=True)
     display_name = Column(String(255), nullable=True)
     email = Column(String(255), unique=True, nullable=True, index=True)
+    endstep_username = Column(String(255), unique=True, nullable=True, index=True)
 
     is_admin = Column(Boolean, default=False, nullable=False)
     is_superadmin = Column(Boolean, default=False, nullable=False)
@@ -518,6 +519,18 @@ class ClubScheduleRow(Base):
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
     __table_args__ = (UniqueConstraint("club_name", "weekday", name="uq_club_schedule_day"),)
+
+
+class ClubSettingsRow(Base):
+    """Настройки клуба, не привязанные к наличию строки расписания."""
+
+    __tablename__ = "club_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    club_name = Column(String(64), unique=True, nullable=False, index=True)
+    publish_pairings = Column(Boolean, default=False, nullable=False, server_default="false")
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
 
 class FeatureFlag(Base):

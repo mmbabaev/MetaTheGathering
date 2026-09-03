@@ -23,6 +23,7 @@ from bot.messages import format_decks_revealed, format_meta_gather_completed, fo
 from bot.registration_messages import RegistrationMessageRefreshJob
 from bot.registration_messages import send_registration_open as _send_registration_open
 from bot.telegram.achievements import send_achievements_report
+from bot.telegram.club_pairings import send_club_pairings
 from bot.telegram.deck_reminder import send_deferred_deck_reminders
 from bot.telegram.round_notify import send_round_notifications
 from core import models
@@ -488,6 +489,10 @@ class AetherhubImportJob:
 
             if result.new_round_numbers and bot is not None:
                 try:
+                    await send_club_pairings(bot, db, tournament_id, result.new_round_numbers)
+                except Exception:
+                    logger.exception(f"AetherhubImportJob: club pairing publication failed for #{tournament_id}")
+                try:
                     await send_round_notifications(
                         bot, db, tournament_id, result.new_round_numbers, datalens_service=DataLensService()
                     )
@@ -608,6 +613,10 @@ class AetherhubTimedImportJob:
                 return
 
             if result.new_round_numbers and bot is not None:
+                try:
+                    await send_club_pairings(bot, db, tournament_id, result.new_round_numbers)
+                except Exception:
+                    logger.exception(f"AetherhubTimedImportJob: club pairing publication failed for #{tournament_id}")
                 try:
                     await send_round_notifications(
                         bot, db, tournament_id, result.new_round_numbers, datalens_service=DataLensService()

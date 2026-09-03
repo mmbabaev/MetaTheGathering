@@ -21,6 +21,7 @@ CB_FILL_MISSING_MORE = "fill_more"  # fill_more:{participant_id}
 CB_FILL_MISSING_CUSTOM = "fill_custom"  # fill_custom:{participant_id}
 CB_TOURNAMENT = "t"
 CB_SETTINGS_NAME = "settings_name"
+CB_SETTINGS_ENDSTEP_USERNAME = "settings_endstep"
 CB_SETTINGS_TOGGLE_EMOJI = "settings_toggle_emoji"
 CB_SETTINGS_TOGGLE_OPPONENT_NOTIFY = "settings_toggle_opp_notify"
 CB_SETTINGS_TOGGLE_ACHIEVEMENTS_NOTIFY = "settings_toggle_achievements_notify"
@@ -86,6 +87,9 @@ CB_SCHEDULE_EDIT_FIELD = "sched_ef"  # sched_ef:{row_id}:{field_idx} — пра�
 CB_SCHEDULE_IMPORTS = "sched_imp"  # sched_imp:{row_id} — правка времён импорта
 CB_SCHEDULE_WEEKDAY = "sched_wd"  # sched_wd:{row_id} — пикер дня недели
 CB_SCHEDULE_SET_WEEKDAY = "sched_swd"  # sched_swd:{row_id}:{weekday_idx} — задать день недели
+CB_CLUB_SETTINGS_LIST = "club_cfg_list"
+CB_CLUB_SETTINGS = "club_cfg"
+CB_CLUB_TOGGLE_PAIRINGS = "club_pair"
 CB_FEATURE_INFO = "feat_info"  # feat_info:{flag_name}
 CB_PAY = "pay"  # pay:{tournament_id}
 CB_PAY_STATUS = "pay_status"  # pay_status:{tournament_id} — no-op, показывает статус оплаты
@@ -596,8 +600,23 @@ class Keyboards:
 
     def schedule_list_keyboard(self, rows: list[tuple[int, str]]) -> InlineKeyboardMarkup:
         """Список строк расписания: одна кнопка на строку. rows: (row_id, label)."""
+        buttons = [[InlineKeyboardButton(label, callback_data=f"{CB_SCHEDULE_ROW}:{row_id}")] for row_id, label in rows]
+        buttons.append([InlineKeyboardButton("⚙️ Настройки клубов", callback_data=CB_CLUB_SETTINGS_LIST)])
+        return InlineKeyboardMarkup(buttons)
+
+    def club_settings_list_keyboard(self, rows: list[tuple[int, str]]) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(
-            [[InlineKeyboardButton(label, callback_data=f"{CB_SCHEDULE_ROW}:{row_id}")] for row_id, label in rows]
+            [[InlineKeyboardButton(label, callback_data=f"{CB_CLUB_SETTINGS}:{row_id}")] for row_id, label in rows]
+            + [[InlineKeyboardButton("⬅️ К расписанию", callback_data=CB_SCHEDULE_LIST)]]
+        )
+
+    def club_settings_keyboard(self, settings_id: int, publish_pairings: bool) -> InlineKeyboardMarkup:
+        label = "🔔 Публикация парингов: вкл" if publish_pairings else "🔕 Публикация парингов: выкл"
+        return InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton(label, callback_data=f"{CB_CLUB_TOGGLE_PAIRINGS}:{settings_id}")],
+                [InlineKeyboardButton("⬅️ Назад", callback_data=CB_CLUB_SETTINGS_LIST)],
+            ]
         )
 
     def schedule_row_keyboard(
@@ -692,6 +711,7 @@ class Keyboards:
         pairings_label = "👥 Статус по парингам: вкл" if status_by_pairings else "📋 Статус по парингам: выкл"
         rows = [
             [InlineKeyboardButton("✏️ Изменить имя", callback_data=CB_SETTINGS_NAME)],
+            [InlineKeyboardButton("✏️ Изменить Endstep-ник", callback_data=CB_SETTINGS_ENDSTEP_USERNAME)],
             [InlineKeyboardButton(emoji_label, callback_data=CB_SETTINGS_TOGGLE_EMOJI)],
             [InlineKeyboardButton(notify_label, callback_data=CB_SETTINGS_TOGGLE_OPPONENT_NOTIFY)],
             [InlineKeyboardButton(achievements_label, callback_data=CB_SETTINGS_TOGGLE_ACHIEVEMENTS_NOTIFY)],
@@ -997,6 +1017,14 @@ def app_stats_back_keyboard() -> InlineKeyboardMarkup:
 
 def schedule_list_keyboard(rows: list[tuple[int, str]]) -> InlineKeyboardMarkup:
     return _default.schedule_list_keyboard(rows)
+
+
+def club_settings_list_keyboard(rows: list[tuple[int, str]]) -> InlineKeyboardMarkup:
+    return _default.club_settings_list_keyboard(rows)
+
+
+def club_settings_keyboard(settings_id: int, publish_pairings: bool) -> InlineKeyboardMarkup:
+    return _default.club_settings_keyboard(settings_id, publish_pairings)
 
 
 def schedule_row_keyboard(

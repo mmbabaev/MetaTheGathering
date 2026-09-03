@@ -3,7 +3,7 @@
 import pytest
 
 from bot.handlers.schedule import SCHEDULE_ROW_NOT_FOUND, ScheduleHandler
-from bot.keyboards import CB_SCHEDULE_ROW, CB_SCHEDULE_TOGGLE, Keyboards
+from bot.keyboards import CB_CLUB_SETTINGS_LIST, CB_SCHEDULE_ROW, CB_SCHEDULE_TOGGLE, Keyboards
 from bot.messages import NOT_ADMIN
 from core.models import ClubScheduleRow
 from services.schedule import WEEKDAYS, ScheduleService, format_import_times, parse_import_times
@@ -125,6 +125,34 @@ class TestRows:
         assert sched_svc.toggle_enabled(99999) is None
 
 
+class TestClubSettings:
+    def test_seed_includes_online_club_and_defaults_off(self, sched_svc):
+        assert sched_svc.ensure_club_settings() == 5
+        rows = sched_svc.list_club_settings()
+        assert [row.club_name for row in rows][-1] == "Endstep-ru"
+        assert all(row.publish_pairings is False for row in rows)
+        assert sched_svc.ensure_club_settings() == 0
+
+    def test_toggle_pairing_publication(self, sched_svc):
+        sched_svc.ensure_club_settings()
+        row = next(row for row in sched_svc.list_club_settings() if row.club_name == "Endstep-ru")
+        assert sched_svc.pairings_publication_enabled("Endstep-ru") is False
+        assert sched_svc.toggle_pairings_publication(row.id) is True
+        assert sched_svc.pairings_publication_enabled("Endstep-ru") is True
+
+    def test_handler_lists_endstep_without_schedule(self, handler, admin_user):
+        result = handler.handle_club_settings_list(ADMIN_TG_ID)
+        labels = [button.text for row in result.keyboard.inline_keyboard for button in row]
+        assert any("⏭️🦶 Endstep-ru" in label and "выкл" in label for label in labels)
+
+    def test_handler_toggles_publication(self, handler, admin_user):
+        handler.handle_club_settings_list(ADMIN_TG_ID)
+        row = next(row for row in handler.schedule_svc.list_club_settings() if row.club_name == "Endstep-ru")
+        result = handler.handle_toggle_pairings_publication(ADMIN_TG_ID, row.id)
+        assert "включена" in result.text
+        assert row.publish_pairings is True
+
+
 # ── build_clubs: выключенные строки не доходят до планировщика ───────────────
 
 
@@ -192,13 +220,14 @@ class TestScheduleHandler:
         assert {b.callback_data for b in buttons} == {
             f"{CB_SCHEDULE_ROW}:{r1.id}",
             f"{CB_SCHEDULE_ROW}:{r2.id}",
+            CB_CLUB_SETTINGS_LIST,
         }
 
     def test_list_shows_disabled_rows_too(self, handler, admin_user, db):
         _row(db, club="Goldfish", weekday="friday", enabled=False)
         result = handler.handle_schedule_list(ADMIN_TG_ID)
         assert "выключено" in result.text
-        assert len(result.keyboard.inline_keyboard) == 1
+        assert len(result.keyboard.inline_keyboard) == 2
 
     def test_list_and_card_show_previous_day_creation(self, handler, admin_user, db):
         row = _row(db, club="Pair of dice", weekday="tuesday")
@@ -212,9 +241,9 @@ class TestScheduleHandler:
         assert "создание накануне 18:30" in schedule.text
         assert "Создание турнира: накануне в 18:30" in card.text
 
-    def test_empty_schedule_has_no_keyboard(self, handler, admin_user):
+    def test_empty_schedule_still_has_club_settings(self, handler, admin_user):
         result = handler.handle_schedule_list(ADMIN_TG_ID)
-        assert result.keyboard is None
+        assert result.keyboard.inline_keyboard[0][0].callback_data == CB_CLUB_SETTINGS_LIST
 
     def test_row_card_shows_times(self, handler, admin_user, db):
         row = _row(db)

@@ -10,6 +10,7 @@ from telegram.ext import ContextTypes
 from bot.handlers.aetherhub import AetherhubHandler, tournament_event_date
 from bot.keyboards import aetherhub_confirm_keyboard
 from bot.scheduler import get_clubs
+from bot.telegram.club_pairings import send_club_pairings
 from bot.telegram.common import announce_completion_if_ready, parse_callback_ints
 from bot.telegram.deck_reminder import send_deferred_deck_reminders
 from bot.telegram.player import _player_handler
@@ -224,6 +225,10 @@ async def callback_aetherhub_confirm(update: Update, context: ContextTypes.DEFAU
     if result.new_round_numbers:
         db_notify = SessionLocal()
         try:
+            try:
+                await send_club_pairings(context.bot, db_notify, tournament_id, result.new_round_numbers)
+            except Exception:
+                logger.exception("Club pairing publication failed for tournament %s", tournament_id)
             # DataLens обязателен и здесь: без него ручной импорт слал бы уведомления без винрейта
             # (в отличие от scheduled-джоб, которые его передают) — см. bot/scheduler.py.
             try:

@@ -23,6 +23,30 @@ class TestUpdateUserName:
         assert user.last_name == "Иванов"
         assert user.tg_id == 9001
 
+
+class TestEndstepUsername:
+    def test_update_and_case_insensitive_lookup(self, user_svc):
+        user = user_svc.update_endstep_username(9050, "  EndStepHero  ")
+        assert user.endstep_username == "EndStepHero"
+        assert user_svc.get_by_endstep_username("endstephero").id == user.id
+
+    def test_settings_shows_and_updates_username(self, handler, user_svc):
+        result = handler.handle_settings_endstep_username_text(9051, "MtgPlayer")
+        assert "MtgPlayer" in result.text
+        assert "MtgPlayer" in handler.handle_settings(9051).text
+
+    def test_duplicate_username_is_rejected_case_insensitively(self, handler, user_svc):
+        user_svc.update_endstep_username(9052, "UniqueNick")
+        result = handler.handle_settings_endstep_username_text(9053, "uniquenick")
+        assert result.needs_endstep_username is True
+        assert user_svc.get_by_tg_id(9053) is None
+
+    def test_multiline_username_is_rejected(self, handler):
+        result = handler.handle_settings_endstep_username_text(9054, "bad\nname")
+        assert result.needs_endstep_username is True
+
+
+class TestUpdateExistingUserName:
     def test_updates_existing_user(self, user_svc):
         user_svc.get_or_create(tg_id=9002, username="user", first_name="Старое")
         user = user_svc.update_name(tg_id=9002, first_name="Новое", last_name="Имя")

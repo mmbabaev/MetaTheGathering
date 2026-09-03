@@ -17,6 +17,21 @@ def _normalize_name(s: str) -> str:
     return s.strip().lower().replace("ё", "е")
 
 
+def normalize_endstep_username(value: str) -> str | None:
+    value = value.strip()
+    if not value or len(value) > 255 or any(char in value for char in "\r\n"):
+        return None
+    return value
+
+
+class EndstepUsernameInvalid(ValueError):
+    pass
+
+
+class EndstepUsernameTaken(ValueError):
+    pass
+
+
 def _name_variants(first_name: str, last_name: Optional[str]) -> set[tuple[str, str]]:
     """Comparable full-name forms, including Telegram's one-field display names."""
     first = _normalize_name(first_name)
@@ -83,6 +98,13 @@ class UserService:
     def get_by_username(self, username: str) -> Optional[models.User]:
         """Найти пользователя по Telegram username (без @, без учёта регистра)."""
         stmt = select(models.User).where(models.User.username.ilike(username))
+        return self.db.execute(stmt).scalar_one_or_none()
+
+    def get_by_endstep_username(self, username: str) -> Optional[models.User]:
+        normalized = normalize_endstep_username(username)
+        if normalized is None:
+            return None
+        stmt = select(models.User).where(func.lower(models.User.endstep_username) == normalized.lower())
         return self.db.execute(stmt).scalar_one_or_none()
 
     def find_by_name(self, query: str) -> Optional[models.User]:
@@ -275,6 +297,8 @@ class UserService:
             if rev_fn and rev_ln:
                 real_user.first_name = placeholder.first_name
                 real_user.last_name = placeholder.last_name
+        if not real_user.endstep_username and placeholder.endstep_username:
+            real_user.endstep_username = placeholder.endstep_username
 
         self.db.delete(placeholder)
 
@@ -362,6 +386,8 @@ class UserService:
         if adopt_name and source.first_name:
             target.first_name = source.first_name
             target.last_name = source.last_name
+        if not target.endstep_username and source.endstep_username:
+            target.endstep_username = source.endstep_username
 
         self.db.delete(source)
         self.db.commit()
@@ -421,6 +447,22 @@ class UserService:
             self.db.add(user)
         user.first_name = clean_person_name_component(first_name)
         user.last_name = clean_person_name_component(last_name)
+        self.db.commit()
+        self.db.refresh(user)
+        return user
+
+    def update_endstep_username(self, tg_id: int, username: str) -> models.User:
+        normalized = normalize_endstep_username(username)
+        if normalized is None:
+            raise EndstepUsernameInvalid
+        existing = self.get_by_endstep_username(normalized)
+        user = self.get_by_tg_id(tg_id)
+        if existing is not None and (user is None or existing.id != user.id):
+            raise EndstepUsernameTaken
+        if user is None:
+            user = models.User(tg_id=tg_id)
+            self.db.add(user)
+        user.endstep_username = normalized
         self.db.commit()
         self.db.refresh(user)
         return user

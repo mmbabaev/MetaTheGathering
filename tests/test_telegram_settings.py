@@ -13,7 +13,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from bot.handlers.base import HandlerResult
 from bot.telegram.settings import (
+    USER_DATA_PENDING_SETTINGS_ENDSTEP_USERNAME,
     USER_DATA_PENDING_SETTINGS_NAME,
+    callback_settings_endstep_username,
     callback_settings_name,
     callback_toggle_cellar_notify,
     callback_toggle_emoji,
@@ -117,6 +119,17 @@ async def test_callback_settings_name_no_query_does_nothing():
     await callback_settings_name(update, ctx)
 
     assert USER_DATA_PENDING_SETTINGS_NAME not in ctx.user_data
+
+
+async def test_callback_settings_endstep_username_sets_pending_state():
+    update = _make_callback_update()
+    ctx = _make_context()
+
+    await callback_settings_endstep_username(update, ctx)
+
+    assert ctx.user_data[USER_DATA_PENDING_SETTINGS_ENDSTEP_USERNAME] is True
+    update.callback_query.edit_message_text.assert_awaited_once()
+    update.callback_query.answer.assert_awaited_once()
 
 
 # ── callback_toggle_emoji ─────────────────────────────────────────────────────
