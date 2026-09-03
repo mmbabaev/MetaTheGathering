@@ -33,10 +33,16 @@ def _complete_draft(handler, draft, *, announce_now=True):
 
 
 def test_wizard_starts_with_club_buttons_and_endstep_icon(db):
-    result = _handler(db).handle_start(ADMIN_ID)
+    handler = _handler(db)
+    result = handler.handle_start(ADMIN_ID)
     labels = [button.text for row in result.keyboard.inline_keyboard for button in row]
     assert "1/4" in result.text
     assert any("⏭️🦶 Endstep-ru" in label for label in labels)
+    assert any("Pair of dice" in label for label in labels)
+    assert any("Hobby Games" in label for label in labels)
+
+    online_step = handler.handle_club(ADMIN_ID, {}, 4, now=NOW)
+    assert online_step.text.startswith("🎮 ⏭️🦶 Endstep-ru")
 
 
 def test_wizard_builds_immediate_plan_in_club_timezone(db):
@@ -105,7 +111,9 @@ async def test_execute_plan_creates_online_tournament_and_announces(db):
     assert tournament.club == "Endstep-ru"
     assert tournament.is_online is True
     assert tournament.registration_close_at == datetime(2026, 9, 5, 16, 30)
-    assert "05.09.2026 в 19:30" in bot.send_message.await_args.kwargs["text"]
+    announcement = bot.send_message.await_args.kwargs["text"]
+    assert announcement.startswith("🎮 Endstep-ru Pauper")
+    assert "05.09.2026 в 19:30" in announcement
     db.refresh(plan)
     assert plan.status == "completed"
     assert plan.announcement_sent_at is not None

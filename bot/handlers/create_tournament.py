@@ -178,13 +178,15 @@ class CreateTournamentWizardHandler:
     def _announce_date_result(self, identity: ClubIdentity, now: datetime | None) -> HandlerResult:
         dates = self._date_options(identity, now, ANNOUNCE_DAYS)
         return HandlerResult(
-            f"🏆 {identity.title_prefix}{identity.name}\n\n2/4. Когда создать турнир и отправить объявление в чат?",
+            f"{self._creation_icon(identity)} {identity.title_prefix}{identity.name}\n\n"
+            "2/4. Когда создать турнир и отправить объявление в чат?",
             keyboard=self.keyboards.create_tournament_announce_date_keyboard(dates),
         )
 
     def _announce_time_result(self, identity: ClubIdentity, chosen: date) -> HandlerResult:
         return HandlerResult(
-            f"🏆 {identity.name}\nПубликация: {self._date_label(chosen)}\n\nВыберите время публикации:",
+            f"{self._creation_icon(identity)} {identity.name}\n"
+            f"Публикация: {self._date_label(chosen)}\n\nВыберите время публикации:",
             keyboard=self.keyboards.create_tournament_time_keyboard(
                 ANNOUNCE_TIMES,
                 callback_prefix=CB_CREATE_WIZARD_ANNOUNCE_TIME,
@@ -195,7 +197,7 @@ class CreateTournamentWizardHandler:
     def _event_date_result(self, identity: ClubIdentity, draft: dict, now: datetime | None) -> HandlerResult:
         back = "ad" if draft.get("announce_now") else "at"
         return HandlerResult(
-            f"🏆 {identity.name}\n\n3/4. В какой день пройдёт турнир?",
+            f"{self._creation_icon(identity)} {identity.name}\n\n3/4. В какой день пройдёт турнир?",
             keyboard=self.keyboards.create_tournament_date_keyboard(
                 self._date_options(identity, now, EVENT_DAYS), back_target=back
             ),
@@ -203,7 +205,8 @@ class CreateTournamentWizardHandler:
 
     def _event_time_result(self, identity: ClubIdentity, chosen: date) -> HandlerResult:
         return HandlerResult(
-            f"🏆 {identity.name}\nДата турнира: {self._date_label(chosen)}\n\n4/4. Во сколько начало?",
+            f"{self._creation_icon(identity)} {identity.name}\n"
+            f"Дата турнира: {self._date_label(chosen)}\n\n4/4. Во сколько начало?",
             keyboard=self.keyboards.create_tournament_time_keyboard(
                 EVENT_TIMES,
                 callback_prefix=CB_CREATE_WIZARD_EVENT_TIME,
@@ -293,6 +296,10 @@ class CreateTournamentWizardHandler:
     @staticmethod
     def _date_label(value: date) -> str:
         return f"{WEEKDAY_SHORT[value.weekday()]}, {value.strftime('%d.%m.%Y')}"
+
+    @staticmethod
+    def _creation_icon(identity: ClubIdentity) -> str:
+        return "🎮" if identity.is_online else "🏆"
 
     @staticmethod
     def _now_utc_naive(now: datetime | None) -> datetime:
