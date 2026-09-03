@@ -325,6 +325,11 @@ def _parse_create_tournament_args(
 
 async def cmd_create_tournament(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """/create_tournament [--club NAME] [название] — создаёт турнир вручную."""
+    if not context.args:
+        from bot.telegram.create_tournament import cmd_create_tournament_wizard  # noqa: PLC0415
+
+        await cmd_create_tournament_wizard(update, context)
+        return
     user = update.effective_user
     msg = update.effective_message
     if not user or not msg:

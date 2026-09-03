@@ -25,6 +25,7 @@ from bot.registration_messages import send_registration_open as _send_registrati
 from bot.telegram.achievements import send_achievements_report
 from bot.telegram.deck_reminder import send_deferred_deck_reminders
 from bot.telegram.round_notify import send_round_notifications
+from bot.tournament_creation import execute_due_creation_plans
 from core import models
 from core.clubs import club_identities, debug_club, default_clubs
 from core.config import Club, ClubSchedule, settings
@@ -1335,6 +1336,17 @@ def setup_scheduler(app: Application) -> None:
 
     app.job_queue.run_repeating(_timed_import, interval=60, first=10)
     logger.info("Scheduler: AetherhubTimedImportJob registered (every 60s)")
+
+    async def _create_manually_scheduled_tournaments(context: ContextTypes.DEFAULT_TYPE) -> None:
+        db = SessionLocal()
+        try:
+            await execute_due_creation_plans(context.bot, db)
+        finally:
+            db.close()
+
+    _create_manually_scheduled_tournaments.__name__ = "manual_tournament_creation"
+    app.job_queue.run_repeating(_create_manually_scheduled_tournaments, interval=60, first=15)
+    logger.info("Scheduler: manual tournament creation registered (every 60s)")
 
     registration_refresh_job = RegistrationMessageRefreshJob()
 

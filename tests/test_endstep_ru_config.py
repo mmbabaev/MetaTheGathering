@@ -77,3 +77,15 @@ async def test_manual_create_command_targets_endstep_chat_and_sets_club():
         title_prefix="⏭️🦶 ",
     )
     session_local.return_value.close.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_create_tournament_without_args_opens_wizard():
+    update = MagicMock()
+    context = MagicMock()
+    context.args = []
+
+    with patch("bot.telegram.create_tournament.cmd_create_tournament_wizard", new_callable=AsyncMock) as wizard:
+        await cmd_create_tournament(update, context)
+
+    wizard.assert_awaited_once_with(update, context)

@@ -101,6 +101,15 @@ CB_CELLAR_RESERVE = "cellar_reserve"  # cellar_reserve:{YYYY-MM-DD}:{deck_id}:{p
 CB_CELLAR_CANCEL = "cellar_cancel"  # cellar_cancel:{reservation_id}:{page}
 CB_CELLAR_CANCEL_CONFIRM = "cellar_cancel_yes"  # cellar_cancel_yes:{reservation_id}:{page}
 CB_CELLAR_NOOP = "cellar_noop"
+CB_CREATE_WIZARD_CLUB = "ctw_c"
+CB_CREATE_WIZARD_ANNOUNCE_NOW = "ctw_an"
+CB_CREATE_WIZARD_ANNOUNCE_DATE = "ctw_ad"
+CB_CREATE_WIZARD_ANNOUNCE_TIME = "ctw_at"
+CB_CREATE_WIZARD_EVENT_DATE = "ctw_ed"
+CB_CREATE_WIZARD_EVENT_TIME = "ctw_et"
+CB_CREATE_WIZARD_BACK = "ctw_b"
+CB_CREATE_WIZARD_CONFIRM = "ctw_ok"
+CB_CREATE_WIZARD_CANCEL = "ctw_no"
 
 CELLAR_PAGE_SIZE = 10
 
@@ -593,6 +602,54 @@ class Keyboards:
 
     def app_stats_back_keyboard(self) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data=CB_APP_STATS_HOME)]])
+
+    def create_tournament_club_keyboard(self, clubs: list[tuple[int, str]]) -> InlineKeyboardMarkup:
+        rows = [
+            [InlineKeyboardButton(label, callback_data=f"{CB_CREATE_WIZARD_CLUB}:{index}")] for index, label in clubs
+        ]
+        rows.append([InlineKeyboardButton("❌ Отмена", callback_data=CB_CREATE_WIZARD_CANCEL)])
+        return InlineKeyboardMarkup(rows)
+
+    def create_tournament_announce_date_keyboard(self, dates: list[tuple[str, str]]) -> InlineKeyboardMarkup:
+        rows = [[InlineKeyboardButton("⚡ Сейчас", callback_data=CB_CREATE_WIZARD_ANNOUNCE_NOW)]]
+        rows.extend(
+            [InlineKeyboardButton(label, callback_data=f"{CB_CREATE_WIZARD_ANNOUNCE_DATE}:{value}")]
+            for value, label in dates
+        )
+        rows.append([InlineKeyboardButton("⬅️ К клубам", callback_data=f"{CB_CREATE_WIZARD_BACK}:club")])
+        rows.append([InlineKeyboardButton("❌ Отмена", callback_data=CB_CREATE_WIZARD_CANCEL)])
+        return InlineKeyboardMarkup(rows)
+
+    def create_tournament_date_keyboard(
+        self, dates: list[tuple[str, str]], *, back_target: str
+    ) -> InlineKeyboardMarkup:
+        rows = [
+            [InlineKeyboardButton(label, callback_data=f"{CB_CREATE_WIZARD_EVENT_DATE}:{value}")]
+            for value, label in dates
+        ]
+        rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_CREATE_WIZARD_BACK}:{back_target}")])
+        rows.append([InlineKeyboardButton("❌ Отмена", callback_data=CB_CREATE_WIZARD_CANCEL)])
+        return InlineKeyboardMarkup(rows)
+
+    def create_tournament_time_keyboard(
+        self, times: list[str], *, callback_prefix: str, back_target: str
+    ) -> InlineKeyboardMarkup:
+        buttons = [
+            InlineKeyboardButton(value, callback_data=f"{callback_prefix}:{value.replace(':', '')}") for value in times
+        ]
+        rows = [buttons[index : index + 4] for index in range(0, len(buttons), 4)]
+        rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_CREATE_WIZARD_BACK}:{back_target}")])
+        rows.append([InlineKeyboardButton("❌ Отмена", callback_data=CB_CREATE_WIZARD_CANCEL)])
+        return InlineKeyboardMarkup(rows)
+
+    def create_tournament_confirm_keyboard(self) -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("✅ Запланировать", callback_data=CB_CREATE_WIZARD_CONFIRM)],
+                [InlineKeyboardButton("⬅️ Изменить время турнира", callback_data=f"{CB_CREATE_WIZARD_BACK}:et")],
+                [InlineKeyboardButton("❌ Отмена", callback_data=CB_CREATE_WIZARD_CANCEL)],
+            ]
+        )
 
     def schedule_list_keyboard(self, rows: list[tuple[int, str]]) -> InlineKeyboardMarkup:
         """Список строк расписания: одна кнопка на строку. rows: (row_id, label)."""

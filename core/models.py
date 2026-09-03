@@ -736,3 +736,23 @@ class MagicOculusImport(Base):
     imported_at = Column(DateTime, nullable=True)
 
     tournament = relationship("Tournament")
+
+
+class TournamentCreationPlan(Base):
+    """Отложенное ручное создание турнира и публикация регистрации в чат клуба."""
+
+    __tablename__ = "tournament_creation_plans"
+
+    id = Column(Integer, primary_key=True, index=True)
+    club_name = Column(String(64), nullable=False, index=True)
+    created_by_tg_id = Column(BigInteger, nullable=False, index=True)
+    announce_at = Column(DateTime, nullable=False, index=True)
+    event_at = Column(DateTime, nullable=False)
+    status = Column(String(16), nullable=False, default="pending", server_default="pending", index=True)
+    tournament_id = Column(Integer, ForeignKey("tournaments.id", ondelete="SET NULL"), nullable=True, unique=True)
+    announcement_sent_at = Column(DateTime, nullable=True)
+    last_error = Column(String(512), nullable=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+    tournament = relationship("Tournament")

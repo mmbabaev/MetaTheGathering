@@ -26,12 +26,12 @@ def _markup(button_url: str | None):
 
 async def send_registration_open(
     bot, db, club: Club, tournament_id: int, base_text: str, *, owner_chat_id: int | None = None
-) -> None:
+) -> int:
     if bot is None:
-        return
+        return 0
     targets = {cid for cid in (club.chat_id, owner_chat_id) if cid}
     if not targets:
-        return
+        return 0
 
     button_url = None
     try:
@@ -44,9 +44,11 @@ async def send_registration_open(
     service = RegistrationMessageService(db)
     participant_count = service.participant_count(tournament_id)
     text = format_registration_message(base_text, participant_count) if live_count_enabled else base_text
+    sent = 0
     for chat_id in targets:
         try:
             message = await bot.send_message(chat_id=chat_id, text=text, reply_markup=_markup(button_url))
+            sent += 1
             if not isinstance(message.message_id, int):
                 continue
             service.upsert_last(
@@ -62,6 +64,7 @@ async def send_registration_open(
         except Exception:
             db.rollback()
             logger.exception("send_registration_open: tracking failed for %s in #%s", chat_id, tournament_id)
+    return sent
 
 
 class RegistrationMessageRefreshJob:
@@ -75,7 +78,11 @@ class RegistrationMessageRefreshJob:
             rows = service.list_stale_active() if live_count_enabled else service.list_counted_active()
             for row, participant_count in rows:
                 rendered_count = participant_count if live_count_enabled else HIDDEN_PARTICIPANT_COUNT
-                text = format_registration_message(row.base_text, participant_count) if live_count_enabled else row.base_text
+                text = (
+                    format_registration_message(row.base_text, participant_count)
+                    if live_count_enabled
+                    else row.base_text
+                )
                 try:
                     await bot.edit_message_text(
                         chat_id=row.chat_id,
