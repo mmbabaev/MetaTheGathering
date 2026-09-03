@@ -1555,6 +1555,18 @@ class TestHandleCreateTournament:
         assert "Pauper" in result.text
         assert result.tournament_id is not None
 
+    def test_selected_club_is_stored_and_its_icon_prefixes_auto_title(self, handler, admin_user):
+        result = handler.handle_create_tournament(
+            tg_id=ADMIN_TG_ID,
+            chat_id=CHAT_ID,
+            club="Endstep-ru",
+            title_prefix="🎮 ⏭️ ",
+        )
+
+        tournament = handler.svc.db.get(m.Tournament, result.tournament_id)
+        assert tournament.club == "Endstep-ru"
+        assert tournament.title.startswith("🎮 ⏭️ Endstep-ru Pauper ")
+
     def test_second_active_tournament_is_created(self, handler, admin_user, active_tournament):
         result = handler.handle_create_tournament(tg_id=ADMIN_TG_ID, chat_id=CHAT_ID, title="Second")
         assert not result.is_alert

@@ -1041,7 +1041,7 @@ def import_closed_tournament_to_magicoculus(tournament_id: int) -> MagicOculusIm
             (row for row in club_identities() if row.name.casefold() == tournament.club.casefold()),
             None,
         )
-        if identity is None:
+        if identity is None or not identity.magicoculus_city:
             raise ValueError(f'Для клуба "{tournament.club}" не настроен город Magic Oculus')
         client = MagicOculusClient(settings.MAGIC_OCULUS_API_URL)
         return MagicOculusImporter(db, client).import_once(tournament, city=identity.magicoculus_city)

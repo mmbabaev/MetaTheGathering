@@ -171,7 +171,8 @@ HELP_TEXT_ADMIN = """\
 /tournament_status — список участников всех активных турниров
 /archive — архив закрытых турниров
 
-/create_tournament — создать новый турнир вручную
+/create_tournament — создать турнир вручную
+  Endstep-ru: /create_tournament --club Endstep-ru [название]
 /delete_tournament — удалить текущий турнир
 
 /add_players — массовая запись (каждая строка: Имя Фамилия)

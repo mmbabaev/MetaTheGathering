@@ -30,6 +30,7 @@ from bot.telegram.player import (
     _player_handler,
 )
 from bot.telegram.round_notify import send_debug_round_notifications
+from core.clubs import ClubIdentity, club_identities
 from core.config import app_cfg, settings
 from core.database import SessionLocal
 from core.models import TournamentStatus
@@ -288,20 +289,65 @@ async def cmd_close_tournament(update: Update, context: ContextTypes.DEFAULT_TYP
         db.close()
 
 
+CREATE_TOURNAMENT_USAGE = "Использование: /create_tournament --club Endstep-ru [название]"
+
+
+def _parse_create_tournament_args(
+    args: list[str] | None,
+) -> tuple[ClubIdentity | None, str | None, str | None]:
+    """Разбирает optional ``--club NAME``; остальные аргументы — название турнира."""
+    parts = list(args or [])
+    if not parts:
+        return None, None, None
+
+    selector: str | None = None
+    if parts[0] == "--club":
+        if len(parts) < 2:
+            return None, None, CREATE_TOURNAMENT_USAGE
+        selector = parts[1]
+        parts = parts[2:]
+    elif parts[0].startswith("--club="):
+        selector = parts[0].partition("=")[2]
+        parts = parts[1:]
+
+    identity = None
+    if selector is not None:
+        identity = next((row for row in club_identities() if row.name.casefold() == selector.casefold()), None)
+        if identity is None:
+            known = ", ".join(row.name for row in club_identities())
+            return None, None, f"Неизвестный клуб «{selector}». Доступны: {known}."
+        if not identity.chat_id:
+            return None, None, f"Для клуба «{identity.name}» ещё не настроен Telegram-чат."
+
+    title = " ".join(parts).strip() or None
+    return identity, title, None
+
+
 async def cmd_create_tournament(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """/create_tournament [название] — создаёт турнир. В личке дефолт — чат Единорога."""
+    """/create_tournament [--club NAME] [название] — создаёт турнир вручную."""
     user = update.effective_user
     msg = update.effective_message
     if not user or not msg:
         return
-    if msg.chat.type == ChatType.PRIVATE:
+    identity, title, error = _parse_create_tournament_args(context.args)
+    if error:
+        await msg.reply_text(error)
+        return
+    if identity is not None:
+        chat_id = identity.chat_id
+    elif msg.chat.type == ChatType.PRIVATE:
         chat_id = app_cfg.edinorog_chat_id or msg.chat_id
     else:
         chat_id = msg.chat_id
-    title = " ".join(context.args or []).strip() or None
     db = SessionLocal()
     try:
-        result = _admin_handler(db).handle_create_tournament(user.id, chat_id, title)
+        result = _admin_handler(db).handle_create_tournament(
+            user.id,
+            chat_id,
+            title,
+            club=identity.name if identity else None,
+            title_prefix=identity.title_prefix if identity else "",
+        )
         if result.is_alert:
             await msg.reply_text(result.text)
             return
