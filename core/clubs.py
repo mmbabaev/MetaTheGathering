@@ -1,7 +1,7 @@
 """Идентичность клубов и дефолтное расписание (issue #124/#125).
 
 Разделение ответственности:
-  * **идентичность клуба** (chat_id, ссылка на AetherHub, эмодзи) — инфраструктура, живёт в коде;
+  * **идентичность клуба** (chat_id, ссылка на чат и AetherHub, эмодзи) — инфраструктура, живёт в коде;
   * **расписание** (дни, времена, вкл/выкл) — данные, живут в БД (`club_schedules`) и правятся
     админом из `/schedule`. Дефолты ниже нужны только для первичного сида пустой таблицы.
 
@@ -65,6 +65,14 @@ class ClubIdentity:
     magicoculus_city: str | None
     timezone: str
     is_online: bool = False
+    chat_url: str | None = None
+
+
+def _chat_url(production_url: str | None, chat_id: int | None) -> str | None:
+    """Return the actual destination link, including the shared safe debug chat."""
+    if app_cfg.debug and chat_id:
+        return "https://t.me/metathegatheringtestgroup"
+    return production_url
 
 
 def club_identities() -> list[ClubIdentity]:
@@ -77,6 +85,7 @@ def club_identities() -> list[ClubIdentity]:
             title_prefix="🐠 ",
             magicoculus_city="Москва",
             timezone="Europe/Moscow",
+            chat_url=_chat_url("https://t.me/MoscowPauperChat", app_cfg.goldfish_chat_id),
         ),
         ClubIdentity(
             name="Edinorog",
@@ -85,6 +94,7 @@ def club_identities() -> list[ClubIdentity]:
             title_prefix="🦄 ",
             magicoculus_city="Москва",
             timezone="Europe/Moscow",
+            chat_url=_chat_url("https://t.me/paupermoscow", app_cfg.edinorog_chat_id),
         ),
         ClubIdentity(
             name="Pair of dice",
@@ -93,6 +103,7 @@ def club_identities() -> list[ClubIdentity]:
             title_prefix="🎲🎲 ",
             magicoculus_city="Санкт-Петербург",
             timezone="Europe/Moscow",
+            chat_url=_chat_url(None, app_cfg.pair_of_dice_chat_id),
         ),
         ClubIdentity(
             name="Hobby Games",
@@ -101,6 +112,7 @@ def club_identities() -> list[ClubIdentity]:
             title_prefix="🎲 ",
             magicoculus_city="Калининград",
             timezone="Europe/Kaliningrad",
+            chat_url=_chat_url(None, app_cfg.hobby_games_chat_id),
         ),
         ClubIdentity(
             name="Endstep-ru",
@@ -110,6 +122,10 @@ def club_identities() -> list[ClubIdentity]:
             magicoculus_city=None,
             timezone="Europe/Moscow",
             is_online=True,
+            chat_url=_chat_url(
+                "https://t.me/metathegatheringtestgroup",
+                app_cfg.endstep_ru_chat_id,
+            ),
         ),
     ]
 
