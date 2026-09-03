@@ -13,7 +13,8 @@ def test_pair_of_dice_identity():
 
 def test_pair_of_dice_production_and_debug_chat_ids_are_separate():
     assert prod_config.pair_of_dice_chat_id == -1001236834154
-    assert debug_config.pair_of_dice_chat_id is None
+    assert debug_config.pair_of_dice_chat_id == -1003631429183
+    assert debug_config.pair_of_dice_chat_id != prod_config.pair_of_dice_chat_id
 
 
 def test_pair_of_dice_defaults_open_registration_the_evening_before():

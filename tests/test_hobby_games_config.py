@@ -15,7 +15,8 @@ def test_hobby_games_identity():
 
 def test_hobby_games_production_and_debug_chat_ids_are_separate():
     assert prod_config.hobby_games_chat_id == -1002787710855
-    assert debug_config.hobby_games_chat_id is None
+    assert debug_config.hobby_games_chat_id == -1003631429183
+    assert debug_config.hobby_games_chat_id != prod_config.hobby_games_chat_id
 
 
 def test_hobby_games_defaults_follow_pair_of_dice_registration_flow():
