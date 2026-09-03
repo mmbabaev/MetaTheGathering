@@ -1207,6 +1207,15 @@ class TestCreateTournamentJob:
         tournament = svc.get_active_tournament_for_chat(0)
         assert tournament.slug == "2026-04-24-pair-of-dice-pauper"
 
+    def test_scheduled_online_club_marks_tournament_online(self, db, svc):
+        club = Club(name="Endstep-ru", chat_id=42, schedules=[], is_online=True)
+        schedule = ClubSchedule(weekday="friday", game_time="19:30")
+
+        asyncio.run(CreateTournamentJob(club, schedule).run(bot=None, now=FRIDAY_NOW, db=db))
+
+        tournament = svc.get_active_tournament_for_chat(42)
+        assert tournament.is_online is True
+
     def test_previous_day_job_uses_event_date_and_says_tomorrow(self, db, svc):
         club = Club(name="Pair of dice", chat_id=42, schedules=[], title_prefix="🎲🎲 ")
         schedule = ClubSchedule(

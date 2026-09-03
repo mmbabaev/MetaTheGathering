@@ -104,6 +104,7 @@ class TournamentService:
             chat_id=data.chat_id,
             slug=data.slug,
             club=data.club,
+            is_online=data.is_online,
             status=models.TournamentStatus.REGISTRATION,
             registration_close_at=data.registration_close_at,
             created_at=models.utc_now(),

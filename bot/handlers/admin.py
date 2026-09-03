@@ -569,14 +569,28 @@ class AdminHandler:
             )
         return HandlerResult(f"🔓 Турнир «{t.title}» снова активен (регистрация открыта).")
 
-    def handle_create_tournament(self, tg_id: int, chat_id: int, title: str | None = None) -> HandlerResult:
+    def handle_create_tournament(
+        self,
+        tg_id: int,
+        chat_id: int,
+        title: str | None = None,
+        *,
+        club: str | None = None,
+        is_online: bool = False,
+        title_prefix: str = "",
+    ) -> HandlerResult:
         """Создать новый турнир в текущем чате."""
         if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
         if not title:
-            title = f"Pauper {datetime.now().strftime('%d.%m.%Y')}"
+            club_label = f"{club} " if club else ""
+            title = f"{title_prefix}{club_label}Pauper {datetime.now().strftime('%d.%m.%Y')}"
+        elif title_prefix and not title.startswith(title_prefix):
+            title = f"{title_prefix}{title}"
         try:
-            t = self.svc.create_tournament(TournamentCreate(title=title, chat_id=chat_id))
+            t = self.svc.create_tournament(
+                TournamentCreate(title=title, chat_id=chat_id, club=club, is_online=is_online)
+            )
         except errors.TournamentAlreadyExists:
             return HandlerResult(TOURNAMENT_ALREADY_EXISTS_MSG, is_alert=True)
         return HandlerResult(f"✅ Турнир создан: «{t.title}»", tournament_id=t.id)

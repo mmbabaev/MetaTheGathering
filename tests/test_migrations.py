@@ -47,6 +47,30 @@ def test_single_alembic_head():
     assert len(heads) == 1, f"Expected exactly 1 alembic head, got {len(heads)}: {heads}"
 
 
+def test_tournament_online_marker_backfills_existing_rows_as_offline():
+    metadata = sa.MetaData()
+    tournaments = sa.Table(
+        "tournaments",
+        metadata,
+        sa.Column("id", sa.Integer, primary_key=True),
+    )
+    engine = sa.create_engine("sqlite://")
+    metadata.create_all(engine)
+    migration = runpy.run_path(str(VERSIONS_DIR / "00840004f838_add_tournament_is_online.py"))
+
+    with engine.begin() as connection:
+        connection.execute(tournaments.insert().values(id=1))
+        context = MigrationContext.configure(connection)
+        with Operations.context(context):
+            migration["upgrade"]()
+
+        migrated = sa.Table("tournaments", sa.MetaData(), autoload_with=connection)
+        connection.execute(migrated.insert().values(id=2))
+        rows = connection.execute(sa.select(migrated.c.id, migrated.c.is_online).order_by(migrated.c.id)).all()
+
+    assert rows == [(1, False), (2, False)]
+
+
 def test_split_spy_general_names_repairs_only_classification_cache():
     metadata = sa.MetaData()
     archetypes = sa.Table(

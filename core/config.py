@@ -42,6 +42,7 @@ class Club:
     name: str
     chat_id: int
     schedules: List[ClubSchedule]
+    is_online: bool = False
     aetherhub_url: Optional[str] = None  # https://aetherhub.com/User/GoldFish
     title_prefix: str = ""
     timezone: Optional[str] = None  # None = settings.TOURNAMENT_TIMEZONE
@@ -141,7 +142,9 @@ class Settings(BaseSettings):
             ids.append(_app_cfg.pair_of_dice_chat_id)
         if _app_cfg.hobby_games_chat_id:
             ids.append(_app_cfg.hobby_games_chat_id)
-        return ids
+        if _app_cfg.endstep_ru_chat_id:
+            ids.append(_app_cfg.endstep_ru_chat_id)
+        return list(dict.fromkeys(ids))
 
 
 settings = Settings()

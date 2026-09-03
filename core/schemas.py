@@ -62,6 +62,7 @@ class TournamentBase(BaseModel):
     chat_id: int
     slug: Optional[str] = None
     club: Optional[str] = None
+    is_online: bool = False
 
 
 class TournamentCreate(TournamentBase):

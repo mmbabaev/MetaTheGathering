@@ -214,6 +214,7 @@ class CreateTournamentJob:
                         chat_id=self.club.chat_id or 0,
                         slug=slug,
                         club=self.club.name,
+                        is_online=self.club.is_online,
                         registration_close_at=_naive_utc(event_at),
                     )
                 )
@@ -1041,7 +1042,7 @@ def import_closed_tournament_to_magicoculus(tournament_id: int) -> MagicOculusIm
             (row for row in club_identities() if row.name.casefold() == tournament.club.casefold()),
             None,
         )
-        if identity is None:
+        if identity is None or not identity.magicoculus_city:
             raise ValueError(f'Для клуба "{tournament.club}" не настроен город Magic Oculus')
         client = MagicOculusClient(settings.MAGIC_OCULUS_API_URL)
         return MagicOculusImporter(db, client).import_once(tournament, city=identity.magicoculus_city)

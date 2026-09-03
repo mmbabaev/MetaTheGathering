@@ -62,8 +62,9 @@ class ClubIdentity:
     chat_id: int
     aetherhub_url: str | None
     title_prefix: str
-    magicoculus_city: str
+    magicoculus_city: str | None
     timezone: str
+    is_online: bool = False
 
 
 def club_identities() -> list[ClubIdentity]:
@@ -100,6 +101,15 @@ def club_identities() -> list[ClubIdentity]:
             title_prefix="🎲 ",
             magicoculus_city="Калининград",
             timezone="Europe/Kaliningrad",
+        ),
+        ClubIdentity(
+            name="Endstep-ru",
+            chat_id=app_cfg.endstep_ru_chat_id or 0,
+            aetherhub_url="https://aetherhub.com/User/MetaTheGathering",
+            title_prefix="⏭️🦶 ",
+            magicoculus_city=None,
+            timezone="Europe/Moscow",
+            is_online=True,
         ),
     ]
 
@@ -168,6 +178,7 @@ def default_clubs() -> list[Club]:
             aetherhub_url=i.aetherhub_url,
             title_prefix=i.title_prefix,
             timezone=i.timezone,
+            is_online=i.is_online,
             schedules=by_name.get(i.name, []),
         )
         for i in club_identities()
