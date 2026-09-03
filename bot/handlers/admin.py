@@ -576,6 +576,7 @@ class AdminHandler:
         title: str | None = None,
         *,
         club: str | None = None,
+        is_online: bool = False,
         title_prefix: str = "",
     ) -> HandlerResult:
         """Создать новый турнир в текущем чате."""
@@ -587,7 +588,9 @@ class AdminHandler:
         elif title_prefix and not title.startswith(title_prefix):
             title = f"{title_prefix}{title}"
         try:
-            t = self.svc.create_tournament(TournamentCreate(title=title, chat_id=chat_id, club=club))
+            t = self.svc.create_tournament(
+                TournamentCreate(title=title, chat_id=chat_id, club=club, is_online=is_online)
+            )
         except errors.TournamentAlreadyExists:
             return HandlerResult(TOURNAMENT_ALREADY_EXISTS_MSG, is_alert=True)
         return HandlerResult(f"✅ Турнир создан: «{t.title}»", tournament_id=t.id)

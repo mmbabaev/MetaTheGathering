@@ -116,6 +116,7 @@ class Tournament(Base):
 
     status = Column(Enum(TournamentStatus), default=TournamentStatus.REGISTRATION, nullable=False)
     club = Column(String(64), nullable=True, index=True)  # "Goldfish" / "Edinorog" / None
+    is_online = Column(Boolean, nullable=False, default=False, server_default="false")
 
     registration_open_at = Column(DateTime, nullable=True)
     registration_close_at = Column(DateTime, nullable=True)

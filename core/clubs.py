@@ -64,6 +64,7 @@ class ClubIdentity:
     title_prefix: str
     magicoculus_city: str | None
     timezone: str
+    is_online: bool = False
 
 
 def club_identities() -> list[ClubIdentity]:
@@ -108,6 +109,7 @@ def club_identities() -> list[ClubIdentity]:
             title_prefix="🎮 ⏭️ ",
             magicoculus_city=None,
             timezone="Europe/Moscow",
+            is_online=True,
         ),
     ]
 
@@ -176,6 +178,7 @@ def default_clubs() -> list[Club]:
             aetherhub_url=i.aetherhub_url,
             title_prefix=i.title_prefix,
             timezone=i.timezone,
+            is_online=i.is_online,
             schedules=by_name.get(i.name, []),
         )
         for i in club_identities()

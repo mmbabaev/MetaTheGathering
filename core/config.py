@@ -42,6 +42,7 @@ class Club:
     name: str
     chat_id: int
     schedules: List[ClubSchedule]
+    is_online: bool = False
     aetherhub_url: Optional[str] = None  # https://aetherhub.com/User/GoldFish
     title_prefix: str = ""
     timezone: Optional[str] = None  # None = settings.TOURNAMENT_TIMEZONE

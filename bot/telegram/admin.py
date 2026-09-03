@@ -346,6 +346,7 @@ async def cmd_create_tournament(update: Update, context: ContextTypes.DEFAULT_TY
             chat_id,
             title,
             club=identity.name if identity else None,
+            is_online=identity.is_online if identity else False,
             title_prefix=identity.title_prefix if identity else "",
         )
         if result.is_alert:

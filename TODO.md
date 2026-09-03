@@ -121,7 +121,8 @@
   следующего события; третий активный турнир по-прежнему запрещён, а неявные операции выбирают
   самый новый.
 - Онлайн-клуб Endstep-ru с AetherHub Content Feed и временным тестовым Telegram-чатом:
-  без расписания, с ручным созданием турнира через club-aware `/create_tournament` — PR
+  без расписания, с ручным созданием турнира через club-aware `/create_tournament`.
+  Признак online хранится в турнире; для существующих и новых турниров без пометки дефолт — offline — PR
   [#280](https://github.com/mmbabaev/MetaTheGathering/pull/280).
 
 ### Lifetime-движок укреплён

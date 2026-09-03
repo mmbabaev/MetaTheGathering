@@ -214,6 +214,7 @@ class CreateTournamentJob:
                         chat_id=self.club.chat_id or 0,
                         slug=slug,
                         club=self.club.name,
+                        is_online=self.club.is_online,
                         registration_close_at=_naive_utc(event_at),
                     )
                 )

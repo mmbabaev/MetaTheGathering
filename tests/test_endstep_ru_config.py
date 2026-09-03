@@ -17,10 +17,13 @@ def test_endstep_ru_identity_is_online_and_has_no_default_schedule():
     assert identity.chat_id == ENDSTEP_CHAT_ID
     assert identity.aetherhub_url == "https://aetherhub.com/User/MetaTheGathering"
     assert identity.title_prefix == "🎮 ⏭️ "
+    assert identity.is_online is True
     assert identity.magicoculus_city is None
     assert identity.timezone == "Europe/Moscow"
     assert all(row.club_name != "Endstep-ru" for row in default_schedules())
-    assert next(row for row in default_clubs() if row.name == "Endstep-ru").schedules == []
+    club = next(row for row in default_clubs() if row.name == "Endstep-ru")
+    assert club.is_online is True
+    assert club.schedules == []
 
 
 def test_endstep_ru_uses_temporary_test_chat_in_both_environments():
@@ -70,6 +73,7 @@ async def test_manual_create_command_targets_endstep_chat_and_sets_club():
         ENDSTEP_CHAT_ID,
         None,
         club="Endstep-ru",
+        is_online=True,
         title_prefix="🎮 ⏭️ ",
     )
     session_local.return_value.close.assert_called_once()
