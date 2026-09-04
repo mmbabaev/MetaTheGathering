@@ -1,6 +1,9 @@
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from bot.telegram.club_pairings import send_club_pairings
+from telegram.error import BadRequest
+
+from bot.telegram.club_pairings import refresh_club_pairings, send_club_pairings
 from core import models
 from core.schemas import TournamentCreate
 from services.club_pairings import ClubPairingsService
@@ -13,11 +16,11 @@ def _online_tournament(svc):
     )
 
 
-def _add_pair(db, tournament_id, player, opponent, table=1):
+def _add_pair(db, tournament_id, player, opponent, table=1, round_number=1):
     db.add(
         models.RoundPairing(
             tournament_id=tournament_id,
-            round_number=1,
+            round_number=round_number,
             player_name=player,
             opponent_name=opponent,
             table_number=table,
@@ -70,11 +73,80 @@ async def test_delivery_posts_single_message_to_club_chat(db, svc):
     db.add(models.ClubSettingsRow(club_name="Endstep-ru", publish_pairings=True))
     db.commit()
     bot = AsyncMock()
+    bot.send_message.return_value = SimpleNamespace(message_id=321)
 
     assert await send_club_pairings(bot, db, tournament.id, [1]) is True
     bot.send_message.assert_awaited_once()
     assert bot.send_message.await_args.kwargs["chat_id"] == -100123
     assert bot.send_message.await_args.kwargs["parse_mode"] == "HTML"
+    tracked = db.query(models.TournamentRoundPairingsMessage).one()
+    assert (tracked.tournament_id, tracked.round_number, tracked.chat_id, tracked.message_id) == (
+        tournament.id,
+        1,
+        -100123,
+        321,
+    )
+
+
+async def test_each_new_round_gets_its_own_editable_message(db, svc):
+    tournament = _online_tournament(svc)
+    _add_pair(db, tournament.id, "Alice", "Bob", round_number=1)
+    _add_pair(db, tournament.id, "Alice", "Carol", round_number=2)
+    db.add(models.ClubSettingsRow(club_name="Endstep-ru", publish_pairings=True))
+    db.commit()
+    bot = AsyncMock()
+    bot.send_message.side_effect = [SimpleNamespace(message_id=321), SimpleNamespace(message_id=654)]
+
+    assert await send_club_pairings(bot, db, tournament.id, [2, 1]) is True
+    assert bot.send_message.await_count == 2
+    tracked = db.query(models.TournamentRoundPairingsMessage).order_by(models.TournamentRoundPairingsMessage.id).all()
+    assert [(row.round_number, row.message_id) for row in tracked] == [(1, 321), (2, 654)]
+
+
+async def test_refresh_edits_tracked_round_card_with_current_score(db, svc):
+    tournament = _online_tournament(svc)
+    _add_pair(db, tournament.id, "Alice", "Bob")
+    db.add(models.ClubSettingsRow(club_name="Endstep-ru", publish_pairings=True))
+    db.add(
+        models.TournamentRoundPairingsMessage(
+            tournament_id=tournament.id,
+            round_number=1,
+            chat_id=-100123,
+            message_id=321,
+        )
+    )
+    db.commit()
+    match = ClubPairingsService(db)._results.list_round(tournament.id, 1)[0]
+    match.player1_wins = 2
+    match.player2_wins = 1
+    match.status = models.RoundMatchStatus.CONFIRMED
+    db.commit()
+    bot = AsyncMock()
+
+    assert await refresh_club_pairings(bot, db, tournament.id, 1) is True
+    kwargs = bot.edit_message_text.await_args.kwargs
+    assert (kwargs["chat_id"], kwargs["message_id"], kwargs["parse_mode"]) == (-100123, 321, "HTML")
+    assert "Счёт: <b>2–1</b> · Статус: ✅ подтверждён" in kwargs["text"]
+
+
+async def test_refresh_disables_deleted_round_message(db, svc):
+    tournament = _online_tournament(svc)
+    _add_pair(db, tournament.id, "Alice", "Bob")
+    db.add(models.ClubSettingsRow(club_name="Endstep-ru", publish_pairings=True))
+    tracked = models.TournamentRoundPairingsMessage(
+        tournament_id=tournament.id,
+        round_number=1,
+        chat_id=-100123,
+        message_id=321,
+    )
+    db.add(tracked)
+    db.commit()
+    bot = AsyncMock()
+    bot.edit_message_text.side_effect = BadRequest("Message to edit not found")
+
+    assert await refresh_club_pairings(bot, db, tournament.id, 1) is False
+    db.refresh(tracked)
+    assert tracked.edit_disabled_at is not None
 
 
 async def test_no_chat_target_never_attempts_delivery(db, svc):

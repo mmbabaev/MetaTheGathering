@@ -175,6 +175,9 @@ class Tournament(Base):
     registration_messages = relationship(
         "TournamentRegistrationMessage", back_populates="tournament", cascade="all, delete-orphan"
     )
+    round_pairings_messages = relationship(
+        "TournamentRoundPairingsMessage", back_populates="tournament", cascade="all, delete-orphan"
+    )
     missing_decks_reminder_message = relationship(
         "TournamentMissingDecksReminder",
         back_populates="tournament",
@@ -204,6 +207,25 @@ class TournamentRegistrationMessage(Base):
     tournament = relationship("Tournament", back_populates="registration_messages")
 
     __table_args__ = (UniqueConstraint("tournament_id", "chat_id", name="uq_tournament_registration_message_target"),)
+
+
+class TournamentRoundPairingsMessage(Base):
+    """Editable club-chat card for one tournament round."""
+
+    __tablename__ = "tournament_round_pairings_messages"
+
+    id = Column(Integer, primary_key=True)
+    tournament_id = Column(Integer, ForeignKey("tournaments.id", ondelete="CASCADE"), nullable=False, index=True)
+    round_number = Column(Integer, nullable=False)
+    chat_id = Column(BigInteger, nullable=False)
+    message_id = Column(BigInteger, nullable=False)
+    edit_disabled_at = Column(DateTime, nullable=True, index=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, nullable=False)
+
+    tournament = relationship("Tournament", back_populates="round_pairings_messages")
+
+    __table_args__ = (UniqueConstraint("tournament_id", "round_number", name="uq_tournament_round_pairings_message"),)
 
 
 class TournamentMissingDecksReminder(Base):

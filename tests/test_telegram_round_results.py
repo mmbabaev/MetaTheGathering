@@ -2,7 +2,9 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from bot.telegram.round_results import (
+    callback_admin_p2,
     callback_confirm,
+    callback_reject,
     callback_send,
     callback_swiss_mode,
     callback_swiss_next_round,
@@ -51,9 +53,11 @@ async def test_submit_messages_only_the_actual_opponent(db, user_svc):
     alice, bob, match = _setup_match(db, user_svc)
     update, query = _update(alice.tg_id, f"rr_send:{match.id}:2:1")
     bot = AsyncMock()
+    refresh = AsyncMock()
     with (
         patch("bot.telegram.round_results.SessionLocal", return_value=db),
         patch("bot.telegram.round_results._is_notify_allowed", return_value=True),
+        patch("bot.telegram.round_results.refresh_club_pairings", refresh),
     ):
         await callback_send(update, SimpleNamespace(bot=bot))
 
@@ -61,6 +65,7 @@ async def test_submit_messages_only_the_actual_opponent(db, user_svc):
     assert bot.send_message.call_args.kwargs["chat_id"] == bob.tg_id
     assert "Иванова Алиса 2–1 Петров Борис" in bot.send_message.call_args.kwargs["text"]
     query.edit_message_text.assert_awaited_once()
+    refresh.assert_awaited_once_with(bot, db, match.tournament_id, match.round_number)
 
 
 async def test_notify_allowlist_blocks_result_dm_without_rolling_back_score(db, user_svc):
@@ -82,15 +87,53 @@ async def test_confirmation_messages_only_the_original_proposer(db, user_svc):
     proposed = RoundResultsService(db).propose(match.id, alice.tg_id, 1, 0)
     update, _query = _update(bob.tg_id, f"rr_yes:{match.id}:{proposed.revision}")
     bot = AsyncMock()
+    refresh = AsyncMock()
     with (
         patch("bot.telegram.round_results.SessionLocal", return_value=db),
         patch("bot.telegram.round_results._is_notify_allowed", return_value=True),
+        patch("bot.telegram.round_results.refresh_club_pairings", refresh),
     ):
         await callback_confirm(update, SimpleNamespace(bot=bot))
 
     bot.send_message.assert_awaited_once()
     assert bot.send_message.call_args.kwargs["chat_id"] == alice.tg_id
     assert db.get(models.RoundMatch, match.id).status == models.RoundMatchStatus.CONFIRMED
+    refresh.assert_awaited_once_with(bot, db, match.tournament_id, match.round_number)
+
+
+async def test_rejection_refreshes_public_round_message(db, user_svc):
+    alice, bob, match = _setup_match(db, user_svc)
+    proposed = RoundResultsService(db).propose(match.id, alice.tg_id, 1, 0)
+    update, _query = _update(bob.tg_id, f"rr_no:{match.id}:{proposed.revision}")
+    bot = AsyncMock()
+    refresh = AsyncMock()
+    with (
+        patch("bot.telegram.round_results.SessionLocal", return_value=db),
+        patch("bot.telegram.round_results._is_notify_allowed", return_value=True),
+        patch("bot.telegram.round_results.refresh_club_pairings", refresh),
+    ):
+        await callback_reject(update, SimpleNamespace(bot=bot))
+
+    refresh.assert_awaited_once_with(bot, db, match.tournament_id, match.round_number)
+    assert db.get(models.RoundMatch, match.id).status == models.RoundMatchStatus.UNREPORTED
+
+
+async def test_admin_result_refreshes_public_round_message(db, user_svc):
+    _alice, _bob, match = _setup_match(db, user_svc)
+    admin = user_svc.get_or_create(tg_id=999, first_name="Admin")
+    admin.is_admin = True
+    db.commit()
+    update, _query = _update(admin.tg_id, f"rr_ap2:{match.id}:2:0")
+    bot = AsyncMock()
+    refresh = AsyncMock()
+    with (
+        patch("bot.telegram.round_results.SessionLocal", return_value=db),
+        patch("bot.telegram.round_results.refresh_club_pairings", refresh),
+    ):
+        await callback_admin_p2(update, SimpleNamespace(bot=bot))
+
+    refresh.assert_awaited_once_with(bot, db, match.tournament_id, match.round_number)
+    assert db.get(models.RoundMatch, match.id).status == models.RoundMatchStatus.ADMIN
 
 
 async def test_internal_swiss_toggle_and_first_round_publish_only_to_configured_club_chat(db, user_svc, monkeypatch):
