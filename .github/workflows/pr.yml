@@ -66,10 +66,8 @@ jobs:
         run: bash bot/deploy_bot_debug.sh
         env:
           SSH_KEY: ~/.ssh/deploy_key
-          PREVIEW_ID: ${{ github.event.pull_request.number }}
 
       - name: Deploy debug web
         run: bash bot/deploy_web_debug.sh
         env:
           SSH_KEY: ~/.ssh/deploy_key
-          PREVIEW_ID: ${{ github.event.pull_request.number }}

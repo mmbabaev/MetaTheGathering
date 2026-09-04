@@ -130,9 +130,10 @@
   [#270](https://github.com/mmbabaev/MetaTheGathering/issues/270): debug/prod deploy
   сериализуется в GitHub Actions и на сервере, временные архивы и env получают уникальные
   имена и удаляются даже после ошибки, а загрузка останавливается заранее при нехватке места.
-  Каждый PR получает отдельную PostgreSQL schema и не наследует Alembic revision соседнего PR;
-  стабильный staging от `main`, in-process Telegram transport tests и real-bot smoke остаются
-  следующими этапами — PR [#271](https://github.com/mmbabaev/MetaTheGathering/pull/271).
+  После эксперимента с schema-per-PR debug возвращён к одной постоянной schema: данные больше не «исчезают»
+  при деплое другого PR, а конфликты unmerged-миграций исправляются в ветках. In-process Telegram
+  transport tests и real-bot smoke остаются следующими этапами — PR
+  [#271](https://github.com/mmbabaev/MetaTheGathering/pull/271).
 - Pure fairness foundation перечисляет все 10 линий Bingo 4×4 и считает вероятностные
   веса/imbalance с отдельными diagnostics для строк, столбцов и диагоналей, не меняя
   horizontal-only `bingo-v1` — PR
