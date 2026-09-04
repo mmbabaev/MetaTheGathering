@@ -41,9 +41,6 @@ fi
 # ── Validate ──────────────────────────────────────────────────────────────────
 [ ! -f "$ENV_FILE" ] && error "Файл $ENV_FILE не найден"
 [ ! -f "${SSH_KEY/#\~/$HOME}" ] && error "SSH-ключ $SSH_KEY не найден"
-if [ "$MODE" = "debug" ] && ! [[ "${PREVIEW_ID:-}" =~ ^[0-9]+$ ]]; then
-    error "Для debug deploy задайте числовой PREVIEW_ID (номер PR)"
-fi
 
 # ── Archive ───────────────────────────────────────────────────────────────────
 DEPLOY_ID="$(python3 -c 'import uuid; print(uuid.uuid4().hex)')"
@@ -66,10 +63,11 @@ cleanup() {
 trap cleanup EXIT
 
 if [ "$MODE" = "debug" ]; then
-    DATABASE_SCHEMA="metagatherer_pr_${PREVIEW_ID}"
     ENV_UPLOAD="/tmp/.env.preview-${DEPLOY_ID}"
     awk '!/^(export[[:space:]]+)?DATABASE_SCHEMA=/' "$ENV_FILE" > "$ENV_UPLOAD"
-    printf '\nDATABASE_SCHEMA=%s\n' "$DATABASE_SCHEMA" >> "$ENV_UPLOAD"
+    # Debug uses one durable schema in its own database. An explicit empty
+    # override prevents an obsolete PR-specific value in the Actions secret.
+    printf '\nDATABASE_SCHEMA=\n' >> "$ENV_UPLOAD"
     chmod 600 "$ENV_UPLOAD"
 fi
 

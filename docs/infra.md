@@ -28,7 +28,8 @@ GitHub Actions
 | Web service | `meta-the-gathering-web` | `meta-the-gathering-debug-web` |
 | OTel service | `otel-collector` | `otel-collector-debug` |
 | Env file | `bot/.env` | `bot/.env.debug` |
-| Database schema | default | `metagatherer_pr_<PR number>` |
+| Database | `meta_the_gathering_prod` | `meta_the_gathering_debug` |
+| Database schema | `public` | `public` (one durable debug schema) |
 | Web port | `8080` (127.0.0.1) | `8081` (0.0.0.0) |
 | BOT_ENV | `prod` | `debug` |
 
@@ -65,7 +66,7 @@ Jobs run in order: tests, then one serialized debug deploy job:
 
 **deploy-debug** (needs: test):
 - Write `ENV_FILE_DEBUG` secret → `bot/.env.debug`
-- Add the non-secret `DATABASE_SCHEMA=metagatherer_pr_<PR number>` override
+- Normalize `DATABASE_SCHEMA` to an empty value so every PR uses the same durable debug schema
 - Run `bot/deploy_bot_debug.sh`
 - Then run `bot/deploy_web_debug.sh` in the same job
 - Uses `bot/.env.debug` installed by the successful bot deploy
@@ -145,11 +146,12 @@ tar archive (same excludes as bot,
 to already be on the server. In the PR pipeline it starts only after the bot deploy;
 for a first manual deploy to a fresh server, run the bot deploy first.
 
-PR previews share a PostgreSQL database server but use a separate schema per PR. An
-unmerged migration therefore cannot contaminate another PR's Alembic history. The
-legacy/default debug schema is not dropped or reset automatically. Preview-schema
-retention and a stable staging environment from `main` remain tracked in
-[#270](https://github.com/mmbabaev/MetaTheGathering/issues/270).
+All PR previews use the same durable `public` schema in the separate
+`meta_the_gathering_debug` database. Deploys never reset it, so test users and tournaments
+survive switching between PRs. Because unmerged PR migrations now share one Alembic history,
+conflicting revisions must be reconciled in the affected branch before its debug deploy can
+complete. Deploys remain serialized and abort on multiple code heads or an unknown database
+revision.
 
 ---
 
@@ -173,7 +175,7 @@ Env files are **never committed** to git (`.gitignored`). They are:
 |---|---|---|
 | `TELEGRAM_BOT_TOKEN` | yes | Bot token from @BotFather |
 | `DATABASE_URL` | yes | PostgreSQL DSN, e.g. `postgresql+psycopg2://user:pass@localhost/dbname` |
-| `DATABASE_SCHEMA` | no | PostgreSQL schema override; CI sets `metagatherer_pr_<PR number>` for debug previews |
+| `DATABASE_SCHEMA` | no | Optional PostgreSQL schema override; debug CI forces it empty to use its durable `public` schema |
 | `ADMIN_IDS` | no | Comma-separated Telegram user IDs with admin access |
 | `MONIUM_PROJECT` | no | Monium monitoring project ID |
 | `MONIUM_API_KEY` | no | Monium API key |
@@ -244,7 +246,7 @@ ssh mbabaev@158.160.9.28 'mkdir -p /home/mbabaev/MetaTheGathering/meta_the_gathe
 scp bot/.env.debug mbabaev@158.160.9.28:/home/mbabaev/MetaTheGathering/meta_the_gatheringDebug/bot/.env.debug
 
 # 3. Push to trigger CI, or run deploy locally:
-PREVIEW_ID=271 bash bot/deploy_bot_debug.sh  # debug (use the relevant PR number)
+bash bot/deploy_bot_debug.sh     # debug
 bash bot/deploy_bot.sh            # prod
 ```
 

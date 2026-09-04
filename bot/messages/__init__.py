@@ -1,6 +1,9 @@
 # Шаблоны сообщений
 
+from collections import Counter
 from html import escape
+
+from core.models import RoundMatchStatus
 
 # Форматирование ФИО живёт в services/names.py, чтобы одинаково работало и в картинках
 # (services-слой). Здесь — реэкспорт для существующих импортов из bot.messages.
@@ -180,6 +183,7 @@ HELP_TEXT_ADMIN = """\
 
 /create_tournament — создать турнир вручную
   Endstep-ru: /create_tournament --club Endstep-ru [название]
+/clubs — выбрать чат для объявлений ручных турниров
 /delete_tournament — удалить текущий турнир
 
 /add_players — массовая запись (каждая строка: Имя Фамилия)
@@ -268,6 +272,72 @@ def format_tournament_status(title: str, status: str, participants: list, decks_
     lines.extend(format_participant_line(p, decks_hidden, aetherhub_imported=aetherhub_imported) for p in participants)
     if aetherhub_imported and any(getattr(p, "aetherhub_seen_at", None) is None for p in participants):
         lines.extend(["", "❓ — пока не найден в AetherHub"])
+    return "\n".join(lines)
+
+
+def _round_match_names(matches: list) -> dict[tuple[int, int], str]:
+    """Compact family names, expanded only when two players would look identical."""
+    compact: dict[tuple[int, int], str] = {}
+    full: dict[tuple[int, int], str] = {}
+    for match in matches:
+        for position, (source_name, user) in enumerate(
+            ((match.player1_name, match.player1_user), (match.player2_name, match.player2_user)), start=1
+        ):
+            if source_name is None:
+                continue
+            key = (match.id, position)
+            if user is not None:
+                compact[key] = user.last_name or user.first_name or source_name
+                full[key] = format_participant_name(user.first_name, user.last_name) or source_name
+            else:
+                compact[key] = source_name
+                full[key] = source_name
+    counts = Counter(value.casefold() for value in compact.values())
+    return {key: (full[key] if counts[value.casefold()] > 1 else value) for key, value in compact.items()}
+
+
+def format_round_pairings(title: str, status: str, round_number: int, matches: list) -> str:
+    """Latest-round public status with live pending and final scores."""
+    names = _round_match_names(matches)
+    playable = [match for match in matches if match.player2_name is not None]
+    completed = sum(
+        match.status in {RoundMatchStatus.CONFIRMED, RoundMatchStatus.ADMIN, RoundMatchStatus.IMPORTED}
+        for match in playable
+    )
+    lines = [
+        f"🎮 {escape(title)} · {escape(status)}",
+        f"<b>Раунд {round_number} · результаты {completed}/{len(playable)}</b>",
+        "",
+    ]
+    for index, match in enumerate(matches, start=1):
+        table = match.table_number if match.table_number is not None else index
+        left = escape(names[(match.id, 1)])
+        if match.player2_name is None:
+            lines.append(f"{table}. {left} — BYE ✅")
+            continue
+        right = escape(names[(match.id, 2)])
+        if match.player1_wins is None or match.player2_wins is None:
+            lines.append(f"{table}. {left} — {right}")
+            continue
+        icon = "⏳" if match.status == RoundMatchStatus.PENDING else "✅"
+        lines.append(f"{table}. {left} <b>{match.player1_wins}–{match.player2_wins}</b> {right} {icon}")
+    lines.extend(["", "✅ подтверждено · ⏳ ожидает соперника"])
+    return "\n".join(lines)
+
+
+def format_aetherhub_round_summary(round_number: int, matches: list) -> str:
+    """Copyable scorekeeper summary preserving source/AetherHub player order."""
+    lines = [f"Раунд {round_number}", ""]
+    for index, match in enumerate(matches, start=1):
+        table = match.table_number if match.table_number is not None else index
+        if match.player2_name is None:
+            lines.append(f"Стол {table}: {match.player1_name} — BYE")
+        elif match.player1_wins is None or match.player2_wins is None:
+            lines.append(f"Стол {table}: {match.player1_name} — {match.player2_name}")
+        else:
+            lines.append(
+                f"Стол {table}: {match.player1_name} {match.player1_wins}-{match.player2_wins} {match.player2_name}"
+            )
     return "\n".join(lines)
 
 

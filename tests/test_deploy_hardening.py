@@ -37,21 +37,21 @@ def test_bot_env_upload_is_unique_and_removed_after_failure():
     assert "\"rm -f -- '$REMOTE_ARCHIVE' '$REMOTE_ENV'\"" in source
     assert 'rm -f -- "/tmp/$ARCHIVE_NAME" "$REMOTE_ENV"' in source
     assert 'chmod 600 "$ENV_DEST"' in source
-    assert 'DATABASE_SCHEMA="metagatherer_pr_${PREVIEW_ID}"' in source
+    assert "printf '\\nDATABASE_SCHEMA=\\n'" in source
     assert 'rm -f -- "$ENV_UPLOAD"' in source
     assert "/tmp/.env.deploy\n" not in source
 
 
-def test_debug_deploy_requires_and_propagates_pr_preview_id():
+def test_debug_deploy_uses_one_durable_database_schema():
     bot_source = _read(BOT_DEPLOY)
     web_source = _read(WEB_DEPLOY)
     workflow = _read(ROOT / ".github" / "workflows" / "pr.yml")
 
-    assert "PREVIEW_ID: ${{ github.event.pull_request.number }}" in workflow
-    assert workflow.count("PREVIEW_ID: ${{ github.event.pull_request.number }}") == 2
-    assert "${PREVIEW_ID:-}" in bot_source
-    assert "${PREVIEW_ID:-}" in web_source
-    assert "DATABASE_SCHEMA=$EXPECTED_DATABASE_SCHEMA" in web_source
+    assert "PREVIEW_ID" not in workflow
+    assert "PREVIEW_ID" not in bot_source
+    assert "PREVIEW_ID" not in web_source
+    assert "metagatherer_pr_" not in bot_source
+    assert 'grep -qx "DATABASE_SCHEMA=" "$ENV_DEST"' in web_source
 
 
 def test_workflows_serialize_deploys_by_environment():

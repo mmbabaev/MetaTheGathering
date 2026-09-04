@@ -7,7 +7,7 @@ the bot fails to start and CI breaks. These tests catch it locally before pushin
 
 import re
 import runpy
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import sqlalchemy as sa
@@ -70,6 +70,99 @@ def test_tournament_online_marker_backfills_existing_rows_as_offline():
         rows = connection.execute(sa.select(migrated.c.id, migrated.c.is_online).order_by(migrated.c.id)).all()
 
     assert rows == [(1, False), (2, False)]
+
+
+def test_tournament_creation_plan_migration_defaults_to_pending():
+    metadata = sa.MetaData()
+    sa.Table("tournaments", metadata, sa.Column("id", sa.Integer, primary_key=True))
+    engine = sa.create_engine("sqlite://")
+    metadata.create_all(engine)
+    migration = runpy.run_path(str(VERSIONS_DIR / "4953faa801dd_add_tournament_creation_plans.py"))
+
+    with engine.begin() as connection:
+        context = MigrationContext.configure(connection)
+        with Operations.context(context):
+            migration["upgrade"]()
+        plans = sa.Table("tournament_creation_plans", sa.MetaData(), autoload_with=connection)
+        now = datetime(2026, 9, 4)
+        connection.execute(
+            plans.insert().values(
+                id=1,
+                club_name="Endstep-ru",
+                created_by_tg_id=1,
+                announce_at=now,
+                event_at=now + timedelta(days=1),
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        assert connection.execute(sa.select(plans.c.status)).scalar_one() == "pending"
+
+
+def test_club_announcement_settings_migration_defaults_to_none():
+    metadata = sa.MetaData()
+    sa.Table("tournaments", metadata, sa.Column("id", sa.Integer, primary_key=True))
+    engine = sa.create_engine("sqlite://")
+    metadata.create_all(engine)
+    plan_migration = runpy.run_path(str(VERSIONS_DIR / "4953faa801dd_add_tournament_creation_plans.py"))
+    settings_migration = runpy.run_path(str(VERSIONS_DIR / "11cdd73fac96_add_club_announcement_settings.py"))
+
+    with engine.begin() as connection:
+        context = MigrationContext.configure(connection)
+        with Operations.context(context):
+            plan_migration["upgrade"]()
+            settings_migration["upgrade"]()
+        settings_table = sa.Table("club_announcement_settings", sa.MetaData(), autoload_with=connection)
+        now = datetime(2026, 9, 4)
+        connection.execute(settings_table.insert().values(id=1, club_name="Endstep-ru", created_at=now, updated_at=now))
+        plans = sa.Table("tournament_creation_plans", sa.MetaData(), autoload_with=connection)
+        connection.execute(
+            plans.insert().values(
+                id=1,
+                club_name="Endstep-ru",
+                created_by_tg_id=1,
+                announce_at=now,
+                event_at=now + timedelta(days=1),
+                created_at=now,
+                updated_at=now,
+            )
+        )
+
+        assert connection.execute(sa.select(settings_table.c.destination)).scalar_one() == "none"
+        assert connection.execute(sa.select(plans.c.announcement_chat_label)).scalar_one() == "не отправлять"
+
+
+def test_online_round_results_migration_defaults_to_participant_view():
+    metadata = sa.MetaData()
+    tournaments = sa.Table("tournaments", metadata, sa.Column("id", sa.Integer, primary_key=True))
+    sa.Table("users", metadata, sa.Column("id", sa.Integer, primary_key=True))
+    engine = sa.create_engine("sqlite://")
+    metadata.create_all(engine)
+    migration = runpy.run_path(str(VERSIONS_DIR / "71797c25e8da_add_online_round_results.py"))
+
+    with engine.begin() as connection:
+        connection.execute(tournaments.insert().values(id=1))
+        context = MigrationContext.configure(connection)
+        with Operations.context(context):
+            migration["upgrade"]()
+
+        migrated = sa.Table("tournaments", sa.MetaData(), autoload_with=connection)
+        matches = sa.Table("round_matches", sa.MetaData(), autoload_with=connection)
+        now = datetime(2026, 9, 4)
+        connection.execute(
+            matches.insert().values(
+                id=1,
+                tournament_id=1,
+                round_number=1,
+                pairing_key="dummy-not-a-real-pairing-key",
+                player1_name="Игрок 1",
+                player2_name="Игрок 2",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        assert connection.execute(sa.select(migrated.c.show_round_pairings)).scalar_one() is False
+        assert connection.execute(sa.select(matches.c.status, matches.c.revision)).one() == ("unreported", 0)
 
 
 def test_endstep_username_and_club_settings_migration_defaults_safe():

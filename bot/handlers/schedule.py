@@ -77,7 +77,7 @@ class ScheduleHandler:
         ]
         return HandlerResult(
             "⚙️ Настройки клубов\n\nПубликация парингов в чат по умолчанию выключена.",
-            keyboard=self.keyboards.club_settings_list_keyboard(buttons),
+            keyboard=self.keyboards.club_pairing_settings_list_keyboard(buttons),
         )
 
     def handle_club_settings(self, tg_id: int, settings_id: int) -> HandlerResult:
@@ -89,7 +89,7 @@ class ScheduleHandler:
         state = "включена" if row.publish_pairings else "выключена"
         return HandlerResult(
             f"⚙️ {row.club_name}\n\nПубликация новых парингов в чат: {state}.",
-            keyboard=self.keyboards.club_settings_keyboard(row.id, row.publish_pairings),
+            keyboard=self.keyboards.club_pairing_settings_keyboard(row.id, row.publish_pairings),
         )
 
     def handle_toggle_pairings_publication(self, tg_id: int, settings_id: int) -> HandlerResult:

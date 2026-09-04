@@ -74,6 +74,7 @@ class TournamentRead(TournamentBase):
     id: int
     status: TournamentStatus
     decks_hidden: bool = True
+    show_round_pairings: bool = False
     aetherhub_url: Optional[str] = None
     aetherhub_import_time: Optional[str] = None
     registration_open_at: Optional[datetime] = None

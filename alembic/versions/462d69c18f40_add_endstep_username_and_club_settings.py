@@ -1,7 +1,7 @@
 """add Endstep username and club settings
 
 Revision ID: 462d69c18f40
-Revises: 00840004f838
+Revises: 71797c25e8da
 Create Date: 2026-09-04
 """
 
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "462d69c18f40"
-down_revision: Union[str, Sequence[str], None] = "00840004f838"
+down_revision: Union[str, Sequence[str], None] = "71797c25e8da"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

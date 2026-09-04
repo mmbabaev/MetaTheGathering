@@ -3,7 +3,7 @@
 import pytest
 
 from bot.handlers.schedule import SCHEDULE_ROW_NOT_FOUND, ScheduleHandler
-from bot.keyboards import CB_CLUB_SETTINGS_LIST, CB_SCHEDULE_ROW, CB_SCHEDULE_TOGGLE, Keyboards
+from bot.keyboards import CB_CLUB_PAIRING_SETTINGS_LIST, CB_SCHEDULE_ROW, CB_SCHEDULE_TOGGLE, Keyboards
 from bot.messages import NOT_ADMIN
 from core.models import ClubScheduleRow
 from services.schedule import WEEKDAYS, ScheduleService, format_import_times, parse_import_times
@@ -220,7 +220,7 @@ class TestScheduleHandler:
         assert {b.callback_data for b in buttons} == {
             f"{CB_SCHEDULE_ROW}:{r1.id}",
             f"{CB_SCHEDULE_ROW}:{r2.id}",
-            CB_CLUB_SETTINGS_LIST,
+            CB_CLUB_PAIRING_SETTINGS_LIST,
         }
 
     def test_list_shows_disabled_rows_too(self, handler, admin_user, db):
@@ -243,7 +243,7 @@ class TestScheduleHandler:
 
     def test_empty_schedule_still_has_club_settings(self, handler, admin_user):
         result = handler.handle_schedule_list(ADMIN_TG_ID)
-        assert result.keyboard.inline_keyboard[0][0].callback_data == CB_CLUB_SETTINGS_LIST
+        assert result.keyboard.inline_keyboard[0][0].callback_data == CB_CLUB_PAIRING_SETTINGS_LIST
 
     def test_row_card_shows_times(self, handler, admin_user, db):
         row = _row(db)

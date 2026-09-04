@@ -20,6 +20,8 @@ def test_endstep_ru_identity_is_online_and_has_no_default_schedule():
     assert identity.is_online is True
     assert identity.magicoculus_city is None
     assert identity.timezone == "Europe/Moscow"
+    assert identity.real_chat_id == -1003925371109
+    assert identity.real_chat_label == "@endstep_ru"
     assert all(row.club_name != "Endstep-ru" for row in default_schedules())
     club = next(row for row in default_clubs() if row.name == "Endstep-ru")
     assert club.is_online is True
@@ -77,3 +79,15 @@ async def test_manual_create_command_targets_endstep_chat_and_sets_club():
         title_prefix="⏭️🦶 ",
     )
     session_local.return_value.close.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_create_tournament_without_args_opens_wizard():
+    update = MagicMock()
+    context = MagicMock()
+    context.args = []
+
+    with patch("bot.telegram.create_tournament.cmd_create_tournament_wizard", new_callable=AsyncMock) as wizard:
+        await cmd_create_tournament(update, context)
+
+    wizard.assert_awaited_once_with(update, context)

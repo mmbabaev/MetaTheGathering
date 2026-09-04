@@ -118,6 +118,9 @@ class Tournament(Base):
     status = Column(Enum(TournamentStatus), default=TournamentStatus.REGISTRATION, nullable=False)
     club = Column(String(64), nullable=True, index=True)  # "Goldfish" / "Edinorog" / None
     is_online = Column(Boolean, nullable=False, default=False, server_default="false")
+    # Public status screen can show the latest round's pairings and live scores
+    # instead of the flat participant list. This is configured per tournament.
+    show_round_pairings = Column(Boolean, nullable=False, default=False, server_default="false")
 
     registration_open_at = Column(DateTime, nullable=True)
     registration_close_at = Column(DateTime, nullable=True)
@@ -158,6 +161,7 @@ class Tournament(Base):
         cascade="all, delete-orphan",
     )
     cellar_reservations = relationship("CellarDeckReservation", back_populates="tournament")
+    round_matches = relationship("RoundMatch", back_populates="tournament", cascade="all, delete-orphan")
 
 
 class TournamentRegistrationMessage(Base):
@@ -730,6 +734,75 @@ class RoundPairing(Base):
     __table_args__ = (UniqueConstraint("tournament_id", "round_number", "player_name", name="uq_round_pairing"),)
 
 
+class RoundMatchStatus:
+    """Persistence values for the peer-confirmed round result state machine."""
+
+    UNREPORTED = "unreported"
+    PENDING = "pending"
+    CONFIRMED = "confirmed"
+    ADMIN = "admin"
+    IMPORTED = "imported"
+
+
+class RoundMatch(Base):
+    """One canonical match for a pair of reciprocal ``RoundPairing`` rows."""
+
+    __tablename__ = "round_matches"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tournament_id = Column(Integer, ForeignKey("tournaments.id", ondelete="CASCADE"), nullable=False, index=True)
+    round_number = Column(Integer, nullable=False)
+    table_number = Column(Integer, nullable=True)
+    pairing_key = Column(String(64), nullable=False)
+    # Player order is the source/AetherHub order and is preserved in summaries.
+    player1_name = Column(String(255), nullable=False)
+    player2_name = Column(String(255), nullable=True)  # NULL = bye
+    player1_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    player2_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    player1_wins = Column(Integer, nullable=True)
+    player2_wins = Column(Integer, nullable=True)
+    status = Column(String(16), nullable=False, default=RoundMatchStatus.UNREPORTED, server_default="unreported")
+    proposed_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    confirmed_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    revision = Column(Integer, nullable=False, default=0, server_default="0")
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+    tournament = relationship("Tournament", back_populates="round_matches")
+    player1_user = relationship("User", foreign_keys=[player1_user_id])
+    player2_user = relationship("User", foreign_keys=[player2_user_id])
+    events = relationship("RoundMatchEvent", back_populates="match", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        UniqueConstraint("tournament_id", "round_number", "pairing_key", name="uq_round_match_pair"),
+        CheckConstraint("player1_wins IS NULL OR player1_wins BETWEEN 0 AND 2", name="ck_round_match_p1_wins"),
+        CheckConstraint("player2_wins IS NULL OR player2_wins BETWEEN 0 AND 2", name="ck_round_match_p2_wins"),
+        CheckConstraint(
+            "player1_wins IS NULL OR player2_wins IS NULL OR player1_wins <> 2 OR player2_wins <> 2",
+            name="ck_round_match_not_2_2",
+        ),
+    )
+
+
+class RoundMatchEvent(Base):
+    """Append-only audit trail for proposals, confirmations, rejections and admin edits."""
+
+    __tablename__ = "round_match_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    match_id = Column(Integer, ForeignKey("round_matches.id", ondelete="CASCADE"), nullable=False, index=True)
+    event_type = Column(String(24), nullable=False)
+    actor_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    actor_tg_id = Column(BigInteger, nullable=True)
+    player1_wins = Column(Integer, nullable=True)
+    player2_wins = Column(Integer, nullable=True)
+    revision = Column(Integer, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+    match = relationship("RoundMatch", back_populates="events")
+    actor_user = relationship("User")
+
+
 class MagicOculusImport(Base):
     """Состояние передачи одного турнира в Magic Oculus; защита от повторного POST."""
 
@@ -749,3 +822,39 @@ class MagicOculusImport(Base):
     imported_at = Column(DateTime, nullable=True)
 
     tournament = relationship("Tournament")
+
+
+class TournamentCreationPlan(Base):
+    """Отложенное ручное создание турнира и публикация регистрации в чат клуба."""
+
+    __tablename__ = "tournament_creation_plans"
+
+    id = Column(Integer, primary_key=True, index=True)
+    club_name = Column(String(64), nullable=False, index=True)
+    created_by_tg_id = Column(BigInteger, nullable=False, index=True)
+    announce_at = Column(DateTime, nullable=False, index=True)
+    event_at = Column(DateTime, nullable=False)
+    announcement_chat_id = Column(BigInteger, nullable=True)
+    announcement_chat_label = Column(
+        String(255), nullable=False, default="не отправлять", server_default="не отправлять"
+    )
+    status = Column(String(16), nullable=False, default="pending", server_default="pending", index=True)
+    tournament_id = Column(Integer, ForeignKey("tournaments.id", ondelete="SET NULL"), nullable=True, unique=True)
+    announcement_sent_at = Column(DateTime, nullable=True)
+    last_error = Column(String(512), nullable=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+    tournament = relationship("Tournament")
+
+
+class ClubAnnouncementSetting(Base):
+    """Куда отправлять объявления о вручную создаваемых турнирах клуба."""
+
+    __tablename__ = "club_announcement_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    club_name = Column(String(64), nullable=False, unique=True, index=True)
+    destination = Column(String(16), nullable=False, default="none", server_default="none")
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
