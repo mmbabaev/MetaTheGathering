@@ -237,7 +237,8 @@ class CreateTournamentJob:
                         else event_at.strftime("%d.%m.%Y")
                     )
                     text = (
-                        f"🏆 {self.club.name} Pauper — {when} в {self.schedule.game_time}\n"
+                        f"{'🎮' if self.club.is_online else '🏆'} {self.club.title_prefix}{self.club.name} "
+                        f"Pauper — {when} в {self.schedule.game_time}\n"
                         f"Турнир создан. Регистрация открыта."
                     )
                     await send_registration_open(bot, db, self.club, new_t.id, text)
@@ -267,7 +268,7 @@ class PreStartReminderJob:
                 logger.info("PreStartReminderJob: no active tournament for '%s'", self.club.name)
                 return
             text = (
-                f"⏰ {self.club.name} Pauper начинается в {self.schedule.game_time}!\n"
+                f"⏰ {self.club.title_prefix}{self.club.name} Pauper начинается в {self.schedule.game_time}!\n"
                 f"Ещё не записали колоду? Успейте — жмите кнопку ниже."
             )
             try:

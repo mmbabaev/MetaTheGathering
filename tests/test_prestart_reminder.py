@@ -97,6 +97,17 @@ class TestPreStartReminderJob:
         bot.send_message.assert_awaited()
         assert "начинается" in bot.send_message.call_args_list[0].kwargs["text"]
 
+    async def test_reminder_includes_club_title_prefix(self, db, monkeypatch):
+        monkeypatch.setattr("bot.scheduler.settings.OWNER_CHAT_ID", None)
+        club = Club(name="Endstep-ru", chat_id=-100, schedules=[], title_prefix="⏭️🦶 ", is_online=True)
+        schedule = ClubSchedule(weekday="monday", game_time="20:00", reminder_time="19:25")
+        TournamentService(db).create_tournament(TournamentCreate(title="Pauper", chat_id=-100, club=club.name))
+        bot = _bot()
+
+        await PreStartReminderJob(club, schedule).run(bot=bot, now=MONDAY, db=db)
+
+        assert bot.send_message.await_args.kwargs["text"].startswith("⏰ ⏭️🦶 Endstep-ru Pauper")
+
     async def test_dms_deferred_players_after_group_reminder(self, db, monkeypatch):
         monkeypatch.setattr("bot.scheduler.settings.OWNER_CHAT_ID", None)
         reminder = AsyncMock()
