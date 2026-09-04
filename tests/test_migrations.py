@@ -165,6 +165,38 @@ def test_online_round_results_migration_defaults_to_participant_view():
         assert connection.execute(sa.select(matches.c.status, matches.c.revision)).one() == ("unreported", 0)
 
 
+def test_endstep_username_and_club_settings_migration_defaults_safe():
+    metadata = sa.MetaData()
+    users = sa.Table(
+        "users",
+        metadata,
+        sa.Column("id", sa.Integer, primary_key=True),
+        sa.Column("tg_id", sa.BigInteger, nullable=False),
+    )
+    engine = sa.create_engine("sqlite://")
+    metadata.create_all(engine)
+    migration = runpy.run_path(str(VERSIONS_DIR / "462d69c18f40_add_endstep_username_and_club_settings.py"))
+
+    with engine.begin() as connection:
+        connection.execute(users.insert().values(id=1, tg_id=100))
+        context = MigrationContext.configure(connection)
+        with Operations.context(context):
+            migration["upgrade"]()
+
+        migrated_users = sa.Table("users", sa.MetaData(), autoload_with=connection)
+        club_settings = sa.Table("club_settings", sa.MetaData(), autoload_with=connection)
+        assert connection.execute(sa.select(migrated_users.c.endstep_username)).scalar_one() is None
+        connection.execute(
+            club_settings.insert().values(
+                id=1,
+                club_name="Endstep-ru",
+                created_at=datetime(2026, 9, 4),
+                updated_at=datetime(2026, 9, 4),
+            )
+        )
+        assert connection.execute(sa.select(club_settings.c.publish_pairings)).scalar_one() is False
+
+
 def test_split_spy_general_names_repairs_only_classification_cache():
     metadata = sa.MetaData()
     archetypes = sa.Table(

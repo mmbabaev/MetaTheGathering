@@ -108,16 +108,13 @@ async def _start_cellar_deeplink(update: Update, context: ContextTypes.DEFAULT_T
 async def _start_deck_deeplink(update: Update, context: ContextTypes.DEFAULT_TYPE, user, tournament_id: int) -> None:
     """Обработка deck-диплинка: нет колоды → выбор архетипа, есть → карточка турнира."""
     # Локальный импорт: bot.telegram.player импортирует common — верхнеуровневый импорт замкнул бы цикл.
-    from bot.telegram.player import USER_DATA_PENDING_NAME, _player_handler  # noqa: PLC0415
+    from bot.telegram.player import _player_handler, _set_registration_pending  # noqa: PLC0415
 
     _log("cmd_start_deeplink", user, tournament_id=tournament_id)
     db = SessionLocal()
     try:
         result = _player_handler(db).handle_deeplink_deck(tournament_id, tg_id=user.id)
-        if result.needs_name:
-            if context.user_data is None:
-                context.user_data = {}
-            context.user_data[USER_DATA_PENDING_NAME] = tournament_id
+        _set_registration_pending(context, result, tournament_id)
         await update.effective_message.reply_text(result.text, reply_markup=result.keyboard)
     finally:
         db.close()
@@ -127,16 +124,13 @@ async def _start_registration_deeplink(
     update: Update, context: ContextTypes.DEFAULT_TYPE, user, tournament_id: int
 ) -> None:
     """Обработка общей кнопки регистрации: записанным показывает карточку турнира."""
-    from bot.telegram.player import USER_DATA_PENDING_NAME, _player_handler  # noqa: PLC0415
+    from bot.telegram.player import _player_handler, _set_registration_pending  # noqa: PLC0415
 
     _log("cmd_start_registration_deeplink", user, tournament_id=tournament_id)
     db = SessionLocal()
     try:
         result = _player_handler(db).handle_deeplink_registration(tournament_id, tg_id=user.id)
-        if result.needs_name:
-            if context.user_data is None:
-                context.user_data = {}
-            context.user_data[USER_DATA_PENDING_NAME] = tournament_id
+        _set_registration_pending(context, result, tournament_id)
         await update.effective_message.reply_text(result.text, reply_markup=result.keyboard)
     finally:
         db.close()

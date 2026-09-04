@@ -170,6 +170,46 @@ class TestHandleRegister:
         buttons = [button for row in result.keyboard.inline_keyboard for button in row]
         assert any(button.callback_data == f"{CB_DEFER_DECK}:{active_tournament.id}" for button in buttons)
 
+    def test_online_tournament_requires_endstep_username(self, db, handler, user_svc, active_tournament):
+        user = user_svc.get_or_create(tg_id=5105, username="u", first_name="Иван", last_name="Иванов")
+        db.get(models.Tournament, active_tournament.id).is_online = True
+        db.commit()
+
+        result = handler.handle_register(active_tournament.id, tg_id=user.tg_id)
+
+        assert result.needs_endstep_username is True
+        assert result.keyboard is None
+
+    def test_online_tournament_continues_after_endstep_username(self, db, handler, user_svc, active_tournament):
+        user = user_svc.get_or_create(tg_id=5106, username="u", first_name="Иван", last_name="Иванов")
+        db.get(models.Tournament, active_tournament.id).is_online = True
+        db.commit()
+
+        result = handler.handle_save_endstep_username_then_register(user.tg_id, "Hero_42", active_tournament.id)
+
+        assert result.needs_endstep_username is False
+        assert result.keyboard is not None
+        assert user_svc.get_by_tg_id(user.tg_id).endstep_username == "Hero_42"
+
+    def test_stale_archetype_button_cannot_register_online_without_username(
+        self, db, handler, svc, user_svc, active_tournament, archetype_burn
+    ):
+        user = user_svc.get_or_create(tg_id=5107, username="u", first_name="Иван", last_name="Иванов")
+        db.get(models.Tournament, active_tournament.id).is_online = True
+        db.commit()
+
+        result = handler.handle_archetype(
+            user.tg_id,
+            user.username,
+            user.first_name,
+            user.last_name,
+            active_tournament.id,
+            archetype_burn.id,
+        )
+
+        assert result.needs_endstep_username is True
+        assert svc.get_participant(active_tournament.id, user.id) is None
+
 
 class TestHandleDeferDeck:
     def test_registers_without_deck_and_marks_explicit_defer(self, handler, svc, user_svc, active_tournament):

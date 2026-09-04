@@ -10,6 +10,10 @@ from bot.messages import (
     ALREADY_REGISTERED,
     CHOOSE_ARCHETYPE,
     DEFER_DECK_EXPIRED,
+    ENDSTEP_USERNAME_INVALID,
+    ENDSTEP_USERNAME_REQUIRED,
+    ENDSTEP_USERNAME_SAVED,
+    ENDSTEP_USERNAME_TAKEN,
     INVALID_FULL_NAME,
     LEAVE_CONFIRM_PROMPT,
     LEFT_TOURNAMENT,
@@ -38,7 +42,7 @@ from services.archetype import ArchetypeItem, ArchetypeService
 from services.names import has_complete_person_name, parse_full_name_input
 from services.payment_service import PaymentService
 from services.tournament import TournamentService
-from services.user import UserService
+from services.user import EndstepUsernameInvalid, EndstepUsernameTaken, UserService
 from services.utils import get_tournament
 
 ARCHETYPE_COLLAPSED_COUNT = 3
@@ -203,11 +207,14 @@ class PlayerHandler:
         return self._tournament_card(t, tg_id)
 
     def handle_register(self, tournament_id: int, tg_id: int | None = None) -> HandlerResult:
-        """Возвращает выбор архетипа. Если имя не задано — needs_name=True."""
+        """Возвращает выбор архетипа, запросив обязательные поля профиля."""
         if tg_id is not None:
             user = self.user_svc.get_by_tg_id(tg_id)
             if user is None or not has_complete_person_name(user.first_name, user.last_name):
                 return HandlerResult(NAME_REQUIRED_FOR_REGISTRATION, needs_name=True)
+            tournament = get_tournament(self.svc.db, tournament_id)
+            if tournament.is_online and not user.endstep_username:
+                return HandlerResult(ENDSTEP_USERNAME_REQUIRED, needs_endstep_username=True)
         return self._archetype_keyboard_for_player(tournament_id, tg_id)
 
     def handle_deeplink_deck(self, tournament_id: int, tg_id: int) -> HandlerResult:
@@ -416,7 +423,37 @@ class PlayerHandler:
         first_name, last_name = parsed
         self.user_svc.update_name(tg_id, first_name, last_name)
         self.user_svc.merge_placeholder_by_name(tg_id, first_name, last_name)
-        return self._archetype_keyboard_for_player(tournament_id, tg_id)
+        return self.handle_register(tournament_id, tg_id)
+
+    def handle_save_endstep_username_then_register(
+        self,
+        tg_id: int,
+        username_text: str,
+        tournament_id: int,
+    ) -> HandlerResult:
+        try:
+            user = self.user_svc.update_endstep_username(tg_id, username_text)
+        except EndstepUsernameInvalid:
+            return HandlerResult(ENDSTEP_USERNAME_INVALID, needs_endstep_username=True)
+        except EndstepUsernameTaken:
+            return HandlerResult(ENDSTEP_USERNAME_TAKEN, needs_endstep_username=True)
+        result = self.handle_register(tournament_id, tg_id)
+        if result.needs_name or result.needs_endstep_username:
+            return result
+        result.text = f"{ENDSTEP_USERNAME_SAVED.format(username=user.endstep_username)}\n\n{result.text}"
+        return result
+
+    def _online_username_requirement(self, tournament_id: int, tg_id: int) -> HandlerResult | None:
+        try:
+            tournament = get_tournament(self.svc.db, tournament_id)
+        except errors.TournamentNotFound:
+            return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
+        if not tournament.is_online:
+            return None
+        user = self.user_svc.get_by_tg_id(tg_id)
+        if user is None or not user.endstep_username:
+            return HandlerResult(ENDSTEP_USERNAME_REQUIRED, needs_endstep_username=True)
+        return None
 
     def _register_user(
         self, tg_id: int, username: str | None, first_name: str | None, last_name: str | None
@@ -444,6 +481,9 @@ class PlayerHandler:
         tournament_id: int,
         archetype_id: int,
     ) -> HandlerResult:
+        requirement = self._online_username_requirement(tournament_id, tg_id)
+        if requirement is not None:
+            return requirement
         try:
             db_user = self._register_user(tg_id, username, first_name, last_name)
             try:
@@ -477,6 +517,9 @@ class PlayerHandler:
         tournament_id: int,
     ) -> HandlerResult:
         """Register without a deck during the first seven hours after tournament creation."""
+        requirement = self._online_username_requirement(tournament_id, tg_id)
+        if requirement is not None:
+            return requirement
         try:
             tournament = get_tournament(self.svc.db, tournament_id)
         except errors.TournamentNotFound:
@@ -511,6 +554,9 @@ class PlayerHandler:
         tournament_id: int,
         name: str,
     ) -> HandlerResult:
+        requirement = self._online_username_requirement(tournament_id, tg_id)
+        if requirement is not None:
+            return requirement
         try:
             archetype = self.arch_svc.get_or_create_by_name(name, is_custom=True)
             db_user = self._register_user(tg_id, username, first_name, last_name)

@@ -36,6 +36,7 @@ class ArchetypeWithAliases(ArchetypeRead):
 class UserBase(BaseModel):
     tg_id: int
     username: Optional[str] = None
+    endstep_username: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
 

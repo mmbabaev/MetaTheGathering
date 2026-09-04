@@ -99,6 +99,22 @@ class ScheduleService:
     def get_row(self, row_id: int) -> models.ClubScheduleRow | None:
         return self.db.get(models.ClubScheduleRow, row_id)
 
+    def list_club_settings(self) -> list[models.ClubSettingsRow]:
+        rows = self.db.execute(select(models.ClubSettingsRow)).scalars().all()
+        order = {identity.name: i for i, identity in enumerate(club_identities())}
+        return sorted(rows, key=lambda row: order.get(row.club_name, 99))
+
+    def get_club_settings(self, settings_id: int) -> models.ClubSettingsRow | None:
+        return self.db.get(models.ClubSettingsRow, settings_id)
+
+    def pairings_publication_enabled(self, club_name: str | None) -> bool:
+        if not club_name:
+            return False
+        value = self.db.execute(
+            select(models.ClubSettingsRow.publish_pairings).where(models.ClubSettingsRow.club_name == club_name)
+        ).scalar_one_or_none()
+        return bool(value)
+
     # --- сид ---
 
     def ensure_defaults(self) -> int:
@@ -128,6 +144,19 @@ class ScheduleService:
         self.db.commit()
         return created
 
+    def ensure_club_settings(self) -> int:
+        """Добавляет отсутствующие клубы с безопасным дефолтом публикации «выкл»."""
+        existing = set(self.db.execute(select(models.ClubSettingsRow.club_name)).scalars().all())
+        created = 0
+        for identity in club_identities():
+            if identity.name in existing:
+                continue
+            self.db.add(models.ClubSettingsRow(club_name=identity.name, publish_pairings=False))
+            created += 1
+        if created:
+            self.db.commit()
+        return created
+
     # --- правка ---
 
     def toggle_enabled(self, row_id: int) -> bool | None:
@@ -138,6 +167,14 @@ class ScheduleService:
         row.enabled = not row.enabled
         self.db.commit()
         return bool(row.enabled)
+
+    def toggle_pairings_publication(self, settings_id: int) -> bool | None:
+        row = self.get_club_settings(settings_id)
+        if row is None:
+            return None
+        row.publish_pairings = not row.publish_pairings
+        self.db.commit()
+        return bool(row.publish_pairings)
 
     def set_time_field(self, row_id: int, field: str, value: str) -> bool:
         """Ставит create_time/game_time (нормализованное `value`). Возвращает False, если строки нет."""

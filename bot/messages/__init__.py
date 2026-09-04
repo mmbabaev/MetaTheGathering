@@ -35,10 +35,17 @@ INVALID_FULL_NAME = (
     "Нужно указать фамилию и имя — минимум два слова с буквами.\n\n"
     "Введите фамилию и имя через пробел (например: Иванов Иван):"
 )
+ENDSTEP_USERNAME_REQUIRED = (
+    "Для записи на онлайн-турнир нужен ник Endstep.\n\nВведите точный ник, под которым вы играете на Endstep/AetherHub:"
+)
+ENDSTEP_USERNAME_INVALID = "Ник Endstep должен быть одной непустой строкой длиной до 255 символов."
+ENDSTEP_USERNAME_TAKEN = "Этот ник Endstep уже указан у другого пользователя. Проверьте написание."
+ENDSTEP_USERNAME_SAVED = "Ник Endstep сохранён: {username}"
 
 # Settings
 SETTINGS_MENU = "⚙️ Настройки"
 SETTINGS_CHANGE_NAME_PROMPT = "Введите фамилию и имя через пробел (например: Иванов Иван):"
+SETTINGS_CHANGE_ENDSTEP_USERNAME_PROMPT = "Введите точный ник, под которым вы играете на Endstep/AetherHub:"
 
 # Admin messages
 NOT_ADMIN = "У вас нет прав администратора."

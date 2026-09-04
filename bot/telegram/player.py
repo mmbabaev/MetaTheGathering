@@ -5,6 +5,7 @@ from telegram.ext import ContextTypes
 
 from bot.features import FeatureService
 from bot.handlers.admin import AdminHandler
+from bot.handlers.base import HandlerResult
 from bot.handlers.cellar import CellarHandler
 from bot.handlers.player import PlayerHandler
 from bot.handlers.settings import SettingsHandler
@@ -23,7 +24,9 @@ from services.user import UserService
 
 USER_DATA_PENDING_CUSTOM = "pending_custom_archetype_tournament_id"
 USER_DATA_PENDING_NAME = "pending_name_for_tournament_id"
+USER_DATA_PENDING_ENDSTEP_USERNAME = "pending_endstep_username_for_tournament_id"
 USER_DATA_PENDING_SETTINGS_NAME = "pending_settings_name"
+USER_DATA_PENDING_SETTINGS_ENDSTEP_USERNAME = "pending_settings_endstep_username"
 USER_DATA_PENDING_CELLAR_NAME = "pending_cellar_name"
 USER_DATA_PENDING_BULK_ADD = "pending_bulk_add_tournament_id"
 USER_DATA_PENDING_ADMIN_CUSTOM_ARCH = "pending_admin_custom_arch_participant_id"
@@ -46,6 +49,17 @@ def _player_handler(db) -> PlayerHandler:
         _make_features(db),
         PaymentService(db),
     )
+
+
+def _set_registration_pending(context, result: HandlerResult, tournament_id: int) -> None:
+    if context.user_data is None:
+        context.user_data = {}
+    if result.needs_name:
+        context.user_data[USER_DATA_PENDING_NAME] = tournament_id
+        context.user_data.pop(USER_DATA_PENDING_ENDSTEP_USERNAME, None)
+    elif result.needs_endstep_username:
+        context.user_data[USER_DATA_PENDING_ENDSTEP_USERNAME] = tournament_id
+        context.user_data.pop(USER_DATA_PENDING_NAME, None)
 
 
 def _settings_handler(db) -> SettingsHandler:
@@ -100,10 +114,7 @@ async def callback_register(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     db = SessionLocal()
     try:
         result = _player_handler(db).handle_register(tournament_id, tg_id=user.id if user else None)
-        if result.needs_name:
-            if context.user_data is None:
-                context.user_data = {}
-            context.user_data[USER_DATA_PENDING_NAME] = tournament_id
+        _set_registration_pending(context, result, tournament_id)
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
     finally:
@@ -129,6 +140,11 @@ async def callback_archetype(update: Update, context: ContextTypes.DEFAULT_TYPE)
             tournament_id,
             archetype_id,
         )
+        if result.needs_name or result.needs_endstep_username:
+            _set_registration_pending(context, result, tournament_id)
+            await query.edit_message_text(result.text, reply_markup=result.keyboard)
+            await query.answer()
+            return
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
@@ -161,6 +177,11 @@ async def callback_defer_deck(update: Update, context: ContextTypes.DEFAULT_TYPE
             user.last_name,
             tournament_id,
         )
+        if result.needs_name or result.needs_endstep_username:
+            _set_registration_pending(context, result, tournament_id)
+            await query.edit_message_text(result.text, reply_markup=result.keyboard)
+            await query.answer()
+            return
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
@@ -417,6 +438,25 @@ async def _handle_pending_name(msg, user, text, context) -> bool:
         )
         if not result.needs_name:
             context.user_data.pop(USER_DATA_PENDING_NAME, None)
+        if result.needs_endstep_username:
+            _set_registration_pending(context, result, tournament_id)
+        await msg.reply_text(result.text, reply_markup=result.keyboard)
+    finally:
+        db.close()
+    return True
+
+
+async def _handle_pending_endstep_username(msg, user, text, context) -> bool:
+    tournament_id = context.user_data.get(USER_DATA_PENDING_ENDSTEP_USERNAME)
+    if tournament_id is None:
+        return False
+    db = SessionLocal()
+    try:
+        result = _player_handler(db).handle_save_endstep_username_then_register(user.id, text, tournament_id)
+        if result.needs_name or result.needs_endstep_username:
+            _set_registration_pending(context, result, tournament_id)
+        else:
+            context.user_data.pop(USER_DATA_PENDING_ENDSTEP_USERNAME, None)
         await msg.reply_text(result.text, reply_markup=result.keyboard)
     finally:
         db.close()
@@ -434,6 +474,20 @@ async def _handle_pending_settings_name(msg, user, text, context) -> bool:
         result = _settings_handler(db).handle_settings_name_text(user.id, text)
         if not result.needs_name:
             context.user_data.pop(USER_DATA_PENDING_SETTINGS_NAME, None)
+        await msg.reply_text(result.text)
+    finally:
+        db.close()
+    return True
+
+
+async def _handle_pending_settings_endstep_username(msg, user, text, context) -> bool:
+    if not context.user_data.get(USER_DATA_PENDING_SETTINGS_ENDSTEP_USERNAME):
+        return False
+    db = SessionLocal()
+    try:
+        result = _settings_handler(db).handle_settings_endstep_username_text(user.id, text)
+        if not result.needs_endstep_username:
+            context.user_data.pop(USER_DATA_PENDING_SETTINGS_ENDSTEP_USERNAME, None)
         await msg.reply_text(result.text)
     finally:
         db.close()
@@ -561,8 +615,12 @@ async def _handle_pending_custom_arch(msg, user, text, context) -> bool:
             tournament_id,
             text,
         )
-        await msg.reply_text(result.text)
-        if not result.is_alert:
+        if result.needs_name or result.needs_endstep_username:
+            _set_registration_pending(context, result, tournament_id)
+            await msg.reply_text(result.text, reply_markup=result.keyboard)
+        else:
+            await msg.reply_text(result.text)
+        if not result.is_alert and not result.needs_name and not result.needs_endstep_username:
             card = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id)
             await msg.reply_text(card.text, reply_markup=card.keyboard)
             await refresh_meta_police_message(context.bot, db, tournament_id)
@@ -600,8 +658,10 @@ async def _handle_pending_meta_import(msg, user, text, context) -> bool:
 
 _TEXT_INPUT_HANDLERS = [
     _handle_pending_name,
+    _handle_pending_endstep_username,
     _handle_pending_cellar_name,
     _handle_pending_settings_name,
+    _handle_pending_settings_endstep_username,
     _handle_pending_missing_custom_arch,
     _handle_pending_admin_custom_arch,
     _handle_pending_bulk_add,

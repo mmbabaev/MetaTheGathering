@@ -49,9 +49,12 @@ from bot.keyboards import (
     CB_CLOSE_TOURNAMENT,
     CB_CLOSE_TOURNAMENT_CANCEL,
     CB_CLOSE_TOURNAMENT_CONFIRM,
+    CB_CLUB_PAIRING_SETTINGS,
+    CB_CLUB_PAIRING_SETTINGS_LIST,
     CB_CLUB_SETTINGS_CHAT,
     CB_CLUB_SETTINGS_CLUB,
     CB_CLUB_SETTINGS_LIST,
+    CB_CLUB_TOGGLE_PAIRINGS,
     CB_CREATE_POLL,
     CB_CREATE_WIZARD_ANNOUNCE_DATE,
     CB_CREATE_WIZARD_ANNOUNCE_NOW,
@@ -125,6 +128,7 @@ from bot.keyboards import (
     CB_SCHEDULE_TOGGLE,
     CB_SCHEDULE_WEEKDAY,
     CB_SET_IMPORT_TIME,
+    CB_SETTINGS_ENDSTEP_USERNAME,
     CB_SETTINGS_NAME,
     CB_SETTINGS_TOGGLE_ACHIEVEMENTS_NOTIFY,
     CB_SETTINGS_TOGGLE_CELLAR_NOTIFY,
@@ -218,8 +222,11 @@ async def _post_init(app: Application) -> None:
     try:
         FeatureFlagService(db).ensure_defaults()
         created = ScheduleService(db).ensure_defaults()
+        club_settings_created = ScheduleService(db).ensure_club_settings()
         if created:
             logger.info("Расписание засеяно из кода: %s строк", created)
+        if club_settings_created:
+            logger.info("Настройки клубов засеяны из кода: %s строк", club_settings_created)
         if FeatureFlagService(db).is_enabled(FeatureFlags.CELLAR_DECKS):
             cellar_sync = CellarService(db).ensure_catalog()
             if cellar_sync:
@@ -419,6 +426,12 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(player.callback_leave_cancel, pattern=f"^{CB_LEAVE_CANCEL}:"))
     app.add_handler(CallbackQueryHandler(settings_handler.callback_settings_name, pattern=f"^{CB_SETTINGS_NAME}$"))
     app.add_handler(
+        CallbackQueryHandler(
+            settings_handler.callback_settings_endstep_username,
+            pattern=f"^{CB_SETTINGS_ENDSTEP_USERNAME}$",
+        )
+    )
+    app.add_handler(
         CallbackQueryHandler(settings_handler.callback_toggle_emoji, pattern=f"^{CB_SETTINGS_TOGGLE_EMOJI}$")
     )
     app.add_handler(
@@ -558,6 +571,18 @@ def main() -> None:
     )
     app.add_handler(CallbackQueryHandler(admin.callback_reopen_tournament, pattern=f"^{CB_REOPEN_TOURNAMENT}:"))
     app.add_handler(CallbackQueryHandler(schedule_handler.callback_schedule_list, pattern=f"^{CB_SCHEDULE_LIST}$"))
+    app.add_handler(
+        CallbackQueryHandler(
+            schedule_handler.callback_club_settings_list,
+            pattern=f"^{CB_CLUB_PAIRING_SETTINGS_LIST}$",
+        )
+    )
+    app.add_handler(
+        CallbackQueryHandler(schedule_handler.callback_club_settings, pattern=f"^{CB_CLUB_PAIRING_SETTINGS}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(schedule_handler.callback_club_toggle_pairings, pattern=f"^{CB_CLUB_TOGGLE_PAIRINGS}:")
+    )
     app.add_handler(CallbackQueryHandler(schedule_handler.callback_schedule_row, pattern=f"^{CB_SCHEDULE_ROW}:"))
     app.add_handler(CallbackQueryHandler(schedule_handler.callback_schedule_toggle, pattern=f"^{CB_SCHEDULE_TOGGLE}:"))
     app.add_handler(

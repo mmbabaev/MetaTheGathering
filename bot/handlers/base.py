@@ -10,6 +10,7 @@ class HandlerResult:
     keyboard: Optional[InlineKeyboardMarkup] = None
     is_alert: bool = False
     needs_name: bool = False  # wrapper должен запросить имя перед продолжением
+    needs_endstep_username: bool = False  # онлайн-турнир требует ник Endstep
     parse_mode: Optional[str] = None
     tournament_id: Optional[int] = None  # set when result references a specific tournament
     creation_plan_id: Optional[int] = None  # set after tournament creation is scheduled
