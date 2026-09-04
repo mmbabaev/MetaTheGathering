@@ -33,7 +33,7 @@ def test_pairing_publication_is_off_by_default(db, svc):
     assert ClubPairingsService(db).build_for_new_rounds(tournament.id, [1]) is None
 
 
-def test_online_pairings_show_tg_and_endstep_names_once(db, svc, user_svc):
+def test_online_pairings_use_public_status_format_with_tg_and_real_names(db, svc, user_svc):
     tournament = _online_tournament(svc)
     alice = user_svc.get_or_create(tg_id=1, username="alice_tg", first_name="Alice", last_name="One")
     bob = user_svc.get_or_create(tg_id=2, username="bob_tg", first_name="Bob", last_name="Two")
@@ -48,9 +48,11 @@ def test_online_pairings_show_tg_and_endstep_names_once(db, svc, user_svc):
     message = ClubPairingsService(db).build_for_new_rounds(tournament.id, [1])
 
     assert message.chat_id == -100123
-    assert "@alice_tg (Endstep: AliceEndstep)" in message.text
-    assert "@bob_tg (Endstep: BobEndstep)" in message.text
-    assert message.text.count("Стол 1:") == 1
+    assert "🎮 Endstep Pauper · Регистрация" in message.text
+    assert "Раунд 1 · результаты 0/1" in message.text
+    assert "1. @alice_tg — @bob_tg" in message.text
+    assert "One Alice — Two Bob" in message.text
+    assert "Счёт: — · Статус: 🎮 играют" in message.text
 
 
 def test_endstep_username_resolves_online_aetherhub_name(db, svc, user_svc):
@@ -72,6 +74,20 @@ async def test_delivery_posts_single_message_to_club_chat(db, svc):
     assert await send_club_pairings(bot, db, tournament.id, [1]) is True
     bot.send_message.assert_awaited_once()
     assert bot.send_message.await_args.kwargs["chat_id"] == -100123
+    assert bot.send_message.await_args.kwargs["parse_mode"] == "HTML"
+
+
+async def test_no_chat_target_never_attempts_delivery(db, svc):
+    tournament = svc.create_tournament(
+        TournamentCreate(title="Endstep Pauper", chat_id=0, club="Endstep-ru", is_online=True)
+    )
+    _add_pair(db, tournament.id, "Alice", None)
+    db.add(models.ClubSettingsRow(club_name="Endstep-ru", publish_pairings=True))
+    db.commit()
+    bot = AsyncMock()
+
+    assert await send_club_pairings(bot, db, tournament.id, [1]) is False
+    bot.send_message.assert_not_awaited()
 
 
 def test_unknown_club_never_publishes(db, svc):

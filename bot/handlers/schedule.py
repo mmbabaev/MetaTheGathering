@@ -88,7 +88,8 @@ class ScheduleHandler:
             return HandlerResult(CLUB_SETTINGS_NOT_FOUND, is_alert=True)
         state = "включена" if row.publish_pairings else "выключена"
         return HandlerResult(
-            f"⚙️ {row.club_name}\n\nПубликация новых парингов в чат: {state}.",
+            f"⚙️ {row.club_name}\n\nПубликация новых парингов в чат турнира: {state}.\n"
+            "Для ручного турнира используется чат, выбранный в /clubs перед его созданием.",
             keyboard=self.keyboards.club_pairing_settings_keyboard(row.id, row.publish_pairings),
         )
 

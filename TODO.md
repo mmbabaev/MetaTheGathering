@@ -103,7 +103,9 @@
   [#284](https://github.com/mmbabaev/MetaTheGathering/pull/284),
   [#287](https://github.com/mmbabaev/MetaTheGathering/pull/287).
 - Telegram- и Endstep-ники поддерживаются для сопоставления импортов и публикации парингов, но
-  Endstep-ник остаётся необязательным полем настроек и при регистрации не запрашивается — PR
+  Endstep-ник остаётся необязательным полем настроек и при регистрации не запрашивается. При
+  включённой клубной настройке новый раунд отправляется в чат турнира полной карточкой: Telegram-ники,
+  ФИО, текущие счёты и статусы матчей — PR
   [#281](https://github.com/mmbabaev/MetaTheGathering/pull/281),
   [#287](https://github.com/mmbabaev/MetaTheGathering/pull/287).
 - В настройках Endstep-ru настоящий чат `@endstep_ru` доступен отдельным вариантом; текущий маршрут
