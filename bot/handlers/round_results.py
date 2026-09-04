@@ -32,6 +32,8 @@ class DeliveryResult:
     recipient_tg_id: int | None = None
     recipient_text: str | None = None
     recipient_keyboard: InlineKeyboardMarkup | None = None
+    tournament_id: int | None = None
+    round_number: int | None = None
 
 
 class RoundResultsHandler:
@@ -166,6 +168,8 @@ class RoundResultsHandler:
                     match.revision,
                     back_callback_data=f"{CB_ROUND_VIEW}:{match.tournament_id}:{match.round_number}",
                 ),
+                tournament_id=match.tournament_id,
+                round_number=match.round_number,
             )
         except RoundResultError as exc:
             return DeliveryResult(screen=HandlerResult(str(exc), is_alert=True))
@@ -178,6 +182,8 @@ class RoundResultsHandler:
                 screen=HandlerResult(f"✅ Результат подтверждён:\n\n{self._score(match)}"),
                 recipient_tg_id=proposer.tg_id if proposer and proposer.tg_id > 0 else None,
                 recipient_text=f"✅ Соперник подтвердил результат:\n\n{self._score(match)}",
+                tournament_id=match.tournament_id,
+                round_number=match.round_number,
             )
         except RoundResultError as exc:
             return DeliveryResult(screen=HandlerResult(str(exc), is_alert=True))
@@ -203,6 +209,8 @@ class RoundResultsHandler:
                 ),
                 recipient_tg_id=rejected.proposer_tg_id,
                 recipient_text=f"❌ Соперник отклонил предложенный результат раунда {match.round_number}.",
+                tournament_id=match.tournament_id,
+                round_number=match.round_number,
             )
         except RoundResultError as exc:
             return DeliveryResult(screen=HandlerResult(str(exc), is_alert=True))
@@ -258,6 +266,7 @@ class RoundResultsHandler:
             match = self.results.admin_set(match_id, admin_tg_id, player1_wins, player2_wins)
             result = self.handle_admin_list(match.tournament_id, admin_tg_id)
             result.answer_text = f"Сохранено: {self._score(match)}"
+            result.tournament_id = match.tournament_id
             return result
         except RoundResultError as exc:
             return HandlerResult(str(exc), is_alert=True)

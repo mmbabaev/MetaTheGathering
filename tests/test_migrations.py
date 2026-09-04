@@ -48,6 +48,25 @@ def test_single_alembic_head():
     assert len(heads) == 1, f"Expected exactly 1 alembic head, got {len(heads)}: {heads}"
 
 
+def test_round_pairings_message_tracking_migration_creates_table():
+    metadata = sa.MetaData()
+    sa.Table("tournaments", metadata, sa.Column("id", sa.Integer, primary_key=True))
+    engine = sa.create_engine("sqlite://")
+    metadata.create_all(engine)
+    migration = runpy.run_path(str(VERSIONS_DIR / "330c09696d85_track_round_pairings_messages.py"))
+
+    with engine.begin() as connection:
+        context = MigrationContext.configure(connection)
+        with Operations.context(context):
+            migration["upgrade"]()
+        table = sa.Table("tournament_round_pairings_messages", sa.MetaData(), autoload_with=connection)
+        assert {"tournament_id", "round_number", "chat_id", "message_id"} <= set(table.c.keys())
+
+        with Operations.context(context):
+            migration["downgrade"]()
+        assert not sa.inspect(connection).has_table("tournament_round_pairings_messages")
+
+
 def test_tournament_online_marker_backfills_existing_rows_as_offline():
     metadata = sa.MetaData()
     tournaments = sa.Table(

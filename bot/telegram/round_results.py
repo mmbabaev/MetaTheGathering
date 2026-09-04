@@ -10,7 +10,7 @@ from telegram.ext import ContextTypes
 from bot.handlers.base import HandlerResult
 from bot.handlers.round_results import DeliveryResult, RoundResultsHandler
 from bot.keyboards import Keyboards
-from bot.telegram.club_pairings import send_club_pairings
+from bot.telegram.club_pairings import refresh_club_pairings, send_club_pairings
 from bot.telegram.common import parse_callback_ints
 from core import models
 from core.config import settings
@@ -97,6 +97,7 @@ async def callback_send(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     try:
         delivery = RoundResultsHandler(db).handle_send(match_id, user.id, own, opponent)
         if await _render(query, delivery.screen):
+            await _refresh_public_message(context.bot, db, delivery)
             await _deliver_one(context.bot, delivery)
     finally:
         db.close()
@@ -128,6 +129,7 @@ async def _respond(update: Update, context: ContextTypes.DEFAULT_TYPE, *, confir
             else handler.handle_reject(match_id, revision, user.id)
         )
         if await _render(query, delivery.screen):
+            await _refresh_public_message(context.bot, db, delivery)
             await _deliver_one(context.bot, delivery)
     finally:
         db.close()
@@ -156,11 +158,23 @@ async def callback_admin_p1(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 async def callback_admin_p2(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await _simple(
-        update,
-        3,
-        lambda handler, tg_id, match_id, left, right: handler.handle_admin_p2(match_id, tg_id, left, right),
-    )
+    query = update.callback_query
+    user = update.effective_user
+    if query is None or user is None:
+        return
+    values = await parse_callback_ints(query, 3)
+    if values is None:
+        return
+    match_id, left, right = values
+    db = SessionLocal()
+    try:
+        result = RoundResultsHandler(db).handle_admin_p2(match_id, user.id, left, right)
+        if await _render(query, result) and result.tournament_id is not None:
+            match = db.get(models.RoundMatch, match_id)
+            if match is not None:
+                await refresh_club_pairings(context.bot, db, result.tournament_id, match.round_number)
+    finally:
+        db.close()
 
 
 async def callback_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -293,3 +307,9 @@ def _admin_more_keyboard(db, tournament_id: int, tg_id: int):
         show_internal_beta=settings.DEBUG,
         internal_swiss=tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS,
     )
+
+
+async def _refresh_public_message(bot, db, delivery: DeliveryResult) -> None:
+    if delivery.tournament_id is None or delivery.round_number is None:
+        return
+    await refresh_club_pairings(bot, db, delivery.tournament_id, delivery.round_number)
