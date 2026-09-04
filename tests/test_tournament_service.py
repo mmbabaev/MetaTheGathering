@@ -46,6 +46,21 @@ class TestCreateTournament:
         with pytest.raises(TournamentAlreadyExists):
             svc.create_tournament(TournamentCreate(title="Third", chat_id=100))
 
+    def test_clubs_with_no_announcement_chat_have_independent_limits(self, svc):
+        svc.create_tournament(TournamentCreate(title="Pair 1", chat_id=0, club="Pair of dice"))
+        svc.create_tournament(TournamentCreate(title="Pair 2", chat_id=0, club="Pair of dice"))
+
+        endstep = svc.create_tournament(TournamentCreate(title="Endstep", chat_id=0, club="Endstep-ru"))
+
+        assert endstep.club == "Endstep-ru"
+
+    def test_two_active_tournaments_block_third_for_same_club_across_chats(self, svc):
+        svc.create_tournament(TournamentCreate(title="First", chat_id=100, club="Goldfish"))
+        svc.create_tournament(TournamentCreate(title="Second", chat_id=200, club="Goldfish"))
+
+        with pytest.raises(TournamentAlreadyExists, match="Club Goldfish"):
+            svc.create_tournament(TournamentCreate(title="Third", chat_id=300, club="Goldfish"))
+
     def test_current_active_tournament_is_newest(self, svc, tournament):
         second = svc.create_tournament(TournamentCreate(title="Second", chat_id=100))
         assert svc.get_active_tournament_for_chat(100).id == second.id
@@ -510,6 +525,15 @@ class TestListActiveTournamentsForChat:
 
     def test_empty_for_unknown_chat(self, svc):
         assert svc.list_active_tournaments_for_chat(99998) == []
+
+
+class TestListActiveTournamentsForClub:
+    def test_uses_club_instead_of_shared_announcement_chat(self, svc):
+        goldfish = svc.create_tournament(TournamentCreate(title="Goldfish", chat_id=0, club="Goldfish"))
+        svc.create_tournament(TournamentCreate(title="Endstep", chat_id=0, club="Endstep-ru"))
+
+        assert [t.id for t in svc.list_active_tournaments_for_club("Goldfish")] == [goldfish.id]
+        assert svc.get_active_tournament_for_club("Goldfish").id == goldfish.id
 
 
 # ===== open_registration =====
