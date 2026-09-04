@@ -17,7 +17,6 @@ from bot.telegram.player import (
     USER_DATA_PENDING_ADMIN_CUSTOM_ARCH,
     USER_DATA_PENDING_CELLAR_NAME,
     USER_DATA_PENDING_CUSTOM,
-    USER_DATA_PENDING_ENDSTEP_USERNAME,
     USER_DATA_PENDING_MISSING_CUSTOM_ARCH,
     USER_DATA_PENDING_NAME,
     USER_DATA_PENDING_SETTINGS_NAME,
@@ -142,18 +141,6 @@ async def test_callback_register_needs_name_sets_user_data():
         await callback_register(update, ctx)
 
     assert ctx.user_data[USER_DATA_PENDING_NAME] == 7
-
-
-async def test_callback_register_needs_endstep_username_sets_user_data():
-    result = HandlerResult("Введите Endstep-ник", needs_endstep_username=True)
-    update = _make_callback_update("reg:8")
-    ctx = _make_context()
-
-    with patch("bot.telegram.player.SessionLocal"), patch("bot.telegram.player.PlayerHandler") as mock_ph:
-        mock_ph.return_value.handle_register.return_value = result
-        await callback_register(update, ctx)
-
-    assert ctx.user_data[USER_DATA_PENDING_ENDSTEP_USERNAME] == 8
 
 
 async def test_callback_register_bad_data():
@@ -303,33 +290,6 @@ async def test_message_text_input_pending_name_calls_save():
 
     mock_ph.return_value.handle_save_name_then_register.assert_called_once_with(222, "alice", "Иван Петров", 10)
     assert USER_DATA_PENDING_NAME not in ctx.user_data
-
-
-async def test_message_text_input_pending_endstep_username_calls_save():
-    result = HandlerResult("Выберите архетип:")
-    user = _make_user(223)
-    update = _make_update(user=user, message_text="EndstepHero")
-    ctx = _make_context({USER_DATA_PENDING_ENDSTEP_USERNAME: 11})
-
-    with patch("bot.telegram.player.SessionLocal"), patch("bot.telegram.player.PlayerHandler") as mock_ph:
-        mock_ph.return_value.handle_save_endstep_username_then_register.return_value = result
-        await message_text_input(update, ctx)
-
-    mock_ph.return_value.handle_save_endstep_username_then_register.assert_called_once_with(223, "EndstepHero", 11)
-    assert USER_DATA_PENDING_ENDSTEP_USERNAME not in ctx.user_data
-
-
-async def test_valid_name_switches_pending_state_to_endstep_username():
-    result = HandlerResult("Введите Endstep-ник", needs_endstep_username=True)
-    update = _make_update(message_text="Петров Иван")
-    ctx = _make_context({USER_DATA_PENDING_NAME: 12})
-
-    with patch("bot.telegram.player.SessionLocal"), patch("bot.telegram.player.PlayerHandler") as mock_ph:
-        mock_ph.return_value.handle_save_name_then_register.return_value = result
-        await message_text_input(update, ctx)
-
-    assert USER_DATA_PENDING_NAME not in ctx.user_data
-    assert ctx.user_data[USER_DATA_PENDING_ENDSTEP_USERNAME] == 12
 
 
 async def test_message_text_input_pending_name_empty_restores_state():

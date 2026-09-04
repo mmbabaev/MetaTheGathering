@@ -21,8 +21,8 @@ def _online_tournament(db):
     return TournamentService(db).create_tournament(TournamentCreate(title="Endstep Test", chat_id=100, is_online=True))
 
 
-def _user(db, tg_id, first, last, *, admin=False):
-    user = UserService(db).get_or_create(tg_id=tg_id, first_name=first, last_name=last)
+def _user(db, tg_id, first, last, *, username=None, admin=False):
+    user = UserService(db).get_or_create(tg_id=tg_id, username=username, first_name=first, last_name=last)
     user.is_admin = admin
     db.commit()
     return user
@@ -63,8 +63,8 @@ def _round(db, tournament_id, number, left, right, table=1, score=None):
 @pytest.fixture
 def online_match(db):
     tournament = _online_tournament(db)
-    alice = _user(db, 101, "Алиса", "Иванова")
-    bob = _user(db, 102, "Борис", "Петров")
+    alice = _user(db, 101, "Алиса", "Иванова", username="alice_tg")
+    bob = _user(db, 102, "Борис", "Петров", username="bob_tg")
     _participant(db, tournament.id, alice)
     _participant(db, tournament.id, bob)
     _round(db, tournament.id, 1, "Иванова Алиса", "Петров Борис")
@@ -152,9 +152,26 @@ def test_pending_score_is_public_and_summary_keeps_source_order(db, online_match
     tournament, alice, _, match = online_match
     pending = RoundResultsService(db).propose(match.id, alice.tg_id, 1, 0)
     text = format_round_pairings(tournament.title, "Идёт", 1, [pending])
-    assert "Иванова <b>1–0</b> Петров ⏳" in text
+    assert "1. @alice_tg — @bob_tg" in text
+    assert "Счёт: <b>1–0</b> · Статус: ⏳ ожидает подтверждения" in text
     summary = format_aetherhub_round_summary(1, [pending])
     assert "Иванова Алиса 1-0 Петров Борис" in summary
+
+
+def test_unreported_match_has_explicit_status_and_name_fallback(db):
+    tournament = _online_tournament(db)
+    alice = _user(db, 111, "Алиса", "Иванова")
+    bob = _user(db, 112, "Борис", "Петров")
+    _participant(db, tournament.id, alice)
+    _participant(db, tournament.id, bob)
+    _round(db, tournament.id, 1, "Иванова Алиса", "Петров Борис")
+    match = RoundResultsService(db).sync_round(tournament.id, 1)[0]
+
+    text = format_round_pairings(tournament.title, "Идёт", 1, [match])
+
+    assert "1. Иванова — Петров" in text
+    assert "Счёт: — · Статус: 📝 результат не введён" in text
+    assert "✅ подтверждено · ⏳ ожидает соперника" not in text
 
 
 def test_tournament_pairing_view_toggle_controls_public_round_screen(db, online_match):

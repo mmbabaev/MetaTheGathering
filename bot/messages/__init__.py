@@ -35,9 +35,6 @@ INVALID_FULL_NAME = (
     "Нужно указать фамилию и имя — минимум два слова с буквами.\n\n"
     "Введите фамилию и имя через пробел (например: Иванов Иван):"
 )
-ENDSTEP_USERNAME_REQUIRED = (
-    "Для записи на онлайн-турнир нужен ник Endstep.\n\nВведите точный ник, под которым вы играете на Endstep/AetherHub:"
-)
 ENDSTEP_USERNAME_INVALID = "Ник Endstep должен быть одной непустой строкой длиной до 255 символов."
 ENDSTEP_USERNAME_TAKEN = "Этот ник Endstep уже указан у другого пользователя. Проверьте написание."
 ENDSTEP_USERNAME_SAVED = "Ник Endstep сохранён: {username}"
@@ -276,7 +273,7 @@ def format_tournament_status(title: str, status: str, participants: list, decks_
 
 
 def _round_match_names(matches: list) -> dict[tuple[int, int], str]:
-    """Compact family names, expanded only when two players would look identical."""
+    """Prefer Telegram handles, with compact real names as a fallback."""
     compact: dict[tuple[int, int], str] = {}
     full: dict[tuple[int, int], str] = {}
     for match in matches:
@@ -287,8 +284,12 @@ def _round_match_names(matches: list) -> dict[tuple[int, int], str]:
                 continue
             key = (match.id, position)
             if user is not None:
-                compact[key] = user.last_name or user.first_name or source_name
-                full[key] = format_participant_name(user.first_name, user.last_name) or source_name
+                username = (user.username or "").strip().lstrip("@")
+                if username:
+                    compact[key] = full[key] = f"@{username}"
+                else:
+                    compact[key] = user.last_name or user.first_name or source_name
+                    full[key] = format_participant_name(user.first_name, user.last_name) or source_name
             else:
                 compact[key] = source_name
                 full[key] = source_name
@@ -313,15 +314,20 @@ def format_round_pairings(title: str, status: str, round_number: int, matches: l
         table = match.table_number if match.table_number is not None else index
         left = escape(names[(match.id, 1)])
         if match.player2_name is None:
-            lines.append(f"{table}. {left} — BYE ✅")
+            lines.extend([f"{table}. {left} — BYE", "   Статус: ✅ без игры"])
             continue
         right = escape(names[(match.id, 2)])
+        lines.append(f"{table}. {left} — {right}")
         if match.player1_wins is None or match.player2_wins is None:
-            lines.append(f"{table}. {left} — {right}")
+            lines.append("   Счёт: — · Статус: 📝 результат не введён")
             continue
-        icon = "⏳" if match.status == RoundMatchStatus.PENDING else "✅"
-        lines.append(f"{table}. {left} <b>{match.player1_wins}–{match.player2_wins}</b> {right} {icon}")
-    lines.extend(["", "✅ подтверждено · ⏳ ожидает соперника"])
+        status = {
+            RoundMatchStatus.PENDING: "⏳ ожидает подтверждения",
+            RoundMatchStatus.CONFIRMED: "✅ подтверждён",
+            RoundMatchStatus.ADMIN: "✅ введён администратором",
+            RoundMatchStatus.IMPORTED: "✅ импортирован",
+        }.get(match.status, "📝 результат не введён")
+        lines.append(f"   Счёт: <b>{match.player1_wins}–{match.player2_wins}</b> · Статус: {status}")
     return "\n".join(lines)
 
 
