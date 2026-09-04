@@ -352,7 +352,9 @@ class TestParseClubPage:
         html = _club_cards_html(
             [{"name": "Легаси 15.07.2026", "url": "/Tourney/RoundTourney/1", "subtitle": PLAIN_SUBTITLE}]
         )
-        assert self.svc._parse_club_page(html)[0].is_pauper is False
+        link = self.svc._parse_club_page(html)[0]
+        assert link.is_pauper is False
+        assert link.is_generic_constructed is True
 
     def test_pair_of_dice_pauper_without_date_uses_relative_age(self):
         html = _club_cards_html(
@@ -630,6 +632,78 @@ class TestFindTodaysGoldfishStyle:
         )
         result = self._svc(html).find_todays_pauper_tournament("https://aetherhub.com/User/GoldFish", today=TODAY)
         assert result == "https://aetherhub.com/Tourney/RoundTourney/100670"
+
+    def test_incident_101445_date_only_generic_constructed_is_accepted(self):
+        """04.09.2026: AetherHub потерял Pauper и показал «04.09 · Constructed Tourney»."""
+        html = _club_cards_html(
+            [
+                {
+                    "name": "04.09",
+                    "url": "/Tourney/RoundTourney/101445",
+                    "subtitle": PLAIN_SUBTITLE,
+                    "ago": "2 hours ago",
+                }
+            ]
+        )
+
+        result = self._svc(html).find_todays_pauper_tournament(
+            "https://aetherhub.com/User/GoldFish", today=date(2026, 9, 4)
+        )
+
+        assert result == "https://aetherhub.com/Tourney/RoundTourney/101445"
+
+    def test_explicit_pauper_wins_over_generic_fallback(self):
+        html = _club_cards_html(
+            [
+                {
+                    "name": "24.04",
+                    "url": "/Tourney/RoundTourney/1",
+                    "subtitle": PLAIN_SUBTITLE,
+                    "ago": "1 hour ago",
+                },
+                {
+                    "name": "Паупер 24.04",
+                    "url": "/Tourney/RoundTourney/2",
+                    "subtitle": PLAIN_SUBTITLE,
+                    "ago": "2 hours ago",
+                },
+            ]
+        )
+
+        result = self._svc(html).find_todays_pauper_tournament("https://aetherhub.com/User/GoldFish", today=TODAY)
+
+        assert result == "https://aetherhub.com/Tourney/RoundTourney/2"
+
+    def test_ambiguous_generic_constructed_candidates_are_rejected(self):
+        html = _club_cards_html(
+            [
+                {"name": "24.04", "url": "/Tourney/RoundTourney/1", "subtitle": PLAIN_SUBTITLE},
+                {"name": "24/04", "url": "/Tourney/RoundTourney/2", "subtitle": PLAIN_SUBTITLE},
+            ]
+        )
+
+        result = self._svc(html).find_todays_pauper_tournament("https://aetherhub.com/User/GoldFish", today=TODAY)
+
+        assert result is None
+
+    def test_generic_constructed_fallback_requires_exact_date_and_date_only_name(self):
+        html = _club_cards_html(
+            [
+                {"name": "23.04", "url": "/Tourney/RoundTourney/1", "subtitle": PLAIN_SUBTITLE},
+                {"name": "Модерн 24.04", "url": "/Tourney/RoundTourney/2", "subtitle": PLAIN_SUBTITLE},
+            ]
+        )
+
+        result = self._svc(html).find_todays_pauper_tournament("https://aetherhub.com/User/GoldFish", today=TODAY)
+
+        assert result is None
+
+    def test_find_latest_does_not_use_generic_constructed_fallback(self):
+        html = _club_cards_html([{"name": "24.04", "url": "/Tourney/RoundTourney/1", "subtitle": PLAIN_SUBTITLE}])
+
+        result = self._svc(html).find_todays_pauper_tournament("https://aetherhub.com/User/GoldFish", today=None)
+
+        assert result is None
 
     def test_yesterdays_pauper_not_matched(self):
         """«Паупер 23/04» на 24.04 — дата в имени вчерашняя, турнир не берётся."""
