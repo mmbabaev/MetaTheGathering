@@ -111,8 +111,10 @@
   [#287](https://github.com/mmbabaev/MetaTheGathering/pull/287),
   [#288](https://github.com/mmbabaev/MetaTheGathering/pull/288).
 - В настройках Endstep-ru настоящий чат `@endstep_ru` доступен отдельным вариантом; текущий маршрут
-  ручных объявлений автоматически не переключается — PR
-  [#283](https://github.com/mmbabaev/MetaTheGathering/pull/283).
+  ручных объявлений автоматически не переключается. Все будущие анонсы регистрации и напоминания
+  используют клубный префикс `⏭️🦶` — PR
+  [#283](https://github.com/mmbabaev/MetaTheGathering/pull/283),
+  [#288](https://github.com/mmbabaev/MetaTheGathering/pull/288).
 - Лимит двух активных турниров считается по клубу, а не по техническому адресу объявления:
   `chat_id=0` («не отправлять») и общий debug-чат больше не связывают разные клубы в один лимит — PR
   [#286](https://github.com/mmbabaev/MetaTheGathering/pull/286).

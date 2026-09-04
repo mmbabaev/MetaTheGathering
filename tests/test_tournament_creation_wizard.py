@@ -121,7 +121,7 @@ async def test_execute_plan_creates_online_tournament_and_announces(db):
     assert tournament.registration_close_at == datetime(2026, 9, 5, 16, 30)
     announcement = bot.send_message.await_args.kwargs["text"]
     assert bot.send_message.await_args.kwargs["chat_id"] == -1003631429183
-    assert announcement.startswith("🎮 Endstep-ru Pauper")
+    assert announcement.startswith("🎮 ⏭️🦶 Endstep-ru Pauper")
     assert "05.09.2026 в 19:30" in announcement
     db.refresh(plan)
     assert plan.status == "completed"

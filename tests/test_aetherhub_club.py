@@ -1285,13 +1285,15 @@ class TestCreateTournamentJob:
         assert tournament.slug == "2026-04-24-pair-of-dice-pauper"
 
     def test_scheduled_online_club_marks_tournament_online(self, db, svc):
-        club = Club(name="Endstep-ru", chat_id=42, schedules=[], is_online=True)
+        club = Club(name="Endstep-ru", chat_id=42, schedules=[], is_online=True, title_prefix="⏭️🦶 ")
         schedule = ClubSchedule(weekday="friday", game_time="19:30")
 
-        asyncio.run(CreateTournamentJob(club, schedule).run(bot=None, now=FRIDAY_NOW, db=db))
+        with patch("bot.scheduler.send_registration_open", new_callable=AsyncMock) as announce:
+            asyncio.run(CreateTournamentJob(club, schedule).run(bot=AsyncMock(), now=FRIDAY_NOW, db=db))
 
         tournament = svc.get_active_tournament_for_chat(42)
         assert tournament.is_online is True
+        assert announce.await_args.args[-1].startswith("🎮 ⏭️🦶 Endstep-ru Pauper")
 
     def test_previous_day_job_uses_event_date_and_says_tomorrow(self, db, svc):
         club = Club(name="Pair of dice", chat_id=42, schedules=[], title_prefix="🎲🎲 ")
@@ -1312,6 +1314,7 @@ class TestCreateTournamentJob:
         assert tournament.slug == "2026-04-28-pair-of-dice-pauper"
         assert tournament.registration_close_at == datetime(2026, 4, 28, 16, 30)
         text = announce.await_args.args[-1]
+        assert text.startswith("🏆 🎲🎲 Pair of dice Pauper")
         assert "завтра в 19:30" in text
         assert "сегодня" not in text
 
