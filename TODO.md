@@ -97,10 +97,12 @@
   Публичная строка матча показывает Telegram-ники, счёт и явный статус; при отсутствии Telegram-ника
   используется имя игрока. Администратор может исправить результат и получить сводку для AetherHub.
   В debug-боте доступны 15 тестовых игроков и Swiss-подобные раунды — PR
-  [#284](https://github.com/mmbabaev/MetaTheGathering/pull/284).
+  [#284](https://github.com/mmbabaev/MetaTheGathering/pull/284),
+  [#287](https://github.com/mmbabaev/MetaTheGathering/pull/287).
 - Telegram- и Endstep-ники поддерживаются для сопоставления импортов и публикации парингов, но
   Endstep-ник остаётся необязательным полем настроек и при регистрации не запрашивается — PR
-  [#281](https://github.com/mmbabaev/MetaTheGathering/pull/281).
+  [#281](https://github.com/mmbabaev/MetaTheGathering/pull/281),
+  [#287](https://github.com/mmbabaev/MetaTheGathering/pull/287).
 - В настройках Endstep-ru настоящий чат `@endstep_ru` доступен отдельным вариантом; текущий маршрут
   ручных объявлений автоматически не переключается — PR
   [#283](https://github.com/mmbabaev/MetaTheGathering/pull/283).
