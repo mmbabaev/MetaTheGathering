@@ -44,7 +44,7 @@ def test_real_chat_is_only_offered_when_chat_name_is_known(db):
 
     assert "📣 Настоящий: @MoscowPauperChat" in goldfish
     assert "📣 Настоящий: Питерский паупер" in pair_of_dice
-    assert not any("Настоящий:" in label for label in endstep)
+    assert "📣 Настоящий: @endstep_ru" in endstep
 
 
 def test_destination_is_persisted_and_marked(db):
@@ -60,13 +60,11 @@ def test_destination_is_persisted_and_marked(db):
     )
 
 
-def test_missing_real_chat_option_is_rejected(db):
-    handler, settings = _handler(db)
+def test_keyboard_hides_real_option_when_chat_is_unknown():
+    keyboard = Keyboards().club_settings_chat_keyboard(0, "none", real_chat_label=None)
 
-    result = handler.handle_set_destination(ADMIN_ID, 4, "real")
-
-    assert result.is_alert is True
-    assert settings.get_destination("Endstep-ru") == "none"
+    labels = [button.text for row in keyboard.inline_keyboard for button in row]
+    assert not any("Настоящий:" in label for label in labels)
 
 
 async def test_none_creates_tournament_without_sending_and_completes_plan(db):

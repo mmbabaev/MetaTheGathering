@@ -124,6 +124,8 @@ def club_identities() -> list[ClubIdentity]:
             magicoculus_city=None,
             timezone="Europe/Moscow",
             is_online=True,
+            real_chat_id=-1003925371109,
+            real_chat_label="@endstep_ru",
         ),
     ]
 

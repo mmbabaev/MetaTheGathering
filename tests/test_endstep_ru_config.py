@@ -20,6 +20,8 @@ def test_endstep_ru_identity_is_online_and_has_no_default_schedule():
     assert identity.is_online is True
     assert identity.magicoculus_city is None
     assert identity.timezone == "Europe/Moscow"
+    assert identity.real_chat_id == -1003925371109
+    assert identity.real_chat_label == "@endstep_ru"
     assert all(row.club_name != "Endstep-ru" for row in default_schedules())
     club = next(row for row in default_clubs() if row.name == "Endstep-ru")
     assert club.is_online is True

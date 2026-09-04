@@ -85,7 +85,9 @@
   [#275](https://github.com/mmbabaev/MetaTheGathering/pull/275).
 - Онлайн-клуб Endstep-ru с AetherHub Content Feed и временным тестовым Telegram-чатом:
   без расписания, с ручным созданием турнира через club-aware `/create_tournament`.
-  Признак online хранится в турнире; для существующих и новых турниров без пометки дефолт — offline — PR
+  Настоящий чат — `@endstep_ru`; маршрут ручных объявлений выбирается отдельно и автоматически
+  на него не переключается. Признак online хранится в турнире; для существующих и новых турниров
+  без пометки дефолт — offline — PR
   [#280](https://github.com/mmbabaev/MetaTheGathering/pull/280).
 
 Игрокам ачивки автоматически не рассылаются: текущий режим — owner-only shadow.
