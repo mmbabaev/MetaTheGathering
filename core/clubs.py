@@ -65,14 +65,12 @@ class ClubIdentity:
     magicoculus_city: str | None
     timezone: str
     is_online: bool = False
-    chat_url: str | None = None
+    real_chat_id: int | None = None
+    real_chat_label: str | None = None
 
 
-def _chat_url(production_url: str | None, chat_id: int | None) -> str | None:
-    """Return the actual destination link, including the shared safe debug chat."""
-    if app_cfg.debug and chat_id:
-        return "https://t.me/metathegatheringtestgroup"
-    return production_url
+TEST_ANNOUNCEMENT_CHAT_ID = -1003631429183
+TEST_ANNOUNCEMENT_CHAT_URL = "https://t.me/metathegatheringtestgroup"
 
 
 def club_identities() -> list[ClubIdentity]:
@@ -85,7 +83,8 @@ def club_identities() -> list[ClubIdentity]:
             title_prefix="🐠 ",
             magicoculus_city="Москва",
             timezone="Europe/Moscow",
-            chat_url=_chat_url("https://t.me/MoscowPauperChat", app_cfg.goldfish_chat_id),
+            real_chat_id=-1001399656692,
+            real_chat_label="@MoscowPauperChat",
         ),
         ClubIdentity(
             name="Edinorog",
@@ -94,7 +93,8 @@ def club_identities() -> list[ClubIdentity]:
             title_prefix="🦄 ",
             magicoculus_city="Москва",
             timezone="Europe/Moscow",
-            chat_url=_chat_url("https://t.me/paupermoscow", app_cfg.edinorog_chat_id),
+            real_chat_id=-1001631119846,
+            real_chat_label="@paupermoscow",
         ),
         ClubIdentity(
             name="Pair of dice",
@@ -103,7 +103,8 @@ def club_identities() -> list[ClubIdentity]:
             title_prefix="🎲🎲 ",
             magicoculus_city="Санкт-Петербург",
             timezone="Europe/Moscow",
-            chat_url=_chat_url(None, app_cfg.pair_of_dice_chat_id),
+            real_chat_id=-1001236834154,
+            real_chat_label="Питерский паупер",
         ),
         ClubIdentity(
             name="Hobby Games",
@@ -112,7 +113,8 @@ def club_identities() -> list[ClubIdentity]:
             title_prefix="🎲 ",
             magicoculus_city="Калининград",
             timezone="Europe/Kaliningrad",
-            chat_url=_chat_url(None, app_cfg.hobby_games_chat_id),
+            real_chat_id=-1002787710855,
+            real_chat_label="Hobby Games, Калининград",
         ),
         ClubIdentity(
             name="Endstep-ru",
@@ -122,10 +124,6 @@ def club_identities() -> list[ClubIdentity]:
             magicoculus_city=None,
             timezone="Europe/Moscow",
             is_online=True,
-            chat_url=_chat_url(
-                "https://t.me/metathegatheringtestgroup",
-                app_cfg.endstep_ru_chat_id,
-            ),
         ),
     ]
 

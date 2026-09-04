@@ -15,6 +15,7 @@ from core.clubs import ClubIdentity, club_identities
 from core.config import Club
 from core.schemas import TournamentCreate, TournamentRead
 from services.cellar import CELLAR_CLUB_NAME, CellarService
+from services.club_settings import ClubAnnouncementSettingsService
 from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.tournament import TournamentService
 from services.utils import get_tournament
@@ -38,10 +39,10 @@ def club_identity(name: str) -> ClubIdentity | None:
     return next((identity for identity in club_identities() if identity.name == name), None)
 
 
-def identity_to_club(identity: ClubIdentity) -> Club:
+def identity_to_club(identity: ClubIdentity, chat_id: int | None = None) -> Club:
     return Club(
         name=identity.name,
-        chat_id=identity.chat_id,
+        chat_id=chat_id or 0,
         schedules=[],
         is_online=identity.is_online,
         aetherhub_url=identity.aetherhub_url,
@@ -63,8 +64,8 @@ class TournamentCreationPlanService:
         event_at: datetime,
     ) -> models.TournamentCreationPlan:
         identity = club_identity(club_name)
-        if identity is None or not identity.chat_id:
-            raise InvalidCreationPlan("Клуб или его Telegram-чат не настроен.")
+        if identity is None:
+            raise InvalidCreationPlan("Клуб не найден.")
         if announce_at.tzinfo is not None or event_at.tzinfo is not None:
             raise InvalidCreationPlan("Внутренние даты должны быть в UTC без timezone.")
         if event_at <= announce_at:
@@ -80,11 +81,14 @@ class TournamentCreationPlanService:
         ).scalar_one_or_none()
         if existing is not None:
             raise InvalidCreationPlan("Турнир этого клуба на выбранное время уже запланирован.")
+        target = ClubAnnouncementSettingsService(self.db).current_target(identity)
         row = models.TournamentCreationPlan(
             club_name=club_name,
             created_by_tg_id=created_by_tg_id,
             announce_at=announce_at,
             event_at=event_at,
+            announcement_chat_id=target.chat_id,
+            announcement_chat_label=target.label,
         )
         self.db.add(row)
         self.db.commit()
@@ -115,11 +119,11 @@ class TournamentCreationPlanService:
         if plan is None or plan.status != "pending":
             raise InvalidCreationPlan("План создания уже обработан или не найден.")
         identity = club_identity(plan.club_name)
-        if identity is None or not identity.chat_id:
-            raise InvalidCreationPlan("Клуб или его Telegram-чат не настроен.")
+        if identity is None:
+            raise InvalidCreationPlan("Клуб не найден.")
         if plan.event_at <= models.utc_now():
             raise InvalidCreationPlan("Время турнира уже прошло.")
-        club = identity_to_club(identity)
+        club = identity_to_club(identity, plan.announcement_chat_id)
         local_tz = ZoneInfo(identity.timezone)
         event_at_local = plan.event_at.replace(tzinfo=timezone.utc).astimezone(local_tz)
 
@@ -129,7 +133,7 @@ class TournamentCreationPlanService:
             tournament = TournamentService(self.db).create_tournament(
                 TournamentCreate(
                     title=f"{identity.title_prefix}{identity.name} Pauper {event_at_local.strftime('%d.%m.%Y')}",
-                    chat_id=identity.chat_id,
+                    chat_id=plan.announcement_chat_id or 0,
                     slug=f"{date_str}-{club_slug}-pauper",
                     club=identity.name,
                     is_online=identity.is_online,
@@ -149,6 +153,14 @@ class TournamentCreationPlanService:
         if plan is None:
             return
         plan.announcement_sent_at = now or models.utc_now()
+        plan.status = "completed"
+        plan.last_error = None
+        self.db.commit()
+
+    def mark_completed_without_announcement(self, plan_id: int) -> None:
+        plan = self.get(plan_id)
+        if plan is None:
+            return
         plan.status = "completed"
         plan.last_error = None
         self.db.commit()

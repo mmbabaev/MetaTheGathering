@@ -13,6 +13,7 @@ from bot.telegram.common import log_event as _log
 from bot.tournament_creation import execute_creation_plan
 from core import models
 from core.database import SessionLocal
+from services.club_settings import ClubAnnouncementSettingsService
 from services.tournament_creation import TournamentCreationPlanService
 from services.user import UserService
 
@@ -20,7 +21,12 @@ USER_DATA_CREATE_TOURNAMENT = "create_tournament_wizard"
 
 
 def _handler(db) -> CreateTournamentWizardHandler:
-    return CreateTournamentWizardHandler(TournamentCreationPlanService(db), UserService(db), Keyboards())
+    return CreateTournamentWizardHandler(
+        TournamentCreationPlanService(db),
+        UserService(db),
+        Keyboards(),
+        ClubAnnouncementSettingsService(db),
+    )
 
 
 def _draft(context) -> dict:
@@ -152,7 +158,9 @@ async def callback_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         if plan is not None and plan.announce_at <= models.utc_now() + timedelta(minutes=1):
             execution = await execute_creation_plan(context.bot, db, plan.id)
         if execution is not None:
-            if execution.announced:
+            if execution.announcement_skipped:
+                result.text = f"✅ Турнир создан без объявления в чат.\nID турнира: {execution.tournament_id}"
+            elif execution.announced:
                 result.text = (
                     f"✅ Турнир создан, объявление отправлено в чат клуба.\nID турнира: {execution.tournament_id}"
                 )

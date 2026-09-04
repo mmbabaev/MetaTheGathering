@@ -20,6 +20,7 @@ class CreationExecutionResult:
     plan_id: int
     tournament_id: int | None
     announced: bool
+    announcement_skipped: bool = False
     error: str | None = None
 
 
@@ -30,12 +31,12 @@ async def execute_creation_plan(bot, db, plan_id: int) -> CreationExecutionResul
     except (InvalidCreationPlan, errors.TournamentAlreadyExists, errors.TournamentNotFound) as exc:
         service.mark_failed(plan_id, str(exc))
         logger.warning("Tournament creation plan #%s failed: %s", plan_id, exc)
-        return CreationExecutionResult(plan_id, None, False, str(exc))
+        return CreationExecutionResult(plan_id, None, False, error=str(exc))
     except Exception as exc:  # noqa: BLE001 — один план не должен остановить очередь
         db.rollback()
         service.mark_failed(plan_id, str(exc))
         logger.exception("Tournament creation plan #%s failed", plan_id)
-        return CreationExecutionResult(plan_id, None, False, str(exc))
+        return CreationExecutionResult(plan_id, None, False, error=str(exc))
 
     event_icon = "🎮" if prepared.club.is_online else "🏆"
     base_text = (
@@ -43,6 +44,9 @@ async def execute_creation_plan(bot, db, plan_id: int) -> CreationExecutionResul
         f"в {prepared.event_at_local.strftime('%H:%M')}\n"
         "Турнир создан. Регистрация открыта."
     )
+    if prepared.club.chat_id == 0:
+        service.mark_completed_without_announcement(plan_id)
+        return CreationExecutionResult(plan_id, prepared.tournament.id, False, announcement_skipped=True)
     already_tracked = db.execute(
         select(models.TournamentRegistrationMessage.id).where(
             models.TournamentRegistrationMessage.tournament_id == prepared.tournament.id,
@@ -61,7 +65,7 @@ async def execute_creation_plan(bot, db, plan_id: int) -> CreationExecutionResul
         plan_id,
         prepared.tournament.id,
         False,
-        "Не удалось отправить объявление в чат клуба; повторим автоматически.",
+        error="Не удалось отправить объявление в чат клуба; повторим автоматически.",
     )
 
 

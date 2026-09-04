@@ -99,6 +99,39 @@ def test_tournament_creation_plan_migration_defaults_to_pending():
         assert connection.execute(sa.select(plans.c.status)).scalar_one() == "pending"
 
 
+def test_club_announcement_settings_migration_defaults_to_none():
+    metadata = sa.MetaData()
+    sa.Table("tournaments", metadata, sa.Column("id", sa.Integer, primary_key=True))
+    engine = sa.create_engine("sqlite://")
+    metadata.create_all(engine)
+    plan_migration = runpy.run_path(str(VERSIONS_DIR / "4953faa801dd_add_tournament_creation_plans.py"))
+    settings_migration = runpy.run_path(str(VERSIONS_DIR / "11cdd73fac96_add_club_announcement_settings.py"))
+
+    with engine.begin() as connection:
+        context = MigrationContext.configure(connection)
+        with Operations.context(context):
+            plan_migration["upgrade"]()
+            settings_migration["upgrade"]()
+        settings_table = sa.Table("club_announcement_settings", sa.MetaData(), autoload_with=connection)
+        now = datetime(2026, 9, 4)
+        connection.execute(settings_table.insert().values(id=1, club_name="Endstep-ru", created_at=now, updated_at=now))
+        plans = sa.Table("tournament_creation_plans", sa.MetaData(), autoload_with=connection)
+        connection.execute(
+            plans.insert().values(
+                id=1,
+                club_name="Endstep-ru",
+                created_by_tg_id=1,
+                announce_at=now,
+                event_at=now + timedelta(days=1),
+                created_at=now,
+                updated_at=now,
+            )
+        )
+
+        assert connection.execute(sa.select(settings_table.c.destination)).scalar_one() == "none"
+        assert connection.execute(sa.select(plans.c.announcement_chat_label)).scalar_one() == "не отправлять"
+
+
 def test_split_spy_general_names_repairs_only_classification_cache():
     metadata = sa.MetaData()
     archetypes = sa.Table(

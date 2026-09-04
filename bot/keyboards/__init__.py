@@ -110,6 +110,9 @@ CB_CREATE_WIZARD_EVENT_TIME = "ctw_et"
 CB_CREATE_WIZARD_BACK = "ctw_b"
 CB_CREATE_WIZARD_CONFIRM = "ctw_ok"
 CB_CREATE_WIZARD_CANCEL = "ctw_no"
+CB_CLUB_SETTINGS_LIST = "club_cfg"
+CB_CLUB_SETTINGS_CLUB = "club_cfg_c"
+CB_CLUB_SETTINGS_CHAT = "club_cfg_chat"
 
 CELLAR_PAGE_SIZE = 10
 
@@ -607,7 +610,51 @@ class Keyboards:
         rows = [
             [InlineKeyboardButton(label, callback_data=f"{CB_CREATE_WIZARD_CLUB}:{index}")] for index, label in clubs
         ]
+        rows.append([InlineKeyboardButton("⚙️ Куда отправлять объявления", callback_data=CB_CLUB_SETTINGS_LIST)])
         rows.append([InlineKeyboardButton("❌ Отмена", callback_data=CB_CREATE_WIZARD_CANCEL)])
+        return InlineKeyboardMarkup(rows)
+
+    def club_settings_list_keyboard(self, clubs: list[tuple[int, str]]) -> InlineKeyboardMarkup:
+        rows = [
+            [InlineKeyboardButton(label, callback_data=f"{CB_CLUB_SETTINGS_CLUB}:{index}")] for index, label in clubs
+        ]
+        rows.append([InlineKeyboardButton("⬅️ К созданию турнира", callback_data=f"{CB_CREATE_WIZARD_BACK}:club")])
+        return InlineKeyboardMarkup(rows)
+
+    def club_settings_chat_keyboard(
+        self,
+        club_index: int,
+        current: str,
+        *,
+        real_chat_label: str | None,
+    ) -> InlineKeyboardMarkup:
+        def label(destination: str, text: str) -> str:
+            return f"{'✅ ' if current == destination else ''}{text}"
+
+        rows = [
+            [
+                InlineKeyboardButton(
+                    label("test", "🧪 Тестовый: @metathegatheringtestgroup"),
+                    callback_data=f"{CB_CLUB_SETTINGS_CHAT}:{club_index}:test",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    label("none", "🚫 Не отправлять"),
+                    callback_data=f"{CB_CLUB_SETTINGS_CHAT}:{club_index}:none",
+                )
+            ],
+        ]
+        if real_chat_label:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        label("real", f"📣 Настоящий: {real_chat_label}"),
+                        callback_data=f"{CB_CLUB_SETTINGS_CHAT}:{club_index}:real",
+                    )
+                ]
+            )
+        rows.append([InlineKeyboardButton("⬅️ К клубам", callback_data=CB_CLUB_SETTINGS_LIST)])
         return InlineKeyboardMarkup(rows)
 
     def create_tournament_announce_date_keyboard(self, dates: list[tuple[str, str]]) -> InlineKeyboardMarkup:

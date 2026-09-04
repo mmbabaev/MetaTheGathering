@@ -173,6 +173,7 @@ HELP_TEXT_ADMIN = """\
 
 /create_tournament — создать турнир вручную
   Endstep-ru: /create_tournament --club Endstep-ru [название]
+/clubs — выбрать чат для объявлений ручных турниров
 /delete_tournament — удалить текущий турнир
 
 /add_players — массовая запись (каждая строка: Имя Фамилия)
