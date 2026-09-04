@@ -35,6 +35,7 @@ from core.config import app_cfg, settings
 from core.database import SessionLocal
 from core.models import TournamentStatus
 from services import errors as svc_errors
+from services.aetherhub_import_service import AetherhubImportService
 from services.datalens import DataLensService
 from services.tournament import TournamentService
 from services.user import UserService
@@ -716,9 +717,15 @@ async def callback_admin_more(update: Update, context: ContextTypes.DEFAULT_TYPE
             t = get_tournament(TournamentService(db).db, tournament_id)
             is_closed = t.status == TournamentStatus.CLOSED
             decks_hidden = t.decks_hidden
+            is_online = t.is_online
+            show_round_pairings = t.show_round_pairings
+            has_pairings = AetherhubImportService(db).has_pairings(tournament_id)
         except svc_errors.TournamentNotFound:
             is_closed = False
             decks_hidden = True
+            is_online = False
+            show_round_pairings = False
+            has_pairings = False
     finally:
         db.close()
     await query.edit_message_text(
@@ -729,6 +736,9 @@ async def callback_admin_more(update: Update, context: ContextTypes.DEFAULT_TYPE
             decks_hidden=decks_hidden,
             show_debug=settings.DEBUG,
             show_debug_meta_police=settings.DEBUG and user.id == settings.OWNER_CHAT_ID,
+            is_online=is_online,
+            has_pairings=has_pairings,
+            show_round_pairings=show_round_pairings,
         ),
     )
     await query.answer()
@@ -833,6 +843,9 @@ async def callback_reveal_decks_cancel(update: Update, context: ContextTypes.DEF
                 decks_hidden=t.decks_hidden,
                 show_debug=settings.DEBUG,
                 show_debug_meta_police=settings.DEBUG and user.id == settings.OWNER_CHAT_ID,
+                is_online=t.is_online,
+                has_pairings=AetherhubImportService(db).has_pairings(tournament_id),
+                show_round_pairings=t.show_round_pairings,
             ),
         )
     except svc_errors.TournamentNotFound:

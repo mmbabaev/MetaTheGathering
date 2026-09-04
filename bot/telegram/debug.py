@@ -2,12 +2,18 @@
 
 import logging
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
+from bot.handlers.round_results import RoundResultsHandler
+from bot.keyboards import CB_DEBUG_NEXT_ROUND
 from bot.meta_police_message import send_debug_meta_police_preview
+from bot.telegram.common import parse_callback_ints
 from core.config import settings
 from core.database import SessionLocal
+from services.debug_tournament import DebugTournamentService
+from services.round_results import RoundResultError
+from services.user import UserService
 
 logger = logging.getLogger(__name__)
 
@@ -42,5 +48,64 @@ async def callback_debug_meta_police(update: Update, context: ContextTypes.DEFAU
         await query.answer("Не удалось собрать debug-превью.", show_alert=True)
     else:
         await query.answer(f"Отправил live-превью: {count} игроков без колоды.", show_alert=True)
+    finally:
+        db.close()
+
+
+async def callback_debug_fill_tournament(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Fill only the selected debug tournament with obvious fake local users."""
+    query = update.callback_query
+    user = update.effective_user
+    if query is None or user is None:
+        return
+    values = await parse_callback_ints(query, 1)
+    if values is None:
+        return
+    (tournament_id,) = values
+    db = SessionLocal()
+    try:
+        if not settings.DEBUG or not UserService(db).is_admin(user.id):
+            await query.answer("Кнопка доступна только администраторам debug-бота.", show_alert=True)
+            return
+        result = DebugTournamentService(db).fill_to_15(tournament_id)
+        await query.answer(f"Добавлено: {result.added}. Всего игроков: {result.total}.", show_alert=True)
+        await query.edit_message_text(
+            "Тестовые игроки готовы. Нажмите «Следующий раунд», чтобы создать первые паринги.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("🐞 Следующий раунд", callback_data=f"{CB_DEBUG_NEXT_ROUND}:{tournament_id}")]]
+            ),
+        )
+    except RoundResultError as exc:
+        await query.answer(str(exc), show_alert=True)
+    finally:
+        db.close()
+
+
+async def callback_debug_next_round(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Complete the current debug round and create a score-aware random next round."""
+    query = update.callback_query
+    user = update.effective_user
+    if query is None or user is None:
+        return
+    values = await parse_callback_ints(query, 1)
+    if values is None:
+        return
+    (tournament_id,) = values
+    db = SessionLocal()
+    try:
+        if not settings.DEBUG or not UserService(db).is_admin(user.id):
+            await query.answer("Кнопка доступна только администраторам debug-бота.", show_alert=True)
+            return
+        generated = DebugTournamentService(db).next_round(tournament_id, user.id)
+        screen = RoundResultsHandler(db).handle_round_status(tournament_id, user.id, generated.round_number)
+        await query.edit_message_text(screen.text, reply_markup=screen.keyboard, parse_mode=screen.parse_mode)
+        suffix = (
+            f" Предыдущих результатов дополнено: {generated.completed_previous}."
+            if generated.completed_previous
+            else ""
+        )
+        await query.answer(f"Создан раунд {generated.round_number}.{suffix}", show_alert=True)
+    except RoundResultError as exc:
+        await query.answer(str(exc), show_alert=True)
     finally:
         db.close()

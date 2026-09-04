@@ -12,7 +12,9 @@ from bot.keyboards import (
     CB_CLOSE_TOURNAMENT_CANCEL,
     CB_CLOSE_TOURNAMENT_CONFIRM,
     CB_CUSTOM_ARCHETYPE,
+    CB_DEBUG_FILL_TOURNAMENT,
     CB_DEBUG_META_POLICE,
+    CB_DEBUG_NEXT_ROUND,
     CB_REGISTER,
     CB_REOPEN_TOURNAMENT,
     CB_TOURNAMENT,
@@ -43,6 +45,12 @@ class TestTournamentListKeyboard:
     def test_empty_list(self):
         markup = tournament_list_keyboard([])
         assert len(markup.inline_keyboard) == 0
+
+
+def test_online_participant_gets_round_result_button():
+    keyboard = tournament_card_keyboard(42, is_registered=True, show_round_result_action=True)
+    callbacks = {button.callback_data for row in keyboard.inline_keyboard for button in row}
+    assert "rr_open:42" in callbacks
 
 
 class TestRegisterButton:
@@ -268,3 +276,13 @@ class TestAdminMoreDebugButtons:
         assert not any(
             button.callback_data == f"{CB_DEBUG_META_POLICE}:42" for row in keyboard.inline_keyboard for button in row
         )
+
+    def test_debug_tournament_simulator_buttons_are_debug_only(self):
+        shown = Keyboards().admin_more_keyboard(42, show_debug=True)
+        hidden = Keyboards().admin_more_keyboard(42, show_debug=False)
+        shown_callbacks = {button.callback_data for row in shown.inline_keyboard for button in row}
+        hidden_callbacks = {button.callback_data for row in hidden.inline_keyboard for button in row}
+        assert f"{CB_DEBUG_FILL_TOURNAMENT}:42" in shown_callbacks
+        assert f"{CB_DEBUG_NEXT_ROUND}:42" in shown_callbacks
+        assert f"{CB_DEBUG_FILL_TOURNAMENT}:42" not in hidden_callbacks
+        assert f"{CB_DEBUG_NEXT_ROUND}:42" not in hidden_callbacks

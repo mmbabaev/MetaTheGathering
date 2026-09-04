@@ -63,7 +63,9 @@ from bot.keyboards import (
     CB_CREATE_WIZARD_EVENT_DATE,
     CB_CREATE_WIZARD_EVENT_TIME,
     CB_CUSTOM_ARCHETYPE,
+    CB_DEBUG_FILL_TOURNAMENT,
     CB_DEBUG_META_POLICE,
+    CB_DEBUG_NEXT_ROUND,
     CB_DEBUG_ROUND_NOTIFY,
     CB_DEFER_DECK,
     CB_DELETE_TOURNAMENT,
@@ -102,6 +104,19 @@ from bot.keyboards import (
     CB_REVEAL_DECKS,
     CB_REVEAL_DECKS_CANCEL,
     CB_REVEAL_DECKS_CONFIRM,
+    CB_ROUND_ADMIN,
+    CB_ROUND_ADMIN_MATCH,
+    CB_ROUND_ADMIN_P1,
+    CB_ROUND_ADMIN_P2,
+    CB_ROUND_RESULT_CONFIRM,
+    CB_ROUND_RESULT_OPEN,
+    CB_ROUND_RESULT_OPPONENT,
+    CB_ROUND_RESULT_OWN,
+    CB_ROUND_RESULT_REJECT,
+    CB_ROUND_RESULT_SEND,
+    CB_ROUND_SUMMARY,
+    CB_ROUND_VIEW,
+    CB_ROUND_VIEW_TOGGLE,
     CB_SCHEDULE_EDIT_FIELD,
     CB_SCHEDULE_IMPORTS,
     CB_SCHEDULE_LIST,
@@ -135,6 +150,7 @@ from bot.telegram import features as features_handler
 from bot.telegram import payment as payment_handler
 from bot.telegram import poll as poll_handler
 from bot.telegram import rating as rating_handler
+from bot.telegram import round_results as round_results_handler
 from bot.telegram import schedule as schedule_handler
 from bot.telegram import settings as settings_handler
 from core import models
@@ -493,9 +509,39 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(aetherhub_handler.callback_set_import_time, pattern=f"^{CB_SET_IMPORT_TIME}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_admin_more, pattern=f"^{CB_ADMIN_MORE}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_debug_round_notify, pattern=f"^{CB_DEBUG_ROUND_NOTIFY}:"))
+    app.add_handler(CallbackQueryHandler(round_results_handler.callback_open, pattern=f"^{CB_ROUND_RESULT_OPEN}:"))
+    app.add_handler(CallbackQueryHandler(round_results_handler.callback_own_wins, pattern=f"^{CB_ROUND_RESULT_OWN}:"))
+    app.add_handler(
+        CallbackQueryHandler(round_results_handler.callback_opponent_wins, pattern=f"^{CB_ROUND_RESULT_OPPONENT}:")
+    )
+    app.add_handler(CallbackQueryHandler(round_results_handler.callback_send, pattern=f"^{CB_ROUND_RESULT_SEND}:"))
+    app.add_handler(
+        CallbackQueryHandler(round_results_handler.callback_confirm, pattern=f"^{CB_ROUND_RESULT_CONFIRM}:")
+    )
+    app.add_handler(CallbackQueryHandler(round_results_handler.callback_reject, pattern=f"^{CB_ROUND_RESULT_REJECT}:"))
+    app.add_handler(CallbackQueryHandler(round_results_handler.callback_view, pattern=f"^{CB_ROUND_VIEW}:"))
+    app.add_handler(CallbackQueryHandler(round_results_handler.callback_admin, pattern=f"^{CB_ROUND_ADMIN}:"))
+    app.add_handler(
+        CallbackQueryHandler(round_results_handler.callback_admin_match, pattern=f"^{CB_ROUND_ADMIN_MATCH}:")
+    )
+    app.add_handler(CallbackQueryHandler(round_results_handler.callback_admin_p1, pattern=f"^{CB_ROUND_ADMIN_P1}:"))
+    app.add_handler(CallbackQueryHandler(round_results_handler.callback_admin_p2, pattern=f"^{CB_ROUND_ADMIN_P2}:"))
+    app.add_handler(CallbackQueryHandler(round_results_handler.callback_summary, pattern=f"^{CB_ROUND_SUMMARY}:"))
+    app.add_handler(
+        CallbackQueryHandler(round_results_handler.callback_toggle_view, pattern=f"^{CB_ROUND_VIEW_TOGGLE}:")
+    )
     if settings.DEBUG:
         app.add_handler(
             CallbackQueryHandler(debug_handler.callback_debug_meta_police, pattern=f"^{CB_DEBUG_META_POLICE}:")
+        )
+        app.add_handler(
+            CallbackQueryHandler(
+                debug_handler.callback_debug_fill_tournament,
+                pattern=f"^{CB_DEBUG_FILL_TOURNAMENT}:",
+            )
+        )
+        app.add_handler(
+            CallbackQueryHandler(debug_handler.callback_debug_next_round, pattern=f"^{CB_DEBUG_NEXT_ROUND}:")
         )
     app.add_handler(CallbackQueryHandler(admin.callback_close_tournament, pattern=f"^{CB_CLOSE_TOURNAMENT}:"))
     app.add_handler(
