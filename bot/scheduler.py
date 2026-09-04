@@ -56,7 +56,7 @@ from services.meta_police_message import MetaPoliceMessageService
 from services.names import format_participant_name
 from services.schedule import ScheduleService
 from services.stats import StatsService
-from services.tournament import MAX_ACTIVE_TOURNAMENTS_PER_CHAT, TournamentService
+from services.tournament import MAX_ACTIVE_TOURNAMENTS_PER_CLUB, TournamentService
 
 logger = logging.getLogger(__name__)
 
@@ -200,8 +200,8 @@ class CreateTournamentJob:
         try:
             svc = TournamentService(db)
             try:
-                active = svc.list_active_tournaments_for_chat(self.club.chat_id or 0)
-                if len(active) >= MAX_ACTIVE_TOURNAMENTS_PER_CHAT:
+                active = svc.list_active_tournaments_for_club(self.club.name)
+                if len(active) >= MAX_ACTIVE_TOURNAMENTS_PER_CLUB:
                     logger.warning(
                         "CreateTournamentJob: skipping '%s' — active tournament limit reached (%s: %s)",
                         self.club.name,
@@ -262,7 +262,7 @@ class PreStartReminderJob:
         if close_db:
             db = SessionLocal()
         try:
-            active = TournamentService(db).get_active_tournament_for_chat(self.club.chat_id or 0)
+            active = TournamentService(db).get_active_tournament_for_club(self.club.name)
             if active is None:
                 logger.info("PreStartReminderJob: no active tournament for '%s'", self.club.name)
                 return
