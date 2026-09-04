@@ -49,6 +49,9 @@ from bot.keyboards import (
     CB_CLOSE_TOURNAMENT,
     CB_CLOSE_TOURNAMENT_CANCEL,
     CB_CLOSE_TOURNAMENT_CONFIRM,
+    CB_CLUB_SETTINGS_CHAT,
+    CB_CLUB_SETTINGS_CLUB,
+    CB_CLUB_SETTINGS_LIST,
     CB_CREATE_POLL,
     CB_CREATE_WIZARD_ANNOUNCE_DATE,
     CB_CREATE_WIZARD_ANNOUNCE_NOW,
@@ -125,6 +128,7 @@ from bot.telegram import aetherhub as aetherhub_handler
 from bot.telegram import app_stats as app_stats_handler
 from bot.telegram import bingo as bingo_handler
 from bot.telegram import cellar as cellar_handler
+from bot.telegram import clubs as clubs_handler
 from bot.telegram import create_tournament as create_tournament_handler
 from bot.telegram import debug as debug_handler
 from bot.telegram import features as features_handler
@@ -183,6 +187,7 @@ _APP_STATS_CMD = BotCommand("app_statistics", "Статистика прилож
 _ADMIN_COMMANDS = _SCOREKEEPER_COMMANDS + [
     BotCommand("archive", "Архив закрытых турниров"),
     BotCommand("create_tournament", "Создать турнир"),
+    BotCommand("clubs", "Клубы и чаты объявлений"),
     BotCommand("delete_tournament", "Удалить турнир"),
     BotCommand("schedule", "Расписание автозаданий"),
     BotCommand("features", "Feature flags"),
@@ -326,6 +331,7 @@ def main() -> None:
     app.add_handler(CommandHandler("tournament_status", admin.cmd_tournament_status, filters=private))
     app.add_handler(CommandHandler("archive", admin.cmd_archive, filters=private))
     app.add_handler(CommandHandler("create_tournament", admin.cmd_create_tournament, filters=private))
+    app.add_handler(CommandHandler("clubs", clubs_handler.cmd_clubs, filters=private))
     app.add_handler(CommandHandler("delete_tournament", admin.cmd_delete_tournament, filters=private))
     app.add_handler(CommandHandler("schedule", schedule_handler.cmd_schedule, filters=private))
     app.add_handler(CommandHandler("features", features_handler.cmd_features, filters=private))
@@ -339,6 +345,9 @@ def main() -> None:
         CallbackQueryHandler(cellar_handler.callback_cancel_confirm, pattern=f"^{CB_CELLAR_CANCEL_CONFIRM}:")
     )
     app.add_handler(CallbackQueryHandler(cellar_handler.callback_noop, pattern=f"^{CB_CELLAR_NOOP}$"))
+    app.add_handler(CallbackQueryHandler(clubs_handler.callback_list, pattern=f"^{CB_CLUB_SETTINGS_LIST}$"))
+    app.add_handler(CallbackQueryHandler(clubs_handler.callback_club, pattern=f"^{CB_CLUB_SETTINGS_CLUB}:"))
+    app.add_handler(CallbackQueryHandler(clubs_handler.callback_chat, pattern=f"^{CB_CLUB_SETTINGS_CHAT}:"))
     app.add_handler(CallbackQueryHandler(create_tournament_handler.callback_club, pattern=f"^{CB_CREATE_WIZARD_CLUB}:"))
     app.add_handler(
         CallbackQueryHandler(

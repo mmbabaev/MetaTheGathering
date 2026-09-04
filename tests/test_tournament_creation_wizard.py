@@ -7,6 +7,7 @@ from bot.handlers.create_tournament import CreateTournamentWizardHandler
 from bot.keyboards import Keyboards
 from bot.tournament_creation import execute_creation_plan, execute_due_creation_plans
 from core import models
+from services.club_settings import ClubAnnouncementSettingsService
 from services.tournament_creation import TournamentCreationPlanService
 from services.user import UserService
 
@@ -18,7 +19,9 @@ def _handler(db):
     user = UserService(db).get_or_create(tg_id=ADMIN_ID, username="admin")
     user.is_admin = True
     db.commit()
-    return CreateTournamentWizardHandler(TournamentCreationPlanService(db), UserService(db), Keyboards())
+    club_settings = ClubAnnouncementSettingsService(db)
+    club_settings.set_destination("Endstep-ru", "test")
+    return CreateTournamentWizardHandler(TournamentCreationPlanService(db), UserService(db), Keyboards(), club_settings)
 
 
 def _complete_draft(handler, draft, *, announce_now=True):
@@ -86,7 +89,10 @@ def test_wizard_rejects_event_before_publication(db):
 
 def test_non_admin_cannot_start_wizard(db):
     result = CreateTournamentWizardHandler(
-        TournamentCreationPlanService(db), UserService(db), Keyboards()
+        TournamentCreationPlanService(db),
+        UserService(db),
+        Keyboards(),
+        ClubAnnouncementSettingsService(db),
     ).handle_start(999)
     assert result.keyboard is None
     assert "нет прав" in result.text.lower()
@@ -94,6 +100,7 @@ def test_non_admin_cannot_start_wizard(db):
 
 async def test_execute_plan_creates_online_tournament_and_announces(db):
     service = TournamentCreationPlanService(db)
+    ClubAnnouncementSettingsService(db).set_destination("Endstep-ru", "test")
     plan = service.create_plan(
         club_name="Endstep-ru",
         created_by_tg_id=ADMIN_ID,
@@ -112,6 +119,7 @@ async def test_execute_plan_creates_online_tournament_and_announces(db):
     assert tournament.is_online is True
     assert tournament.registration_close_at == datetime(2026, 9, 5, 16, 30)
     announcement = bot.send_message.await_args.kwargs["text"]
+    assert bot.send_message.await_args.kwargs["chat_id"] == -1003631429183
     assert announcement.startswith("🎮 Endstep-ru Pauper")
     assert "05.09.2026 в 19:30" in announcement
     db.refresh(plan)
@@ -121,6 +129,7 @@ async def test_execute_plan_creates_online_tournament_and_announces(db):
 
 async def test_failed_announcement_retries_without_duplicate_tournament(db):
     service = TournamentCreationPlanService(db)
+    ClubAnnouncementSettingsService(db).set_destination("Endstep-ru", "test")
     plan = service.create_plan(
         club_name="Endstep-ru",
         created_by_tg_id=ADMIN_ID,

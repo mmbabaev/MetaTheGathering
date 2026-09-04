@@ -748,6 +748,10 @@ class TournamentCreationPlan(Base):
     created_by_tg_id = Column(BigInteger, nullable=False, index=True)
     announce_at = Column(DateTime, nullable=False, index=True)
     event_at = Column(DateTime, nullable=False)
+    announcement_chat_id = Column(BigInteger, nullable=True)
+    announcement_chat_label = Column(
+        String(255), nullable=False, default="не отправлять", server_default="не отправлять"
+    )
     status = Column(String(16), nullable=False, default="pending", server_default="pending", index=True)
     tournament_id = Column(Integer, ForeignKey("tournaments.id", ondelete="SET NULL"), nullable=True, unique=True)
     announcement_sent_at = Column(DateTime, nullable=True)
@@ -756,3 +760,15 @@ class TournamentCreationPlan(Base):
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
     tournament = relationship("Tournament")
+
+
+class ClubAnnouncementSetting(Base):
+    """Куда отправлять объявления о вручную создаваемых турнирах клуба."""
+
+    __tablename__ = "club_announcement_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    club_name = Column(String(64), nullable=False, unique=True, index=True)
+    destination = Column(String(16), nullable=False, default="none", server_default="none")
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
