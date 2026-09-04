@@ -107,7 +107,8 @@
   включённой клубной настройке новый раунд отправляется в чат турнира полной карточкой: Telegram-ники,
   ФИО, текущие счёты и статусы матчей — PR
   [#281](https://github.com/mmbabaev/MetaTheGathering/pull/281),
-  [#287](https://github.com/mmbabaev/MetaTheGathering/pull/287).
+  [#287](https://github.com/mmbabaev/MetaTheGathering/pull/287),
+  [#288](https://github.com/mmbabaev/MetaTheGathering/pull/288).
 - В настройках Endstep-ru настоящий чат `@endstep_ru` доступен отдельным вариантом; текущий маршрут
   ручных объявлений автоматически не переключается — PR
   [#283](https://github.com/mmbabaev/MetaTheGathering/pull/283).
