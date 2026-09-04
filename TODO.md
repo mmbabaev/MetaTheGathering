@@ -84,7 +84,8 @@
   один раз получает в личку дату и Content Feed клуба. Если AetherHub показывает единственную
   строку дня как `DD.MM · Constructed Tourney` без формата, она безопасно принимается только при
   точном совпадении даты и чистом имени-дате — PR
-  [#275](https://github.com/mmbabaev/MetaTheGathering/pull/275).
+  [#275](https://github.com/mmbabaev/MetaTheGathering/pull/275),
+  [#289](https://github.com/mmbabaev/MetaTheGathering/pull/289).
 - Онлайн-клуб Endstep-ru с AetherHub Content Feed и временным тестовым Telegram-чатом:
   без расписания, с ручным созданием турнира через club-aware `/create_tournament`.
   Признак online хранится в турнире; для существующих и новых турниров без пометки дефолт — offline — PR
