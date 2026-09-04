@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 
 from bot.features import FeatureService
 from bot.handlers.base import HandlerResult
+from bot.handlers.round_results import RoundResultsHandler
 from bot.keyboards import Keyboards
 from bot.messages import (
     ALREADY_REGISTERED,
@@ -158,6 +159,7 @@ class PlayerHandler:
                 import_time=getattr(t, "aetherhub_import_time", None),
                 payment_enabled=payment_enabled,
                 payment_confirmed=payment_confirmed,
+                show_round_result_action=(t.is_online and has_pairings and t.status != models.TournamentStatus.CLOSED),
             ),
         )
 
@@ -532,12 +534,14 @@ class PlayerHandler:
         except errors.TournamentInvalidState:
             return HandlerResult(REGISTRATION_CLOSED)
 
-    def handle_tournament_public_status(self, tournament_id: int) -> HandlerResult:
+    def handle_tournament_public_status(self, tournament_id: int, tg_id: int | None = None) -> HandlerResult:
         """Показывает список участников турнира (доступно всем игрокам)."""
         try:
             t = get_tournament(self.svc.db, tournament_id)
         except errors.TournamentNotFound:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
+        if t.show_round_pairings and self.aetherhub_svc.has_pairings(tournament_id):
+            return RoundResultsHandler(self.svc.db, self.keyboards).handle_round_status(tournament_id, tg_id)
         participants = sort_participants(self.svc.list_participants_for_tournament(tournament_id))
         text = format_tournament_status(t.title, t.status.label_ru, participants, decks_hidden=t.decks_hidden)
         return HandlerResult(text)

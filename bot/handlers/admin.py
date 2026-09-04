@@ -6,6 +6,7 @@ from datetime import datetime
 from bot.features import FeatureService
 from bot.handlers.base import HandlerResult
 from bot.handlers.player import build_archetype_menu
+from bot.handlers.round_results import RoundResultsHandler
 from bot.handlers.tournament_status import pairing_rows
 from bot.keyboards import Keyboards
 from bot.messages import (
@@ -191,6 +192,11 @@ class AdminHandler:
             t = get_tournament(self.svc.db, tournament_id)
         except errors.TournamentNotFound:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
+        if t.show_round_pairings and AetherhubImportService(self.svc.db).has_pairings(tournament_id):
+            result = RoundResultsHandler(self.svc.db, self.keyboards).handle_round_status(tournament_id, tg_id)
+            if prefix and not result.is_alert:
+                result.text = f"{prefix}\n\n{result.text}"
+            return result
         participants = sort_participants(self.svc.list_participants_for_tournament(tournament_id))
         body = format_tournament_status(t.title, t.status.label_ru, participants, decks_hidden=t.decks_hidden)
         text = f"{prefix}\n\n{body}" if prefix else body

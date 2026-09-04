@@ -5,13 +5,14 @@ import re
 from dataclasses import dataclass
 from datetime import timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from core import models
 from services import errors
 from services.aetherhub_models import AetherhubRound, AetherhubTournamentData
 from services.names import format_participant_name, is_single_word_name_typo
+from services.round_results import RoundResultsService
 from services.user import UserService
 
 logger = logging.getLogger(__name__)
@@ -385,6 +386,16 @@ class AetherhubImportService:
                     existing.opponent_wins = pairing.opponent_wins
                     saved += 1
         self.db.commit()
+        # Keep one canonical match per table for live result collection while
+        # retaining reciprocal RoundPairing rows for existing exports.
+        round_results = RoundResultsService(self.db)
+        for rnd in rounds:
+            if rnd.pairings:
+                round_results.sync_round(
+                    tournament_id,
+                    rnd.number,
+                    find_user=lambda name: self.find_user_by_name(name, tournament_id),
+                )
         return saved
 
     def import_tournament(self, tournament_id: int, data: AetherhubTournamentData) -> ImportResult:
@@ -524,7 +535,15 @@ class AetherhubImportService:
             )
             .delete(synchronize_session=False)
         )
-        if deleted:
+        matches_deleted = (
+            self.db.query(models.RoundMatch)
+            .filter(
+                models.RoundMatch.tournament_id == tournament_id,
+                models.RoundMatch.round_number > max_round,
+            )
+            .delete(synchronize_session=False)
+        )
+        if deleted or matches_deleted:
             self.db.commit()
         return deleted
 
@@ -552,13 +571,23 @@ class AetherhubImportService:
     def is_tournament_complete(self, tournament_id: int) -> bool:
         """True, если турнир сыгран до конца: есть паринги и у всех не-бай матчей проставлен счёт.
 
-        Счёт матчей на AetherHub публикуется только ПОСЛЕ завершения турнира (см.
-        AetherhubFinalReimportJob), поэтому «у всех матчей есть счёт» — надёжный признак,
-        что турнир закончился и финальные стендинги получены.
+        Для обычных импортов счёт AetherHub появляется после завершения. В онлайн-турнирах
+        бот собирает его после каждого раунда, поэтому дополнительно требуем ожидаемое
+        количество Swiss-раундов — иначе первый полностью заполненный раунд выглядел бы
+        как завершённый турнир и преждевременно запускал финальную обработку.
         """
         pairings = self.get_pairings(tournament_id)
         if not pairings:
             return False
+        tournament = self.db.get(models.Tournament, tournament_id)
+        if tournament is not None and tournament.is_online:
+            participant_count = self.db.execute(
+                select(func.count(models.Participant.id)).where(models.Participant.tournament_id == tournament_id)
+            ).scalar_one()
+            expected_rounds = expected_swiss_rounds(participant_count)
+            actual_rounds = len({pairing.round_number for pairing in pairings})
+            if actual_rounds < expected_rounds:
+                return False
         for p in pairings:
             if p.opponent_name is not None and (p.player_wins is None or p.opponent_wins is None):
                 return False

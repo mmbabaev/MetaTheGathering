@@ -132,6 +132,39 @@ def test_club_announcement_settings_migration_defaults_to_none():
         assert connection.execute(sa.select(plans.c.announcement_chat_label)).scalar_one() == "не отправлять"
 
 
+def test_online_round_results_migration_defaults_to_participant_view():
+    metadata = sa.MetaData()
+    tournaments = sa.Table("tournaments", metadata, sa.Column("id", sa.Integer, primary_key=True))
+    sa.Table("users", metadata, sa.Column("id", sa.Integer, primary_key=True))
+    engine = sa.create_engine("sqlite://")
+    metadata.create_all(engine)
+    migration = runpy.run_path(str(VERSIONS_DIR / "71797c25e8da_add_online_round_results.py"))
+
+    with engine.begin() as connection:
+        connection.execute(tournaments.insert().values(id=1))
+        context = MigrationContext.configure(connection)
+        with Operations.context(context):
+            migration["upgrade"]()
+
+        migrated = sa.Table("tournaments", sa.MetaData(), autoload_with=connection)
+        matches = sa.Table("round_matches", sa.MetaData(), autoload_with=connection)
+        now = datetime(2026, 9, 4)
+        connection.execute(
+            matches.insert().values(
+                id=1,
+                tournament_id=1,
+                round_number=1,
+                pairing_key="dummy-not-a-real-pairing-key",
+                player1_name="Игрок 1",
+                player2_name="Игрок 2",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        assert connection.execute(sa.select(migrated.c.show_round_pairings)).scalar_one() is False
+        assert connection.execute(sa.select(matches.c.status, matches.c.revision)).one() == ("unreported", 0)
+
+
 def test_split_spy_general_names_repairs_only_classification_cache():
     metadata = sa.MetaData()
     archetypes = sa.Table(
