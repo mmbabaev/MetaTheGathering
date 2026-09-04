@@ -272,8 +272,8 @@ def format_tournament_status(title: str, status: str, participants: list, decks_
     return "\n".join(lines)
 
 
-def _round_match_names(matches: list) -> dict[tuple[int, int], str]:
-    """Prefer Telegram handles, with compact real names as a fallback."""
+def _round_match_names(matches: list) -> tuple[dict[tuple[int, int], str], dict[tuple[int, int], str]]:
+    """Return primary Telegram labels and full ``Фамилия Имя`` labels."""
     compact: dict[tuple[int, int], str] = {}
     full: dict[tuple[int, int], str] = {}
     for match in matches:
@@ -284,22 +284,23 @@ def _round_match_names(matches: list) -> dict[tuple[int, int], str]:
                 continue
             key = (match.id, position)
             if user is not None:
+                full[key] = format_participant_name(user.first_name, user.last_name) or source_name
                 username = (user.username or "").strip().lstrip("@")
                 if username:
-                    compact[key] = full[key] = f"@{username}"
+                    compact[key] = f"@{username}"
                 else:
                     compact[key] = user.last_name or user.first_name or source_name
-                    full[key] = format_participant_name(user.first_name, user.last_name) or source_name
             else:
                 compact[key] = source_name
                 full[key] = source_name
     counts = Counter(value.casefold() for value in compact.values())
-    return {key: (full[key] if counts[value.casefold()] > 1 else value) for key, value in compact.items()}
+    primary = {key: (full[key] if counts[value.casefold()] > 1 else value) for key, value in compact.items()}
+    return primary, full
 
 
 def format_round_pairings(title: str, status: str, round_number: int, matches: list) -> str:
     """Latest-round public status with live pending and final scores."""
-    names = _round_match_names(matches)
+    names, full_names = _round_match_names(matches)
     playable = [match for match in matches if match.player2_name is not None]
     completed = sum(
         match.status in {RoundMatchStatus.CONFIRMED, RoundMatchStatus.ADMIN, RoundMatchStatus.IMPORTED}
@@ -313,11 +314,18 @@ def format_round_pairings(title: str, status: str, round_number: int, matches: l
     for index, match in enumerate(matches, start=1):
         table = match.table_number if match.table_number is not None else index
         left = escape(names[(match.id, 1)])
+        full_left = escape(full_names[(match.id, 1)])
         if match.player2_name is None:
-            lines.extend([f"{table}. {left} — BYE", "   Статус: ✅ без игры"])
+            lines.append(f"{table}. {left} — BYE")
+            if full_left != left:
+                lines.append(f"   {full_left} — BYE")
+            lines.append("   Статус: ✅ без игры")
             continue
         right = escape(names[(match.id, 2)])
+        full_right = escape(full_names[(match.id, 2)])
         lines.append(f"{table}. {left} — {right}")
+        if (full_left, full_right) != (left, right):
+            lines.append(f"   {full_left} — {full_right}")
         if match.player1_wins is None or match.player2_wins is None:
             lines.append("   Счёт: — · Статус: 🎮 играют")
             continue

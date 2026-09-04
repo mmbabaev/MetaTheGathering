@@ -153,6 +153,7 @@ def test_pending_score_is_public_and_summary_keeps_source_order(db, online_match
     pending = RoundResultsService(db).propose(match.id, alice.tg_id, 1, 0)
     text = format_round_pairings(tournament.title, "Идёт", 1, [pending])
     assert "1. @alice_tg — @bob_tg" in text
+    assert "   Иванова Алиса — Петров Борис" in text
     assert "Счёт: <b>1–0</b> · Статус: ⏳ ожидает подтверждения" in text
     summary = format_aetherhub_round_summary(1, [pending])
     assert "Иванова Алиса 1-0 Петров Борис" in summary
@@ -170,6 +171,7 @@ def test_unreported_match_has_explicit_status_and_name_fallback(db):
     text = format_round_pairings(tournament.title, "Идёт", 1, [match])
 
     assert "1. Иванова — Петров" in text
+    assert "   Иванова Алиса — Петров Борис" in text
     assert "Счёт: — · Статус: 🎮 играют" in text
     assert "✅ подтверждено · ⏳ ожидает соперника" not in text
 
