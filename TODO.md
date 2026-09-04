@@ -131,7 +131,8 @@
   сериализуется в GitHub Actions и на сервере, временные архивы и env получают уникальные
   имена и удаляются даже после ошибки, а загрузка останавливается заранее при нехватке места.
   После эксперимента с schema-per-PR debug возвращён к одной постоянной schema: данные больше не «исчезают»
-  при деплое другого PR, а конфликты unmerged-миграций исправляются в ветках. In-process Telegram
+  при деплое другого PR, а конфликты unmerged-миграций исправляются в ветках — PR
+  [#285](https://github.com/mmbabaev/MetaTheGathering/pull/285). In-process Telegram
   transport tests и real-bot smoke остаются следующими этапами — PR
   [#271](https://github.com/mmbabaev/MetaTheGathering/pull/271).
 - Pure fairness foundation перечисляет все 10 линий Bingo 4×4 и считает вероятностные
