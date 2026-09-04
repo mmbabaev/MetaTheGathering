@@ -7,6 +7,7 @@ from bot.handlers.create_tournament import CreateTournamentWizardHandler
 from bot.keyboards import Keyboards
 from bot.tournament_creation import execute_creation_plan, execute_due_creation_plans
 from core import models
+from core.schemas import TournamentCreate
 from services.club_settings import ClubAnnouncementSettingsService
 from services.tournament_creation import TournamentCreationPlanService
 from services.user import UserService
@@ -125,6 +126,26 @@ async def test_execute_plan_creates_online_tournament_and_announces(db):
     db.refresh(plan)
     assert plan.status == "completed"
     assert plan.announcement_sent_at is not None
+
+
+async def test_no_announcement_plan_is_not_blocked_by_other_clubs_using_chat_zero(db, svc):
+    svc.create_tournament(TournamentCreate(title="Pair 1", chat_id=0, club="Pair of dice"))
+    svc.create_tournament(TournamentCreate(title="Pair 2", chat_id=0, club="Pair of dice"))
+    ClubAnnouncementSettingsService(db).set_destination("Endstep-ru", "none")
+    service = TournamentCreationPlanService(db)
+    plan = service.create_plan(
+        club_name="Endstep-ru",
+        created_by_tg_id=ADMIN_ID,
+        announce_at=models.utc_now() - timedelta(minutes=1),
+        event_at=models.utc_now() + timedelta(days=1),
+    )
+
+    result = await execute_creation_plan(AsyncMock(), db, plan.id)
+
+    assert result.announcement_skipped is True
+    tournament = db.get(models.Tournament, result.tournament_id)
+    assert tournament.club == "Endstep-ru"
+    assert tournament.chat_id == 0
 
 
 async def test_failed_announcement_retries_without_duplicate_tournament(db):

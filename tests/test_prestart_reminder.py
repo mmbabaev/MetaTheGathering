@@ -89,7 +89,7 @@ class TestPreStartReminderJob:
     async def test_reminds_when_active_tournament_exists(self, db, monkeypatch):
         monkeypatch.setattr("bot.scheduler.settings.OWNER_CHAT_ID", 777)
         club, schedule = self._club_schedule()
-        TournamentService(db).create_tournament(TournamentCreate(title="Pauper", chat_id=-100))
+        TournamentService(db).create_tournament(TournamentCreate(title="Pauper", chat_id=-100, club=club.name))
         bot = _bot()
 
         await PreStartReminderJob(club, schedule).run(bot=bot, now=MONDAY, db=db)
@@ -102,7 +102,9 @@ class TestPreStartReminderJob:
         reminder = AsyncMock()
         monkeypatch.setattr("bot.scheduler.send_deferred_deck_reminders", reminder)
         club, schedule = self._club_schedule()
-        tournament = TournamentService(db).create_tournament(TournamentCreate(title="Pauper", chat_id=-100))
+        tournament = TournamentService(db).create_tournament(
+            TournamentCreate(title="Pauper", chat_id=-100, club=club.name)
+        )
         bot = _bot()
 
         await PreStartReminderJob(club, schedule).run(bot=bot, now=MONDAY, db=db)
@@ -123,7 +125,9 @@ class TestPreStartReminderJob:
         reminder = AsyncMock()
         monkeypatch.setattr("bot.scheduler.send_deferred_deck_reminders", reminder)
         club, schedule = self._club_schedule()
-        tournament = TournamentService(db).create_tournament(TournamentCreate(title="Pauper", chat_id=-100))
+        tournament = TournamentService(db).create_tournament(
+            TournamentCreate(title="Pauper", chat_id=-100, club=club.name)
+        )
         bot = _bot()
 
         await PreStartReminderJob(club, schedule).run(bot=bot, now=MONDAY, db=db)
