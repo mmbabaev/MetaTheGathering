@@ -33,7 +33,8 @@ class TestEndstepUsername:
     def test_settings_shows_and_updates_username(self, handler, user_svc):
         result = handler.handle_settings_endstep_username_text(9051, "MtgPlayer")
         assert "MtgPlayer" in result.text
-        assert "MtgPlayer" in handler.handle_settings(9051).text
+        settings_text = handler.handle_settings(9051).text
+        assert "Ник Endstep (необязательно): MtgPlayer" in settings_text
 
     def test_duplicate_username_is_rejected_case_insensitively(self, handler, user_svc):
         user_svc.update_endstep_username(9052, "UniqueNick")

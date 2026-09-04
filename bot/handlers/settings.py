@@ -39,7 +39,8 @@ class SettingsHandler:
         status_pairings = user.status_by_pairings if user else False
         endstep_username = user.endstep_username if user and user.endstep_username else "не указан"
         text = (
-            f"{SETTINGS_MENU}\n\nВаше имя: {current}\nНик Endstep: {endstep_username}\n\nВерсия: {app_settings.VERSION}"
+            f"{SETTINGS_MENU}\n\nВаше имя: {current}\n"
+            f"Ник Endstep (необязательно): {endstep_username}\n\nВерсия: {app_settings.VERSION}"
         )
         return HandlerResult(
             text,

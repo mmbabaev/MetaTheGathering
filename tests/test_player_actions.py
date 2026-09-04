@@ -170,28 +170,17 @@ class TestHandleRegister:
         buttons = [button for row in result.keyboard.inline_keyboard for button in row]
         assert any(button.callback_data == f"{CB_DEFER_DECK}:{active_tournament.id}" for button in buttons)
 
-    def test_online_tournament_requires_endstep_username(self, db, handler, user_svc, active_tournament):
+    def test_online_tournament_does_not_require_endstep_username(self, db, handler, user_svc, active_tournament):
         user = user_svc.get_or_create(tg_id=5105, username="u", first_name="Иван", last_name="Иванов")
         db.get(models.Tournament, active_tournament.id).is_online = True
         db.commit()
 
         result = handler.handle_register(active_tournament.id, tg_id=user.tg_id)
 
-        assert result.needs_endstep_username is True
-        assert result.keyboard is None
-
-    def test_online_tournament_continues_after_endstep_username(self, db, handler, user_svc, active_tournament):
-        user = user_svc.get_or_create(tg_id=5106, username="u", first_name="Иван", last_name="Иванов")
-        db.get(models.Tournament, active_tournament.id).is_online = True
-        db.commit()
-
-        result = handler.handle_save_endstep_username_then_register(user.tg_id, "Hero_42", active_tournament.id)
-
         assert result.needs_endstep_username is False
         assert result.keyboard is not None
-        assert user_svc.get_by_tg_id(user.tg_id).endstep_username == "Hero_42"
 
-    def test_stale_archetype_button_cannot_register_online_without_username(
+    def test_archetype_button_registers_online_without_endstep_username(
         self, db, handler, svc, user_svc, active_tournament, archetype_burn
     ):
         user = user_svc.get_or_create(tg_id=5107, username="u", first_name="Иван", last_name="Иванов")
@@ -207,8 +196,9 @@ class TestHandleRegister:
             archetype_burn.id,
         )
 
-        assert result.needs_endstep_username is True
-        assert svc.get_participant(active_tournament.id, user.id) is None
+        assert result.needs_endstep_username is False
+        assert result.text == REGISTERED_AS.format(archetype_name=archetype_burn.name)
+        assert svc.get_participant(active_tournament.id, user.id) is not None
 
 
 class TestHandleDeferDeck:
