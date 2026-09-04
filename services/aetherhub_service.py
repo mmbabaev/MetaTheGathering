@@ -16,6 +16,8 @@ from services.aetherhub_models import (
 )
 
 PAUPER_RE = re.compile(r"pauper|паупер|пупер", re.IGNORECASE)
+_GENERIC_CONSTRUCTED_RE = re.compile(r"\bconstructed\s+tourney\b", re.IGNORECASE)
+_DATE_ONLY_NAME_RE = re.compile(r"^\s*\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?\s*$")
 
 # Ссылка на страницу турнира — с числовым id (отсекает навигацию: /Tourney/, /Tourney/Leagues …)
 _TOURNEY_LINK_RE = re.compile(r"/Tourney/\w+/\d+")
@@ -298,6 +300,7 @@ class AetherhubService:
                     url=url,
                     date=tournament_date,
                     is_pauper=bool(PAUPER_RE.search(cell_text)),
+                    is_generic_constructed=bool(_GENERIC_CONSTRUCTED_RE.search(cell_text)),
                 )
             )
 
@@ -310,15 +313,30 @@ class AetherhubService:
     def find_todays_pauper_tournament(self, club_url: str, today: date | None = None) -> str | None:
         """URL сегодняшнего паупер-турнира клуба, либо None.
 
-        Список клуба отсортирован свежими сверху, поэтому берём ПЕРВЫЙ турнир, который
+        Список клуба отсортирован свежими сверху, поэтому сначала берём ПЕРВЫЙ турнир, который
         одновременно (1) паупер — по тексту ячейки: у Goldfish это подзаголовок
         «Constructed: Pauper Tourney», у Edinorog «Паупер …» в имени; и (2) сегодняшний —
         дата из имени либо «создан N часов назад» указывает на сегодня.
+        Если AetherHub потерял формат и показывает «DD.MM · Constructed Tourney», допускается
+        только единственный кандидат с чистой датой в имени и точным совпадением дня.
         ``today=None`` (debug) снимает проверку даты — возвращаем самый свежий паупер.
         """
-        for link in self.fetch_club_tournaments(club_url, today=today):
+        links = self.fetch_club_tournaments(club_url, today=today)
+        for link in links:
             if link.is_pauper and (today is None or link.date == today):
                 return link.url
+        if today is None:
+            return None
+        generic_candidates = [
+            link
+            for link in links
+            if link.date == today
+            and link.is_generic_constructed
+            and not link.is_pauper
+            and _DATE_ONLY_NAME_RE.fullmatch(link.name)
+        ]
+        if len(generic_candidates) == 1:
+            return generic_candidates[0].url
         return None
 
     def find_tournament_url(self, club_url: str, event_date: date, tournament_format: str) -> str | None:

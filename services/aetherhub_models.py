@@ -42,3 +42,6 @@ class ClubTournamentLink:
     # У Goldfish имя — просто дата, а «Pauper» стоит в подзаголовке «Constructed: Pauper Tourney»;
     # у Edinorog формат («Паупер»/«Легаси»/…) стоит в имени. Поиск по тексту ячейки ловит оба.
     is_pauper: bool = False
+    # AetherHub иногда теряет формат и показывает только нейтральный «Constructed Tourney».
+    # Такой турнир можно брать лишь через строгий fallback по точной дате и имени-дате.
+    is_generic_constructed: bool = False

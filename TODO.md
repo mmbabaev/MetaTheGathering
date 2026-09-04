@@ -81,7 +81,9 @@
   [#274](https://github.com/mmbabaev/MetaTheGathering/pull/274).
 - Ручная кнопка AetherHub использует дату игрового дня, как плановый импорт, и не предлагает
   старое событие при несовпадении. После второй плановой попытки без турнира владелец бота
-  один раз получает в личку дату и Content Feed клуба — PR
+  один раз получает в личку дату и Content Feed клуба. Если AetherHub показывает единственную
+  строку дня как `DD.MM · Constructed Tourney` без формата, она безопасно принимается только при
+  точном совпадении даты и чистом имени-дате — PR
   [#275](https://github.com/mmbabaev/MetaTheGathering/pull/275).
 - Онлайн-клуб Endstep-ru с AetherHub Content Feed и временным тестовым Telegram-чатом:
   без расписания, с ручным созданием турнира через club-aware `/create_tournament`.
