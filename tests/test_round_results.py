@@ -170,7 +170,7 @@ def test_unreported_match_has_explicit_status_and_name_fallback(db):
     text = format_round_pairings(tournament.title, "Идёт", 1, [match])
 
     assert "1. Иванова — Петров" in text
-    assert "Счёт: — · Статус: 📝 результат не введён" in text
+    assert "Счёт: — · Статус: 🎮 играют" in text
     assert "✅ подтверждено · ⏳ ожидает соперника" not in text
 
 

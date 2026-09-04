@@ -319,14 +319,14 @@ def format_round_pairings(title: str, status: str, round_number: int, matches: l
         right = escape(names[(match.id, 2)])
         lines.append(f"{table}. {left} — {right}")
         if match.player1_wins is None or match.player2_wins is None:
-            lines.append("   Счёт: — · Статус: 📝 результат не введён")
+            lines.append("   Счёт: — · Статус: 🎮 играют")
             continue
         status = {
             RoundMatchStatus.PENDING: "⏳ ожидает подтверждения",
             RoundMatchStatus.CONFIRMED: "✅ подтверждён",
             RoundMatchStatus.ADMIN: "✅ введён администратором",
             RoundMatchStatus.IMPORTED: "✅ импортирован",
-        }.get(match.status, "📝 результат не введён")
+        }.get(match.status, "🎮 играют")
         lines.append(f"   Счёт: <b>{match.player1_wins}–{match.player2_wins}</b> · Статус: {status}")
     return "\n".join(lines)
 
