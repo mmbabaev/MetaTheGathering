@@ -109,8 +109,18 @@ class RoundResultsService:
                 )
             ).scalar_one_or_none()
             if match is None:
-                player1 = resolver(pairing.player_name)
-                player2 = resolver(pairing.opponent_name) if pairing.opponent_name else None
+                player1 = (
+                    self.db.get(models.User, pairing.player_user_id)
+                    if pairing.player_user_id is not None
+                    else resolver(pairing.player_name)
+                )
+                player2 = (
+                    self.db.get(models.User, pairing.opponent_user_id)
+                    if pairing.opponent_user_id is not None
+                    else resolver(pairing.opponent_name)
+                    if pairing.opponent_name
+                    else None
+                )
                 match = models.RoundMatch(
                     tournament_id=tournament_id,
                     round_number=round_number,
@@ -134,10 +144,18 @@ class RoundResultsService:
             else:
                 match.table_number = pairing.table_number
                 if match.player1_user_id is None:
-                    user = resolver(match.player1_name)
+                    user = (
+                        self.db.get(models.User, pairing.player_user_id)
+                        if pairing.player_user_id is not None
+                        else resolver(match.player1_name)
+                    )
                     match.player1_user_id = user.id if user else None
                 if match.player2_name and match.player2_user_id is None:
-                    user = resolver(match.player2_name)
+                    user = (
+                        self.db.get(models.User, pairing.opponent_user_id)
+                        if pairing.opponent_user_id is not None
+                        else resolver(match.player2_name)
+                    )
                     match.player2_user_id = user.id if user else None
                 if (
                     match.status == models.RoundMatchStatus.UNREPORTED

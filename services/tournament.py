@@ -106,6 +106,7 @@ class TournamentService:
             slug=data.slug,
             club=data.club,
             is_online=data.is_online,
+            engine_mode=data.engine_mode,
             status=models.TournamentStatus.REGISTRATION,
             registration_close_at=data.registration_close_at,
             created_at=models.utc_now(),

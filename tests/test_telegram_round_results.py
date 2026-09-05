@@ -1,7 +1,12 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from bot.telegram.round_results import callback_confirm, callback_send
+from bot.telegram.round_results import (
+    callback_confirm,
+    callback_send,
+    callback_swiss_mode,
+    callback_swiss_next_round,
+)
 from core import models
 from core.schemas import TournamentCreate
 from services.round_results import RoundResultsService
@@ -86,3 +91,38 @@ async def test_confirmation_messages_only_the_original_proposer(db, user_svc):
     bot.send_message.assert_awaited_once()
     assert bot.send_message.call_args.kwargs["chat_id"] == alice.tg_id
     assert db.get(models.RoundMatch, match.id).status == models.RoundMatchStatus.CONFIRMED
+
+
+async def test_internal_swiss_toggle_and_first_round_publish_only_to_configured_club_chat(db, user_svc, monkeypatch):
+    tournament = TournamentService(db).create_tournament(
+        TournamentCreate(title="Internal", chat_id=-100500, club="Endstep-ru", is_online=True)
+    )
+    users = []
+    for index in range(4):
+        player = user_svc.get_or_create(
+            tg_id=500 + index,
+            username=f"p{index}",
+            first_name=f"Имя{index}",
+            last_name=f"Фамилия{index}",
+        )
+        db.add(models.Participant(tournament_id=tournament.id, user_id=player.id))
+        users.append(player)
+    users[0].is_admin = True
+    db.commit()
+    monkeypatch.setattr("bot.telegram.round_results.settings.DEBUG", True)
+
+    toggle_update, _ = _update(users[0].tg_id, f"sw_mode:{tournament.id}")
+    next_update, next_query = _update(users[0].tg_id, f"sw_next:{tournament.id}")
+    publication = AsyncMock(return_value=True)
+    bot = AsyncMock()
+    with (
+        patch("bot.telegram.round_results.SessionLocal", return_value=db),
+        patch("bot.telegram.round_results.send_club_pairings", publication),
+    ):
+        await callback_swiss_mode(toggle_update, SimpleNamespace(bot=bot))
+        await callback_swiss_next_round(next_update, SimpleNamespace(bot=bot))
+
+    assert db.get(models.Tournament, tournament.id).engine_mode == models.TournamentEngineMode.INTERNAL_SWISS
+    assert db.query(models.RoundPairing).filter_by(tournament_id=tournament.id).count() == 4
+    publication.assert_awaited_once_with(bot, db, tournament.id, [1])
+    next_query.edit_message_text.assert_awaited_once()

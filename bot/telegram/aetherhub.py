@@ -15,6 +15,7 @@ from bot.telegram.common import announce_completion_if_ready, parse_callback_int
 from bot.telegram.deck_reminder import send_deferred_deck_reminders
 from bot.telegram.player import _player_handler
 from bot.telegram.round_notify import send_round_notifications
+from core import models
 from core.config import Club, settings
 from core.database import SessionLocal
 from services.aetherhub_import_service import AetherhubImportService
@@ -66,6 +67,9 @@ async def callback_aetherhub_import_prompt(update: Update, context: ContextTypes
             return
         try:
             t = get_tournament(db, tournament_id)
+            if t.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS:
+                await query.answer("В этом турнире включён внутренний Swiss; AetherHub не нужен.", show_alert=True)
+                return
             stored_url = t.aetherhub_url
             club = _club_config(t.club)
             club_url = club.aetherhub_url if club else None

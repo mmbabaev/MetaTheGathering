@@ -51,15 +51,20 @@ class ClubPairingsService:
         lines = [f"📋 {tournament.title} · раунд {round_number}"]
         for pairing in pairings:
             table = str(pairing.table_number) if pairing.table_number is not None else "—"
-            player = self._format_player(pairing.player_name, tournament)
+            player = self._format_player(pairing.player_name, tournament, pairing.player_user_id)
             opponent = (
-                self._format_player(pairing.opponent_name, tournament) if pairing.opponent_name is not None else "BYE"
+                self._format_player(pairing.opponent_name, tournament, pairing.opponent_user_id)
+                if pairing.opponent_name is not None
+                else "BYE"
             )
             lines.append(f"Стол {table}: {player} — {opponent}")
         return "\n".join(lines)
 
-    def _format_player(self, imported_name: str, tournament: models.Tournament) -> str:
-        user = self._import.find_user_by_name(imported_name, tournament.id)
+    def _format_player(
+        self, imported_name: str, tournament: models.Tournament, exact_user_id: int | None = None
+    ) -> str:
+        user = self.db.get(models.User, exact_user_id) if exact_user_id is not None else None
+        user = user or self._import.find_user_by_name(imported_name, tournament.id)
         telegram_name = f"@{user.username}" if user is not None and user.username else None
         if tournament.is_online:
             endstep_name = user.endstep_username if user is not None and user.endstep_username else imported_name

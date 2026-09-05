@@ -14,9 +14,10 @@ from bot.keyboards import (
     CB_ROUND_RESULT_OWN,
     Keyboards,
 )
-from bot.messages import format_aetherhub_round_summary, format_round_pairings
+from bot.messages import format_aetherhub_round_summary, format_round_pairings, format_swiss_standings
 from core import models
 from core.config import settings
+from services.internal_swiss import InternalSwissService
 from services.round_results import FINAL_STATUSES, RoundResultError, RoundResultsService
 from services.user import UserService
 
@@ -57,8 +58,20 @@ class RoundResultsHandler:
             )
         )
         is_admin = bool(tg_id is not None and self.users.is_admin(tg_id))
+        internal_swiss = tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS
+        round_ready = (
+            self.results.is_round_ready(tournament_id, selected)
+            if internal_swiss and selected == available[-1]
+            else False
+        )
         return HandlerResult(
-            format_round_pairings(tournament.title, tournament.status.label_ru, selected, matches),
+            format_round_pairings(
+                tournament.title,
+                tournament.status.label_ru,
+                selected,
+                matches,
+                planned_rounds=tournament.swiss_rounds if internal_swiss else None,
+            ),
             keyboard=self.keyboards.round_status_keyboard(
                 tournament_id,
                 selected,
@@ -66,6 +79,9 @@ class RoundResultsHandler:
                 can_report=can_report,
                 is_admin=is_admin,
                 show_debug_next=settings.DEBUG and is_admin,
+                internal_swiss=internal_swiss,
+                planned_rounds=tournament.swiss_rounds,
+                round_ready=round_ready,
             ),
             parse_mode="HTML",
         )
@@ -237,6 +253,97 @@ class RoundResultsHandler:
             enabled = self.results.set_pairings_view(tournament_id, admin_tg_id)
             label = "паринги текущего раунда" if enabled else "список игроков"
             return HandlerResult(f"Вид статуса турнира: {label}.", answer_text=f"Статус: {label}")
+        except RoundResultError as exc:
+            return HandlerResult(str(exc), is_alert=True)
+
+    def handle_swiss_toggle(self, tournament_id: int, admin_tg_id: int) -> HandlerResult:
+        tournament = self.db.get(models.Tournament, tournament_id)
+        if tournament is None:
+            return HandlerResult("Турнир не найден.", is_alert=True)
+        enabled = tournament.engine_mode != models.TournamentEngineMode.INTERNAL_SWISS
+        try:
+            updated = InternalSwissService(self.db).set_enabled(tournament_id, admin_tg_id, enabled)
+        except RoundResultError as exc:
+            return HandlerResult(str(exc), is_alert=True)
+        label = "внутренний Swiss" if updated.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS else "AetherHub"
+        return HandlerResult(f"Движок турнира: {label}.", answer_text=f"Движок: {label}")
+
+    def handle_swiss_next_round(self, tournament_id: int, admin_tg_id: int) -> HandlerResult:
+        try:
+            generated = InternalSwissService(self.db).generate_next_round(tournament_id, admin_tg_id)
+        except RoundResultError as exc:
+            return HandlerResult(str(exc), is_alert=True)
+        screen = self.handle_round_status(tournament_id, admin_tg_id, generated.round_number)
+        screen.answer_text = f"Создан раунд {generated.round_number}/{generated.planned_rounds}."
+        screen.new_round_numbers = [generated.round_number]
+        return screen
+
+    def handle_swiss_standings(self, tournament_id: int, tg_id: int, page: int = 0) -> HandlerResult:
+        try:
+            tournament = self.db.get(models.Tournament, tournament_id)
+            if tournament is None:
+                raise RoundResultError("Турнир не найден.")
+            if tournament.engine_mode != models.TournamentEngineMode.INTERNAL_SWISS:
+                raise RoundResultError("Для этого турнира используются стендинги AetherHub.")
+            engine = InternalSwissService(self.db)
+            standings = engine.standings(tournament_id)
+            round_number = self.results.latest_round_number(tournament_id) or 0
+            planned = tournament.swiss_rounds or 0
+            ready = bool(round_number and self.results.is_round_ready(tournament_id, round_number))
+            page_count = max(1, (len(standings) + 19) // 20)
+            page = max(0, min(page, page_count - 1))
+            return HandlerResult(
+                format_swiss_standings(
+                    tournament.title,
+                    round_number,
+                    planned,
+                    standings,
+                    provisional=not ready,
+                    page=page,
+                ),
+                keyboard=self.keyboards.swiss_standings_keyboard(
+                    tournament_id, round_number, page=page, page_count=page_count
+                ),
+                parse_mode="HTML",
+            )
+        except RoundResultError as exc:
+            return HandlerResult(str(exc), is_alert=True)
+
+    def handle_swiss_finish_prompt(self, tournament_id: int, admin_tg_id: int) -> HandlerResult:
+        if not self.users.is_admin(admin_tg_id):
+            return HandlerResult("Нет прав администратора.", is_alert=True)
+        tournament = self.db.get(models.Tournament, tournament_id)
+        if tournament is None or tournament.engine_mode != models.TournamentEngineMode.INTERNAL_SWISS:
+            return HandlerResult("Внутренний Swiss-турнир не найден.", is_alert=True)
+        round_number = self.results.latest_round_number(tournament_id)
+        if round_number is None or round_number < (tournament.swiss_rounds or 0):
+            return HandlerResult(f"Сыграно раундов: {round_number or 0}/{tournament.swiss_rounds or 0}.", is_alert=True)
+        if not self.results.is_round_ready(tournament_id, round_number):
+            return HandlerResult(f"Сначала соберите все результаты раунда {round_number}.", is_alert=True)
+        return HandlerResult(
+            f"🏁 Завершить турнир «{tournament.title}» и зафиксировать итоговые места?",
+            keyboard=self.keyboards.swiss_finish_confirm_keyboard(tournament_id),
+        )
+
+    def handle_swiss_finish(self, tournament_id: int, admin_tg_id: int) -> HandlerResult:
+        try:
+            standings = InternalSwissService(self.db).finish(tournament_id, admin_tg_id)
+            tournament = self.db.get(models.Tournament, tournament_id)
+            page_count = max(1, (len(standings) + 19) // 20)
+            return HandlerResult(
+                format_swiss_standings(
+                    tournament.title,
+                    tournament.swiss_rounds or 0,
+                    tournament.swiss_rounds or 0,
+                    standings,
+                    provisional=False,
+                ),
+                keyboard=self.keyboards.swiss_standings_keyboard(
+                    tournament_id, tournament.swiss_rounds, page_count=page_count
+                ),
+                parse_mode="HTML",
+                answer_text="Турнир завершён.",
+            )
         except RoundResultError as exc:
             return HandlerResult(str(exc), is_alert=True)
 

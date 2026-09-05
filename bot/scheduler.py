@@ -443,6 +443,9 @@ class AetherhubImportJob:
             if not tournament:
                 logger.warning(f"AetherhubImportJob: no active tournament for '{self.club.name}'")
                 return
+            if tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS:
+                logger.info("AetherhubImportJob: tournament #%s uses internal Swiss, skipping", tournament.id)
+                return
 
             tournament_id = tournament.id
             url = tournament.aetherhub_url
@@ -552,6 +555,7 @@ class AetherhubTimedImportJob:
             stmt = select(models.Tournament).where(
                 models.Tournament.aetherhub_import_time == current_time,
                 models.Tournament.status != models.TournamentStatus.CLOSED,
+                models.Tournament.engine_mode != models.TournamentEngineMode.INTERNAL_SWISS,
             )
             tournaments = db.execute(stmt).scalars().all()
         finally:
@@ -679,6 +683,7 @@ class AetherhubFinalReimportJob:
                 models.Tournament.created_at >= cutoff,
                 models.Tournament.status != models.TournamentStatus.CLOSED,
                 models.Tournament.completed_announced_at.is_(None),
+                models.Tournament.engine_mode != models.TournamentEngineMode.INTERNAL_SWISS,
             )
             tournaments = db.execute(stmt).scalars().all()
         finally:

@@ -6,9 +6,10 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from bot.handlers.round_results import RoundResultsHandler
-from bot.keyboards import CB_DEBUG_NEXT_ROUND
+from bot.keyboards import CB_DEBUG_NEXT_ROUND, CB_SWISS_NEXT_ROUND
 from bot.meta_police_message import send_debug_meta_police_preview
 from bot.telegram.common import parse_callback_ints
+from core import models
 from core.config import settings
 from core.database import SessionLocal
 from services.debug_tournament import DebugTournamentService
@@ -68,11 +69,15 @@ async def callback_debug_fill_tournament(update: Update, context: ContextTypes.D
             await query.answer("Кнопка доступна только администраторам debug-бота.", show_alert=True)
             return
         result = DebugTournamentService(db).fill_to_15(tournament_id)
+        tournament = db.get(models.Tournament, tournament_id)
+        internal = bool(tournament and tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS)
+        next_prefix = CB_SWISS_NEXT_ROUND if internal else CB_DEBUG_NEXT_ROUND
+        next_label = "🎲 Создать раунд 1" if internal else "🐞 Следующий раунд"
         await query.answer(f"Добавлено: {result.added}. Всего игроков: {result.total}.", show_alert=True)
         await query.edit_message_text(
             "Тестовые игроки готовы. Нажмите «Следующий раунд», чтобы создать первые паринги.",
             reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton("🐞 Следующий раунд", callback_data=f"{CB_DEBUG_NEXT_ROUND}:{tournament_id}")]]
+                [[InlineKeyboardButton(next_label, callback_data=f"{next_prefix}:{tournament_id}")]]
             ),
         )
     except RoundResultError as exc:

@@ -111,6 +111,11 @@ CB_ROUND_ADMIN_P1 = "rr_adm_1"  # rr_adm_1:{match_id}:{wins}
 CB_ROUND_ADMIN_P2 = "rr_adm_2"  # rr_adm_2:{match_id}:{p1_wins}:{p2_wins}
 CB_ROUND_SUMMARY = "rr_sum"  # rr_sum:{tournament_id}
 CB_ROUND_VIEW_TOGGLE = "rr_toggle"  # rr_toggle:{tournament_id}
+CB_SWISS_MODE_TOGGLE = "sw_mode"  # beta: sw_mode:{tournament_id}
+CB_SWISS_NEXT_ROUND = "sw_next"  # sw_next:{tournament_id}
+CB_SWISS_STANDINGS = "sw_table"  # sw_table:{tournament_id}
+CB_SWISS_FINISH = "sw_finish"  # sw_finish:{tournament_id}
+CB_SWISS_FINISH_CONFIRM = "sw_finish_yes"  # sw_finish_yes:{tournament_id}
 CB_APP_STATS_HOME = "appstat_home"  # appstat_home — меню статистики приложения (владелец)
 CB_APP_STATS_NOTIFY_ROUNDS = "appstat_nr"  # appstat_nr — список включивших уведомления о раундах
 CB_CELLAR_DATES = "cellar_dates"
@@ -385,6 +390,7 @@ class Keyboards:
         payment_enabled: bool = False,
         payment_confirmed: bool = False,
         show_round_result_action: bool = False,
+        internal_swiss: bool = False,
     ) -> InlineKeyboardMarkup:
         if is_registered:
             action_btn = InlineKeyboardButton("🚪 Выйти из турнира", callback_data=f"{CB_LEAVE}:{tournament_id}")
@@ -409,15 +415,15 @@ class Keyboards:
                 [InlineKeyboardButton("🤝 Записать оппонентов", callback_data=f"{CB_ADMIN_OPPONENTS}:{tournament_id}")]
             )
         if is_admin:
-            aetherhub_emoji = "🔄" if aetherhub_url else "📥"
-            rows.append(
-                [
-                    InlineKeyboardButton("📊 Опрос", callback_data=f"{CB_POLL_MENU}:{tournament_id}"),
+            admin_row = [InlineKeyboardButton("📊 Опрос", callback_data=f"{CB_POLL_MENU}:{tournament_id}")]
+            if not internal_swiss:
+                aetherhub_emoji = "🔄" if aetherhub_url else "📥"
+                admin_row.append(
                     InlineKeyboardButton(
                         f"{aetherhub_emoji} AetherHub", callback_data=f"{CB_AETHERHUB_IMPORT}:{tournament_id}"
-                    ),
-                ]
-            )
+                    )
+                )
+            rows.append(admin_row)
             rows.append(
                 [
                     InlineKeyboardButton("📈 Выгрузка", callback_data=f"{CB_EXPORT_MENU}:{tournament_id}"),
@@ -470,6 +476,8 @@ class Keyboards:
         is_online: bool = False,
         has_pairings: bool = False,
         show_round_pairings: bool = False,
+        show_internal_beta: bool = False,
+        internal_swiss: bool = False,
     ) -> InlineKeyboardMarkup:
         rows = [
             [InlineKeyboardButton("➕ Добавить участников", callback_data=f"{CB_BULK_ADD}:{tournament_id}")],
@@ -478,15 +486,28 @@ class Keyboards:
         if is_online:
             view_label = "🤝 Статус: паринги" if show_round_pairings else "📋 Статус: игроки"
             rows.append([InlineKeyboardButton(view_label, callback_data=f"{CB_ROUND_VIEW_TOGGLE}:{tournament_id}")])
+        if show_internal_beta and is_online and not is_closed:
+            engine_label = "🧪 Движок: Swiss" if internal_swiss else "🧪 Движок: AetherHub"
+            rows.append([InlineKeyboardButton(engine_label, callback_data=f"{CB_SWISS_MODE_TOGGLE}:{tournament_id}")])
+        if internal_swiss and not is_closed:
+            next_label = "🎲 Создать раунд 1" if not has_pairings else "➡️ Следующий раунд"
+            rows.append([InlineKeyboardButton(next_label, callback_data=f"{CB_SWISS_NEXT_ROUND}:{tournament_id}")])
+            if has_pairings:
+                rows.append(
+                    [
+                        InlineKeyboardButton("📊 Стендинги", callback_data=f"{CB_SWISS_STANDINGS}:{tournament_id}:0"),
+                        InlineKeyboardButton("🏁 Завершить Swiss", callback_data=f"{CB_SWISS_FINISH}:{tournament_id}"),
+                    ]
+                )
         if is_online and has_pairings:
-            rows.append(
-                [
-                    InlineKeyboardButton("✏️ Результаты", callback_data=f"{CB_ROUND_ADMIN}:{tournament_id}"),
-                    InlineKeyboardButton("📋 Для AetherHub", callback_data=f"{CB_ROUND_SUMMARY}:{tournament_id}"),
-                ]
-            )
+            result_buttons = [InlineKeyboardButton("✏️ Результаты", callback_data=f"{CB_ROUND_ADMIN}:{tournament_id}")]
+            if not internal_swiss:
+                result_buttons.append(
+                    InlineKeyboardButton("📋 Для AetherHub", callback_data=f"{CB_ROUND_SUMMARY}:{tournament_id}")
+                )
+            rows.append(result_buttons)
         debug_buttons = []
-        if show_debug:
+        if show_debug and not internal_swiss:
             debug_buttons.append(
                 InlineKeyboardButton("🐞 Тест оповещений", callback_data=f"{CB_DEBUG_ROUND_NOTIFY}:{tournament_id}")
             )
@@ -497,24 +518,27 @@ class Keyboards:
         if debug_buttons:
             rows.append(debug_buttons)
         if show_debug:
-            rows.append(
-                [
-                    InlineKeyboardButton("🐞 Игроки ×15", callback_data=f"{CB_DEBUG_FILL_TOURNAMENT}:{tournament_id}"),
-                    InlineKeyboardButton("🐞 Следующий раунд", callback_data=f"{CB_DEBUG_NEXT_ROUND}:{tournament_id}"),
-                ]
-            )
+            simulator_buttons = [
+                InlineKeyboardButton("🐞 Игроки ×15", callback_data=f"{CB_DEBUG_FILL_TOURNAMENT}:{tournament_id}")
+            ]
+            if not internal_swiss:
+                simulator_buttons.append(
+                    InlineKeyboardButton("🐞 Следующий раунд", callback_data=f"{CB_DEBUG_NEXT_ROUND}:{tournament_id}")
+                )
+            rows.append(simulator_buttons)
         if decks_hidden:
             rows.append([InlineKeyboardButton("👁 Показать колоды", callback_data=f"{CB_REVEAL_DECKS}:{tournament_id}")])
         else:
             rows.append([InlineKeyboardButton("🙈 Скрыть колоды", callback_data=f"{CB_HIDE_DECKS}:{tournament_id}")])
-        if not is_closed:
+        if not is_closed and not internal_swiss:
             rows.append(
                 [InlineKeyboardButton("🔒 Закрыть турнир", callback_data=f"{CB_CLOSE_TOURNAMENT}:{tournament_id}")]
             )
-        if is_closed:
+        if is_closed and not internal_swiss:
             rows.append(
                 [InlineKeyboardButton("🔓 Сделать активным", callback_data=f"{CB_REOPEN_TOURNAMENT}:{tournament_id}")]
             )
+        if is_closed:
             rows.append(
                 [InlineKeyboardButton("🗑 Удалить турнир", callback_data=f"{CB_DELETE_TOURNAMENT}:{tournament_id}")]
             )
@@ -570,6 +594,9 @@ class Keyboards:
         can_report: bool = False,
         is_admin: bool = False,
         show_debug_next: bool = False,
+        internal_swiss: bool = False,
+        planned_rounds: int | None = None,
+        round_ready: bool = False,
     ) -> InlineKeyboardMarkup:
         rows = []
         navigation = []
@@ -594,13 +621,23 @@ class Keyboards:
                 [InlineKeyboardButton("🎯 Внести результат", callback_data=f"{CB_ROUND_RESULT_OPEN}:{tournament_id}")]
             )
         if is_admin:
-            rows.append(
-                [
-                    InlineKeyboardButton("✏️ Результаты", callback_data=f"{CB_ROUND_ADMIN}:{tournament_id}"),
-                    InlineKeyboardButton("📋 Для AetherHub", callback_data=f"{CB_ROUND_SUMMARY}:{tournament_id}"),
-                ]
-            )
-        if show_debug_next:
+            result_buttons = [InlineKeyboardButton("✏️ Результаты", callback_data=f"{CB_ROUND_ADMIN}:{tournament_id}")]
+            if not internal_swiss:
+                result_buttons.append(
+                    InlineKeyboardButton("📋 Для AetherHub", callback_data=f"{CB_ROUND_SUMMARY}:{tournament_id}")
+                )
+            rows.append(result_buttons)
+        if internal_swiss:
+            rows.append([InlineKeyboardButton("📊 Стендинги", callback_data=f"{CB_SWISS_STANDINGS}:{tournament_id}:0")])
+            if is_admin and round_ready and round_number < (planned_rounds or 0):
+                rows.append(
+                    [InlineKeyboardButton("➡️ Следующий раунд", callback_data=f"{CB_SWISS_NEXT_ROUND}:{tournament_id}")]
+                )
+            if is_admin and round_ready and round_number >= (planned_rounds or 0):
+                rows.append(
+                    [InlineKeyboardButton("🏁 Завершить Swiss", callback_data=f"{CB_SWISS_FINISH}:{tournament_id}")]
+                )
+        if show_debug_next and not internal_swiss:
             rows.append(
                 [InlineKeyboardButton("🐞 Следующий раунд", callback_data=f"{CB_DEBUG_NEXT_ROUND}:{tournament_id}")]
             )
@@ -628,6 +665,40 @@ class Keyboards:
     def round_summary_keyboard(self, tournament_id: int) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(
             [[InlineKeyboardButton("⬅️ К раунду", callback_data=f"{CB_ROUND_VIEW}:{tournament_id}:0")]]
+        )
+
+    def swiss_standings_keyboard(
+        self,
+        tournament_id: int,
+        round_number: int | None,
+        *,
+        page: int = 0,
+        page_count: int = 1,
+    ) -> InlineKeyboardMarkup:
+        callback = f"{CB_ROUND_VIEW}:{tournament_id}:{round_number or 0}"
+        rows = []
+        navigation = []
+        if page > 0:
+            navigation.append(
+                InlineKeyboardButton("⬅️", callback_data=f"{CB_SWISS_STANDINGS}:{tournament_id}:{page - 1}")
+            )
+        if page + 1 < page_count:
+            navigation.append(
+                InlineKeyboardButton("➡️", callback_data=f"{CB_SWISS_STANDINGS}:{tournament_id}:{page + 1}")
+            )
+        if navigation:
+            rows.append(navigation)
+        rows.append([InlineKeyboardButton("⬅️ К раунду", callback_data=callback)])
+        return InlineKeyboardMarkup(rows)
+
+    def swiss_finish_confirm_keyboard(self, tournament_id: int) -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton("⬅️ Не завершать", callback_data=f"{CB_ROUND_VIEW}:{tournament_id}:0"),
+                    InlineKeyboardButton("🏁 Завершить", callback_data=f"{CB_SWISS_FINISH_CONFIRM}:{tournament_id}"),
+                ]
+            ]
         )
 
     def delete_tournament_confirm_keyboard(self, tournament_id: int) -> InlineKeyboardMarkup:
@@ -1180,6 +1251,7 @@ def tournament_card_keyboard(
     payment_enabled: bool = False,
     payment_confirmed: bool = False,
     show_round_result_action: bool = False,
+    internal_swiss: bool = False,
 ) -> InlineKeyboardMarkup:
     return _default.tournament_card_keyboard(
         tournament_id,
@@ -1193,6 +1265,7 @@ def tournament_card_keyboard(
         payment_enabled=payment_enabled,
         payment_confirmed=payment_confirmed,
         show_round_result_action=show_round_result_action,
+        internal_swiss=internal_swiss,
     )
 
 
@@ -1209,6 +1282,8 @@ def admin_more_keyboard(
     is_online: bool = False,
     has_pairings: bool = False,
     show_round_pairings: bool = False,
+    show_internal_beta: bool = False,
+    internal_swiss: bool = False,
 ) -> InlineKeyboardMarkup:
     return _default.admin_more_keyboard(
         tournament_id,
@@ -1219,6 +1294,8 @@ def admin_more_keyboard(
         is_online=is_online,
         has_pairings=has_pairings,
         show_round_pairings=show_round_pairings,
+        show_internal_beta=show_internal_beta,
+        internal_swiss=internal_swiss,
     )
 
 

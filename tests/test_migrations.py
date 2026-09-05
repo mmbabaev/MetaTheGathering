@@ -197,6 +197,46 @@ def test_endstep_username_and_club_settings_migration_defaults_safe():
         assert connection.execute(sa.select(club_settings.c.publish_pairings)).scalar_one() is False
 
 
+def test_internal_swiss_migration_keeps_existing_tournaments_on_aetherhub():
+    metadata = sa.MetaData()
+    tournaments = sa.Table("tournaments", metadata, sa.Column("id", sa.Integer, primary_key=True))
+    sa.Table("users", metadata, sa.Column("id", sa.Integer, primary_key=True))
+    participants = sa.Table(
+        "participants",
+        metadata,
+        sa.Column("id", sa.Integer, primary_key=True),
+        sa.Column("tournament_id", sa.Integer, nullable=False),
+        sa.Column("user_id", sa.Integer, nullable=False),
+    )
+    pairings = sa.Table(
+        "round_pairings",
+        metadata,
+        sa.Column("id", sa.Integer, primary_key=True),
+        sa.Column("tournament_id", sa.Integer, nullable=False),
+        sa.Column("round_number", sa.Integer, nullable=False),
+        sa.Column("player_name", sa.String(255), nullable=False),
+    )
+    engine = sa.create_engine("sqlite://")
+    metadata.create_all(engine)
+    migration = runpy.run_path(str(VERSIONS_DIR / "8d10f8278807_add_internal_swiss_mode.py"))
+
+    with engine.begin() as connection:
+        connection.execute(tournaments.insert().values(id=1))
+        connection.execute(participants.insert().values(id=1, tournament_id=1, user_id=1))
+        connection.execute(pairings.insert().values(id=1, tournament_id=1, round_number=1, player_name="Игрок"))
+        context = MigrationContext.configure(connection)
+        with Operations.context(context):
+            migration["upgrade"]()
+
+        migrated_tournaments = sa.Table("tournaments", sa.MetaData(), autoload_with=connection)
+        migrated_participants = sa.Table("participants", sa.MetaData(), autoload_with=connection)
+        migrated_pairings = sa.Table("round_pairings", sa.MetaData(), autoload_with=connection)
+        assert connection.execute(sa.select(migrated_tournaments.c.engine_mode)).scalar_one() == "aetherhub"
+        assert connection.execute(sa.select(migrated_tournaments.c.swiss_rounds)).scalar_one() is None
+        assert connection.execute(sa.select(migrated_participants.c.swiss_initial_rank)).scalar_one() is None
+        assert connection.execute(sa.select(migrated_pairings.c.player_user_id)).scalar_one() is None
+
+
 def test_split_spy_general_names_repairs_only_classification_cache():
     metadata = sa.MetaData()
     archetypes = sa.Table(

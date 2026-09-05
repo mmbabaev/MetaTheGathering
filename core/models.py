@@ -40,6 +40,18 @@ class TournamentStatus(str, enum.Enum):
         }.get(self, self.value)
 
 
+class TournamentEngineMode:
+    """How pairings and standings are produced for one tournament.
+
+    Keep these as plain persisted strings instead of a PostgreSQL enum so the
+    opt-in beta can evolve without database enum migrations.  Existing and new
+    tournaments default to the AetherHub-compatible flow.
+    """
+
+    AETHERHUB = "aetherhub"
+    INTERNAL_SWISS = "internal_swiss"
+
+
 class User(Base):
     """Пользователь — Telegram-аккаунт или веб-пользователь (отрицательный tg_id)."""
 
@@ -121,6 +133,15 @@ class Tournament(Base):
     # Public status screen can show the latest round's pairings and live scores
     # instead of the flat participant list. This is configured per tournament.
     show_round_pairings = Column(Boolean, nullable=False, default=False, server_default="false")
+    engine_mode = Column(
+        String(24),
+        nullable=False,
+        default=TournamentEngineMode.AETHERHUB,
+        server_default=TournamentEngineMode.AETHERHUB,
+    )
+    # Frozen when internal round 1 is generated. Magic tournament rules say the
+    # announced number of rounds must not change after the tournament starts.
+    swiss_rounds = Column(Integer, nullable=True)
 
     registration_open_at = Column(DateTime, nullable=True)
     registration_close_at = Column(DateTime, nullable=True)
@@ -363,6 +384,9 @@ class Participant(Base):
     confirmed = Column(Boolean, default=False, nullable=False)
 
     final_place = Column(Integer, nullable=True)  # место в финальных стендингах; NULL = не импортировано
+    # Stable random order assigned at the start of an internal Swiss event. It
+    # resolves otherwise exact standings ties without alphabetical bias.
+    swiss_initial_rank = Column(Integer, nullable=True)
     # Последний импорт AetherHub, в котором участник действительно присутствовал.
     aetherhub_seen_at = Column(DateTime, nullable=True)
 
@@ -730,6 +754,10 @@ class RoundPairing(Base):
     table_number = Column(Integer, nullable=True)  # номер стола (пары); NULL = неизвестно
     player_wins = Column(Integer, nullable=True)  # победы игрока в матче; NULL = счёт неизвестен
     opponent_wins = Column(Integer, nullable=True)  # победы соперника в матче; NULL = счёт неизвестен
+    # Internal Swiss pairings retain exact identities. Imported AetherHub rows
+    # leave these NULL and continue to use name resolution as before.
+    player_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    opponent_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     __table_args__ = (UniqueConstraint("tournament_id", "round_number", "player_name", name="uq_round_pairing"),)
 

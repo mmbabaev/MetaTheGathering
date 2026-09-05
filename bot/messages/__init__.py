@@ -298,7 +298,14 @@ def _round_match_names(matches: list) -> tuple[dict[tuple[int, int], str], dict[
     return primary, full
 
 
-def format_round_pairings(title: str, status: str, round_number: int, matches: list) -> str:
+def format_round_pairings(
+    title: str,
+    status: str,
+    round_number: int,
+    matches: list,
+    *,
+    planned_rounds: int | None = None,
+) -> str:
     """Latest-round public status with live pending and final scores."""
     names, full_names = _round_match_names(matches)
     playable = [match for match in matches if match.player2_name is not None]
@@ -308,7 +315,8 @@ def format_round_pairings(title: str, status: str, round_number: int, matches: l
     )
     lines = [
         f"🎮 {escape(title)} · {escape(status)}",
-        f"<b>Раунд {round_number} · результаты {completed}/{len(playable)}</b>",
+        f"<b>Раунд {round_number}{f'/{planned_rounds}' if planned_rounds else ''} · "
+        f"результаты {completed}/{len(playable)}</b>",
         "",
     ]
     for index, match in enumerate(matches, start=1):
@@ -336,6 +344,46 @@ def format_round_pairings(title: str, status: str, round_number: int, matches: l
             RoundMatchStatus.IMPORTED: "✅ импортирован",
         }.get(match.status, "🎮 играют")
         lines.append(f"   Счёт: <b>{match.player1_wins}–{match.player2_wins}</b> · Статус: {status}")
+    return "\n".join(lines)
+
+
+def format_swiss_standings(
+    title: str,
+    round_number: int,
+    planned_rounds: int,
+    standings: list,
+    *,
+    provisional: bool,
+    page: int = 0,
+    page_size: int = 20,
+) -> str:
+    """Compact live standings with the official Constructed tiebreakers."""
+
+    page_count = max(1, (len(standings) + page_size - 1) // page_size)
+    page = max(0, min(page, page_count - 1))
+    start = page * page_size
+    shown = standings[start : start + page_size]
+    qualifier = " · предварительные" if provisional else ""
+    lines = [
+        f"🎮 {escape(title)}",
+        f"<b>📊 Стендинги · раунд {round_number}/{planned_rounds}{qualifier}</b>",
+        "",
+    ]
+    for row in shown:
+        primary = f"@{row.username.lstrip('@')}" if row.username else row.display_name
+        lines.append(f"<b>{row.place}. {escape(primary)}</b>")
+        if primary != row.display_name:
+            lines.append(f"   {escape(row.display_name)}")
+        bye = f" · BYE ×{row.byes}" if row.byes else ""
+        lines.append(
+            f"   {row.match_points} оч. · {row.record} · "
+            f"OMW {row.opponents_match_win_percentage:.1%} · "
+            f"GW {row.game_win_percentage:.1%} · "
+            f"OGW {row.opponents_game_win_percentage:.1%}{bye}"
+        )
+    lines.extend(["", "Тай-брейки: OMW → GW → OGW. BYE даёт победу 2–0 и не считается оппонентом."])
+    if page_count > 1:
+        lines.append(f"Страница {page + 1}/{page_count}")
     return "\n".join(lines)
 
 

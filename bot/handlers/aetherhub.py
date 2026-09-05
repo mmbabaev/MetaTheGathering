@@ -5,6 +5,8 @@ from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 
 from bot.handlers.base import HandlerResult
+from core import models
+from services import errors
 from services.aetherhub_import_service import AetherhubImportService, expected_swiss_rounds
 from services.aetherhub_models import AetherhubTournamentData
 from services.aetherhub_service import AetherhubService
@@ -88,7 +90,13 @@ class AetherhubHandler:
         )
 
     def handle_confirm_import(self, tournament_id: int, url: str, data: AetherhubTournamentData) -> HandlerResult:
-        result = self._import.import_tournament(tournament_id, data)
+        tournament = self._tournament.db.get(models.Tournament, tournament_id)
+        if tournament is not None and tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS:
+            return HandlerResult("В этом турнире включён внутренний Swiss; AetherHub не нужен.", is_alert=True)
+        try:
+            result = self._import.import_tournament(tournament_id, data)
+        except errors.TournamentInvalidState as exc:
+            return HandlerResult(str(exc), is_alert=True)
         self._tournament.set_aetherhub_url(tournament_id, url)
         expected_rounds = expected_swiss_rounds(result.players_received)
         standings_are_final = (

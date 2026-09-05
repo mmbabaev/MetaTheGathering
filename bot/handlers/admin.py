@@ -37,6 +37,7 @@ from services import errors
 from services.aetherhub_import_service import MIN_TOURNAMENT_DURATION, AetherhubImportService
 from services.archetype import ArchetypeService
 from services.export import ExportService
+from services.internal_swiss import InternalSwissService
 from services.meta_table_import import MetaTableImportService
 from services.poll import PollService
 from services.tournament import TournamentService
@@ -544,6 +545,15 @@ class AdminHandler:
         if tournament.status == models.TournamentStatus.CLOSED:
             return HandlerResult("⚠️ Турнир уже закрыт.", is_alert=True)
 
+        if tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS:
+            if not confirmed:
+                return RoundResultsHandler(self.svc.db, self.keyboards).handle_swiss_finish_prompt(tournament_id, tg_id)
+            try:
+                InternalSwissService(self.svc.db).finish(tournament_id, tg_id)
+            except ValueError as exc:
+                return HandlerResult(str(exc), is_alert=True)
+            return HandlerResult(TOURNAMENT_CLOSED_MSG, tournament_id=tournament_id)
+
         participants = self.svc.list_participants_for_tournament(tournament_id)
         if participants and not confirmed:
             return HandlerResult(
@@ -562,6 +572,9 @@ class AdminHandler:
         """Кнопка «🔓 Сделать активным» — возвращает закрытый турнир в регистрацию."""
         if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN, is_alert=True)
+        tournament = self.svc.db.get(models.Tournament, tournament_id)
+        if tournament is not None and tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS:
+            return HandlerResult("Завершённый Swiss-турнир нельзя вернуть в регистрацию.", is_alert=True)
         try:
             t = self.svc.reopen_tournament(tournament_id)
         except errors.TournamentNotFound:
@@ -663,7 +676,11 @@ class AdminHandler:
         if not self.can_build_meta_chart(tg_id, tournament_id):
             return "no_access"
         tournament = get_tournament(self.svc.db, tournament_id)
-        if tournament.started_at is not None and models.utc_now() - tournament.started_at < MIN_TOURNAMENT_DURATION:
+        if (
+            tournament.engine_mode != models.TournamentEngineMode.INTERNAL_SWISS
+            and tournament.started_at is not None
+            and models.utc_now() - tournament.started_at < MIN_TOURNAMENT_DURATION
+        ):
             return "not_ready"
         if not AetherhubImportService(self.svc.db).is_tournament_complete(tournament_id):
             return "not_ready"
