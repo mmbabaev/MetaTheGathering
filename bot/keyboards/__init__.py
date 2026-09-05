@@ -546,18 +546,22 @@ class Keyboards:
         return InlineKeyboardMarkup(rows)
 
     def round_score_values_keyboard(
-        self, match_id: int, *, prefix: str, extra: str = "", allow_two: bool = True
+        self,
+        match_id: int,
+        *,
+        prefix: str,
+        extra: str = "",
+        allow_two: bool = True,
+        back_callback_data: str | None = None,
     ) -> InlineKeyboardMarkup:
         values = (0, 1, 2) if allow_two else (0, 1)
         suffix = f":{extra}" if extra else ""
-        return InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton(str(value), callback_data=f"{prefix}:{match_id}{suffix}:{value}")
-                    for value in values
-                ]
-            ]
-        )
+        rows = [
+            [InlineKeyboardButton(str(value), callback_data=f"{prefix}:{match_id}{suffix}:{value}") for value in values]
+        ]
+        if back_callback_data:
+            rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back_callback_data)])
+        return InlineKeyboardMarkup(rows)
 
     def round_result_preview_keyboard(self, match_id: int, own_wins: int, opponent_wins: int) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(
@@ -571,19 +575,22 @@ class Keyboards:
             ]
         )
 
-    def round_result_response_keyboard(self, match_id: int, revision: int) -> InlineKeyboardMarkup:
-        return InlineKeyboardMarkup(
+    def round_result_response_keyboard(
+        self, match_id: int, revision: int, *, back_callback_data: str | None = None
+    ) -> InlineKeyboardMarkup:
+        rows = [
             [
-                [
-                    InlineKeyboardButton(
-                        "❌ Нет, исправить", callback_data=f"{CB_ROUND_RESULT_REJECT}:{match_id}:{revision}"
-                    ),
-                    InlineKeyboardButton(
-                        "✅ Подтвердить", callback_data=f"{CB_ROUND_RESULT_CONFIRM}:{match_id}:{revision}"
-                    ),
-                ]
+                InlineKeyboardButton(
+                    "❌ Нет, исправить", callback_data=f"{CB_ROUND_RESULT_REJECT}:{match_id}:{revision}"
+                ),
+                InlineKeyboardButton(
+                    "✅ Подтвердить", callback_data=f"{CB_ROUND_RESULT_CONFIRM}:{match_id}:{revision}"
+                ),
             ]
-        )
+        ]
+        if back_callback_data:
+            rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back_callback_data)])
+        return InlineKeyboardMarkup(rows)
 
     def round_status_keyboard(
         self,

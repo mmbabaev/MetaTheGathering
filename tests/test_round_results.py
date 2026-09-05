@@ -129,12 +129,33 @@ def test_rejection_resets_active_score_and_opens_corrected_two_step_flow(db, onl
 
 
 def test_invalid_2_2_is_hidden_after_two_and_rejected_by_service(db, online_match):
-    _, alice, _, match = online_match
+    tournament, alice, _, match = online_match
     screen = RoundResultsHandler(db).handle_own_wins(match.id, alice.tg_id, 2)
-    labels = [button.text for row in screen.keyboard.inline_keyboard for button in row]
-    assert labels == ["0", "1"]
+    assert [button.text for button in screen.keyboard.inline_keyboard[0]] == ["0", "1"]
+    assert screen.keyboard.inline_keyboard[1][0].callback_data == f"rr_open:{tournament.id}"
     with pytest.raises(RoundResultError, match="2–2"):
         RoundResultsService(db).propose(match.id, alice.tg_id, 2, 2)
+
+
+def test_result_entry_and_admin_score_steps_have_logical_back_buttons(db, online_match):
+    tournament, alice, _bob, match = online_match
+    handler = RoundResultsHandler(db)
+
+    own_step = handler.handle_open(tournament.id, alice.tg_id)
+    assert own_step.keyboard.inline_keyboard[-1][0].callback_data == f"rr_view:{tournament.id}:1"
+
+    opponent_step = handler.handle_own_wins(match.id, alice.tg_id, 1)
+    assert opponent_step.keyboard.inline_keyboard[-1][0].callback_data == f"rr_open:{tournament.id}"
+
+    delivery = handler.handle_send(match.id, alice.tg_id, 1, 1)
+    assert delivery.recipient_keyboard.inline_keyboard[-1][0].callback_data == f"rr_view:{tournament.id}:1"
+
+    admin = _user(db, 999, "Анна", "Админова", admin=True)
+    admin_first_step = handler.handle_admin_match(match.id, admin.tg_id)
+    assert admin_first_step.keyboard.inline_keyboard[-1][0].callback_data == f"rr_admin:{tournament.id}"
+
+    admin_second_step = handler.handle_admin_p1(match.id, admin.tg_id, 1)
+    assert admin_second_step.keyboard.inline_keyboard[-1][0].callback_data == f"rr_adm_m:{match.id}"
 
 
 def test_admin_can_set_and_replace_result(db, online_match):
