@@ -1,7 +1,7 @@
 """track editable round pairings messages
 
 Revision ID: 330c09696d85
-Revises: 462d69c18f40
+Revises: 8d10f8278807
 Create Date: 2026-09-04
 """
 
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "330c09696d85"
-down_revision: Union[str, Sequence[str], None] = "462d69c18f40"
+down_revision: Union[str, Sequence[str], None] = "8d10f8278807"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
