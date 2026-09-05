@@ -8,10 +8,14 @@ from telegram import InlineKeyboardMarkup
 
 from bot.handlers.base import HandlerResult
 from bot.keyboards import (
+    CB_ROUND_ADMIN,
+    CB_ROUND_ADMIN_MATCH,
     CB_ROUND_ADMIN_P1,
     CB_ROUND_ADMIN_P2,
+    CB_ROUND_RESULT_OPEN,
     CB_ROUND_RESULT_OPPONENT,
     CB_ROUND_RESULT_OWN,
+    CB_ROUND_VIEW,
     Keyboards,
 )
 from bot.messages import format_aetherhub_round_summary, format_round_pairings, format_swiss_standings
@@ -101,12 +105,20 @@ class RoundResultsHandler:
                     return HandlerResult(f"⏳ {self._score(match)}\n\nОжидаем подтверждения соперника.")
                 return HandlerResult(
                     self._confirmation_text(match),
-                    keyboard=self.keyboards.round_result_response_keyboard(match.id, match.revision),
+                    keyboard=self.keyboards.round_result_response_keyboard(
+                        match.id,
+                        match.revision,
+                        back_callback_data=f"{CB_ROUND_VIEW}:{match.tournament_id}:{match.round_number}",
+                    ),
                 )
             own_name, opponent_name = self._actor_names(match, actor.id)
             return HandlerResult(
                 f"Раунд {match.round_number} · {own_name} против {opponent_name}\n\nСколько игр выиграли вы?",
-                keyboard=self.keyboards.round_score_values_keyboard(match.id, prefix=CB_ROUND_RESULT_OWN),
+                keyboard=self.keyboards.round_score_values_keyboard(
+                    match.id,
+                    prefix=CB_ROUND_RESULT_OWN,
+                    back_callback_data=f"{CB_ROUND_VIEW}:{match.tournament_id}:{match.round_number}",
+                ),
             )
         except RoundResultError as exc:
             return HandlerResult(str(exc), is_alert=True)
@@ -123,6 +135,7 @@ class RoundResultsHandler:
                     prefix=CB_ROUND_RESULT_OPPONENT,
                     extra=str(own_wins),
                     allow_two=own_wins != 2,
+                    back_callback_data=f"{CB_ROUND_RESULT_OPEN}:{match.tournament_id}",
                 ),
             )
         except RoundResultError as exc:
@@ -148,7 +161,11 @@ class RoundResultsHandler:
                 screen=HandlerResult(f"⏳ {self._score(match)}\n\nРезультат ожидает подтверждения соперника."),
                 recipient_tg_id=opponent.tg_id if opponent and opponent.tg_id > 0 else None,
                 recipient_text=self._confirmation_text(match),
-                recipient_keyboard=self.keyboards.round_result_response_keyboard(match.id, match.revision),
+                recipient_keyboard=self.keyboards.round_result_response_keyboard(
+                    match.id,
+                    match.revision,
+                    back_callback_data=f"{CB_ROUND_VIEW}:{match.tournament_id}:{match.round_number}",
+                ),
             )
         except RoundResultError as exc:
             return DeliveryResult(screen=HandlerResult(str(exc), is_alert=True))
@@ -178,7 +195,11 @@ class RoundResultsHandler:
                     f"Результат отклонён. Укажите правильный.\n\n"
                     f"Раунд {match.round_number} · {own_name} против {opponent_name}\n\n"
                     "Сколько игр выиграли вы?",
-                    keyboard=self.keyboards.round_score_values_keyboard(match.id, prefix=CB_ROUND_RESULT_OWN),
+                    keyboard=self.keyboards.round_score_values_keyboard(
+                        match.id,
+                        prefix=CB_ROUND_RESULT_OWN,
+                        back_callback_data=f"{CB_ROUND_VIEW}:{match.tournament_id}:{match.round_number}",
+                    ),
                 ),
                 recipient_tg_id=rejected.proposer_tg_id,
                 recipient_text=f"❌ Соперник отклонил предложенный результат раунда {match.round_number}.",
@@ -205,7 +226,11 @@ class RoundResultsHandler:
             match = self.results.get_match(match_id)
             return HandlerResult(
                 f"{match.player1_name} против {match.player2_name}\n\nСколько выиграл {match.player1_name}?",
-                keyboard=self.keyboards.round_score_values_keyboard(match.id, prefix=CB_ROUND_ADMIN_P1),
+                keyboard=self.keyboards.round_score_values_keyboard(
+                    match.id,
+                    prefix=CB_ROUND_ADMIN_P1,
+                    back_callback_data=f"{CB_ROUND_ADMIN}:{match.tournament_id}",
+                ),
             )
         except RoundResultError as exc:
             return HandlerResult(str(exc), is_alert=True)
@@ -222,6 +247,7 @@ class RoundResultsHandler:
                     prefix=CB_ROUND_ADMIN_P2,
                     extra=str(player1_wins),
                     allow_two=player1_wins != 2,
+                    back_callback_data=f"{CB_ROUND_ADMIN_MATCH}:{match.id}",
                 ),
             )
         except RoundResultError as exc:
