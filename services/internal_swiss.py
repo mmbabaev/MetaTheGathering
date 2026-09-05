@@ -48,6 +48,7 @@ class SwissStanding:
     game_win_percentage: float
     opponents_game_win_percentage: float
     initial_rank: int
+    dropped: bool
 
     @property
     def record(self) -> str:
@@ -229,7 +230,7 @@ class InternalSwissService:
         if not self._round_ready(tournament_id, current_round):
             raise RoundResultError(f"Сначала соберите все результаты раунда {current_round}.")
         standings = self.standings(tournament_id)
-        participants = {row.id: row for row in self._participants(tournament_id)}
+        participants = {row.id: row for row in self._participants(tournament_id, include_dropped=True)}
         for row in standings:
             participants[row.participant_id].final_place = row.place
         tournament.status = models.TournamentStatus.CLOSED
@@ -242,7 +243,6 @@ class InternalSwissService:
         tournament = self._tournament(tournament_id)
         self._ensure_internal(tournament)
         participants = self._participants(tournament_id, include_dropped=True)
-        active_user_ids = {participant.user_id for participant in participants if participant.dropped_at is None}
         stats = {
             participant.user_id: _Stats(
                 participant=participant,
@@ -260,8 +260,6 @@ class InternalSwissService:
 
         sortable: list[tuple[tuple[float | int, ...], _Stats, float, float, float]] = []
         for item in stats.values():
-            if item.participant.user_id not in active_user_ids:
-                continue
             omw = self._opponents_average(item.opponents, stats, "match")
             ogw = self._opponents_average(item.opponents, stats, "game")
             gw = item.game_win_percentage
@@ -289,6 +287,7 @@ class InternalSwissService:
                     game_win_percentage=gw,
                     opponents_game_win_percentage=ogw,
                     initial_rank=item.participant.swiss_initial_rank or 10**9,
+                    dropped=item.participant.dropped_at is not None,
                 )
             )
         return result
@@ -298,7 +297,7 @@ class InternalSwissService:
     ) -> tuple[list[tuple[int, int]], int | None]:
         previous_opponents, float_history = self._pairing_history(tournament_id)
         byes = {row.user_id: row.byes for row in standings}
-        active = list(standings)
+        active = [row for row in standings if not row.dropped]
         bye_user_id = None
         if len(active) % 2:
             minimum_byes = min(byes[row.user_id] for row in active)

@@ -99,8 +99,9 @@ def test_dropped_player_is_excluded_from_following_pairings(db):
 
     standings = engine.standings(tournament.id)
     winner = next(row for row in standings if row.user_id == played_match.player1_user_id)
+    dropped_row = next(row for row in standings if row.user_id == dropped.id)
     assert (winner.match_points, winner.record) == (3, "1–0–0")
-    assert dropped.id not in {row.user_id for row in standings}
+    assert (dropped_row.match_points, dropped_row.record, dropped_row.dropped) == (0, "0–1–0", True)
 
     generated = engine.generate_next_round(tournament.id, admin.tg_id)
     assert generated.matches == 4
@@ -108,6 +109,28 @@ def test_dropped_player_is_excluded_from_following_pairings(db):
         dropped.id not in {match.player1_user_id, match.player2_user_id}
         for match in results.list_round(tournament.id, 2)
     )
+
+
+def test_dropped_player_remains_in_standings_with_points_earned_before_drop(db):
+    tournament, users, admin, engine = _setup(db, 8)
+    engine.generate_next_round(tournament.id, admin.tg_id)
+    results = RoundResultsService(db)
+    first_round = results.list_round(tournament.id, 1)
+    for match in first_round:
+        if match.player2_user_id is not None:
+            results.admin_set(match.id, admin.tg_id, 2, 0)
+    dropped = next(user for user in users if user.id == first_round[0].player1_user_id)
+    TournamentService(db).drop_participant(tournament.id, dropped.id)
+
+    standings = engine.standings(tournament.id)
+    dropped_row = next(row for row in standings if row.user_id == dropped.id)
+
+    assert len(standings) == 8
+    assert (dropped_row.match_points, dropped_row.record, dropped_row.dropped) == (3, "1–0–0", True)
+    text = format_swiss_standings("Internal", 1, 4, standings, provisional=False)
+    assert f"<b>{dropped_row.place}. @{dropped.username}</b>" in text
+    assert "3 оч. · 1–0–0" in text
+    assert "⛔ дроп" in text
 
 
 def test_next_round_requires_every_result_and_never_repeats_when_avoidable(db):
@@ -217,6 +240,34 @@ def test_four_round_internal_event_finishes_and_persists_places(db):
     assert stored.status == models.TournamentStatus.CLOSED
     assert [row.place for row in standings] == list(range(1, 10))
     assert sorted(participant.final_place for participant in stored.participants) == list(range(1, 10))
+
+
+def test_finish_includes_dropped_player_and_persists_final_place(db):
+    tournament, users, admin, engine = _setup(db, 4)
+    results = RoundResultsService(db)
+    engine.generate_next_round(tournament.id, admin.tg_id)
+    first_round = results.list_round(tournament.id, 1)
+    for match in first_round:
+        results.admin_set(match.id, admin.tg_id, 2, 0)
+    dropped = next(user for user in users if user.id == first_round[0].player1_user_id)
+    TournamentService(db).drop_participant(tournament.id, dropped.id)
+
+    for expected_round in range(2, 5):
+        generated = engine.generate_next_round(tournament.id, admin.tg_id)
+        assert generated.round_number == expected_round
+        for match in results.list_round(tournament.id, expected_round):
+            if match.player2_user_id is not None:
+                results.admin_set(match.id, admin.tg_id, 2, 0)
+
+    standings = engine.finish(tournament.id, admin.tg_id)
+    dropped_row = next(row for row in standings if row.user_id == dropped.id)
+    stored = db.get(models.Tournament, tournament.id)
+    dropped_participant = next(row for row in stored.participants if row.user_id == dropped.id)
+
+    assert len(standings) == 4
+    assert (dropped_row.match_points, dropped_row.record, dropped_row.dropped) == (3, "1–0–0", True)
+    assert dropped_participant.final_place == dropped_row.place
+    assert sorted(participant.final_place for participant in stored.participants) == [1, 2, 3, 4]
 
 
 def test_fifteen_player_debug_sized_event_has_unique_matches_and_byes(db):
