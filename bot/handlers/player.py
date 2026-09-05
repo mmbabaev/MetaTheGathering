@@ -132,7 +132,7 @@ class PlayerHandler:
             is_admin = self.user_svc.is_admin(tg_id)
         participants = self.svc.list_participants_for_tournament(t.id)
         with_deck = sum(1 for p in participants if p.archetype)
-        has_pairings = bool(self.aetherhub_svc.get_pairings(t.id))
+        has_pairings = self._has_pairings(t)
         show_fill_opponents = has_pairings and self.feature_svc.can_fill_opponent_decks()
         text = format_tournament_card(
             t.title,
@@ -543,11 +543,18 @@ class PlayerHandler:
             t = get_tournament(self.svc.db, tournament_id)
         except errors.TournamentNotFound:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
-        if t.show_round_pairings and self.aetherhub_svc.has_pairings(tournament_id):
+        if t.show_round_pairings and self._has_pairings(t):
             return RoundResultsHandler(self.svc.db, self.keyboards).handle_round_status(tournament_id, tg_id)
         participants = sort_participants(self.svc.list_participants_for_tournament(tournament_id))
         text = format_tournament_status(t.title, t.status.label_ru, participants, decks_hidden=t.decks_hidden)
         return HandlerResult(text)
+
+    def _has_pairings(self, tournament) -> bool:
+        if self.aetherhub_svc.has_pairings(tournament.id):
+            return True
+        if tournament.engine_mode != models.TournamentEngineMode.INTERNAL_SWISS:
+            return False
+        return self.svc.db.query(models.RoundPairing.id).filter_by(tournament_id=tournament.id).first() is not None
 
     def handle_leave_tournament(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Показывает подтверждение выхода из турнира."""
