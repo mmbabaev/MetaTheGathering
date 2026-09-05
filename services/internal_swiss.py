@@ -23,37 +23,13 @@ from services.user import UserService
 MATCH_WIN_POINTS = 3
 MATCH_DRAW_POINTS = 1
 MIN_PERCENTAGE = 1 / 3
+INTERNAL_SWISS_ROUNDS = 4
 
 
 def recommended_swiss_rounds(player_count: int) -> int:
-    """Recommended rounds for an individual Constructed Swiss tournament.
+    """Return the fixed beta round count for every playable internal event."""
 
-    The 4+ player ranges follow the individual-event minimum and Appendix E of
-    the Magic Tournament Rules. Smaller ranges are useful only for debug/local
-    events below the sanctioned-event minimum.
-    """
-
-    if player_count <= 1:
-        return 0
-    if player_count == 2:
-        return 1
-    if player_count == 3:
-        return 2
-    if player_count == 4:
-        return 3
-    if player_count <= 8:
-        return 3
-    if player_count <= 32:
-        return 5
-    if player_count <= 64:
-        return 6
-    if player_count <= 128:
-        return 7
-    if player_count <= 226:
-        return 8
-    if player_count <= 409:
-        return 9
-    return 10
+    return INTERNAL_SWISS_ROUNDS if player_count >= 2 else 0
 
 
 @dataclass(frozen=True)
