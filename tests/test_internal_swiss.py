@@ -40,9 +40,9 @@ def _setup(db, count: int = 8):
 
 @pytest.mark.parametrize(
     "players,rounds",
-    [(1, 0), (2, 1), (3, 2), (4, 3), (5, 3), (8, 3), (9, 5), (16, 5), (32, 5), (33, 6), (129, 8)],
+    [(0, 0), (1, 0), (2, 4), (3, 4), (4, 4), (8, 4), (15, 4), (32, 4), (129, 4)],
 )
-def test_recommended_constructed_rounds_follow_mtr_ranges(players, rounds):
+def test_internal_beta_always_uses_four_rounds(players, rounds):
     assert recommended_swiss_rounds(players) == rounds
 
 
@@ -70,17 +70,17 @@ def test_first_round_freezes_count_and_uses_exact_registered_identities(db):
 
     generated = engine.generate_next_round(tournament.id, admin.tg_id)
 
-    assert (generated.round_number, generated.planned_rounds, generated.matches) == (1, 3, 4)
+    assert (generated.round_number, generated.planned_rounds, generated.matches) == (1, 4, 4)
     stored = db.get(models.Tournament, tournament.id)
     assert stored.status == models.TournamentStatus.ONGOING
-    assert stored.swiss_rounds == 3
+    assert stored.swiss_rounds == 4
     assert sorted(participant.swiss_initial_rank for participant in stored.participants) == list(range(1, 9))
     matches = RoundResultsService(db).list_round(tournament.id, 1)
     assert {match.player1_user_id for match in matches} | {match.player2_user_id for match in matches} == {
         user.id for user in users
     }
     screen = RoundResultsHandler(db).handle_round_status(tournament.id, admin.tg_id)
-    assert "Раунд 1/3 · результаты 0/4" in screen.text
+    assert "Раунд 1/4 · результаты 0/4" in screen.text
     callbacks = {button.callback_data for row in screen.keyboard.inline_keyboard for button in row}
     assert f"sw_table:{tournament.id}:0" in callbacks
 
@@ -152,7 +152,7 @@ def test_official_tiebreakers_and_bye_are_calculated(db):
     assert bye_row.opponents_match_win_percentage == 0.0
     assert all(row.match_points == 1 and row.record == "0–0–1" for row in draw_rows)
     assert all(row.game_win_percentage == pytest.approx(4 / 9) for row in draw_rows)
-    text = format_swiss_standings("Internal", 1, 3, standings, provisional=False)
+    text = format_swiss_standings("Internal", 1, 4, standings, provisional=False)
     assert "BYE ×1" in text
     assert "OMW" in text and "GW" in text and "OGW" in text
 
@@ -174,10 +174,10 @@ def test_odd_score_groups_create_only_one_pair_up_pair_down(db):
     assert sorted(gaps) == [0, 0, 3]
 
 
-def test_five_round_internal_event_finishes_and_persists_places(db):
+def test_four_round_internal_event_finishes_and_persists_places(db):
     tournament, _users, admin, engine = _setup(db, 9)
     results = RoundResultsService(db)
-    for expected_round in range(1, 6):
+    for expected_round in range(1, 5):
         generated = engine.generate_next_round(tournament.id, admin.tg_id)
         assert generated.round_number == expected_round
         for match in results.list_round(tournament.id, expected_round):
@@ -201,7 +201,7 @@ def test_fifteen_player_debug_sized_event_has_unique_matches_and_byes(db):
     seen_pairs: set[frozenset[int]] = set()
     seen_byes: set[int] = set()
 
-    for round_number in range(1, 6):
+    for round_number in range(1, 5):
         generated = engine.generate_next_round(tournament.id, admin.tg_id)
         assert generated.round_number == round_number
         for match in results.list_round(tournament.id, round_number):
@@ -214,5 +214,5 @@ def test_fifteen_player_debug_sized_event_has_unique_matches_and_byes(db):
             seen_pairs.add(pair)
             results.admin_set(match.id, admin.tg_id, *score_rng.choice(((2, 0), (2, 1), (1, 1), (0, 2))))
 
-    assert len(seen_pairs) == 35
-    assert len(seen_byes) == 5
+    assert len(seen_pairs) == 28
+    assert len(seen_byes) == 4
