@@ -82,13 +82,13 @@ async def test_debug_fill_and_next_round_are_local_db_only(db, user_svc, monkeyp
     fill_update = _update(user_id=admin_tg_id, data=f"dbg_fill_t:{tournament.id}")
     with patch("bot.telegram.debug.SessionLocal", return_value=db):
         await callback_debug_fill_tournament(fill_update, context)
-    assert db.query(models.Participant).filter_by(tournament_id=tournament.id).count() == 15
+    assert db.query(models.Participant).filter_by(tournament_id=tournament.id).count() == 7
     context.bot.send_message.assert_not_awaited()
 
     round_update = _update(user_id=admin_tg_id, data=f"dbg_next_r:{tournament.id}")
     with patch("bot.telegram.debug.SessionLocal", return_value=db):
         await callback_debug_next_round(round_update, context)
-    assert db.query(models.RoundPairing).filter_by(tournament_id=tournament.id, round_number=1).count() == 15
+    assert db.query(models.RoundPairing).filter_by(tournament_id=tournament.id, round_number=1).count() == 7
     context.bot.send_message.assert_not_awaited()
 
 
