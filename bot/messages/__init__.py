@@ -1,11 +1,13 @@
 # Шаблоны сообщений
 
+from collections import Counter
 from html import escape
 
+from core.models import RoundMatchStatus
+
 # Форматирование ФИО живёт в services/names.py, чтобы одинаково работало и в картинках
-# (services-слой). Здесь — реэкспорт для существующих импортов из bot.messages.
+# (services-слой).
 from services.names import family_name_sort_key, format_participant_name
-from services.round_pairings_view import format_round_pairings as format_round_pairings
 
 NO_ACTIVE_TOURNAMENTS = "Нет активных турниров."
 CHOOSE_ARCHETYPE = "Выберите архетип колоды:"
