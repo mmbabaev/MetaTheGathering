@@ -65,6 +65,7 @@ class User(Base):
     display_name = Column(String(255), nullable=True)
     email = Column(String(255), unique=True, nullable=True, index=True)
     endstep_username = Column(String(255), unique=True, nullable=True, index=True)
+    city = Column(String(255), nullable=True)
 
     is_admin = Column(Boolean, default=False, nullable=False)
     is_superadmin = Column(Boolean, default=False, nullable=False)

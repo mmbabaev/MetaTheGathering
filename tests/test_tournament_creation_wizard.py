@@ -99,7 +99,8 @@ def test_non_admin_cannot_start_wizard(db):
     assert "нет прав" in result.text.lower()
 
 
-async def test_execute_plan_creates_online_tournament_and_announces(db):
+async def test_execute_plan_creates_online_tournament_and_announces(db, monkeypatch):
+    monkeypatch.setattr(models, "utc_now", lambda: datetime(2026, 9, 4, 8, 0))
     service = TournamentCreationPlanService(db)
     ClubAnnouncementSettingsService(db).set_destination("Endstep-ru", "test")
     plan = service.create_plan(

@@ -4,7 +4,7 @@ import pytest
 
 from bot.handlers.settings import SettingsHandler
 from bot.keyboards import Keyboards
-from bot.messages import NAME_SAVED, SETTINGS_MENU
+from bot.messages import CITY_INVALID, NAME_SAVED, SETTINGS_MENU
 from core.config import settings
 
 
@@ -45,6 +45,56 @@ class TestEndstepUsername:
     def test_multiline_username_is_rejected(self, handler):
         result = handler.handle_settings_endstep_username_text(9054, "bad\nname")
         assert result.needs_endstep_username is True
+
+
+class TestCity:
+    def test_update_city_normalizes_whitespace(self, user_svc):
+        user = user_svc.update_city(9060, "  Нижний   Новгород  ")
+
+        assert user.city == "Нижний Новгород"
+
+    @pytest.mark.parametrize(
+        "city_code, expected",
+        [("moscow", "Москва"), ("saint_petersburg", "Санкт-Петербург")],
+    )
+    def test_quick_choice_saves_city(self, handler, user_svc, city_code, expected):
+        result = handler.handle_settings_city_choice(9061, city_code)
+
+        assert user_svc.get_by_tg_id(9061).city == expected
+        assert f"Город: {expected}" in result.text
+        assert result.keyboard is not None
+
+    def test_custom_city_is_saved_and_shown_in_settings(self, handler, user_svc):
+        result = handler.handle_settings_city_text(9062, "Владивосток")
+
+        assert user_svc.get_by_tg_id(9062).city == "Владивосток"
+        assert "Город сохранён: Владивосток" in result.text
+        assert "Город: Владивосток" in result.text
+
+    @pytest.mark.parametrize("value", ["   ", "Москва\nТверь", "x" * 256])
+    def test_invalid_custom_city_keeps_input_pending(self, handler, user_svc, value):
+        result = handler.handle_settings_city_text(9063, value)
+
+        assert result.text == CITY_INVALID
+        assert result.needs_city is True
+        assert user_svc.get_by_tg_id(9063) is None
+
+    def test_city_menu_has_quick_choices_custom_input_and_back(self, handler):
+        result = handler.handle_city_menu(9064)
+        buttons = [button for row in result.keyboard.inline_keyboard for button in row]
+
+        assert [button.text for button in buttons] == [
+            "Москва",
+            "Санкт-Петербург",
+            "✏️ Ввести свой",
+            "⬅️ Назад",
+        ]
+        assert [button.callback_data for button in buttons] == [
+            "settings_city_set:moscow",
+            "settings_city_set:saint_petersburg",
+            "settings_city_custom",
+            "settings_home",
+        ]
 
 
 class TestUpdateExistingUserName:

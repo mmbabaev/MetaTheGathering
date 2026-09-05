@@ -22,6 +22,10 @@ CB_FILL_MISSING_CUSTOM = "fill_custom"  # fill_custom:{participant_id}
 CB_TOURNAMENT = "t"
 CB_SETTINGS_NAME = "settings_name"
 CB_SETTINGS_ENDSTEP_USERNAME = "settings_endstep"
+CB_SETTINGS_CITY = "settings_city"
+CB_SETTINGS_CITY_SET = "settings_city_set"
+CB_SETTINGS_CITY_CUSTOM = "settings_city_custom"
+CB_SETTINGS_HOME = "settings_home"
 CB_SETTINGS_TOGGLE_EMOJI = "settings_toggle_emoji"
 CB_SETTINGS_TOGGLE_OPPONENT_NOTIFY = "settings_toggle_opp_notify"
 CB_SETTINGS_TOGGLE_ACHIEVEMENTS_NOTIFY = "settings_toggle_achievements_notify"
@@ -1057,6 +1061,7 @@ class Keyboards:
         rows = [
             [InlineKeyboardButton("✏️ Изменить имя", callback_data=CB_SETTINGS_NAME)],
             [InlineKeyboardButton("✏️ Изменить Endstep-ник", callback_data=CB_SETTINGS_ENDSTEP_USERNAME)],
+            [InlineKeyboardButton("🏙 Изменить город", callback_data=CB_SETTINGS_CITY)],
             [InlineKeyboardButton(emoji_label, callback_data=CB_SETTINGS_TOGGLE_EMOJI)],
             [InlineKeyboardButton(notify_label, callback_data=CB_SETTINGS_TOGGLE_OPPONENT_NOTIFY)],
             [InlineKeyboardButton(achievements_label, callback_data=CB_SETTINGS_TOGGLE_ACHIEVEMENTS_NOTIFY)],
@@ -1069,6 +1074,18 @@ class Keyboards:
             rows.append([InlineKeyboardButton(cellar_label, callback_data=CB_SETTINGS_TOGGLE_CELLAR_NOTIFY)])
         rows.append([InlineKeyboardButton(pairings_label, callback_data=CB_SETTINGS_TOGGLE_STATUS_PAIRINGS)])
         return InlineKeyboardMarkup(rows)
+
+    def settings_city_keyboard(self) -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton("Москва", callback_data=f"{CB_SETTINGS_CITY_SET}:moscow"),
+                    InlineKeyboardButton("Санкт-Петербург", callback_data=f"{CB_SETTINGS_CITY_SET}:saint_petersburg"),
+                ],
+                [InlineKeyboardButton("✏️ Ввести свой", callback_data=CB_SETTINGS_CITY_CUSTOM)],
+                [InlineKeyboardButton("⬅️ Назад", callback_data=CB_SETTINGS_HOME)],
+            ]
+        )
 
     def admin_participants_keyboard(
         self,
@@ -1437,6 +1454,10 @@ def settings_keyboard(
         notify_cellar_reservations=notify_cellar_reservations,
         status_by_pairings=status_by_pairings,
     )
+
+
+def settings_city_keyboard() -> InlineKeyboardMarkup:
+    return _default.settings_city_keyboard()
 
 
 def admin_participants_keyboard(

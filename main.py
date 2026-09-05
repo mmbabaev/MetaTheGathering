@@ -128,7 +128,11 @@ from bot.keyboards import (
     CB_SCHEDULE_TOGGLE,
     CB_SCHEDULE_WEEKDAY,
     CB_SET_IMPORT_TIME,
+    CB_SETTINGS_CITY,
+    CB_SETTINGS_CITY_CUSTOM,
+    CB_SETTINGS_CITY_SET,
     CB_SETTINGS_ENDSTEP_USERNAME,
+    CB_SETTINGS_HOME,
     CB_SETTINGS_NAME,
     CB_SETTINGS_TOGGLE_ACHIEVEMENTS_NOTIFY,
     CB_SETTINGS_TOGGLE_CELLAR_NOTIFY,
@@ -436,6 +440,20 @@ def main() -> None:
             pattern=f"^{CB_SETTINGS_ENDSTEP_USERNAME}$",
         )
     )
+    app.add_handler(CallbackQueryHandler(settings_handler.callback_settings_city, pattern=f"^{CB_SETTINGS_CITY}$"))
+    app.add_handler(
+        CallbackQueryHandler(
+            settings_handler.callback_settings_city_choice,
+            pattern=f"^{CB_SETTINGS_CITY_SET}:",
+        )
+    )
+    app.add_handler(
+        CallbackQueryHandler(
+            settings_handler.callback_settings_city_custom,
+            pattern=f"^{CB_SETTINGS_CITY_CUSTOM}$",
+        )
+    )
+    app.add_handler(CallbackQueryHandler(settings_handler.callback_settings_home, pattern=f"^{CB_SETTINGS_HOME}$"))
     app.add_handler(
         CallbackQueryHandler(settings_handler.callback_toggle_emoji, pattern=f"^{CB_SETTINGS_TOGGLE_EMOJI}$")
     )

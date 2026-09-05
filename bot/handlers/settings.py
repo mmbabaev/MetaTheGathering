@@ -1,20 +1,28 @@
 # /settings — управление профилем пользователя — чистая бизнес-логика
 
 from bot.handlers.base import HandlerResult
-from bot.keyboards import settings_keyboard
+from bot.keyboards import settings_city_keyboard, settings_keyboard
 from bot.messages import (
+    CITY_INVALID,
+    CITY_SAVED,
     ENDSTEP_USERNAME_INVALID,
     ENDSTEP_USERNAME_SAVED,
     ENDSTEP_USERNAME_TAKEN,
     INVALID_FULL_NAME,
     NAME_SAVED,
+    SETTINGS_CITY_PROMPT,
     SETTINGS_MENU,
     format_participant_name,
 )
 from core.config import settings as app_settings
 from services.cellar import can_view_cellar_overview
 from services.names import parse_full_name_input
-from services.user import EndstepUsernameInvalid, EndstepUsernameTaken, UserService
+from services.user import CityInvalid, EndstepUsernameInvalid, EndstepUsernameTaken, UserService
+
+CITY_CHOICES = {
+    "moscow": "Москва",
+    "saint_petersburg": "Санкт-Петербург",
+}
 
 
 class SettingsHandler:
@@ -38,9 +46,11 @@ class SettingsHandler:
             notify_cellar_reservations = True
         status_pairings = user.status_by_pairings if user else False
         endstep_username = user.endstep_username if user and user.endstep_username else "не указан"
+        city = user.city if user and user.city else "не указан"
         text = (
             f"{SETTINGS_MENU}\n\nВаше имя: {current}\n"
-            f"Ник Endstep (необязательно): {endstep_username}\n\nВерсия: {app_settings.VERSION}"
+            f"Ник Endstep (необязательно): {endstep_username}\n"
+            f"Город: {city}\n\nВерсия: {app_settings.VERSION}"
         )
         return HandlerResult(
             text,
@@ -101,3 +111,30 @@ class SettingsHandler:
         except EndstepUsernameTaken:
             return HandlerResult(ENDSTEP_USERNAME_TAKEN, needs_endstep_username=True)
         return HandlerResult(ENDSTEP_USERNAME_SAVED.format(username=user.endstep_username))
+
+    def handle_city_menu(self, tg_id: int) -> HandlerResult:
+        user = self.user_svc.get_by_tg_id(tg_id)
+        current = user.city if user and user.city else "не указан"
+        return HandlerResult(
+            f"{SETTINGS_CITY_PROMPT}\n\nСейчас: {current}",
+            keyboard=settings_city_keyboard(),
+        )
+
+    def handle_settings_city_choice(self, tg_id: int, city_code: str) -> HandlerResult:
+        city = CITY_CHOICES.get(city_code)
+        if city is None:
+            return HandlerResult("Неизвестный город.", is_alert=True)
+        return self._save_city(tg_id, city)
+
+    def handle_settings_city_text(self, tg_id: int, city_text: str) -> HandlerResult:
+        try:
+            return self._save_city(tg_id, city_text)
+        except CityInvalid:
+            return HandlerResult(CITY_INVALID, needs_city=True)
+
+    def _save_city(self, tg_id: int, city: str) -> HandlerResult:
+        user = self.user_svc.update_city(tg_id, city)
+        result = self.handle_settings(tg_id)
+        result.text = f"{CITY_SAVED.format(city=user.city)}\n\n{result.text}"
+        result.answer_text = CITY_SAVED.format(city=user.city)
+        return result

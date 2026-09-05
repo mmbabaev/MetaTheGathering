@@ -19,6 +19,7 @@ from bot.telegram.player import (
     USER_DATA_PENDING_CUSTOM,
     USER_DATA_PENDING_MISSING_CUSTOM_ARCH,
     USER_DATA_PENDING_NAME,
+    USER_DATA_PENDING_SETTINGS_CITY,
     USER_DATA_PENDING_SETTINGS_NAME,
     callback_archetype,
     callback_archetype_more,
@@ -372,6 +373,33 @@ async def test_message_text_input_settings_name():
 
     mock_sh.return_value.handle_settings_name_text.assert_called_once_with(update.effective_user.id, "Новое Имя")
     assert USER_DATA_PENDING_SETTINGS_NAME not in ctx.user_data
+
+
+async def test_message_text_input_settings_city_saves_custom_city_and_keyboard():
+    keyboard = MagicMock()
+    result = HandlerResult("Город сохранён: Казань", keyboard=keyboard)
+    update = _make_update(message_text="Казань")
+    ctx = _make_context({USER_DATA_PENDING_SETTINGS_CITY: True})
+
+    with patch("bot.telegram.player.SessionLocal"), patch("bot.telegram.player.SettingsHandler") as mock_sh:
+        mock_sh.return_value.handle_settings_city_text.return_value = result
+        await message_text_input(update, ctx)
+
+    mock_sh.return_value.handle_settings_city_text.assert_called_once_with(update.effective_user.id, "Казань")
+    update.effective_message.reply_text.assert_awaited_once_with(result.text, reply_markup=keyboard)
+    assert USER_DATA_PENDING_SETTINGS_CITY not in ctx.user_data
+
+
+async def test_message_text_input_invalid_city_keeps_pending_state():
+    result = HandlerResult("Введите город", needs_city=True)
+    update = _make_update(message_text="---")
+    ctx = _make_context({USER_DATA_PENDING_SETTINGS_CITY: True})
+
+    with patch("bot.telegram.player.SessionLocal"), patch("bot.telegram.player.SettingsHandler") as mock_sh:
+        mock_sh.return_value.handle_settings_city_text.return_value = result
+        await message_text_input(update, ctx)
+
+    assert ctx.user_data[USER_DATA_PENDING_SETTINGS_CITY] is True
 
 
 # ── message_text_input — admin custom archetype ──────────────────────────────
