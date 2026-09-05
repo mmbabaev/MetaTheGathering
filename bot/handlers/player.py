@@ -24,6 +24,8 @@ from bot.messages import (
     REGISTERED_AS,
     REGISTERED_DECK_LATER,
     REGISTRATION_CLOSED,
+    SWISS_DROP_CONFIRM_PROMPT,
+    SWISS_DROPPED,
     TOURNAMENT_NOT_FOUND,
     format_participant_name,
     format_tournament_card,
@@ -555,6 +557,15 @@ class PlayerHandler:
         participant = self.svc.get_participant(tournament_id, user.id)
         if participant is None:
             return HandlerResult(NOT_REGISTERED_IN_TOURNAMENT, is_alert=True)
+        tournament = get_tournament(self.svc.db, tournament_id)
+        if (
+            tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS
+            and tournament.status == models.TournamentStatus.ONGOING
+        ):
+            return HandlerResult(
+                SWISS_DROP_CONFIRM_PROMPT,
+                keyboard=self.keyboards.swiss_drop_confirm_keyboard(tournament_id),
+            )
         return HandlerResult(LEAVE_CONFIRM_PROMPT, keyboard=self.keyboards.leave_confirm_keyboard(tournament_id))
 
     def handle_leave_confirm(self, tg_id: int, tournament_id: int) -> HandlerResult:
@@ -563,6 +574,13 @@ class PlayerHandler:
         if user is None:
             return HandlerResult(NOT_REGISTERED_IN_TOURNAMENT, is_alert=True)
         try:
+            tournament = get_tournament(self.svc.db, tournament_id)
+            if (
+                tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS
+                and tournament.status == models.TournamentStatus.ONGOING
+            ):
+                self.svc.drop_participant(tournament_id, user.id)
+                return HandlerResult(SWISS_DROPPED)
             self.svc.unregister_participant(tournament_id, user.id)
             return HandlerResult(LEFT_TOURNAMENT)
         except errors.ParticipantNotFound:

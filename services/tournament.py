@@ -482,6 +482,20 @@ class TournamentService:
         self.db.delete(participant)
         self.db.commit()
 
+    def drop_participant(self, tournament_id: int, user_id: int) -> None:
+        """Mark a player as dropped from an ongoing internal Swiss tournament."""
+        tournament = get_tournament(self.db, tournament_id)
+        if tournament.engine_mode != models.TournamentEngineMode.INTERNAL_SWISS:
+            raise errors.TournamentInvalidState("Дроп доступен только для внутреннего Swiss.")
+        if tournament.status != models.TournamentStatus.ONGOING:
+            raise errors.TournamentInvalidState("Дроп доступен только в идущем турнире.")
+        participant = self.get_participant(tournament_id, user_id)
+        if participant is None:
+            raise errors.ParticipantNotFound()
+        if participant.dropped_at is None:
+            participant.dropped_at = models.utc_now()
+            self.db.commit()
+
     def bulk_add_participants(
         self,
         tournament_id: int,
