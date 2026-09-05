@@ -12,6 +12,7 @@ from bot.keyboards import (
     CB_DEFER_DECK,
     CB_LEAVE,
     CB_REGISTER,
+    CB_ROUND_RESULT_OPEN,
     CB_TSTATUS,
 )
 from bot.messages import (
@@ -110,6 +111,30 @@ class TestHandleTournamentSelect:
 
         callbacks = [button.callback_data for row in result.keyboard.inline_keyboard for button in row]
         assert f"{CB_CLOSE_TOURNAMENT}:{active_tournament.id}" not in callbacks
+
+    def test_swiss_player_card_remains_enterable_after_first_round(self, handler, user_svc, db, active_tournament):
+        user = user_svc.get_or_create(tg_id=5102, first_name="Swiss", last_name="Player")
+        db.add(models.Participant(tournament_id=active_tournament.id, user_id=user.id))
+        stored = db.get(models.Tournament, active_tournament.id)
+        stored.engine_mode = models.TournamentEngineMode.INTERNAL_SWISS
+        stored.is_online = True
+        active_tournament.status = models.TournamentStatus.ONGOING
+        stored.status = models.TournamentStatus.ONGOING
+        db.add(
+            models.RoundPairing(
+                tournament_id=active_tournament.id,
+                round_number=1,
+                table_number=1,
+                player_name="Swiss Player",
+                opponent_name="Opponent Player",
+                player_user_id=user.id,
+            )
+        )
+        db.commit()
+        result = handler.handle_tournament_select(active_tournament.id, tg_id=user.tg_id)
+        callbacks = [button.callback_data for row in result.keyboard.inline_keyboard for button in row]
+        assert f"{CB_LEAVE}:{active_tournament.id}" in callbacks
+        assert f"{CB_ROUND_RESULT_OPEN}:{active_tournament.id}" in callbacks
 
 
 # --- handle_register ---
