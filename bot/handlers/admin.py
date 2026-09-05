@@ -40,6 +40,7 @@ from services.export import ExportService
 from services.internal_swiss import InternalSwissService
 from services.meta_table_import import MetaTableImportService
 from services.poll import PollService
+from services.round_results import RoundResultError
 from services.tournament import TournamentService
 from services.user import UserService
 from services.utils import get_tournament
@@ -338,6 +339,7 @@ class AdminHandler:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
         user = self.user_svc.get_by_id(p.user_id)
         has_pairings = AetherhubImportService(self.svc.db).has_pairings(tournament_id)
+        tournament = get_tournament(self.svc.db, tournament_id)
         is_target_scorekeeper = bool(user.is_scorekeeper) if user else False
         is_target_poll_organizer = bool(user.is_poll_organizer) if user else False
         name = (
@@ -356,6 +358,10 @@ class AdminHandler:
                 is_target_scorekeeper=is_target_scorekeeper,
                 is_target_poll_organizer=is_target_poll_organizer,
                 is_privileged=is_privileged,
+                swiss_ongoing=(
+                    tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS
+                    and tournament.status == models.TournamentStatus.ONGOING
+                ),
             ),
         )
 
@@ -444,8 +450,13 @@ class AdminHandler:
             format_participant_name(user.first_name if user else None, user.last_name if user else None) or f"id{p.id}"
         )
         username_str = f" (@{user.username})" if user and user.username else ""
+        tournament = get_tournament(self.svc.db, tournament_id)
+        is_swiss = (
+            tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS
+            and tournament.status == models.TournamentStatus.ONGOING
+        )
         return HandlerResult(
-            f"Удалить {name}{username_str} из турнира?",
+            f"{'Дропнуть' if is_swiss else 'Удалить'} {name}{username_str} из турнира?",
             keyboard=self.keyboards.admin_remove_confirm_keyboard(participant_id, tournament_id),
         )
 
@@ -461,6 +472,13 @@ class AdminHandler:
             format_participant_name(user.first_name if user else None, user.last_name if user else None) or f"id{p.id}"
         )
         try:
+            tournament = get_tournament(self.svc.db, tournament_id)
+            if (
+                tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS
+                and tournament.status == models.TournamentStatus.ONGOING
+            ):
+                self.svc.drop_participant(tournament_id, p.user_id)
+                return self._tournament_status_result(tournament_id, prefix=f"🗑 {name} дропнут.", tg_id=tg_id)
             self.svc.unregister_participant(tournament_id, p.user_id)
         except errors.ParticipantNotFound:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
@@ -550,7 +568,7 @@ class AdminHandler:
                 return RoundResultsHandler(self.svc.db, self.keyboards).handle_swiss_finish_prompt(tournament_id, tg_id)
             try:
                 InternalSwissService(self.svc.db).finish(tournament_id, tg_id)
-            except ValueError as exc:
+            except (ValueError, RoundResultError) as exc:
                 return HandlerResult(str(exc), is_alert=True)
             return HandlerResult(TOURNAMENT_CLOSED_MSG, tournament_id=tournament_id)
 

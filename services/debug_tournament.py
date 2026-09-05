@@ -13,7 +13,7 @@ from services.names import format_participant_name
 from services.round_results import FINAL_STATUSES, RoundResultError, RoundResultsService
 from services.user import UserService
 
-DEBUG_PLAYER_TARGET = 15
+DEBUG_PLAYER_TARGET = 7
 _DEBUG_SCORES = ((2, 0), (2, 1), (1, 0), (1, 1), (0, 0), (0, 1), (0, 2), (1, 2))
 
 
@@ -37,7 +37,7 @@ class DebugTournamentService:
         self.users = UserService(db)
         self.results = RoundResultsService(db)
 
-    def fill_to_15(self, tournament_id: int) -> DebugFillResult:
+    def fill_to_7(self, tournament_id: int) -> DebugFillResult:
         tournament = self._tournament(tournament_id)
         participants = self._participants(tournament_id)
         to_add = max(0, DEBUG_PLAYER_TARGET - len(participants))
@@ -85,6 +85,9 @@ class DebugTournamentService:
         tournament.show_round_pairings = True
         self.db.commit()
         return DebugFillResult(added=to_add, total=len(self._participants(tournament_id)))
+
+    # Backwards-compatible alias for existing debug callback integrations.
+    fill_to_15 = fill_to_7
 
     def next_round(self, tournament_id: int, admin_tg_id: int) -> DebugRoundResult:
         tournament = self._tournament(tournament_id)
@@ -231,7 +234,10 @@ class DebugTournamentService:
         return list(
             self.db.execute(
                 select(models.Participant)
-                .where(models.Participant.tournament_id == tournament_id)
+                .where(
+                    models.Participant.tournament_id == tournament_id,
+                    models.Participant.dropped_at.is_(None),
+                )
                 .order_by(models.Participant.id)
             ).scalars()
         )

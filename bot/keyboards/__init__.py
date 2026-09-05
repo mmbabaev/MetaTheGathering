@@ -96,7 +96,7 @@ CB_PAY_STATUS = "pay_status"  # pay_status:{tournament_id} — no-op, показ
 CB_ADMIN_IMPORT_META = "adm_meta"  # adm_meta:{tournament_id}
 CB_DEBUG_ROUND_NOTIFY = "dbg_rnotify"  # dbg_rnotify:{tournament_id} — debug: DM all round notifications to presser
 CB_DEBUG_META_POLICE = "dbg_mpol"  # dbg_mpol:{tournament_id} — debug: owner-only live preview
-CB_DEBUG_FILL_TOURNAMENT = "dbg_fill_t"  # debug only: fill tournament to 15 fake players
+CB_DEBUG_FILL_TOURNAMENT = "dbg_fill_t"  # debug only: fill tournament to 7 fake players
 CB_DEBUG_NEXT_ROUND = "dbg_next_r"  # debug only: complete scores and generate Swiss-like round
 CB_ROUND_RESULT_OPEN = "rr_open"  # rr_open:{tournament_id}
 CB_ROUND_RESULT_OWN = "rr_own"  # rr_own:{match_id}:{wins}
@@ -519,7 +519,7 @@ class Keyboards:
             rows.append(debug_buttons)
         if show_debug:
             simulator_buttons = [
-                InlineKeyboardButton("🐞 Игроки ×15", callback_data=f"{CB_DEBUG_FILL_TOURNAMENT}:{tournament_id}")
+                InlineKeyboardButton("🐞 Игроки ×7", callback_data=f"{CB_DEBUG_FILL_TOURNAMENT}:{tournament_id}")
             ]
             if not internal_swiss:
                 simulator_buttons.append(
@@ -530,7 +530,7 @@ class Keyboards:
             rows.append([InlineKeyboardButton("👁 Показать колоды", callback_data=f"{CB_REVEAL_DECKS}:{tournament_id}")])
         else:
             rows.append([InlineKeyboardButton("🙈 Скрыть колоды", callback_data=f"{CB_HIDE_DECKS}:{tournament_id}")])
-        if not is_closed and not internal_swiss:
+        if not is_closed and (not internal_swiss or not has_pairings):
             rows.append(
                 [InlineKeyboardButton("🔒 Закрыть турнир", callback_data=f"{CB_CLOSE_TOURNAMENT}:{tournament_id}")]
             )
@@ -1025,6 +1025,16 @@ class Keyboards:
             ]
         )
 
+    def swiss_drop_confirm_keyboard(self, tournament_id: int) -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton("Нет", callback_data=f"{CB_LEAVE_CANCEL}:{tournament_id}"),
+                    InlineKeyboardButton("Да", callback_data=f"{CB_LEAVE_CONFIRM}:{tournament_id}"),
+                ]
+            ]
+        )
+
     def settings_keyboard(
         self,
         is_admin: bool = False,
@@ -1086,6 +1096,7 @@ class Keyboards:
         is_target_scorekeeper: bool = False,
         is_target_poll_organizer: bool = False,
         is_privileged: bool = True,
+        swiss_ongoing: bool = False,
     ) -> InlineKeyboardMarkup:
         buttons = []
         if is_privileged:
@@ -1115,7 +1126,7 @@ class Keyboards:
                         callback_data=f"{CB_ADMIN_TOGGLE_SCOREKEEPER}:{participant_id}:{tournament_id}",
                     ),
                     InlineKeyboardButton(
-                        "🗑 Удалить",
+                        "🗑 Дропнуть" if swiss_ongoing else "🗑 Удалить",
                         callback_data=f"{CB_ADMIN_REMOVE_CONFIRM}:{participant_id}:{tournament_id}",
                     ),
                 ]
@@ -1143,7 +1154,7 @@ class Keyboards:
                 [
                     InlineKeyboardButton("❌ Отмена", callback_data=f"{CB_ADMIN_PICK_ARCH}:{participant_id}"),
                     InlineKeyboardButton(
-                        "✅ Удалить", callback_data=f"{CB_ADMIN_REMOVE_DO}:{participant_id}:{tournament_id}"
+                        "✅ Подтвердить", callback_data=f"{CB_ADMIN_REMOVE_DO}:{participant_id}:{tournament_id}"
                     ),
                 ]
             ]

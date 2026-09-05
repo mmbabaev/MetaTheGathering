@@ -85,6 +85,23 @@ def test_first_round_freezes_count_and_uses_exact_registered_identities(db):
     assert f"sw_table:{tournament.id}:0" in callbacks
 
 
+def test_dropped_player_is_excluded_from_following_pairings(db):
+    tournament, users, admin, engine = _setup(db, 8)
+    engine.generate_next_round(tournament.id, admin.tg_id)
+    results = RoundResultsService(db)
+    for match in results.list_round(tournament.id, 1):
+        if match.player2_user_id is not None:
+            results.admin_set(match.id, admin.tg_id, 2, 0)
+    dropped = users[-1]
+    TournamentService(db).drop_participant(tournament.id, dropped.id)
+    generated = engine.generate_next_round(tournament.id, admin.tg_id)
+    assert generated.matches == 4
+    assert all(
+        dropped.id not in {match.player1_user_id, match.player2_user_id}
+        for match in results.list_round(tournament.id, 2)
+    )
+
+
 def test_next_round_requires_every_result_and_never_repeats_when_avoidable(db):
     tournament, _users, admin, engine = _setup(db, 8)
     engine.generate_next_round(tournament.id, admin.tg_id)

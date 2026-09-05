@@ -68,7 +68,7 @@ async def callback_debug_fill_tournament(update: Update, context: ContextTypes.D
         if not settings.DEBUG or not UserService(db).is_admin(user.id):
             await query.answer("Кнопка доступна только администраторам debug-бота.", show_alert=True)
             return
-        result = DebugTournamentService(db).fill_to_15(tournament_id)
+        result = DebugTournamentService(db).fill_to_7(tournament_id)
         tournament = db.get(models.Tournament, tournament_id)
         internal = bool(tournament and tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS)
         next_prefix = CB_SWISS_NEXT_ROUND if internal else CB_DEBUG_NEXT_ROUND

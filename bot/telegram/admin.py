@@ -742,7 +742,7 @@ async def callback_admin_more(update: Update, context: ContextTypes.DEFAULT_TYPE
             is_online=is_online,
             has_pairings=has_pairings,
             show_round_pairings=show_round_pairings,
-            show_internal_beta=settings.DEBUG,
+            show_internal_beta=True,
             internal_swiss=internal_swiss,
         ),
     )
@@ -851,7 +851,7 @@ async def callback_reveal_decks_cancel(update: Update, context: ContextTypes.DEF
                 is_online=t.is_online,
                 has_pairings=AetherhubImportService(db).has_pairings(tournament_id),
                 show_round_pairings=t.show_round_pairings,
-                show_internal_beta=settings.DEBUG,
+                show_internal_beta=UserService(db).is_admin(user.id),
                 internal_swiss=t.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS,
             ),
         )

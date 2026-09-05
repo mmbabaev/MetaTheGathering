@@ -546,7 +546,10 @@ class InternalSwissService:
             self.db.execute(
                 select(models.Participant)
                 .options(joinedload(models.Participant.user))
-                .where(models.Participant.tournament_id == tournament_id)
+                .where(
+                    models.Participant.tournament_id == tournament_id,
+                    models.Participant.dropped_at.is_(None),
+                )
                 .order_by(models.Participant.id)
             ).scalars()
         )

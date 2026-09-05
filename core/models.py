@@ -409,6 +409,8 @@ class Participant(Base):
     # Stable random order assigned at the start of an internal Swiss event. It
     # resolves otherwise exact standings ties without alphabetical bias.
     swiss_initial_rank = Column(Integer, nullable=True)
+    # Time when the player dropped from an ongoing internal Swiss tournament.
+    dropped_at = Column(DateTime, nullable=True, index=True)
     # Последний импорт AetherHub, в котором участник действительно присутствовал.
     aetherhub_seen_at = Column(DateTime, nullable=True)
 

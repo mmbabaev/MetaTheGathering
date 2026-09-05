@@ -21,6 +21,8 @@ REGISTRATION_CLOSED = "Регистрация на этот турнир зак�
 TOURNAMENT_NOT_FOUND = "Турнир не найден."
 LEAVE_CONFIRM_PROMPT = "Вы уверены, что хотите выйти из турнира?"
 LEFT_TOURNAMENT = "Вы вышли из турнира."
+SWISS_DROP_CONFIRM_PROMPT = "Выйти из Swiss-турнира? После подтверждения вы не будете участвовать в следующих раундах."
+SWISS_DROPPED = "Вы дропнулись из Swiss-турнира."
 NOT_REGISTERED_IN_TOURNAMENT = "Вы не записаны на этот турнир."
 
 

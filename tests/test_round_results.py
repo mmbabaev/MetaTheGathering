@@ -252,8 +252,8 @@ def test_debug_fill_is_idempotent_and_enables_online_pairing_view(db):
     debug = DebugTournamentService(db, rng=random.Random(1))
     first = debug.fill_to_15(tournament.id)
     second = debug.fill_to_15(tournament.id)
-    assert (first.added, first.total) == (15, 15)
-    assert (second.added, second.total) == (0, 15)
+    assert (first.added, first.total) == (7, 7)
+    assert (second.added, second.total) == (0, 7)
     stored = db.get(models.Tournament, tournament.id)
     assert stored.is_online is True
     assert stored.show_round_pairings is True
@@ -281,7 +281,7 @@ def test_debug_refill_does_not_reuse_removed_synthetic_identity(db):
     usernames = [participant.user.username for participant in debug._participants(tournament.id)]
     assert refill.added == 1
     assert removed_username not in usernames
-    assert len(set(usernames)) == 15
+    assert len(set(usernames)) == 7
 
 
 def test_debug_next_round_completes_previous_and_builds_score_aware_pairings(db):
@@ -291,8 +291,8 @@ def test_debug_next_round_completes_previous_and_builds_score_aware_pairings(db)
     debug.fill_to_15(tournament.id)
     first = debug.next_round(tournament.id, admin.tg_id)
     second = debug.next_round(tournament.id, admin.tg_id)
-    assert (first.round_number, first.matches, first.completed_previous) == (1, 8, 0)
-    assert (second.round_number, second.matches, second.completed_previous) == (2, 8, 7)
+    assert (first.round_number, first.matches, first.completed_previous) == (1, 4, 0)
+    assert (second.round_number, second.matches, second.completed_previous) == (2, 4, 3)
     round_one = RoundResultsService(db).list_round(tournament.id, 1)
     assert sum(match.player2_name is None for match in round_one) == 1
     assert all(match.player2_name is None or match.status == models.RoundMatchStatus.ADMIN for match in round_one)
