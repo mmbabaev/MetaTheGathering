@@ -152,7 +152,7 @@ async def test_internal_swiss_toggle_and_first_round_publish_only_to_configured_
         users.append(player)
     users[0].is_admin = True
     db.commit()
-    monkeypatch.setattr("bot.telegram.round_results.settings.DEBUG", True)
+    monkeypatch.setattr("bot.telegram.round_results.settings.DEBUG", False)
 
     toggle_update, _ = _update(users[0].tg_id, f"sw_mode:{tournament.id}")
     next_update, next_query = _update(users[0].tg_id, f"sw_next:{tournament.id}")
@@ -169,3 +169,17 @@ async def test_internal_swiss_toggle_and_first_round_publish_only_to_configured_
     assert db.query(models.RoundPairing).filter_by(tournament_id=tournament.id).count() == 4
     publication.assert_awaited_once_with(bot, db, tournament.id, [1])
     next_query.edit_message_text.assert_awaited_once()
+
+
+async def test_internal_swiss_callback_requires_admin_in_production(db, user_svc, monkeypatch):
+    tournament = TournamentService(db).create_tournament(TournamentCreate(title="Online", chat_id=1, is_online=True))
+    player = user_svc.get_or_create(tg_id=123, first_name="Player")
+    db.commit()
+    monkeypatch.setattr("bot.telegram.round_results.settings.DEBUG", False)
+    update, query = _update(player.tg_id, f"sw_mode:{tournament.id}")
+
+    with patch("bot.telegram.round_results.SessionLocal", return_value=db):
+        await callback_swiss_mode(update, SimpleNamespace(bot=AsyncMock()))
+
+    assert db.get(models.Tournament, tournament.id).engine_mode == models.TournamentEngineMode.AETHERHUB
+    query.answer.assert_awaited_once_with("Нет прав.", show_alert=True)

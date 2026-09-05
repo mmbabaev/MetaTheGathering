@@ -16,6 +16,7 @@ from core import models
 from core.config import settings
 from core.database import SessionLocal
 from services.aetherhub_import_service import AetherhubImportService
+from services.user import UserService
 
 logger = logging.getLogger(__name__)
 
@@ -217,8 +218,8 @@ async def callback_swiss_mode(update: Update, context: ContextTypes.DEFAULT_TYPE
     (tournament_id,) = values
     db = SessionLocal()
     try:
-        if not settings.DEBUG:
-            await query.answer("Beta-режим доступен только в debug-боте.", show_alert=True)
+        if not UserService(db).is_admin(user.id):
+            await query.answer("Нет прав.", show_alert=True)
             return
         result = RoundResultsHandler(db).handle_swiss_toggle(tournament_id, user.id)
         if result.is_alert:
@@ -244,8 +245,8 @@ async def callback_swiss_next_round(update: Update, context: ContextTypes.DEFAUL
     (tournament_id,) = values
     db = SessionLocal()
     try:
-        if not settings.DEBUG:
-            await query.answer("Beta-режим доступен только в debug-боте.", show_alert=True)
+        if not UserService(db).is_admin(user.id):
+            await query.answer("Нет прав.", show_alert=True)
             return
         result = RoundResultsHandler(db).handle_swiss_next_round(tournament_id, user.id)
         if not await _render(query, result):
@@ -283,8 +284,8 @@ async def callback_swiss_finish_confirm(update: Update, context: ContextTypes.DE
     (tournament_id,) = values
     db = SessionLocal()
     try:
-        if not settings.DEBUG:
-            await query.answer("Beta-режим доступен только в debug-боте.", show_alert=True)
+        if not UserService(db).is_admin(user.id):
+            await query.answer("Нет прав.", show_alert=True)
             return
         await _render(query, RoundResultsHandler(db).handle_swiss_finish(tournament_id, user.id))
     finally:
@@ -304,7 +305,7 @@ def _admin_more_keyboard(db, tournament_id: int, tg_id: int):
         is_online=tournament.is_online,
         has_pairings=AetherhubImportService(db).has_pairings(tournament_id),
         show_round_pairings=tournament.show_round_pairings,
-        show_internal_beta=settings.DEBUG,
+        show_internal_beta=UserService(db).is_admin(tg_id),
         internal_swiss=tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS,
     )
 
