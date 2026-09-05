@@ -381,11 +381,12 @@ def format_swiss_standings(
         if primary != row.display_name:
             lines.append(f"   {escape(row.display_name)}")
         bye = f" · BYE ×{row.byes}" if row.byes else ""
+        dropped = " · ⛔ дроп" if row.dropped else ""
         lines.append(
             f"   {row.match_points} оч. · {row.record} · "
             f"OMW {row.opponents_match_win_percentage:.1%} · "
             f"GW {row.game_win_percentage:.1%} · "
-            f"OGW {row.opponents_game_win_percentage:.1%}{bye}"
+            f"OGW {row.opponents_game_win_percentage:.1%}{bye}{dropped}"
         )
     lines.extend(["", "Тай-брейки: OMW → GW → OGW. BYE даёт победу 2–0 и не считается оппонентом."])
     if page_count > 1:
