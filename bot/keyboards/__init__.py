@@ -563,6 +563,11 @@ class Keyboards:
             rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back_callback_data)])
         return InlineKeyboardMarkup(rows)
 
+    def round_result_back_keyboard(self, tournament_id: int) -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup(
+            [[InlineKeyboardButton("⬅️ К турниру", callback_data=f"{CB_TOURNAMENT}:{tournament_id}")]]
+        )
+
     def round_result_preview_keyboard(self, match_id: int, own_wins: int, opponent_wins: int) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(
             [
