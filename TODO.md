@@ -105,7 +105,9 @@
   Во всех состояниях ввода результата, включая уже сохранённый счёт, ожидание подтверждения,
   BYE и невозможность найти матч, игрок может вернуться кнопкой в меню турнира — PR
   [#284](https://github.com/mmbabaev/MetaTheGathering/pull/284),
-  [#287](https://github.com/mmbabaev/MetaTheGathering/pull/287).
+  [#287](https://github.com/mmbabaev/MetaTheGathering/pull/287),
+  [#294](https://github.com/mmbabaev/MetaTheGathering/pull/294),
+  [#295](https://github.com/mmbabaev/MetaTheGathering/pull/295).
 - Telegram- и Endstep-ники поддерживаются для сопоставления импортов и публикации парингов, но
   Endstep-ник остаётся необязательным полем настроек и при регистрации не запрашивается. При
   включённой клубной настройке новый раунд отправляется в чат турнира полной карточкой: Telegram-ники,
