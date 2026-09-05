@@ -349,7 +349,7 @@ class InternalSwissService:
             return self._exact_pairs(ordered, previous_opponents)
 
         # Large beta events use the same local priorities without exponential
-        # search.  A two-pair repair removes avoidable rematches afterwards.
+        # search. A two-pair repair then tries to remove avoidable rematches.
         remaining = ordered[:]
         pairs: list[tuple[_PairingPlayer, _PairingPlayer]] = []
         while remaining:
