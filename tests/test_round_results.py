@@ -142,13 +142,18 @@ def test_result_entry_and_admin_score_steps_have_logical_back_buttons(db, online
     handler = RoundResultsHandler(db)
 
     own_step = handler.handle_open(tournament.id, alice.tg_id)
-    assert own_step.keyboard.inline_keyboard[-1][0].callback_data == f"rr_view:{tournament.id}:1"
+    assert own_step.keyboard.inline_keyboard[-1][0].callback_data == f"t:{tournament.id}"
 
     opponent_step = handler.handle_own_wins(match.id, alice.tg_id, 1)
     assert opponent_step.keyboard.inline_keyboard[-1][0].callback_data == f"rr_open:{tournament.id}"
 
     delivery = handler.handle_send(match.id, alice.tg_id, 1, 1)
-    assert delivery.recipient_keyboard.inline_keyboard[-1][0].callback_data == f"rr_view:{tournament.id}:1"
+    assert delivery.screen.keyboard.inline_keyboard[-1][0].callback_data == f"t:{tournament.id}"
+    assert delivery.recipient_keyboard.inline_keyboard[-1][0].callback_data == f"t:{tournament.id}"
+
+    confirmed = handler.handle_confirm(match.id, db.get(models.RoundMatch, match.id).revision, _bob.tg_id)
+    assert confirmed.screen.keyboard.inline_keyboard[-1][0].callback_data == f"t:{tournament.id}"
+    assert confirmed.recipient_keyboard.inline_keyboard[-1][0].callback_data == f"t:{tournament.id}"
 
     admin = _user(db, 999, "Анна", "Админова", admin=True)
     admin_first_step = handler.handle_admin_match(match.id, admin.tg_id)
@@ -156,6 +161,51 @@ def test_result_entry_and_admin_score_steps_have_logical_back_buttons(db, online
 
     admin_second_step = handler.handle_admin_p1(match.id, admin.tg_id, 1)
     assert admin_second_step.keyboard.inline_keyboard[-1][0].callback_data == f"rr_adm_m:{match.id}"
+
+
+def test_result_open_always_returns_to_tournament(db, online_match):
+    tournament, alice, bob, match = online_match
+    handler = RoundResultsHandler(db)
+    expected_callback = f"t:{tournament.id}"
+
+    pending = RoundResultsService(db).propose(match.id, alice.tg_id, 2, 1)
+    waiting = handler.handle_open(tournament.id, alice.tg_id)
+    confirmation = handler.handle_open(tournament.id, bob.tg_id)
+
+    assert waiting.keyboard.inline_keyboard[-1][0].callback_data == expected_callback
+    assert confirmation.keyboard.inline_keyboard[-1][0].callback_data == expected_callback
+
+    RoundResultsService(db).confirm(match.id, pending.revision, bob.tg_id)
+    completed = handler.handle_open(tournament.id, alice.tg_id)
+
+    assert "Результат уже подтверждён" in completed.text
+    assert completed.keyboard.inline_keyboard[-1][0].callback_data == expected_callback
+
+
+def test_result_open_error_returns_message_with_tournament_button(db, online_match):
+    tournament, _alice, _bob, _match = online_match
+    outsider = _user(db, 103, "Вера", "Сидорова")
+
+    screen = RoundResultsHandler(db).handle_open(tournament.id, outsider.tg_id)
+
+    assert screen.is_alert is False
+    assert len(screen.keyboard.inline_keyboard) == 1
+    assert len(screen.keyboard.inline_keyboard[0]) == 1
+    assert screen.keyboard.inline_keyboard[0][0].text == "⬅️ К турниру"
+    assert screen.keyboard.inline_keyboard[0][0].callback_data == f"t:{tournament.id}"
+
+
+def test_result_open_bye_returns_message_with_tournament_button(db, online_match):
+    tournament, alice, _bob, match = online_match
+    match.player2_name = None
+    match.player2_user_id = None
+    match.status = models.RoundMatchStatus.IMPORTED
+    db.commit()
+
+    screen = RoundResultsHandler(db).handle_open(tournament.id, alice.tg_id)
+
+    assert "у вас BYE" in screen.text
+    assert screen.keyboard.inline_keyboard[0][0].callback_data == f"t:{tournament.id}"
 
 
 def test_admin_can_set_and_replace_result(db, online_match):

@@ -15,7 +15,7 @@ from bot.keyboards import (
     CB_ROUND_RESULT_OPEN,
     CB_ROUND_RESULT_OPPONENT,
     CB_ROUND_RESULT_OWN,
-    CB_ROUND_VIEW,
+    CB_TOURNAMENT,
     Keyboards,
 )
 from bot.messages import format_aetherhub_round_summary, format_round_pairings, format_swiss_standings
@@ -93,24 +93,35 @@ class RoundResultsHandler:
         )
 
     def handle_open(self, tournament_id: int, tg_id: int) -> HandlerResult:
+        back_callback_data = f"{CB_TOURNAMENT}:{tournament_id}"
+        back_keyboard = self.keyboards.round_result_back_keyboard(tournament_id)
         try:
             match = self.results.current_match_for_user(tournament_id, tg_id)
             actor = self.users.get_by_tg_id(tg_id)
             if actor is None:
                 raise RoundResultError("Пользователь не найден.")
             if match.player2_name is None:
-                return HandlerResult(f"Раунд {match.round_number}: у вас BYE. Результат вводить не нужно.")
+                return HandlerResult(
+                    f"Раунд {match.round_number}: у вас BYE. Результат вводить не нужно.",
+                    keyboard=back_keyboard,
+                )
             if match.status in FINAL_STATUSES:
-                return HandlerResult(f"✅ Результат уже подтверждён:\n\n{self._score(match)}")
+                return HandlerResult(
+                    f"✅ Результат уже подтверждён:\n\n{self._score(match)}",
+                    keyboard=back_keyboard,
+                )
             if match.status == models.RoundMatchStatus.PENDING:
                 if match.proposed_by_user_id == actor.id:
-                    return HandlerResult(f"⏳ {self._score(match)}\n\nОжидаем подтверждения соперника.")
+                    return HandlerResult(
+                        f"⏳ {self._score(match)}\n\nОжидаем подтверждения соперника.",
+                        keyboard=back_keyboard,
+                    )
                 return HandlerResult(
                     self._confirmation_text(match),
                     keyboard=self.keyboards.round_result_response_keyboard(
                         match.id,
                         match.revision,
-                        back_callback_data=f"{CB_ROUND_VIEW}:{match.tournament_id}:{match.round_number}",
+                        back_callback_data=back_callback_data,
                     ),
                 )
             own_name, opponent_name = self._actor_names(match, actor.id)
@@ -119,11 +130,11 @@ class RoundResultsHandler:
                 keyboard=self.keyboards.round_score_values_keyboard(
                     match.id,
                     prefix=CB_ROUND_RESULT_OWN,
-                    back_callback_data=f"{CB_ROUND_VIEW}:{match.tournament_id}:{match.round_number}",
+                    back_callback_data=back_callback_data,
                 ),
             )
         except RoundResultError as exc:
-            return HandlerResult(str(exc), is_alert=True)
+            return HandlerResult(str(exc), keyboard=back_keyboard)
 
     def handle_own_wins(self, match_id: int, tg_id: int, own_wins: int) -> HandlerResult:
         try:
@@ -159,14 +170,18 @@ class RoundResultsHandler:
             match = self.results.propose(match_id, tg_id, own_wins, opponent_wins)
             actor = self.users.get_by_tg_id(tg_id)
             opponent = self._other_user(match, actor.id if actor else None)
+            back_keyboard = self.keyboards.round_result_back_keyboard(match.tournament_id)
             return DeliveryResult(
-                screen=HandlerResult(f"⏳ {self._score(match)}\n\nРезультат ожидает подтверждения соперника."),
+                screen=HandlerResult(
+                    f"⏳ {self._score(match)}\n\nРезультат ожидает подтверждения соперника.",
+                    keyboard=back_keyboard,
+                ),
                 recipient_tg_id=opponent.tg_id if opponent and opponent.tg_id > 0 else None,
                 recipient_text=self._confirmation_text(match),
                 recipient_keyboard=self.keyboards.round_result_response_keyboard(
                     match.id,
                     match.revision,
-                    back_callback_data=f"{CB_ROUND_VIEW}:{match.tournament_id}:{match.round_number}",
+                    back_callback_data=f"{CB_TOURNAMENT}:{match.tournament_id}",
                 ),
                 tournament_id=match.tournament_id,
                 round_number=match.round_number,
@@ -178,10 +193,15 @@ class RoundResultsHandler:
         try:
             match = self.results.confirm(match_id, revision, tg_id)
             proposer = self.db.get(models.User, match.proposed_by_user_id) if match.proposed_by_user_id else None
+            back_keyboard = self.keyboards.round_result_back_keyboard(match.tournament_id)
             return DeliveryResult(
-                screen=HandlerResult(f"✅ Результат подтверждён:\n\n{self._score(match)}"),
+                screen=HandlerResult(
+                    f"✅ Результат подтверждён:\n\n{self._score(match)}",
+                    keyboard=back_keyboard,
+                ),
                 recipient_tg_id=proposer.tg_id if proposer and proposer.tg_id > 0 else None,
                 recipient_text=f"✅ Соперник подтвердил результат:\n\n{self._score(match)}",
+                recipient_keyboard=back_keyboard,
                 tournament_id=match.tournament_id,
                 round_number=match.round_number,
             )
@@ -204,11 +224,12 @@ class RoundResultsHandler:
                     keyboard=self.keyboards.round_score_values_keyboard(
                         match.id,
                         prefix=CB_ROUND_RESULT_OWN,
-                        back_callback_data=f"{CB_ROUND_VIEW}:{match.tournament_id}:{match.round_number}",
+                        back_callback_data=f"{CB_TOURNAMENT}:{match.tournament_id}",
                     ),
                 ),
                 recipient_tg_id=rejected.proposer_tg_id,
                 recipient_text=f"❌ Соперник отклонил предложенный результат раунда {match.round_number}.",
+                recipient_keyboard=self.keyboards.round_result_back_keyboard(match.tournament_id),
                 tournament_id=match.tournament_id,
                 round_number=match.round_number,
             )
