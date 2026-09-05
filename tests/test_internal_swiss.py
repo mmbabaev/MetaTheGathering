@@ -89,11 +89,19 @@ def test_dropped_player_is_excluded_from_following_pairings(db):
     tournament, users, admin, engine = _setup(db, 8)
     engine.generate_next_round(tournament.id, admin.tg_id)
     results = RoundResultsService(db)
-    for match in results.list_round(tournament.id, 1):
+    first_round = results.list_round(tournament.id, 1)
+    for match in first_round:
         if match.player2_user_id is not None:
             results.admin_set(match.id, admin.tg_id, 2, 0)
-    dropped = users[-1]
+    played_match = first_round[0]
+    dropped = next(user for user in users if user.id == played_match.player2_user_id)
     TournamentService(db).drop_participant(tournament.id, dropped.id)
+
+    standings = engine.standings(tournament.id)
+    winner = next(row for row in standings if row.user_id == played_match.player1_user_id)
+    assert (winner.match_points, winner.record) == (3, "1–0–0")
+    assert dropped.id not in {row.user_id for row in standings}
+
     generated = engine.generate_next_round(tournament.id, admin.tg_id)
     assert generated.matches == 4
     assert all(

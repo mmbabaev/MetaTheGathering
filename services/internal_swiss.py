@@ -241,7 +241,8 @@ class InternalSwissService:
     def standings(self, tournament_id: int) -> list[SwissStanding]:
         tournament = self._tournament(tournament_id)
         self._ensure_internal(tournament)
-        participants = self._participants(tournament_id)
+        participants = self._participants(tournament_id, include_dropped=True)
+        active_user_ids = {participant.user_id for participant in participants if participant.dropped_at is None}
         stats = {
             participant.user_id: _Stats(
                 participant=participant,
@@ -259,6 +260,8 @@ class InternalSwissService:
 
         sortable: list[tuple[tuple[float | int, ...], _Stats, float, float, float]] = []
         for item in stats.values():
+            if item.participant.user_id not in active_user_ids:
+                continue
             omw = self._opponents_average(item.opponents, stats, "match")
             ogw = self._opponents_average(item.opponents, stats, "game")
             gw = item.game_win_percentage
@@ -419,7 +422,7 @@ class InternalSwissService:
     def _pairing_history(
         self, tournament_id: int
     ) -> tuple[set[frozenset[int]], dict[int, tuple[int, int, str | None]]]:
-        points = {participant.user_id: 0 for participant in self._participants(tournament_id)}
+        points = {participant.user_id: 0 for participant in self._participants(tournament_id, include_dropped=True)}
         previous: set[frozenset[int]] = set()
         history: dict[int, list[int | str | None]] = {user_id: [0, 0, None] for user_id in points}
         for match in self._matches(tournament_id):
@@ -541,15 +544,15 @@ class InternalSwissService:
             match.player2_user_id is None or match.status in FINAL_STATUSES for match in matches
         )
 
-    def _participants(self, tournament_id: int) -> list[models.Participant]:
+    def _participants(self, tournament_id: int, *, include_dropped: bool = False) -> list[models.Participant]:
+        conditions = [models.Participant.tournament_id == tournament_id]
+        if not include_dropped:
+            conditions.append(models.Participant.dropped_at.is_(None))
         return list(
             self.db.execute(
                 select(models.Participant)
                 .options(joinedload(models.Participant.user))
-                .where(
-                    models.Participant.tournament_id == tournament_id,
-                    models.Participant.dropped_at.is_(None),
-                )
+                .where(*conditions)
                 .order_by(models.Participant.id)
             ).scalars()
         )
