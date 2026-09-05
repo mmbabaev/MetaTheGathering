@@ -408,6 +408,10 @@ class AetherhubImportService:
         tournament = self.db.get(models.Tournament, tournament_id)
         if tournament is None:
             raise errors.TournamentNotFound(f"Tournament {tournament_id} not found")
+        if tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS:
+            raise errors.TournamentInvalidState(
+                "Для этого турнира включён внутренний Swiss; импорт AetherHub отключён."
+            )
         if tournament.status == models.TournamentStatus.CLOSED:
             # Закрытый турнир: только освежаем паринги/счёт (финальные результаты
             # часто появляются к закрытию). Без перерегистрации участников и без
@@ -590,7 +594,12 @@ class AetherhubImportService:
             participant_count = self.db.execute(
                 select(func.count(models.Participant.id)).where(models.Participant.tournament_id == tournament_id)
             ).scalar_one()
-            expected_rounds = expected_swiss_rounds(participant_count)
+            expected_rounds = (
+                tournament.swiss_rounds
+                if tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS
+                and tournament.swiss_rounds is not None
+                else expected_swiss_rounds(participant_count)
+            )
             actual_rounds = len({pairing.round_number for pairing in pairings})
             if actual_rounds < expected_rounds:
                 return False

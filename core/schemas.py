@@ -3,7 +3,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict
 
-from core.models import TournamentStatus, VoteType
+from core.models import TournamentEngineMode, TournamentStatus, VoteType
 
 # ==== Archetype ====
 
@@ -64,6 +64,7 @@ class TournamentBase(BaseModel):
     slug: Optional[str] = None
     club: Optional[str] = None
     is_online: bool = False
+    engine_mode: str = TournamentEngineMode.AETHERHUB
 
 
 class TournamentCreate(TournamentBase):
@@ -75,6 +76,7 @@ class TournamentRead(TournamentBase):
     status: TournamentStatus
     decks_hidden: bool = True
     show_round_pairings: bool = False
+    swiss_rounds: Optional[int] = None
     aetherhub_url: Optional[str] = None
     aetherhub_import_time: Optional[str] = None
     registration_open_at: Optional[datetime] = None
@@ -108,6 +110,7 @@ class ParticipantRead(ParticipantBase):
     deck_reminder_prestart_sent_at: Optional[datetime] = None
     deck_reminder_round2_sent_at: Optional[datetime] = None
     aetherhub_seen_at: Optional[datetime] = None
+    swiss_initial_rank: Optional[int] = None
     upvotes_count: int
     downvotes_count: int
     created_at: datetime

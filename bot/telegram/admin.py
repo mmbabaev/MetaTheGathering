@@ -30,6 +30,7 @@ from bot.telegram.player import (
     _player_handler,
 )
 from bot.telegram.round_notify import send_debug_round_notifications
+from core import models
 from core.clubs import ClubIdentity, club_identities
 from core.config import app_cfg, settings
 from core.database import SessionLocal
@@ -719,12 +720,14 @@ async def callback_admin_more(update: Update, context: ContextTypes.DEFAULT_TYPE
             decks_hidden = t.decks_hidden
             is_online = t.is_online
             show_round_pairings = t.show_round_pairings
+            internal_swiss = t.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS
             has_pairings = AetherhubImportService(db).has_pairings(tournament_id)
         except svc_errors.TournamentNotFound:
             is_closed = False
             decks_hidden = True
             is_online = False
             show_round_pairings = False
+            internal_swiss = False
             has_pairings = False
     finally:
         db.close()
@@ -739,6 +742,8 @@ async def callback_admin_more(update: Update, context: ContextTypes.DEFAULT_TYPE
             is_online=is_online,
             has_pairings=has_pairings,
             show_round_pairings=show_round_pairings,
+            show_internal_beta=settings.DEBUG,
+            internal_swiss=internal_swiss,
         ),
     )
     await query.answer()
@@ -846,6 +851,8 @@ async def callback_reveal_decks_cancel(update: Update, context: ContextTypes.DEF
                 is_online=t.is_online,
                 has_pairings=AetherhubImportService(db).has_pairings(tournament_id),
                 show_round_pairings=t.show_round_pairings,
+                show_internal_beta=settings.DEBUG,
+                internal_swiss=t.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS,
             ),
         )
     except svc_errors.TournamentNotFound:

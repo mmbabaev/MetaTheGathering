@@ -10,6 +10,7 @@ from telegram.ext import ContextTypes
 from bot.handlers.base import HandlerResult
 from bot.handlers.round_results import DeliveryResult, RoundResultsHandler
 from bot.keyboards import Keyboards
+from bot.telegram.club_pairings import send_club_pairings
 from bot.telegram.common import parse_callback_ints
 from core import models
 from core.config import settings
@@ -191,6 +192,91 @@ async def callback_toggle_view(update: Update, context: ContextTypes.DEFAULT_TYP
         db.close()
 
 
+async def callback_swiss_mode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user = update.effective_user
+    if query is None or user is None:
+        return
+    values = await parse_callback_ints(query, 1)
+    if values is None:
+        return
+    (tournament_id,) = values
+    db = SessionLocal()
+    try:
+        if not settings.DEBUG:
+            await query.answer("Beta-режим доступен только в debug-боте.", show_alert=True)
+            return
+        result = RoundResultsHandler(db).handle_swiss_toggle(tournament_id, user.id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        await query.edit_message_text(
+            "Действия с турниром:",
+            reply_markup=_admin_more_keyboard(db, tournament_id, user.id),
+        )
+        await query.answer(result.answer_text, show_alert=True)
+    finally:
+        db.close()
+
+
+async def callback_swiss_next_round(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user = update.effective_user
+    if query is None or user is None:
+        return
+    values = await parse_callback_ints(query, 1)
+    if values is None:
+        return
+    (tournament_id,) = values
+    db = SessionLocal()
+    try:
+        if not settings.DEBUG:
+            await query.answer("Beta-режим доступен только в debug-боте.", show_alert=True)
+            return
+        result = RoundResultsHandler(db).handle_swiss_next_round(tournament_id, user.id)
+        if not await _render(query, result):
+            return
+        if result.new_round_numbers:
+            await send_club_pairings(context.bot, db, tournament_id, result.new_round_numbers)
+    finally:
+        db.close()
+
+
+async def callback_swiss_standings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _simple(
+        update,
+        2,
+        lambda handler, tg_id, tournament_id, page: handler.handle_swiss_standings(tournament_id, tg_id, page),
+    )
+
+
+async def callback_swiss_finish(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _simple(
+        update,
+        1,
+        lambda handler, tg_id, tournament_id: handler.handle_swiss_finish_prompt(tournament_id, tg_id),
+    )
+
+
+async def callback_swiss_finish_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user = update.effective_user
+    if query is None or user is None:
+        return
+    values = await parse_callback_ints(query, 1)
+    if values is None:
+        return
+    (tournament_id,) = values
+    db = SessionLocal()
+    try:
+        if not settings.DEBUG:
+            await query.answer("Beta-режим доступен только в debug-боте.", show_alert=True)
+            return
+        await _render(query, RoundResultsHandler(db).handle_swiss_finish(tournament_id, user.id))
+    finally:
+        db.close()
+
+
 def _admin_more_keyboard(db, tournament_id: int, tg_id: int):
     tournament = db.get(models.Tournament, tournament_id)
     if tournament is None:
@@ -204,4 +290,6 @@ def _admin_more_keyboard(db, tournament_id: int, tg_id: int):
         is_online=tournament.is_online,
         has_pairings=AetherhubImportService(db).has_pairings(tournament_id),
         show_round_pairings=tournament.show_round_pairings,
+        show_internal_beta=settings.DEBUG,
+        internal_swiss=tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS,
     )

@@ -9,6 +9,7 @@ from bot.telegram.debug import (
 )
 from core import models
 from core.schemas import TournamentCreate
+from services.internal_swiss import InternalSwissService
 from services.tournament import TournamentService
 
 
@@ -89,3 +90,21 @@ async def test_debug_fill_and_next_round_are_local_db_only(db, user_svc, monkeyp
         await callback_debug_next_round(round_update, context)
     assert db.query(models.RoundPairing).filter_by(tournament_id=tournament.id, round_number=1).count() == 15
     context.bot.send_message.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_debug_fill_offers_real_swiss_round_when_internal_mode_is_enabled(db, user_svc, monkeypatch):
+    monkeypatch.setattr("bot.telegram.debug.settings.DEBUG", True)
+    admin = user_svc.get_or_create(tg_id=211, first_name="Анна", last_name="Админова")
+    admin.is_admin = True
+    db.commit()
+    tournament = TournamentService(db).create_tournament(TournamentCreate(title="Internal", chat_id=5, is_online=True))
+    InternalSwissService(db).set_enabled(tournament.id, admin.tg_id, True)
+    update = _update(user_id=admin.tg_id, data=f"dbg_fill_t:{tournament.id}")
+
+    with patch("bot.telegram.debug.SessionLocal", return_value=db):
+        await callback_debug_fill_tournament(update, _context())
+
+    button = update.callback_query.edit_message_text.await_args.kwargs["reply_markup"].inline_keyboard[0][0]
+    assert button.text == "🎲 Создать раунд 1"
+    assert button.callback_data == f"sw_next:{tournament.id}"

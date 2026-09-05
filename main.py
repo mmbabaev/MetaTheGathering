@@ -137,6 +137,11 @@ from bot.keyboards import (
     CB_SETTINGS_TOGGLE_POLL_NOTIFY,
     CB_SETTINGS_TOGGLE_STATUS_PAIRINGS,
     CB_STANDINGS,
+    CB_SWISS_FINISH,
+    CB_SWISS_FINISH_CONFIRM,
+    CB_SWISS_MODE_TOGGLE,
+    CB_SWISS_NEXT_ROUND,
+    CB_SWISS_STANDINGS,
     CB_TOURNAMENT,
     CB_TSTATUS,
 )
@@ -542,6 +547,22 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(round_results_handler.callback_summary, pattern=f"^{CB_ROUND_SUMMARY}:"))
     app.add_handler(
         CallbackQueryHandler(round_results_handler.callback_toggle_view, pattern=f"^{CB_ROUND_VIEW_TOGGLE}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(round_results_handler.callback_swiss_mode, pattern=f"^{CB_SWISS_MODE_TOGGLE}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(round_results_handler.callback_swiss_next_round, pattern=f"^{CB_SWISS_NEXT_ROUND}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(round_results_handler.callback_swiss_standings, pattern=f"^{CB_SWISS_STANDINGS}:")
+    )
+    app.add_handler(CallbackQueryHandler(round_results_handler.callback_swiss_finish, pattern=f"^{CB_SWISS_FINISH}:"))
+    app.add_handler(
+        CallbackQueryHandler(
+            round_results_handler.callback_swiss_finish_confirm,
+            pattern=f"^{CB_SWISS_FINISH_CONFIRM}:",
+        )
     )
     if settings.DEBUG:
         app.add_handler(

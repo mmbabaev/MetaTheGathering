@@ -17,6 +17,7 @@ from bot.keyboards import (
     CB_DEBUG_NEXT_ROUND,
     CB_REGISTER,
     CB_REOPEN_TOURNAMENT,
+    CB_ROUND_SUMMARY,
     CB_TOURNAMENT,
     Keyboards,
     admin_archetype_select_keyboard,
@@ -286,3 +287,22 @@ class TestAdminMoreDebugButtons:
         assert f"{CB_DEBUG_NEXT_ROUND}:42" in shown_callbacks
         assert f"{CB_DEBUG_FILL_TOURNAMENT}:42" not in hidden_callbacks
         assert f"{CB_DEBUG_NEXT_ROUND}:42" not in hidden_callbacks
+
+    def test_internal_swiss_replaces_simulator_and_aetherhub_actions(self):
+        keyboard = Keyboards().admin_more_keyboard(
+            42,
+            show_debug=True,
+            show_internal_beta=True,
+            is_online=True,
+            has_pairings=True,
+            internal_swiss=True,
+        )
+        callbacks = {button.callback_data for row in keyboard.inline_keyboard for button in row}
+
+        assert "sw_mode:42" in callbacks
+        assert "sw_next:42" in callbacks
+        assert "sw_table:42:0" in callbacks
+        assert "sw_finish:42" in callbacks
+        assert f"{CB_DEBUG_NEXT_ROUND}:42" not in callbacks
+        assert f"{CB_ROUND_SUMMARY}:42" not in callbacks
+        assert f"{CB_CLOSE_TOURNAMENT}:42" not in callbacks

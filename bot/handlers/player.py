@@ -160,6 +160,7 @@ class PlayerHandler:
                 payment_enabled=payment_enabled,
                 payment_confirmed=payment_confirmed,
                 show_round_result_action=(t.is_online and has_pairings and t.status != models.TournamentStatus.CLOSED),
+                internal_swiss=(t.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS),
             ),
         )
 
