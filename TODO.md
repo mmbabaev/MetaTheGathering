@@ -123,7 +123,8 @@
   pair-up/pair-down. Для 9–32 игроков фиксируется 5 Constructed-раундов по MTR Appendix E.
   Режим opt-in на уровне турнира; AetherHub остаётся дефолтом и не может перезаписать
   внутренние паринги. Правила и ограничения beta описаны в
-  [`docs/internal_swiss.md`](docs/internal_swiss.md).
+  [`docs/internal_swiss.md`](docs/internal_swiss.md) — PR
+  [#290](https://github.com/mmbabaev/MetaTheGathering/pull/290).
 
 - Защита первой регистрации из [#273](https://github.com/mmbabaev/MetaTheGathering/issues/273):
   ФИО требует минимум два слова с буквами, пробелы и декоративные эмоджи по краям
