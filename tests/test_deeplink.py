@@ -1,5 +1,6 @@
 """Tests for deck-registration deeplinks (bot/deeplink.py + handler + /start)."""
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -14,14 +15,19 @@ from bot.deeplink import (
     parse_deck_payload,
     parse_fill_missing_payload,
     parse_registration_payload,
+    parse_round_payload,
     registration_deeplink,
     registration_payload,
+    round_deeplink,
+    round_payload,
 )
 from bot.handlers.base import HandlerResult
 from bot.handlers.player import PlayerHandler
 from bot.messages import CHOOSE_ARCHETYPE, NAME_REQUIRED_FOR_REGISTRATION, TOURNAMENT_NOT_FOUND
-from bot.telegram.common import cmd_start
+from bot.telegram.common import _start_round_deeplink, cmd_start
+from core import models
 from core.schemas import TournamentCreate
+from services.round_results import RoundResultsService
 
 
 class TestPayload:
@@ -49,6 +55,14 @@ class TestPayload:
 
     def test_registration_deeplink_url(self):
         assert registration_deeplink("MyBot", 7) == "https://t.me/MyBot?start=register_7"
+
+    def test_round_deeplink_round_trip(self):
+        assert parse_round_payload(round_payload(42)) == 42
+        assert round_deeplink("MyBot", 7) == "https://t.me/MyBot?start=round_7"
+
+    @pytest.mark.parametrize("bad", ["", "round_", "round_x", "round_1x", "round_²", None])
+    def test_non_round_payloads_are_none(self, bad):
+        assert parse_round_payload(bad or "") is None
 
     def test_fill_missing_round_trip(self):
         assert parse_fill_missing_payload(fill_missing_payload(42)) == 42
@@ -161,6 +175,63 @@ async def test_cmd_start_routes_fill_missing_deeplink():
         await cmd_start(update, context)
 
     start_fill.assert_awaited_once_with(update, context, update.effective_user, 42)
+
+
+@pytest.mark.asyncio
+async def test_cmd_start_routes_round_deeplink():
+    update = MagicMock()
+    update.effective_user = MagicMock(id=123)
+    update.effective_message = AsyncMock()
+    context = MagicMock(args=["round_42"], user_data={})
+
+    with patch("bot.telegram.common._start_round_deeplink", new_callable=AsyncMock) as start_round:
+        await cmd_start(update, context)
+
+    start_round.assert_awaited_once_with(update, context, update.effective_user, 42)
+
+
+@pytest.mark.asyncio
+async def test_round_deeplink_opens_unreported_current_match(db, svc, user_svc):
+    tournament = svc.create_tournament(TournamentCreate(title="Swiss", chat_id=1, is_online=True))
+    stored = db.get(models.Tournament, tournament.id)
+    stored.status = models.TournamentStatus.ONGOING
+    alice = user_svc.get_or_create(tg_id=101, first_name="Alice", last_name="One")
+    bob = user_svc.get_or_create(tg_id=102, first_name="Bob", last_name="Two")
+    db.add_all(
+        [
+            models.Participant(tournament_id=tournament.id, user_id=alice.id),
+            models.Participant(tournament_id=tournament.id, user_id=bob.id),
+            models.RoundPairing(
+                tournament_id=tournament.id,
+                round_number=1,
+                player_name="One Alice",
+                opponent_name="Two Bob",
+                player_user_id=alice.id,
+                opponent_user_id=bob.id,
+            ),
+            models.RoundPairing(
+                tournament_id=tournament.id,
+                round_number=1,
+                player_name="Two Bob",
+                opponent_name="One Alice",
+                player_user_id=bob.id,
+                opponent_user_id=alice.id,
+            ),
+        ]
+    )
+    db.commit()
+    RoundResultsService(db).sync_round(tournament.id, 1)
+    update = SimpleNamespace(effective_message=AsyncMock())
+
+    with patch("bot.telegram.common.SessionLocal", return_value=db):
+        await _start_round_deeplink(
+            update,
+            MagicMock(),
+            SimpleNamespace(id=alice.tg_id, username=None),
+            tournament.id,
+        )
+
+    assert "Сколько игр выиграли вы?" in update.effective_message.reply_text.await_args.args[0]
 
 
 @pytest.mark.asyncio
