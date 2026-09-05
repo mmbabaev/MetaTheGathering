@@ -216,6 +216,30 @@ def test_endstep_username_and_club_settings_migration_defaults_safe():
         assert connection.execute(sa.select(club_settings.c.publish_pairings)).scalar_one() is False
 
 
+def test_user_city_migration_keeps_existing_city_empty_and_accepts_custom_value():
+    metadata = sa.MetaData()
+    users = sa.Table(
+        "users",
+        metadata,
+        sa.Column("id", sa.Integer, primary_key=True),
+        sa.Column("tg_id", sa.BigInteger, nullable=False),
+    )
+    engine = sa.create_engine("sqlite://")
+    metadata.create_all(engine)
+    migration = runpy.run_path(str(VERSIONS_DIR / "572aa2e07c0c_add_user_city.py"))
+
+    with engine.begin() as connection:
+        connection.execute(users.insert().values(id=1, tg_id=100))
+        context = MigrationContext.configure(connection)
+        with Operations.context(context):
+            migration["upgrade"]()
+
+        migrated_users = sa.Table("users", sa.MetaData(), autoload_with=connection)
+        assert connection.execute(sa.select(migrated_users.c.city)).scalar_one() is None
+        connection.execute(migrated_users.update().values(city="Казань"))
+        assert connection.execute(sa.select(migrated_users.c.city)).scalar_one() == "Казань"
+
+
 def test_internal_swiss_migration_keeps_existing_tournaments_on_aetherhub():
     metadata = sa.MetaData()
     tournaments = sa.Table("tournaments", metadata, sa.Column("id", sa.Integer, primary_key=True))

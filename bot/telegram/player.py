@@ -26,6 +26,7 @@ USER_DATA_PENDING_CUSTOM = "pending_custom_archetype_tournament_id"
 USER_DATA_PENDING_NAME = "pending_name_for_tournament_id"
 USER_DATA_PENDING_SETTINGS_NAME = "pending_settings_name"
 USER_DATA_PENDING_SETTINGS_ENDSTEP_USERNAME = "pending_settings_endstep_username"
+USER_DATA_PENDING_SETTINGS_CITY = "pending_settings_city"
 USER_DATA_PENDING_CELLAR_NAME = "pending_cellar_name"
 USER_DATA_PENDING_BULK_ADD = "pending_bulk_add_tournament_id"
 USER_DATA_PENDING_ADMIN_CUSTOM_ARCH = "pending_admin_custom_arch_participant_id"
@@ -470,6 +471,20 @@ async def _handle_pending_settings_endstep_username(msg, user, text, context) ->
     return True
 
 
+async def _handle_pending_settings_city(msg, user, text, context) -> bool:
+    if not context.user_data.get(USER_DATA_PENDING_SETTINGS_CITY):
+        return False
+    db = SessionLocal()
+    try:
+        result = _settings_handler(db).handle_settings_city_text(user.id, text)
+        if not result.needs_city:
+            context.user_data.pop(USER_DATA_PENDING_SETTINGS_CITY, None)
+        await msg.reply_text(result.text, reply_markup=result.keyboard)
+    finally:
+        db.close()
+    return True
+
+
 async def _handle_pending_cellar_name(msg, user, text, context) -> bool:
     if not context.user_data.get(USER_DATA_PENDING_CELLAR_NAME):
         return False
@@ -637,6 +652,7 @@ _TEXT_INPUT_HANDLERS = [
     _handle_pending_cellar_name,
     _handle_pending_settings_name,
     _handle_pending_settings_endstep_username,
+    _handle_pending_settings_city,
     _handle_pending_missing_custom_arch,
     _handle_pending_admin_custom_arch,
     _handle_pending_bulk_add,

@@ -13,9 +13,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from bot.handlers.base import HandlerResult
 from bot.telegram.settings import (
+    USER_DATA_PENDING_SETTINGS_CITY,
     USER_DATA_PENDING_SETTINGS_ENDSTEP_USERNAME,
     USER_DATA_PENDING_SETTINGS_NAME,
+    callback_settings_city,
+    callback_settings_city_choice,
+    callback_settings_city_custom,
     callback_settings_endstep_username,
+    callback_settings_home,
     callback_settings_name,
     callback_toggle_cellar_notify,
     callback_toggle_emoji,
@@ -130,6 +135,78 @@ async def test_callback_settings_endstep_username_sets_pending_state():
     assert ctx.user_data[USER_DATA_PENDING_SETTINGS_ENDSTEP_USERNAME] is True
     update.callback_query.edit_message_text.assert_awaited_once()
     update.callback_query.answer.assert_awaited_once()
+
+
+async def test_callback_settings_city_opens_choice_keyboard_and_closes_db():
+    keyboard = MagicMock()
+    result = HandlerResult("🏙 Выберите город", keyboard=keyboard)
+    update = _make_callback_update()
+
+    with (
+        patch("bot.telegram.settings.SessionLocal") as mock_sl,
+        patch("bot.telegram.settings.SettingsHandler") as mock_sh,
+    ):
+        mock_db = MagicMock()
+        mock_sl.return_value = mock_db
+        mock_sh.return_value.handle_city_menu.return_value = result
+        await callback_settings_city(update, _make_context())
+
+    mock_sh.return_value.handle_city_menu.assert_called_once_with(update.effective_user.id)
+    update.callback_query.edit_message_text.assert_awaited_once_with(result.text, reply_markup=keyboard)
+    mock_db.close.assert_called_once()
+
+
+async def test_callback_settings_city_choice_saves_selected_city():
+    keyboard = MagicMock()
+    result = HandlerResult("Город: Москва", keyboard=keyboard, answer_text="Город сохранён")
+    update = _make_callback_update()
+    update.callback_query.data = "settings_city_set:moscow"
+
+    with (
+        patch("bot.telegram.settings.SessionLocal") as mock_sl,
+        patch("bot.telegram.settings.SettingsHandler") as mock_sh,
+    ):
+        mock_db = MagicMock()
+        mock_sl.return_value = mock_db
+        mock_sh.return_value.handle_settings_city_choice.return_value = result
+        await callback_settings_city_choice(update, _make_context())
+
+    mock_sh.return_value.handle_settings_city_choice.assert_called_once_with(update.effective_user.id, "moscow")
+    update.callback_query.edit_message_text.assert_awaited_once_with(result.text, reply_markup=keyboard)
+    update.callback_query.answer.assert_awaited_once_with(result.answer_text)
+    mock_db.close.assert_called_once()
+
+
+async def test_callback_settings_city_custom_sets_only_city_pending_state():
+    update = _make_callback_update()
+    context = _make_context({USER_DATA_PENDING_SETTINGS_NAME: True})
+
+    await callback_settings_city_custom(update, context)
+
+    assert context.user_data == {USER_DATA_PENDING_SETTINGS_CITY: True}
+    update.callback_query.edit_message_text.assert_awaited_once()
+    update.callback_query.answer.assert_awaited_once()
+
+
+async def test_callback_settings_home_returns_to_settings_and_clears_pending_state():
+    keyboard = MagicMock()
+    result = HandlerResult("⚙️ Настройки", keyboard=keyboard)
+    update = _make_callback_update()
+    context = _make_context({USER_DATA_PENDING_SETTINGS_CITY: True})
+
+    with (
+        patch("bot.telegram.settings.SessionLocal") as mock_sl,
+        patch("bot.telegram.settings.SettingsHandler") as mock_sh,
+    ):
+        mock_db = MagicMock()
+        mock_sl.return_value = mock_db
+        mock_sh.return_value.handle_settings.return_value = result
+        await callback_settings_home(update, context)
+
+    assert context.user_data == {}
+    mock_sh.return_value.handle_settings.assert_called_once_with(update.effective_user.id)
+    update.callback_query.edit_message_text.assert_awaited_once_with(result.text, reply_markup=keyboard)
+    mock_db.close.assert_called_once()
 
 
 # ── callback_toggle_emoji ─────────────────────────────────────────────────────

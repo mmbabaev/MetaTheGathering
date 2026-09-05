@@ -24,11 +24,24 @@ def normalize_endstep_username(value: str) -> str | None:
     return value
 
 
+def normalize_city(value: str) -> str | None:
+    if any(char in value for char in "\r\n"):
+        return None
+    value = " ".join(value.split())
+    if not value or len(value) > 255:
+        return None
+    return value
+
+
 class EndstepUsernameInvalid(ValueError):
     pass
 
 
 class EndstepUsernameTaken(ValueError):
+    pass
+
+
+class CityInvalid(ValueError):
     pass
 
 
@@ -299,6 +312,8 @@ class UserService:
                 real_user.last_name = placeholder.last_name
         if not real_user.endstep_username and placeholder.endstep_username:
             real_user.endstep_username = placeholder.endstep_username
+        if not real_user.city and placeholder.city:
+            real_user.city = placeholder.city
 
         self.db.delete(placeholder)
 
@@ -388,6 +403,8 @@ class UserService:
             target.last_name = source.last_name
         if not target.endstep_username and source.endstep_username:
             target.endstep_username = source.endstep_username
+        if not target.city and source.city:
+            target.city = source.city
 
         self.db.delete(source)
         self.db.commit()
@@ -463,6 +480,19 @@ class UserService:
             user = models.User(tg_id=tg_id)
             self.db.add(user)
         user.endstep_username = normalized
+        self.db.commit()
+        self.db.refresh(user)
+        return user
+
+    def update_city(self, tg_id: int, city: str) -> models.User:
+        normalized = normalize_city(city)
+        if normalized is None:
+            raise CityInvalid
+        user = self.get_by_tg_id(tg_id)
+        if user is None:
+            user = models.User(tg_id=tg_id)
+            self.db.add(user)
+        user.city = normalized
         self.db.commit()
         self.db.refresh(user)
         return user
