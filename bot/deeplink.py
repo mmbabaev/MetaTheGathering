@@ -1,7 +1,8 @@
 """Telegram deeplinks: `t.me/<bot>?start=<payload>`.
 
 Поддерживаются переход в запись своей колоды (`deck_<id>`), общая регистрация
-(`register_<id>`), помощь мета-полиции (`fill_<id>`) и меню ячейки (`cellar`).
+(`register_<id>`), текущий раунд (`round_<id>`), помощь мета-полиции (`fill_<id>`)
+и меню ячейки (`cellar`).
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from typing import Optional
 
 _DECK_PREFIX = "deck_"
 _REGISTER_PREFIX = "register_"
+_ROUND_PREFIX = "round_"
 _FILL_MISSING_PREFIX = "fill_"
 _CELLAR_PAYLOAD = "cellar"
 
@@ -52,6 +54,21 @@ def parse_registration_payload(payload: str) -> Optional[int]:
 def registration_deeplink(bot_username: str, tournament_id: int) -> str:
     """Ссылка общей регистрации: записанным показывает статус турнира."""
     return f"https://t.me/{bot_username}?start={registration_payload(tournament_id)}"
+
+
+def round_payload(tournament_id: int) -> str:
+    return f"{_ROUND_PREFIX}{tournament_id}"
+
+
+def parse_round_payload(payload: str) -> Optional[int]:
+    if not payload or not payload.startswith(_ROUND_PREFIX):
+        return None
+    rest = payload[len(_ROUND_PREFIX) :]
+    return int(rest) if rest.isascii() and rest.isdigit() else None
+
+
+def round_deeplink(bot_username: str, tournament_id: int) -> str:
+    return f"https://t.me/{bot_username}?start={round_payload(tournament_id)}"
 
 
 def fill_missing_payload(tournament_id: int) -> str:
