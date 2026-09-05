@@ -6,6 +6,7 @@ from bot.telegram.round_results import (
     callback_confirm,
     callback_reject,
     callback_send,
+    callback_swiss_finish_confirm,
     callback_swiss_mode,
     callback_swiss_next_round,
 )
@@ -183,3 +184,32 @@ async def test_internal_swiss_callback_requires_admin_in_production(db, user_svc
 
     assert db.get(models.Tournament, tournament.id).engine_mode == models.TournamentEngineMode.AETHERHUB
     query.answer.assert_awaited_once_with("Нет прав.", show_alert=True)
+
+
+async def test_internal_swiss_finish_publishes_results_after_success(db, user_svc):
+    tournament = TournamentService(db).create_tournament(
+        TournamentCreate(title="Internal", chat_id=-100500, club="Endstep-ru", is_online=True)
+    )
+    admin = user_svc.get_or_create(tg_id=999, first_name="Admin")
+    admin.is_admin = True
+    db.commit()
+    update, query = _update(admin.tg_id, f"sw_finish_yes:{tournament.id}")
+    publication = AsyncMock(return_value=True)
+    bot = AsyncMock()
+
+    with (
+        patch("bot.telegram.round_results.SessionLocal", return_value=db),
+        patch("bot.telegram.round_results.RoundResultsHandler.handle_swiss_finish") as finish,
+        patch("bot.telegram.round_results.publish_swiss_completion", publication),
+    ):
+        finish.return_value = SimpleNamespace(
+            text="Итоговые стендинги",
+            keyboard=None,
+            is_alert=False,
+            parse_mode="HTML",
+            answer_text="Турнир завершён.",
+        )
+        await callback_swiss_finish_confirm(update, SimpleNamespace(bot=bot))
+
+    query.edit_message_text.assert_awaited_once()
+    publication.assert_awaited_once_with(bot, db, tournament.id)

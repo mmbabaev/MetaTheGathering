@@ -121,7 +121,7 @@ def club_identities() -> list[ClubIdentity]:
             chat_id=app_cfg.endstep_ru_chat_id or 0,
             aetherhub_url="https://aetherhub.com/User/MetaTheGathering",
             title_prefix="⏭️🦶 ",
-            magicoculus_city=None,
+            magicoculus_city="Endstep",
             timezone="Europe/Moscow",
             is_online=True,
             real_chat_id=-1003925371109,

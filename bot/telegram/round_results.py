@@ -10,6 +10,7 @@ from telegram.ext import ContextTypes
 from bot.handlers.base import HandlerResult
 from bot.handlers.round_results import DeliveryResult, RoundResultsHandler
 from bot.keyboards import Keyboards
+from bot.swiss_completion import publish_swiss_completion
 from bot.telegram.club_pairings import refresh_club_pairings, send_club_pairings
 from bot.telegram.common import parse_callback_ints
 from core import models
@@ -287,7 +288,9 @@ async def callback_swiss_finish_confirm(update: Update, context: ContextTypes.DE
         if not UserService(db).is_admin(user.id):
             await query.answer("Нет прав.", show_alert=True)
             return
-        await _render(query, RoundResultsHandler(db).handle_swiss_finish(tournament_id, user.id))
+        result = RoundResultsHandler(db).handle_swiss_finish(tournament_id, user.id)
+        if await _render(query, result):
+            await publish_swiss_completion(context.bot, db, tournament_id)
     finally:
         db.close()
 

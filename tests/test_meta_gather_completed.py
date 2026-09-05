@@ -737,6 +737,27 @@ def test_pair_of_dice_magicoculus_import_uses_saint_petersburg(monkeypatch):
     db.close.assert_called_once()
 
 
+def test_endstep_magicoculus_import_uses_endstep_city(monkeypatch):
+    db = MagicMock()
+    tournament = SimpleNamespace(club="Endstep-ru")
+    collector = MagicMock()
+    collector.return_value.collect.return_value = tournament
+    client = MagicMock()
+    importer = MagicMock()
+    expected = MagicOculusImportResult(tournament_id=470, detail={})
+    importer.return_value.import_once.return_value = expected
+    monkeypatch.setattr("bot.scheduler.SessionLocal", MagicMock(return_value=db))
+    monkeypatch.setattr("bot.scheduler.MagicOculusTournamentCollector", collector)
+    monkeypatch.setattr("bot.scheduler.MagicOculusClient", client)
+    monkeypatch.setattr("bot.scheduler.MagicOculusImporter", importer)
+
+    result = scheduler.import_closed_tournament_to_magicoculus(86)
+
+    assert result == expected
+    importer.return_value.import_once.assert_called_once_with(tournament, city="Endstep")
+    db.close.assert_called_once()
+
+
 async def test_magicoculus_failure_does_not_break_close(db, user_svc, arch_svc, monkeypatch):
     monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
     FeatureFlagService(db).toggle(FeatureFlags.MAGIC_OCULUS_IMPORT)

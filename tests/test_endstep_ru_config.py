@@ -18,7 +18,7 @@ def test_endstep_ru_identity_is_online_and_has_no_default_schedule():
     assert identity.aetherhub_url == "https://aetherhub.com/User/MetaTheGathering"
     assert identity.title_prefix == "⏭️🦶 "
     assert identity.is_online is True
-    assert identity.magicoculus_city is None
+    assert identity.magicoculus_city == "Endstep"
     assert identity.timezone == "Europe/Moscow"
     assert identity.real_chat_id == -1003925371109
     assert identity.real_chat_label == "@endstep_ru"
