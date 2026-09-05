@@ -73,12 +73,16 @@ async def test_delivery_posts_single_message_to_club_chat(db, svc):
     db.add(models.ClubSettingsRow(club_name="Endstep-ru", publish_pairings=True))
     db.commit()
     bot = AsyncMock()
+    bot.get_me.return_value = SimpleNamespace(username="MetaGathererBot")
     bot.send_message.return_value = SimpleNamespace(message_id=321)
 
     assert await send_club_pairings(bot, db, tournament.id, [1]) is True
     bot.send_message.assert_awaited_once()
     assert bot.send_message.await_args.kwargs["chat_id"] == -100123
     assert bot.send_message.await_args.kwargs["parse_mode"] == "HTML"
+    button = bot.send_message.await_args.kwargs["reply_markup"].inline_keyboard[0][0]
+    assert button.text == "🎯 Открыть турнир"
+    assert button.url == f"https://t.me/MetaGathererBot?start=round_{tournament.id}"
     tracked = db.query(models.TournamentRoundPairingsMessage).one()
     assert (tracked.tournament_id, tracked.round_number, tracked.chat_id, tracked.message_id) == (
         tournament.id,
@@ -95,6 +99,7 @@ async def test_each_new_round_gets_its_own_editable_message(db, svc):
     db.add(models.ClubSettingsRow(club_name="Endstep-ru", publish_pairings=True))
     db.commit()
     bot = AsyncMock()
+    bot.get_me.return_value = SimpleNamespace(username="MetaGathererBot")
     bot.send_message.side_effect = [SimpleNamespace(message_id=321), SimpleNamespace(message_id=654)]
 
     assert await send_club_pairings(bot, db, tournament.id, [2, 1]) is True
@@ -122,11 +127,13 @@ async def test_refresh_edits_tracked_round_card_with_current_score(db, svc):
     match.status = models.RoundMatchStatus.CONFIRMED
     db.commit()
     bot = AsyncMock()
+    bot.get_me.return_value = SimpleNamespace(username="MetaGathererBot")
 
     assert await refresh_club_pairings(bot, db, tournament.id, 1) is True
     kwargs = bot.edit_message_text.await_args.kwargs
     assert (kwargs["chat_id"], kwargs["message_id"], kwargs["parse_mode"]) == (-100123, 321, "HTML")
     assert "Счёт: <b>2–1</b> · Статус: ✅ подтверждён" in kwargs["text"]
+    assert kwargs["reply_markup"].inline_keyboard[0][0].url.endswith(f"?start=round_{tournament.id}")
 
 
 async def test_refresh_disables_deleted_round_message(db, svc):

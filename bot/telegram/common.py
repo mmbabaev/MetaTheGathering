@@ -5,7 +5,13 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from bot.deeplink import is_cellar_payload, parse_deck_payload, parse_fill_missing_payload, parse_registration_payload
+from bot.deeplink import (
+    is_cellar_payload,
+    parse_deck_payload,
+    parse_fill_missing_payload,
+    parse_registration_payload,
+    parse_round_payload,
+)
 from bot.messages import HELP_TEXT, HELP_TEXT_ADMIN
 from core.database import SessionLocal
 from core.event_log import event_logger
@@ -74,6 +80,10 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if tournament_id is not None:
         await _start_registration_deeplink(update, context, user, tournament_id)
         return
+    tournament_id = parse_round_payload(payload) if payload else None
+    if tournament_id is not None:
+        await _start_round_deeplink(update, context, user, tournament_id)
+        return
     tournament_id = parse_fill_missing_payload(payload) if payload else None
     if tournament_id is not None:
         await _start_fill_missing_deeplink(update, context, user, tournament_id)
@@ -132,6 +142,32 @@ async def _start_registration_deeplink(
         result = _player_handler(db).handle_deeplink_registration(tournament_id, tg_id=user.id)
         _set_registration_pending(context, result, tournament_id)
         await update.effective_message.reply_text(result.text, reply_markup=result.keyboard)
+    finally:
+        db.close()
+
+
+async def _start_round_deeplink(update: Update, context: ContextTypes.DEFAULT_TYPE, user, tournament_id: int) -> None:
+    """Open the user's current score flow, falling back to the tournament card."""
+    from bot.handlers.round_results import RoundResultsHandler  # noqa: PLC0415
+    from bot.telegram.player import _player_handler  # noqa: PLC0415
+    from services.round_results import FINAL_STATUSES, RoundResultError, RoundResultsService  # noqa: PLC0415
+
+    _log("cmd_start_round_deeplink", user, tournament_id=tournament_id)
+    db = SessionLocal()
+    try:
+        try:
+            match = RoundResultsService(db).current_match_for_user(tournament_id, user.id)
+        except RoundResultError:
+            match = None
+        if match is not None and match.player2_name is not None and match.status not in FINAL_STATUSES:
+            result = RoundResultsHandler(db).handle_open(tournament_id, user.id)
+        else:
+            result = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id)
+        await update.effective_message.reply_text(
+            result.text,
+            reply_markup=result.keyboard,
+            parse_mode=result.parse_mode,
+        )
     finally:
         db.close()
 

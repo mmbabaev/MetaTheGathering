@@ -4,12 +4,28 @@ from __future__ import annotations
 
 import logging
 
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import BadRequest, Forbidden, TelegramError
 
+from bot.deeplink import round_deeplink
 from services.club_pairings import ClubPairingsService
 from services.round_pairings_message import RoundPairingsMessageService
 
 logger = logging.getLogger(__name__)
+
+
+async def _round_keyboard(bot, tournament_id: int) -> InlineKeyboardMarkup | None:
+    try:
+        me = await bot.get_me()
+        username = getattr(me, "username", None)
+        if not username:
+            return None
+        return InlineKeyboardMarkup(
+            [[InlineKeyboardButton("🎯 Открыть турнир", url=round_deeplink(username, tournament_id))]]
+        )
+    except Exception:  # noqa: BLE001 — отсутствие кнопки не должно блокировать публикацию раунда
+        logger.warning("[club_pairings] could not build tournament deep-link button", exc_info=True)
+        return None
 
 
 async def send_club_pairings(bot, db, tournament_id: int, round_numbers: list[int]) -> bool:
@@ -17,13 +33,19 @@ async def send_club_pairings(bot, db, tournament_id: int, round_numbers: list[in
         return False
     builder = ClubPairingsService(db)
     tracker = RoundPairingsMessageService(db)
+    keyboard = await _round_keyboard(bot, tournament_id)
     sent = False
     for round_number in sorted(set(round_numbers)):
         message = builder.build_for_round(tournament_id, round_number)
         if message is None:
             continue
         try:
-            delivered = await bot.send_message(chat_id=message.chat_id, text=message.text, parse_mode="HTML")
+            delivered = await bot.send_message(
+                chat_id=message.chat_id,
+                text=message.text,
+                parse_mode="HTML",
+                reply_markup=keyboard,
+            )
         except Exception as exc:  # noqa: BLE001 — ошибка чата не должна ронять импорт
             logger.warning(
                 "[club_pairings] could not post tournament #%s round=%s: %s", tournament_id, round_number, exc
@@ -60,12 +82,14 @@ async def refresh_club_pairings(bot, db, tournament_id: int, round_number: int) 
         return False
     if message is None:
         return False
+    keyboard = await _round_keyboard(bot, tournament_id)
     try:
         await bot.edit_message_text(
             chat_id=tracked.chat_id,
             message_id=tracked.message_id,
             text=message.text,
             parse_mode="HTML",
+            reply_markup=keyboard,
         )
     except BadRequest as exc:
         error = str(exc).lower()
