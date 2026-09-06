@@ -543,6 +543,8 @@ class PlayerHandler:
             t = get_tournament(self.svc.db, tournament_id)
         except errors.TournamentNotFound:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
+        if t.status == models.TournamentStatus.CLOSED and t.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS:
+            return RoundResultsHandler(self.svc.db, self.keyboards).handle_swiss_standings(tournament_id, tg_id or 0)
         if t.show_round_pairings and self._has_pairings(t):
             return RoundResultsHandler(self.svc.db, self.keyboards).handle_round_status(tournament_id, tg_id)
         participants = sort_participants(self.svc.list_participants_for_tournament(tournament_id))

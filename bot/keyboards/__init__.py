@@ -493,17 +493,22 @@ class Keyboards:
         if show_internal_beta and is_online and not is_closed:
             engine_label = "🧪 Движок: Swiss" if internal_swiss else "🧪 Движок: AetherHub"
             rows.append([InlineKeyboardButton(engine_label, callback_data=f"{CB_SWISS_MODE_TOGGLE}:{tournament_id}")])
-        if internal_swiss and not is_closed:
-            next_label = "🎲 Создать раунд 1" if not has_pairings else "➡️ Следующий раунд"
-            rows.append([InlineKeyboardButton(next_label, callback_data=f"{CB_SWISS_NEXT_ROUND}:{tournament_id}")])
-            if has_pairings:
+        if internal_swiss:
+            if not is_closed:
+                next_label = "🎲 Создать раунд 1" if not has_pairings else "➡️ Следующий раунд"
+                rows.append([InlineKeyboardButton(next_label, callback_data=f"{CB_SWISS_NEXT_ROUND}:{tournament_id}")])
+            if has_pairings and not is_closed:
                 rows.append(
                     [
                         InlineKeyboardButton("📊 Стендинги", callback_data=f"{CB_SWISS_STANDINGS}:{tournament_id}:0"),
                         InlineKeyboardButton("🏁 Завершить Swiss", callback_data=f"{CB_SWISS_FINISH}:{tournament_id}"),
                     ]
                 )
-        if is_online and has_pairings:
+            elif has_pairings:
+                rows.append(
+                    [InlineKeyboardButton("📊 Стендинги", callback_data=f"{CB_SWISS_STANDINGS}:{tournament_id}:0")]
+                )
+        if is_online and has_pairings and not (internal_swiss and is_closed):
             result_buttons = [InlineKeyboardButton("✏️ Результаты", callback_data=f"{CB_ROUND_ADMIN}:{tournament_id}")]
             if not internal_swiss:
                 result_buttons.append(
@@ -608,6 +613,7 @@ class Keyboards:
         internal_swiss: bool = False,
         planned_rounds: int | None = None,
         round_ready: bool = False,
+        is_closed: bool = False,
     ) -> InlineKeyboardMarkup:
         rows = []
         navigation = []
@@ -627,11 +633,11 @@ class Keyboards:
                 )
             )
         rows.append(navigation)
-        if can_report:
+        if can_report and not is_closed:
             rows.append(
                 [InlineKeyboardButton("🎯 Внести результат", callback_data=f"{CB_ROUND_RESULT_OPEN}:{tournament_id}")]
             )
-        if is_admin:
+        if is_admin and not (internal_swiss and is_closed):
             result_buttons = [InlineKeyboardButton("✏️ Результаты", callback_data=f"{CB_ROUND_ADMIN}:{tournament_id}")]
             if not internal_swiss:
                 result_buttons.append(
@@ -640,11 +646,11 @@ class Keyboards:
             rows.append(result_buttons)
         if internal_swiss:
             rows.append([InlineKeyboardButton("📊 Стендинги", callback_data=f"{CB_SWISS_STANDINGS}:{tournament_id}:0")])
-            if is_admin and round_ready and round_number < (planned_rounds or 0):
+            if is_admin and not is_closed and round_ready and round_number < (planned_rounds or 0):
                 rows.append(
                     [InlineKeyboardButton("➡️ Следующий раунд", callback_data=f"{CB_SWISS_NEXT_ROUND}:{tournament_id}")]
                 )
-            if is_admin and round_ready and round_number >= (planned_rounds or 0):
+            if is_admin and not is_closed and round_ready and round_number >= (planned_rounds or 0):
                 rows.append(
                     [InlineKeyboardButton("🏁 Завершить Swiss", callback_data=f"{CB_SWISS_FINISH}:{tournament_id}")]
                 )
@@ -685,8 +691,13 @@ class Keyboards:
         *,
         page: int = 0,
         page_count: int = 1,
+        back_to_tournament: bool = False,
     ) -> InlineKeyboardMarkup:
-        callback = f"{CB_ROUND_VIEW}:{tournament_id}:{round_number or 0}"
+        callback = (
+            f"{CB_TOURNAMENT}:{tournament_id}"
+            if back_to_tournament
+            else f"{CB_ROUND_VIEW}:{tournament_id}:{round_number or 0}"
+        )
         rows = []
         navigation = []
         if page > 0:
@@ -699,7 +710,8 @@ class Keyboards:
             )
         if navigation:
             rows.append(navigation)
-        rows.append([InlineKeyboardButton("⬅️ К раунду", callback_data=callback)])
+        back_label = "⬅️ К турниру" if back_to_tournament else "⬅️ К раунду"
+        rows.append([InlineKeyboardButton(back_label, callback_data=callback)])
         return InlineKeyboardMarkup(rows)
 
     def swiss_finish_confirm_keyboard(self, tournament_id: int) -> InlineKeyboardMarkup:
