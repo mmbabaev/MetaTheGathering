@@ -194,6 +194,11 @@ class AdminHandler:
             t = get_tournament(self.svc.db, tournament_id)
         except errors.TournamentNotFound:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
+        if t.status == models.TournamentStatus.CLOSED and t.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS:
+            result = RoundResultsHandler(self.svc.db, self.keyboards).handle_swiss_standings(tournament_id, tg_id)
+            if prefix and not result.is_alert:
+                result.text = f"{prefix}\n\n{result.text}"
+            return result
         if t.show_round_pairings and AetherhubImportService(self.svc.db).has_pairings(tournament_id):
             result = RoundResultsHandler(self.svc.db, self.keyboards).handle_round_status(tournament_id, tg_id)
             if prefix and not result.is_alert:

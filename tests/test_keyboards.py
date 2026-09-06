@@ -306,3 +306,46 @@ class TestAdminMoreDebugButtons:
         assert f"{CB_DEBUG_NEXT_ROUND}:42" not in callbacks
         assert f"{CB_ROUND_SUMMARY}:42" not in callbacks
         assert f"{CB_CLOSE_TOURNAMENT}:42" not in callbacks
+
+    def test_closed_internal_swiss_only_keeps_standings_action(self):
+        keyboard = Keyboards().admin_more_keyboard(
+            42,
+            is_closed=True,
+            is_online=True,
+            has_pairings=True,
+            internal_swiss=True,
+        )
+        callbacks = {button.callback_data for row in keyboard.inline_keyboard for button in row}
+
+        assert "sw_table:42:0" in callbacks
+        assert "sw_next:42" not in callbacks
+        assert "sw_finish:42" not in callbacks
+        assert "rr_admin:42" not in callbacks
+
+
+def test_closed_internal_swiss_round_has_no_result_or_finish_actions():
+    keyboard = Keyboards().round_status_keyboard(
+        42,
+        4,
+        [1, 2, 3, 4],
+        can_report=True,
+        is_admin=True,
+        internal_swiss=True,
+        planned_rounds=4,
+        round_ready=True,
+        is_closed=True,
+    )
+    callbacks = {button.callback_data for row in keyboard.inline_keyboard for button in row}
+
+    assert "sw_table:42:0" in callbacks
+    assert "sw_next:42" not in callbacks
+    assert "sw_finish:42" not in callbacks
+    assert "rr_admin:42" not in callbacks
+    assert "rr_open:42" not in callbacks
+
+
+def test_closed_swiss_standings_return_to_tournament():
+    keyboard = Keyboards().swiss_standings_keyboard(42, 4, back_to_tournament=True)
+
+    assert keyboard.inline_keyboard[-1][0].text == "⬅️ К турниру"
+    assert keyboard.inline_keyboard[-1][0].callback_data == f"{CB_TOURNAMENT}:42"

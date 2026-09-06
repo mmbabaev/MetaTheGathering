@@ -392,6 +392,20 @@ class TestHandleAdminStatus:
         assert result.text == TOURNAMENT_NOT_FOUND
         assert result.is_alert
 
+    def test_closed_internal_swiss_status_shows_text_standings(self, handler, svc, admin_user, active_tournament):
+        tournament = svc.db.get(m.Tournament, active_tournament.id)
+        tournament.status = TournamentStatus.CLOSED
+        tournament.engine_mode = m.TournamentEngineMode.INTERNAL_SWISS
+        tournament.swiss_rounds = 4
+        svc.db.commit()
+
+        result = handler.handle_admin_status(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+
+        assert "📊 Стендинги · раунд 0/4" in result.text
+        assert result.parse_mode == "HTML"
+        assert result.keyboard.inline_keyboard[-1][0].callback_data == f"t:{active_tournament.id}"
+        assert result.keyboard.inline_keyboard[-1][0].text == "⬅️ К турниру"
+
     def test_keyboard_unfilled_participant_visible(self, handler, svc, user_svc, admin_user, active_tournament):
         """Незаполненный участник виден без нажатия кнопки разворота."""
         user = user_svc.get_or_create(tg_id=8001, username=None, first_name="Тест")

@@ -57,6 +57,7 @@ class RoundResultsHandler:
         user = self.users.get_by_tg_id(tg_id) if tg_id is not None else None
         can_report = bool(
             user
+            and tournament.status != models.TournamentStatus.CLOSED
             and selected == available[-1]
             and any(
                 match.player2_name is not None and user.id in (match.player1_user_id, match.player2_user_id)
@@ -88,6 +89,7 @@ class RoundResultsHandler:
                 internal_swiss=internal_swiss,
                 planned_rounds=tournament.swiss_rounds,
                 round_ready=round_ready,
+                is_closed=tournament.status == models.TournamentStatus.CLOSED,
             ),
             parse_mode="HTML",
         )
@@ -337,7 +339,11 @@ class RoundResultsHandler:
                     page=page,
                 ),
                 keyboard=self.keyboards.swiss_standings_keyboard(
-                    tournament_id, round_number, page=page, page_count=page_count
+                    tournament_id,
+                    round_number,
+                    page=page,
+                    page_count=page_count,
+                    back_to_tournament=tournament.status == models.TournamentStatus.CLOSED,
                 ),
                 parse_mode="HTML",
             )

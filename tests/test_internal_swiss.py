@@ -241,6 +241,13 @@ def test_four_round_internal_event_finishes_and_persists_places(db):
     assert [row.place for row in standings] == list(range(1, 10))
     assert sorted(participant.final_place for participant in stored.participants) == list(range(1, 10))
 
+    screen = RoundResultsHandler(db).handle_round_status(tournament.id, admin.tg_id)
+    callbacks = {button.callback_data for row in screen.keyboard.inline_keyboard for button in row}
+    assert f"sw_table:{tournament.id}:0" in callbacks
+    assert f"sw_finish:{tournament.id}" not in callbacks
+    assert f"rr_admin:{tournament.id}" not in callbacks
+    assert f"rr_open:{tournament.id}" not in callbacks
+
 
 def test_finish_includes_dropped_player_and_persists_final_place(db):
     tournament, users, admin, engine = _setup(db, 4)

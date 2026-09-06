@@ -502,6 +502,20 @@ class TestHandleTournamentPublicStatus:
         assert result.is_alert
         assert result.text == TOURNAMENT_NOT_FOUND
 
+    def test_closed_internal_swiss_status_shows_text_standings(self, handler, svc, active_tournament):
+        tournament = svc.db.get(models.Tournament, active_tournament.id)
+        tournament.status = TournamentStatus.CLOSED
+        tournament.engine_mode = models.TournamentEngineMode.INTERNAL_SWISS
+        tournament.swiss_rounds = 4
+        svc.db.commit()
+
+        result = handler.handle_tournament_public_status(active_tournament.id)
+
+        assert "📊 Стендинги · раунд 0/4" in result.text
+        assert result.parse_mode == "HTML"
+        assert result.keyboard.inline_keyboard[-1][0].callback_data == f"t:{active_tournament.id}"
+        assert result.keyboard.inline_keyboard[-1][0].text == "⬅️ К турниру"
+
 
 # --- handle_leave_tournament / handle_leave_confirm ---
 
