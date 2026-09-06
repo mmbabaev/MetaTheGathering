@@ -77,6 +77,7 @@ from bot.keyboards import (
     CB_EXPORT_EXCEL,
     CB_EXPORT_MENU,
     CB_EXPORT_PLAYERS,
+    CB_EXPORT_SWISS_PLAYERS,
     CB_FEATURE_INFO,
     CB_FEATURE_TOGGLE,
     CB_FILL_MISSING_CUSTOM,
@@ -491,6 +492,7 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(admin.callback_participant_custom_arch, pattern=f"^{CB_ADMIN_CUSTOM_ARCH}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_export_menu, pattern=f"^{CB_EXPORT_MENU}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_export_players, pattern=f"^{CB_EXPORT_PLAYERS}:"))
+    app.add_handler(CallbackQueryHandler(admin.callback_export_swiss_players, pattern=f"^{CB_EXPORT_SWISS_PLAYERS}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_export_excel, pattern=f"^{CB_EXPORT_EXCEL}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_meta_chart, pattern=f"^{CB_META_CHART}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_standings, pattern=f"^{CB_STANDINGS}:"))

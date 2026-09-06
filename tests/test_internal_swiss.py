@@ -10,6 +10,7 @@ from core import models
 from core.schemas import TournamentCreate
 from services import errors
 from services.aetherhub_import_service import AetherhubImportService
+from services.export import ExportService
 from services.internal_swiss import InternalSwissService, recommended_swiss_rounds
 from services.round_results import RoundResultError, RoundResultsService
 from services.tournament import TournamentService
@@ -131,6 +132,27 @@ def test_dropped_player_remains_in_standings_with_points_earned_before_drop(db):
     assert f"<b>{dropped_row.place}. @{dropped.username}</b>" in text
     assert "3 оч. · 1–0–0" in text
     assert "⛔ дроп" in text
+
+
+def test_text_export_contains_player_username_points_and_city(db):
+    tournament, users, admin, engine = _setup(db, 4)
+    users[0].city = "Москва"
+    users[1].username = None
+    db.commit()
+    engine.generate_next_round(tournament.id, admin.tg_id)
+    results = RoundResultsService(db)
+    for match in results.list_round(tournament.id, 1):
+        results.admin_set(match.id, admin.tg_id, 2, 0)
+
+    standings = engine.standings(tournament.id)
+    exported = ExportService(db).export_swiss_players_with_points(tournament.id)
+
+    assert exported.splitlines()[0] == "Игрок — ТГ-ник — Очки — Город"
+    for row in standings:
+        user = db.get(models.User, row.user_id)
+        username = f"@{user.username}" if user.username else "—"
+        city = user.city or "—"
+        assert f"{row.display_name} — {username} — {row.match_points} — {city}" in exported
 
 
 def test_next_round_requires_every_result_and_never_repeats_when_avoidable(db):

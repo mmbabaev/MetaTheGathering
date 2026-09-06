@@ -391,8 +391,17 @@ async def callback_export_menu(update: Update, context: ContextTypes.DEFAULT_TYP
     if ids is None:
         return
     (tournament_id,) = ids
+    db = SessionLocal()
+    try:
+        tournament = db.get(models.Tournament, tournament_id)
+        show_swiss_players = bool(tournament and tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS)
+    finally:
+        db.close()
     await query.answer()
-    await query.edit_message_text("Выберите формат выгрузки:", reply_markup=export_menu_keyboard(tournament_id))
+    await query.edit_message_text(
+        "Выберите формат выгрузки:",
+        reply_markup=export_menu_keyboard(tournament_id, show_swiss_players=show_swiss_players),
+    )
 
 
 async def callback_export_players(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -418,6 +427,29 @@ async def callback_export_players(update: Update, context: ContextTypes.DEFAULT_
         # parse_mode=HTML падал с ошибкой парсинга и список не отправлялся.
         await query.message.reply_text(f"<pre>{html.escape(result)}</pre>", parse_mode="HTML")
         _log("export_players", user, tournament_id=tournament_id)
+    finally:
+        db.close()
+
+
+async def callback_export_swiss_players(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка Swiss-выгрузки — отправляет имена, ники, очки и города текстом."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_export_swiss_players(user.id, tournament_id)
+        if not result:
+            await query.answer("Нет прав, турнир не найден или это не внутренний Swiss.", show_alert=True)
+            return
+        await query.answer()
+        await query.message.reply_text(f"<pre>{html.escape(result)}</pre>", parse_mode="HTML")
+        _log("export_swiss_players", user, tournament_id=tournament_id)
     finally:
         db.close()
 
