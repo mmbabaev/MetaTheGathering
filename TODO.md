@@ -152,6 +152,8 @@
 - Закрытый внутренний Swiss собирается из собственных стендингов и матчей в два
   CSV-файла и one-shot отправляется в Magic Oculus без AetherHub URL. Старый
   AetherHub-флоу не меняется; ошибки остаются owner-only и не откатывают закрытие.
+  До merge нужен подтверждённый контракт колонок CSV со стороны Oculus — draft PR
+  [#302](https://github.com/mmbabaev/MetaTheGathering/pull/302).
 
 - Защита первой регистрации из [#273](https://github.com/mmbabaev/MetaTheGathering/issues/273):
   ФИО требует минимум два слова с буквами, пробелы и декоративные эмоджи по краям
