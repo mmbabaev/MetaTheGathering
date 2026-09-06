@@ -657,6 +657,15 @@ class AdminHandler:
         except errors.TournamentNotFound:
             return None
 
+    def handle_export_swiss_players(self, tg_id: int, tournament_id: int) -> str | None:
+        """Возвращает Swiss-список с Telegram-никами, очками и городами."""
+        if not self.user_svc.is_privileged(tg_id):
+            return None
+        try:
+            return ExportService(self.svc.db).export_swiss_players_with_points(tournament_id)
+        except errors.TournamentNotFound:
+            return None
+
     def handle_export_excel(self, tg_id: int, tournament_id: int) -> list[tuple[bytes, str]] | None:
         """Файлы Excel-выгрузки: участники + паринги (если известны). None если нет прав."""
         if not self.user_svc.is_privileged(tg_id):

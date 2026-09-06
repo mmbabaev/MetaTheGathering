@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from bot.messages import format_participant_name
 from core import models
 from services.deck_mapping import general_archetype
+from services.internal_swiss import InternalSwissService
 from services.stats import StatsService
 from services.utils import get_tournament
 
@@ -134,6 +135,28 @@ class ExportService:
             for p in participants
         ]
         return "\n".join(names)
+
+    def export_swiss_players_with_points(self, tournament_id: int) -> str:
+        """Return copyable Swiss rows: player, Telegram username, points and city."""
+
+        tournament = get_tournament(self.db, tournament_id)
+        if tournament.engine_mode != models.TournamentEngineMode.INTERNAL_SWISS:
+            return ""
+
+        standings = InternalSwissService(self.db).standings(tournament_id)
+        users = {
+            user.id: user
+            for user in self.db.execute(
+                select(models.User).where(models.User.id.in_([row.user_id for row in standings]))
+            ).scalars()
+        }
+        lines = ["Игрок — ТГ-ник — Очки — Город"]
+        for row in standings:
+            user = users[row.user_id]
+            username = f"@{user.username.lstrip('@')}" if user.username else "—"
+            city = user.city.strip() if user.city and user.city.strip() else "—"
+            lines.append(f"{row.display_name} — {username} — {row.match_points} — {city}")
+        return "\n".join(lines)
 
     def export_participants_excel(self, tournament_id: int) -> tuple[bytes, str]:
         """Возвращает (bytes, filename) для Excel-файла списка участников."""

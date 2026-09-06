@@ -15,6 +15,7 @@ from bot.keyboards import (
     CB_DEBUG_FILL_TOURNAMENT,
     CB_DEBUG_META_POLICE,
     CB_DEBUG_NEXT_ROUND,
+    CB_EXPORT_SWISS_PLAYERS,
     CB_REGISTER,
     CB_REOPEN_TOURNAMENT,
     CB_ROUND_SUMMARY,
@@ -216,6 +217,16 @@ def test_close_tournament_confirm_keyboard_has_confirm_and_cancel():
     markup = close_tournament_confirm_keyboard(42)
     callbacks = [button.callback_data for row in markup.inline_keyboard for button in row]
     assert callbacks == [f"{CB_CLOSE_TOURNAMENT_CANCEL}:42", f"{CB_CLOSE_TOURNAMENT_CONFIRM}:42"]
+
+
+def test_swiss_contact_export_button_is_only_shown_when_requested():
+    hidden = Keyboards().export_menu_keyboard(42)
+    shown = Keyboards().export_menu_keyboard(42, show_swiss_players=True)
+    hidden_callbacks = {button.callback_data for row in hidden.inline_keyboard for button in row}
+    shown_callbacks = {button.callback_data for row in shown.inline_keyboard for button in row}
+
+    assert f"{CB_EXPORT_SWISS_PLAYERS}:42" not in hidden_callbacks
+    assert f"{CB_EXPORT_SWISS_PLAYERS}:42" in shown_callbacks
 
 
 # ── admin_more_keyboard: кнопка «Сделать активным» ───────────────────────────

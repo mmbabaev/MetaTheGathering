@@ -1749,6 +1749,19 @@ class TestHandleExportEdgeCases:
         result = handler.handle_export_players(tg_id=ADMIN_TG_ID, tournament_id=99999)
         assert result == ""
 
+    def test_export_swiss_players_not_privileged_returns_none(self, handler, user_alice, active_tournament):
+        result = handler.handle_export_swiss_players(tg_id=user_alice.tg_id, tournament_id=active_tournament.id)
+        assert result is None
+
+    def test_export_swiss_players_available_for_internal_engine(self, handler, svc, admin_user, active_tournament):
+        tournament = svc.db.get(m.Tournament, active_tournament.id)
+        tournament.engine_mode = m.TournamentEngineMode.INTERNAL_SWISS
+        svc.db.commit()
+
+        result = handler.handle_export_swiss_players(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+
+        assert result == "Игрок — ТГ-ник — Очки — Город"
+
     def test_export_excel_not_privileged_returns_none(self, handler, user_alice, active_tournament):
         result = handler.handle_export_excel(tg_id=user_alice.tg_id, tournament_id=active_tournament.id)
         assert result is None
