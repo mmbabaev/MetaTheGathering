@@ -12,6 +12,7 @@ from services.magicoculus import (
     MagicOculusCollectionError,
     MagicOculusImporter,
     MagicOculusTournamentCollector,
+    magicoculus_city_for_club,
 )
 
 app = typer.Typer(no_args_is_help=True)
@@ -33,7 +34,10 @@ def preview(tournament_id: int = typer.Argument(..., help="ID турнира Met
         "club": tournament.club,
         "format": tournament.format,
         "tournamentType": tournament.tournament_type,
-        "aetherhubUrl": str(tournament.aetherhub_url),
+        "source": tournament.source_kind,
+        "aetherhubUrl": str(tournament.aetherhub_url) if tournament.aetherhub_url else None,
+        "finalStandingsCsv": tournament.final_standings_csv,
+        "allRoundsCsv": tournament.all_rounds_csv,
         "players": len(tournament.player_decks),
         "playerDecksText": tournament.positional_player_decks_text,
         "playerDecksNamedPreview": tournament.player_decks_text,
@@ -44,7 +48,7 @@ def preview(tournament_id: int = typer.Argument(..., help="ID турнира Met
 @app.command("send")
 def send(
     tournament_id: int = typer.Argument(..., help="ID турнира MetaGatherer"),
-    city: str = typer.Option("Москва", help="Название города из справочника Magic Oculus"),
+    city: str | None = typer.Option(None, help="Город Oculus; по умолчанию берётся из настройки клуба"),
     execute: bool = typer.Option(False, "--execute", help="Подтвердить реальный POST"),
 ) -> None:
     """Отправить один турнир ровно один раз и записать результат в журнал."""
@@ -55,7 +59,10 @@ def send(
         with get_db() as db:
             tournament = MagicOculusTournamentCollector(db).collect(tournament_id, validate_aetherhub=True)
             client = MagicOculusClient(settings.MAGIC_OCULUS_API_URL)
-            result = MagicOculusImporter(db, client).import_once(tournament, city=city)
+            result = MagicOculusImporter(db, client).import_once(
+                tournament,
+                city=city or magicoculus_city_for_club(tournament.club),
+            )
     except (MagicOculusCollectionError, MagicOculusApiError) as exc:
         typer.echo(f"Ошибка: {exc}", err=True)
         raise typer.Exit(1) from exc

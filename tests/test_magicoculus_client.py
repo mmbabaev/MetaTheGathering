@@ -30,6 +30,17 @@ def _tournament():
     )
 
 
+def _swiss_tournament():
+    return MagicOculusTournament(
+        source_tournament_id=86,
+        date=date(2026, 9, 5),
+        club="Endstep-ru",
+        final_standings_csv="Rank,Name,Points\r\n1,Иванов Иван,3\r\n",
+        all_rounds_csv="Table,Player 1,Player 2,Match Results\r\n1,Иванов Иван,BYE,2 - 0\r\n",
+        player_decks=[MagicOculusPlayerDeck(player="Иванов Иван", deck="Elves", final_place=1)],
+    )
+
+
 def test_resolves_current_reference_ids():
     session = MagicMock()
     session.get.side_effect = [
@@ -143,7 +154,50 @@ def test_imports_multipart_and_verifies_detail():
     files = session.post.call_args.kwargs["files"]
     assert files["date"] == (None, "2026-07-24")
     assert files["playerDecksText"] == (None, "Elves")
+    assert files["aetherhubUrl"] == (None, "https://aetherhub.com/Tourney/RoundTourney/42")
+    assert "finalStandingsFile" not in files
     session.get.assert_called_once_with("https://magic.example/api/v1/tournaments/145", timeout=30)
+
+
+def test_imports_internal_swiss_with_csv_files_instead_of_aetherhub():
+    session = MagicMock()
+    session.post.return_value = _response({"success": True, "tournament": {"id": 470}, "warnings": []})
+    session.get.return_value = _response({"id": 470, "standings": [{"place": 1}]})
+
+    result = MagicOculusClient("https://magic.example", session=session).import_tournament(
+        _swiss_tournament(), city_id="endstep", club_id="Endstep-Ru", format_id="pauper"
+    )
+
+    assert result.tournament_id == 470
+    files = session.post.call_args.kwargs["files"]
+    assert "aetherhubUrl" not in files
+    assert files["includeInMatchupMatrix"] == (None, "true")
+    assert files["finalStandingsFile"][0] == "final-standings.csv"
+    assert files["finalStandingsFile"][1].decode("utf-8-sig").startswith("Rank,Name,Points")
+    assert files["finalStandingsFile"][2] == "text/csv"
+    assert files["allRoundsFile"][0] == "all-rounds.csv"
+    assert b"BYE" in files["allRoundsFile"][1]
+
+
+def test_tournament_requires_exactly_one_results_source():
+    with pytest.raises(ValueError, match="ровно одна база результатов"):
+        MagicOculusTournament(
+            source_tournament_id=86,
+            date=date(2026, 9, 5),
+            club="Endstep-ru",
+            player_decks=[MagicOculusPlayerDeck(player="Иванов Иван", deck="Elves", final_place=1)],
+        )
+
+    with pytest.raises(ValueError, match="ровно одна база результатов"):
+        MagicOculusTournament(
+            source_tournament_id=86,
+            date=date(2026, 9, 5),
+            club="Endstep-ru",
+            aetherhub_url="https://aetherhub.com/Tourney/RoundTourney/86",
+            final_standings_csv="standings",
+            all_rounds_csv="rounds",
+            player_decks=[MagicOculusPlayerDeck(player="Иванов Иван", deck="Elves", final_place=1)],
+        )
 
 
 def test_preserves_all_api_errors_in_exception():
