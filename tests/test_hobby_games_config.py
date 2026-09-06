@@ -4,7 +4,7 @@ from core.clubs import club_identities, default_clubs, default_schedules
 
 
 def test_hobby_games_identity():
-    identity = next(row for row in club_identities() if row.name == "Hobby Games")
+    identity = next(row for row in club_identities() if row.name == "Калининград")
 
     assert identity.chat_id == -1002787710855
     assert identity.aetherhub_url == "https://aetherhub.com/User/HobbyGames39/"
@@ -19,7 +19,7 @@ def test_hobby_games_production_and_debug_chat_ids_are_separate():
 
 
 def test_hobby_games_defaults_follow_pair_of_dice_registration_flow():
-    schedule = next(row for row in default_schedules() if row.club_name == "Hobby Games")
+    schedule = next(row for row in default_schedules() if row.club_name == "Калининград")
 
     assert schedule.weekday == "saturday"
     assert schedule.create_time == "18:30"
@@ -41,7 +41,7 @@ def test_hobby_games_defaults_follow_pair_of_dice_registration_flow():
 
 
 def test_hobby_games_default_club_uses_local_timezone():
-    club = next(row for row in default_clubs() if row.name == "Hobby Games")
+    club = next(row for row in default_clubs() if row.name == "Калининград")
 
     assert club.timezone == "Europe/Kaliningrad"
     assert [schedule.weekday for schedule in club.schedules] == ["saturday"]

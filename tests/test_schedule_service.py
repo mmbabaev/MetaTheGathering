@@ -77,7 +77,7 @@ class TestEnsureDefaults:
             ("Edinorog", "thursday"),
             ("Pair of dice", "tuesday"),
             ("Pair of dice", "sunday"),
-            ("Hobby Games", "saturday"),
+            ("Калининград", "saturday"),
         }
         assert all(r.enabled for r in rows)
 
@@ -106,14 +106,14 @@ class TestRows:
         _row(db, club="Goldfish", weekday="friday")
         _row(db, club="Pair of dice", weekday="sunday")
         _row(db, club="Pair of dice", weekday="tuesday")
-        _row(db, club="Hobby Games", weekday="saturday")
+        _row(db, club="Калининград", weekday="saturday")
         assert [(r.club_name, r.weekday) for r in sched_svc.list_rows()] == [
             ("Goldfish", "friday"),
             ("Edinorog", "monday"),
             ("Edinorog", "thursday"),
             ("Pair of dice", "tuesday"),
             ("Pair of dice", "sunday"),
-            ("Hobby Games", "saturday"),
+            ("Калининград", "saturday"),
         ]
 
     def test_toggle_flips_and_returns_new_state(self, sched_svc, db):
@@ -195,8 +195,8 @@ class TestBuildClubs:
         assert club.aetherhub_url == "https://aetherhub.com/User/Andysays"
 
     def test_hobby_games_identity_comes_from_code(self, sched_svc, db):
-        _row(db, club="Hobby Games", weekday="saturday")
-        club = next(c for c in sched_svc.build_clubs() if c.name == "Hobby Games")
+        _row(db, club="Калининград", weekday="saturday")
+        club = next(c for c in sched_svc.build_clubs() if c.name == "Калининград")
         assert club.chat_id == -1002787710855
         assert club.aetherhub_url == "https://aetherhub.com/User/HobbyGames39/"
         assert club.timezone == "Europe/Kaliningrad"

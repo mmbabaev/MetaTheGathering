@@ -43,7 +43,7 @@ def test_wizard_starts_with_club_buttons_and_endstep_icon(db):
     assert "1/4" in result.text
     assert any("⏭️🦶 Endstep-ru" in label for label in labels)
     assert any("Pair of dice" in label for label in labels)
-    assert any("Hobby Games" in label for label in labels)
+    assert any("Калининград" in label for label in labels)
 
     online_step = handler.handle_club(ADMIN_ID, {}, 4, now=NOW)
     assert online_step.text.startswith("🎮 ⏭️🦶 Endstep-ru")
