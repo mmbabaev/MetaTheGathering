@@ -129,7 +129,7 @@ class Tournament(Base):
     slug = Column(String(64), nullable=True, index=True)  # например "2026-01-31-pauper"
 
     status = Column(Enum(TournamentStatus), default=TournamentStatus.REGISTRATION, nullable=False)
-    club = Column(String(64), nullable=True, index=True)  # "Goldfish" / "Edinorog" / None
+    club = Column(String(64), nullable=True, index=True)  # canonical ClubIdentity.name / None
     is_online = Column(Boolean, nullable=False, default=False, server_default="false")
     # Public status screen can show the latest round's pairings and live scores
     # instead of the flat participant list. This is configured per tournament.
@@ -558,7 +558,7 @@ class ClubScheduleRow(Base):
     __tablename__ = "club_schedules"
 
     id = Column(Integer, primary_key=True, index=True)
-    club_name = Column(String(64), nullable=False, index=True)  # "Goldfish" / "Edinorog"
+    club_name = Column(String(64), nullable=False, index=True)  # canonical ClubIdentity.name
     weekday = Column(String(16), nullable=False)  # "monday".."sunday"
     enabled = Column(Boolean, default=True, nullable=False, server_default="true")
 
