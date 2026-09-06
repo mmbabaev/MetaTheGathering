@@ -171,7 +171,7 @@ class TestSetupScheduler:
         app = _make_app()
         clubs = [
             Club(
-                name="Hobby Games - Калининград",
+                name="Калининград",
                 chat_id=1,
                 timezone="Europe/Kaliningrad",
                 schedules=[

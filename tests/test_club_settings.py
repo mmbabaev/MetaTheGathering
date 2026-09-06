@@ -32,7 +32,7 @@ def test_default_is_none_and_all_clubs_are_listed(db):
     labels = _button_texts(result)
     assert len([label for label in labels if "·" in label]) == 5
     assert any("Pair of dice · не отправлять" in label for label in labels)
-    assert any("Hobby Games - Калининград · не отправлять" in label for label in labels)
+    assert any("Калининград · не отправлять" in label for label in labels)
 
 
 def test_real_chat_is_only_offered_when_chat_name_is_known(db):

@@ -1,4 +1,4 @@
-"""rename Hobby Games club to Hobby Games - Kaliningrad
+"""rename Hobby Games club to Kaliningrad
 
 Revision ID: 7167a65fad51
 Revises: 572aa2e07c0c
@@ -17,7 +17,7 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 OLD_NAME = "Hobby Games"
-NEW_NAME = "Hobby Games - Калининград"
+NEW_NAME = "Калининград"
 
 
 def _rename(old_name: str, new_name: str) -> None:

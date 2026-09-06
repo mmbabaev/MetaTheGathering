@@ -107,14 +107,14 @@ def club_identities() -> list[ClubIdentity]:
             real_chat_label="Питерский паупер",
         ),
         ClubIdentity(
-            name="Hobby Games - Калининград",
+            name="Калининград",
             chat_id=app_cfg.hobby_games_chat_id or 0,
             aetherhub_url="https://aetherhub.com/User/HobbyGames39/",
             title_prefix="🎲 ",
             magicoculus_city="Калининград",
             timezone="Europe/Kaliningrad",
             real_chat_id=-1002787710855,
-            real_chat_label="Hobby Games - Калининград",
+            real_chat_label="Калининград",
         ),
         ClubIdentity(
             name="Endstep-ru",
@@ -162,7 +162,7 @@ def default_schedules() -> list[DefaultSchedule]:
             create_days_before=1,
         ),
         DefaultSchedule(
-            "Hobby Games - Калининград",
+            "Калининград",
             "saturday",
             "18:30",
             "17:00",

@@ -8,7 +8,7 @@ from alembic.operations import Operations
 ROOT = Path(__file__).resolve().parent.parent
 MIGRATION_PATH = ROOT / "alembic" / "versions" / "7167a65fad51_rename_hobby_games_kaliningrad.py"
 OLD_NAME = "Hobby Games"
-NEW_NAME = "Hobby Games - Калининград"
+NEW_NAME = "Калининград"
 
 
 def _tables(metadata: sa.MetaData) -> dict[str, tuple[sa.Table, str]]:

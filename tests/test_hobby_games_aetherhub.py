@@ -136,9 +136,9 @@ def test_real_tournament_parses_eight_players_three_rounds_and_scores():
 def test_real_three_round_tournament_import_is_complete(db, svc):
     tournament = svc.create_tournament(
         TournamentCreate(
-            title="🎲 Hobby Games - Калининград Pauper 15.08.2026",
+            title="🎲 Калининград Pauper 15.08.2026",
             chat_id=-1002787710855,
-            club="Hobby Games - Калининград",
+            club="Калининград",
         )
     )
     data = _service().fetch_tournament(TOURNAMENT_URL)
