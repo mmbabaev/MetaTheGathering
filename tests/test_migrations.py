@@ -280,6 +280,39 @@ def test_internal_swiss_migration_keeps_existing_tournaments_on_aetherhub():
         assert connection.execute(sa.select(migrated_pairings.c.player_user_id)).scalar_one() is None
 
 
+def test_magicoculus_journal_allows_internal_swiss_without_aetherhub_url():
+    metadata = sa.MetaData()
+    tournaments = sa.Table("tournaments", metadata, sa.Column("id", sa.Integer, primary_key=True))
+    imports = sa.Table(
+        "magicoculus_imports",
+        metadata,
+        sa.Column("id", sa.Integer, primary_key=True),
+        sa.Column("tournament_id", sa.Integer, nullable=False),
+        sa.Column("aetherhub_url", sa.String(512), nullable=False, unique=True),
+    )
+    engine = sa.create_engine("sqlite://")
+    metadata.create_all(engine)
+    migration = runpy.run_path(str(VERSIONS_DIR / "9a8747d47da4_allow_swiss_oculus_imports.py"))
+
+    with engine.begin() as connection:
+        connection.execute(tournaments.insert().values(id=1))
+        connection.execute(
+            imports.insert().values(
+                id=1,
+                tournament_id=1,
+                aetherhub_url="https://aetherhub.com/Tourney/RoundTourney/1",
+            )
+        )
+        context = MigrationContext.configure(connection)
+        with Operations.context(context):
+            migration["upgrade"]()
+
+        migrated = sa.Table("magicoculus_imports", sa.MetaData(), autoload_with=connection)
+        assert migrated.c.aetherhub_url.nullable is True
+        connection.execute(migrated.insert().values(id=2, tournament_id=2, aetherhub_url=None))
+        assert connection.execute(sa.select(sa.func.count()).select_from(migrated)).scalar_one() == 2
+
+
 def test_split_spy_general_names_repairs_only_classification_cache():
     metadata = sa.MetaData()
     archetypes = sa.Table(

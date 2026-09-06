@@ -3,23 +3,39 @@
 from __future__ import annotations
 
 import json
+from csv import writer
 from datetime import date
+from io import StringIO
 from typing import Any
 
 import requests
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl
-from sqlalchemy import select
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from core import models
 from core.clubs import club_identities
 from services.aetherhub_service import AetherhubService
+from services.internal_swiss import InternalSwissService
 from services.names import format_participant_name, is_single_word_name_typo
+from services.round_results import FINAL_STATUSES
 
 
 def _roster_name_key(name: str) -> tuple[str, ...]:
     """Order-independent full-name key shared by MetaGatherer and AetherHub rosters."""
     return tuple(sorted(name.strip().casefold().replace("ё", "е").split()))
+
+
+def _percentage(value: float) -> str:
+    return f"{value * 100:.4f}%"
+
+
+def _csv_text(headers: tuple[str, ...], rows: list[tuple[Any, ...]]) -> str:
+    output = StringIO(newline="")
+    csv_writer = writer(output, lineterminator="\r\n")
+    csv_writer.writerow(headers)
+    csv_writer.writerows(rows)
+    return output.getvalue()
 
 
 def _matched_roster_indexes(metagatherer_names: list[str], aetherhub_names: list[str]) -> set[int]:
@@ -85,8 +101,25 @@ class MagicOculusTournament(BaseModel):
     club: str = Field(min_length=1)
     format: str = "Pauper"
     tournament_type: str = "daily"
-    aetherhub_url: HttpUrl
+    aetherhub_url: HttpUrl | None = None
+    final_standings_csv: str | None = None
+    all_rounds_csv: str | None = None
     player_decks: list[MagicOculusPlayerDeck] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_import_source(self) -> MagicOculusTournament:
+        has_aetherhub = self.aetherhub_url is not None
+        has_standings = self.final_standings_csv is not None
+        has_rounds = self.all_rounds_csv is not None
+        if has_standings != has_rounds:
+            raise ValueError("Для CSV-импорта нужны и финальные стендинги, и все раунды")
+        if has_aetherhub == has_standings:
+            raise ValueError("Нужна ровно одна база результатов: AetherHub или два CSV-файла")
+        return self
+
+    @property
+    def source_kind(self) -> str:
+        return "aetherhub" if self.aetherhub_url is not None else "internal_swiss"
 
     @property
     def player_decks_text(self) -> str:
@@ -110,6 +143,13 @@ class MagicOculusCollectionError(ValueError):
 
 class MagicOculusApiError(RuntimeError):
     pass
+
+
+def magicoculus_city_for_club(club: str) -> str:
+    identity = next((row for row in club_identities() if row.name.casefold() == club.casefold()), None)
+    if identity is None or not identity.magicoculus_city:
+        raise MagicOculusCollectionError(f'Для клуба "{club}" не настроен город Magic Oculus')
+    return identity.magicoculus_city
 
 
 class MagicOculusReference(BaseModel):
@@ -181,8 +221,11 @@ class MagicOculusTournamentCollector:
         if not tournament.club:
             raise MagicOculusCollectionError(f"У турнира #{tournament_id} не указан клуб")
         event_date = (tournament.started_at or tournament.created_at).date()
-        aetherhub_url = self._resolve_aetherhub_url(tournament, event_date)
-        aetherhub_players = self._fetch_aetherhub_players(aetherhub_url) if validate_aetherhub else None
+        is_internal_swiss = tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS
+        aetherhub_url = None if is_internal_swiss else self._resolve_aetherhub_url(tournament, event_date)
+        aetherhub_players = (
+            self._fetch_aetherhub_players(aetherhub_url) if validate_aetherhub and aetherhub_url is not None else None
+        )
 
         rows: list[MagicOculusPlayerDeck] = []
         missing_names: list[str] = []
@@ -197,9 +240,7 @@ class MagicOculusTournamentCollector:
             for participant in participants
         ]
         matched_participants = (
-            _matched_roster_indexes(participant_names, aetherhub_players)
-            if aetherhub_players is not None
-            else None
+            _matched_roster_indexes(participant_names, aetherhub_players) if aetherhub_players is not None else None
         )
         for index, participant in enumerate(participants):
             player = participant_names[index]
@@ -234,19 +275,111 @@ class MagicOculusTournamentCollector:
         if not rows:
             raise MagicOculusCollectionError(f"У турнира #{tournament_id} нет участников")
 
+        final_standings_csv = None
+        all_rounds_csv = None
+        if is_internal_swiss:
+            final_standings_csv, all_rounds_csv = self._collect_internal_swiss_csv(tournament, rows)
+
         try:
             result = MagicOculusTournament(
                 source_tournament_id=tournament.id,
                 date=event_date,
                 club=tournament.club,
                 aetherhub_url=aetherhub_url,
+                final_standings_csv=final_standings_csv,
+                all_rounds_csv=all_rounds_csv,
                 player_decks=rows,
             )
         except ValueError as exc:
             raise MagicOculusCollectionError(str(exc)) from exc
-        if validate_aetherhub:
+        if validate_aetherhub and aetherhub_url is not None:
             self.validate_aetherhub_players(result, aetherhub_players=aetherhub_players)
         return result
+
+    def _collect_internal_swiss_csv(
+        self,
+        tournament: models.Tournament,
+        player_decks: list[MagicOculusPlayerDeck],
+    ) -> tuple[str, str]:
+        if tournament.status != models.TournamentStatus.CLOSED:
+            raise MagicOculusCollectionError("Внутренний Swiss можно загрузить только после завершения")
+        if not tournament.swiss_rounds:
+            raise MagicOculusCollectionError("У внутреннего Swiss не зафиксировано число раундов")
+
+        standings = InternalSwissService(self.db).standings(tournament.id)
+        expected_places = list(range(1, len(standings) + 1))
+        actual_places = [row.final_place for row in player_decks]
+        if actual_places != expected_places:
+            raise MagicOculusCollectionError(
+                f"У внутреннего Swiss должны быть финальные места 1..{len(standings)}, получено: {actual_places}"
+            )
+
+        names_by_user_id = {standing.user_id: player_decks[standing.place - 1].player for standing in standings}
+        matches = list(
+            self.db.execute(
+                select(models.RoundMatch)
+                .where(models.RoundMatch.tournament_id == tournament.id)
+                .order_by(models.RoundMatch.round_number, models.RoundMatch.table_number, models.RoundMatch.id)
+            ).scalars()
+        )
+        round_numbers = sorted({match.round_number for match in matches})
+        expected_rounds = list(range(1, tournament.swiss_rounds + 1))
+        if round_numbers != expected_rounds:
+            raise MagicOculusCollectionError(
+                f"У внутреннего Swiss ожидались раунды {expected_rounds}, получено: {round_numbers}"
+            )
+        unfinished = [
+            match
+            for match in matches
+            if match.player2_user_id is not None
+            and (match.status not in FINAL_STATUSES or match.player1_wins is None or match.player2_wins is None)
+        ]
+        if unfinished:
+            raise MagicOculusCollectionError(
+                "Во внутреннем Swiss остались матчи без финального результата: "
+                + ", ".join(f"R{match.round_number}/T{match.table_number}" for match in unfinished)
+            )
+
+        standings_rows = []
+        for standing in standings:
+            record = f"{standing.wins} - {standing.losses}"
+            if standing.draws:
+                record += f" - {standing.draws}"
+            standings_rows.append(
+                (
+                    standing.place,
+                    names_by_user_id[standing.user_id],
+                    standing.match_points,
+                    record,
+                    _percentage(standing.opponents_match_win_percentage),
+                    _percentage(standing.game_win_percentage),
+                    _percentage(standing.opponents_game_win_percentage),
+                )
+            )
+
+        rounds_rows = []
+        for match in matches:
+            player1 = names_by_user_id.get(match.player1_user_id)
+            player2 = names_by_user_id.get(match.player2_user_id) if match.player2_user_id is not None else "BYE"
+            if player1 is None or player2 is None:
+                raise MagicOculusCollectionError(
+                    f"Не удалось сопоставить игроков матча R{match.round_number}/T{match.table_number}"
+                )
+            player1_wins = match.player1_wins if match.player1_wins is not None else 2
+            player2_wins = match.player2_wins if match.player2_wins is not None else 0
+            rounds_rows.append(
+                (
+                    match.table_number or 0,
+                    player1,
+                    player2,
+                    f"{player1_wins} - {player2_wins}",
+                )
+            )
+
+        return (
+            _csv_text(("Rank", "Name", "Points", "Results", "OMW", "GW", "OGW"), standings_rows),
+            _csv_text(("Table", "Player 1", "Player 2", "Match Results"), rounds_rows),
+        )
 
     def _fetch_aetherhub_players(self, url: str) -> list[str]:
         try:
@@ -264,6 +397,8 @@ class MagicOculusTournamentCollector:
         *,
         aetherhub_players: list[str] | None = None,
     ) -> None:
+        if tournament.aetherhub_url is None:
+            raise MagicOculusCollectionError("У внутреннего Swiss нет состава AetherHub для проверки")
         players = aetherhub_players or self._fetch_aetherhub_players(str(tournament.aetherhub_url))
         metagatherer_names = [row.player for row in tournament.player_decks]
         matched = _matched_roster_indexes(metagatherer_names, players)
@@ -349,16 +484,29 @@ class MagicOculusClient:
         club_id: str,
         format_id: str,
     ) -> MagicOculusImportResult:
-        fields = {
+        fields: dict[str, tuple[Any, ...]] = {
             "date": (None, tournament.date.isoformat()),
             "cityId": (None, city_id),
             "clubId": (None, club_id),
             "tournamentType": (None, tournament.tournament_type),
             "formatId": (None, format_id),
-            "aetherhubUrl": (None, str(tournament.aetherhub_url)),
             # Позиционный режим намеренно не использует имена AetherHub: источник колод и мест — бот.
             "playerDecksText": (None, tournament.positional_player_decks_text),
         }
+        if tournament.aetherhub_url is not None:
+            fields["aetherhubUrl"] = (None, str(tournament.aetherhub_url))
+        else:
+            fields["finalStandingsFile"] = (
+                "final-standings.csv",
+                tournament.final_standings_csv.encode("utf-8-sig"),
+                "text/csv",
+            )
+            fields["allRoundsFile"] = (
+                "all-rounds.csv",
+                tournament.all_rounds_csv.encode("utf-8-sig"),
+                "text/csv",
+            )
+            fields["includeInMatchupMatrix"] = (None, "true")
         response = self._session.post(
             f"{self._base_url}/api/v1/admin/tournaments/import",
             files=fields,
@@ -391,16 +539,10 @@ class MagicOculusImporter:
         self.client = client
 
     def import_once(self, tournament: MagicOculusTournament, *, city: str) -> MagicOculusImportResult:
-        existing = (
-            self.db.execute(
-                select(models.MagicOculusImport).where(
-                    (models.MagicOculusImport.tournament_id == tournament.source_tournament_id)
-                    | (models.MagicOculusImport.aetherhub_url == str(tournament.aetherhub_url))
-                )
-            )
-            .scalars()
-            .first()
-        )
+        source_conditions = [models.MagicOculusImport.tournament_id == tournament.source_tournament_id]
+        if tournament.aetherhub_url is not None:
+            source_conditions.append(models.MagicOculusImport.aetherhub_url == str(tournament.aetherhub_url))
+        existing = self.db.execute(select(models.MagicOculusImport).where(or_(*source_conditions))).scalars().first()
         if existing is not None:
             raise MagicOculusApiError(
                 f"Импорт уже зафиксирован в журнале #{existing.id} со статусом {existing.status}; "
@@ -409,7 +551,7 @@ class MagicOculusImporter:
 
         journal = models.MagicOculusImport(
             tournament_id=tournament.source_tournament_id,
-            aetherhub_url=str(tournament.aetherhub_url),
+            aetherhub_url=str(tournament.aetherhub_url) if tournament.aetherhub_url is not None else None,
             status="pending",
         )
         self.db.add(journal)

@@ -865,7 +865,9 @@ class MagicOculusImport(Base):
     tournament_id = Column(
         Integer, ForeignKey("tournaments.id", ondelete="CASCADE"), nullable=False, unique=True, index=True
     )
-    aetherhub_url = Column(String(512), nullable=False, unique=True)
+    # Internal Swiss imports use their own standings/rounds files and therefore
+    # have no AetherHub URL. Tournament ID remains the primary idempotency key.
+    aetherhub_url = Column(String(512), nullable=True, unique=True)
     status = Column(String(16), nullable=False, default="pending", server_default="pending")
     magicoculus_tournament_id = Column(Integer, nullable=True, unique=True)
     warnings_json = Column(String, nullable=True)
