@@ -1045,6 +1045,10 @@ async def maybe_import_closed_tournament_to_magicoculus(bot, db, tournament_id: 
     tournament = db.get(models.Tournament, tournament_id)
     if tournament is None or tournament.status != models.TournamentStatus.CLOSED:
         return
+    if tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS and not FeatureFlagService(db).is_enabled(
+        FeatureFlags.MAGIC_OCULUS_INTERNAL_SWISS_IMPORT
+    ):
+        return
     title = tournament.title
     chat_id = tournament.chat_id
     try:

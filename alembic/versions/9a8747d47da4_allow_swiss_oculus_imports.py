@@ -28,7 +28,16 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     imports = sa.table("magicoculus_imports", sa.column("aetherhub_url", sa.String(length=512)))
-    op.get_bind().execute(sa.delete(imports).where(imports.c.aetherhub_url.is_(None)))
+    internal_imports = (
+        op.get_bind()
+        .execute(sa.select(sa.func.count()).select_from(imports).where(imports.c.aetherhub_url.is_(None)))
+        .scalar_one()
+    )
+    if internal_imports:
+        raise RuntimeError(
+            "Cannot make magicoculus_imports.aetherhub_url non-nullable: "
+            f"{internal_imports} internal Swiss import journal row(s) would be lost"
+        )
     with op.batch_alter_table("magicoculus_imports") as batch_op:
         batch_op.alter_column(
             "aetherhub_url",

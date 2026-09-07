@@ -139,6 +139,24 @@ def test_internal_swiss_must_be_closed_before_collection(db, svc, user_svc, arch
         MagicOculusTournamentCollector(db).collect(tournament.id)
 
 
+def test_internal_swiss_rejects_stale_persisted_places(db, svc, user_svc, arch_svc):
+    tournament = _completed_internal_swiss(db, svc, user_svc, arch_svc)
+    participants = (
+        db.query(models.Participant)
+        .filter_by(tournament_id=tournament.id)
+        .order_by(models.Participant.final_place)
+        .all()
+    )
+    participants[0].final_place, participants[1].final_place = (
+        participants[1].final_place,
+        participants[0].final_place,
+    )
+    db.commit()
+
+    with pytest.raises(MagicOculusCollectionError, match="не совпадают с рассчитанными"):
+        MagicOculusTournamentCollector(db).collect(tournament.id)
+
+
 @pytest.mark.parametrize(
     ("club", "url", "message"),
     [

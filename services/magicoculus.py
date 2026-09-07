@@ -278,7 +278,11 @@ class MagicOculusTournamentCollector:
         final_standings_csv = None
         all_rounds_csv = None
         if is_internal_swiss:
-            final_standings_csv, all_rounds_csv = self._collect_internal_swiss_csv(tournament, rows)
+            final_standings_csv, all_rounds_csv = self._collect_internal_swiss_csv(
+                tournament,
+                participants,
+                participant_names,
+            )
 
         try:
             result = MagicOculusTournament(
@@ -299,7 +303,8 @@ class MagicOculusTournamentCollector:
     def _collect_internal_swiss_csv(
         self,
         tournament: models.Tournament,
-        player_decks: list[MagicOculusPlayerDeck],
+        participants: list[models.Participant],
+        participant_names: list[str],
     ) -> tuple[str, str]:
         if tournament.status != models.TournamentStatus.CLOSED:
             raise MagicOculusCollectionError("Внутренний Swiss можно загрузить только после завершения")
@@ -307,14 +312,25 @@ class MagicOculusTournamentCollector:
             raise MagicOculusCollectionError("У внутреннего Swiss не зафиксировано число раундов")
 
         standings = InternalSwissService(self.db).standings(tournament.id)
-        expected_places = list(range(1, len(standings) + 1))
-        actual_places = [row.final_place for row in player_decks]
-        if actual_places != expected_places:
+        participants_by_user_id = {participant.user_id: participant for participant in participants}
+        names_by_user_id = {
+            participant.user_id: participant_names[index] for index, participant in enumerate(participants)
+        }
+        if len(standings) != len(participants_by_user_id):
             raise MagicOculusCollectionError(
-                f"У внутреннего Swiss должны быть финальные места 1..{len(standings)}, получено: {actual_places}"
+                "Не удалось однозначно сопоставить финальные стендинги с участниками турнира"
             )
-
-        names_by_user_id = {standing.user_id: player_decks[standing.place - 1].player for standing in standings}
+        inconsistent_places = []
+        for standing in standings:
+            participant = participants_by_user_id.get(standing.user_id)
+            if participant is None or participant.final_place != standing.place:
+                stored_place = participant.final_place if participant is not None else None
+                inconsistent_places.append(f"user:{standing.user_id}={stored_place}, ожидалось {standing.place}")
+        if inconsistent_places:
+            raise MagicOculusCollectionError(
+                "Финальные места внутреннего Swiss не совпадают с рассчитанными стендингами: "
+                + "; ".join(inconsistent_places)
+            )
         matches = list(
             self.db.execute(
                 select(models.RoundMatch)

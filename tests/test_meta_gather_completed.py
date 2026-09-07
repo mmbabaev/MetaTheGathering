@@ -793,6 +793,40 @@ async def test_magicoculus_import_can_be_disabled(db, user_svc, arch_svc, monkey
     assert db.get(models.Tournament, t.id).status == models.TournamentStatus.CLOSED
 
 
+async def test_internal_swiss_magicoculus_import_needs_separate_flag(db, user_svc, arch_svc, monkeypatch):
+    FeatureFlagService(db).toggle(FeatureFlags.MAGIC_OCULUS_IMPORT)
+    tournament = _complete_tournament(db, user_svc, arch_svc)
+    tournament_row = db.get(models.Tournament, tournament.id)
+    tournament_row.engine_mode = models.TournamentEngineMode.INTERNAL_SWISS
+    tournament_row.status = models.TournamentStatus.CLOSED
+    db.commit()
+    to_thread = AsyncMock()
+    monkeypatch.setattr("bot.scheduler.asyncio.to_thread", to_thread)
+
+    await scheduler.maybe_import_closed_tournament_to_magicoculus(AsyncMock(), db, tournament.id)
+
+    to_thread.assert_not_awaited()
+
+
+async def test_internal_swiss_magicoculus_import_runs_when_both_flags_are_enabled(db, user_svc, arch_svc, monkeypatch):
+    flags = FeatureFlagService(db)
+    flags.toggle(FeatureFlags.MAGIC_OCULUS_IMPORT)
+    flags.toggle(FeatureFlags.MAGIC_OCULUS_INTERNAL_SWISS_IMPORT)
+    tournament = _complete_tournament(db, user_svc, arch_svc)
+    tournament_row = db.get(models.Tournament, tournament.id)
+    tournament_row.engine_mode = models.TournamentEngineMode.INTERNAL_SWISS
+    tournament_row.status = models.TournamentStatus.CLOSED
+    db.commit()
+    assert flags.is_enabled(FeatureFlags.MAGIC_OCULUS_IMPORT) is True
+    assert flags.is_enabled(FeatureFlags.MAGIC_OCULUS_INTERNAL_SWISS_IMPORT) is True
+    to_thread = AsyncMock(return_value=MagicOculusImportResult(tournament_id=470, detail={}))
+    monkeypatch.setattr("bot.scheduler.asyncio.to_thread", to_thread)
+
+    await scheduler.maybe_import_closed_tournament_to_magicoculus(AsyncMock(), db, tournament.id)
+
+    to_thread.assert_awaited_once_with(scheduler.import_closed_tournament_to_magicoculus, tournament.id)
+
+
 async def test_magicoculus_import_starts_only_after_tournament_is_closed(db, user_svc, arch_svc, monkeypatch):
     monkeypatch.setattr(settings, "OWNER_CHAT_ID", 777)
     FeatureFlagService(db).toggle(FeatureFlags.MAGIC_OCULUS_IMPORT)

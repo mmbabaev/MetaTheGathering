@@ -10,6 +10,7 @@ import runpy
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import pytest
 import sqlalchemy as sa
 from alembic.config import Config
 from alembic.migration import MigrationContext
@@ -311,6 +312,17 @@ def test_magicoculus_journal_allows_internal_swiss_without_aetherhub_url():
         assert migrated.c.aetherhub_url.nullable is True
         connection.execute(migrated.insert().values(id=2, tournament_id=2, aetherhub_url=None))
         assert connection.execute(sa.select(sa.func.count()).select_from(migrated)).scalar_one() == 2
+
+        with Operations.context(context), pytest.raises(RuntimeError, match="would be lost"):
+            migration["downgrade"]()
+        assert connection.execute(sa.select(sa.func.count()).select_from(migrated)).scalar_one() == 2
+
+        connection.execute(migrated.delete().where(migrated.c.id == 2))
+        with Operations.context(context):
+            migration["downgrade"]()
+        downgraded = sa.Table("magicoculus_imports", sa.MetaData(), autoload_with=connection)
+        assert downgraded.c.aetherhub_url.nullable is False
+        assert connection.execute(sa.select(downgraded.c.id)).scalar_one() == 1
 
 
 def test_split_spy_general_names_repairs_only_classification_cache():
