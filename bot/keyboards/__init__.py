@@ -305,21 +305,38 @@ def participant_button_rows(
     """Чистая модель клавиатуры участников статуса — ряды кнопок, без Telegram.
 
     С ``pairs`` (из ``pairing_rows``) — раскладка по столам: один ряд = один стол,
-    две кнопки-игрока (бай/незарегистрированный игрок → одиночная кнопка), участники
-    без пары — по двое в ряд; порядок строго по столам (как в ``pairs``). Без
-    ``pairs`` — прежний плоский режим: только незаполненные, по одной кнопке в ряд,
-    + «Показать заполненных». Telegram-слой лишь маппит это в InlineKeyboardMarkup.
+    номер стола добавляется к первой кнопке, полностью заполненные столы по умолчанию
+    скрыты, бай/незарегистрированный игрок даёт одиночную кнопку, а участники без пары
+    идут по двое в ряд. Порядок строго совпадает с ``pairs``. Без ``pairs`` — прежний
+    плоский режим: только незаполненные, по одной кнопке в ряд, + «Показать
+    заполненных». Telegram-слой лишь маппит модель в InlineKeyboardMarkup.
     """
     back = [StatusButton("⬅️ Назад", f"{CB_TOURNAMENT}:{tournament_id}")] if tournament_id is not None else None
 
     if pairs is not None:
         rows: list[list[StatusButton]] = []
-        for _table, p1, _n1, p2, _n2 in pairs:
-            row = [_status_participant_button(p) for p in (p1, p2) if p is not None]
-            if row:
-                rows.append(row)
+        hidden_tables = 0
+        for table, p1, _n1, p2, _n2 in pairs:
+            present = [p for p in (p1, p2) if p is not None]
+            if not present:
+                continue
+            # Стол «заполнен», если у всех присутствующих участников проставлена колода.
+            # По умолчанию такие столы скрываем (их незачем дозаполнять) — показать все по кнопке.
+            if not show_filled and all(p.archetype is not None for p in present):
+                hidden_tables += 1
+                continue
+            # Один ряд на стол; номер стола — префиксом на кнопке первого игрока (компактно, без
+            # отдельного ряда-метки), чтобы номера читались сверху вниз по левому краю.
+            buttons = [_status_participant_button(p) for p in present]
+            if table is not None:
+                buttons[0] = StatusButton(f"№{table} · {buttons[0].label}", buttons[0].callback_data)
+            rows.append(buttons)
         for i in range(0, len(unpaired or []), 2):
             rows.append([_status_participant_button(p) for p in (unpaired or [])[i : i + 2]])
+        if hidden_tables and tournament_id is not None:
+            rows.append(
+                [StatusButton(f"Показать все столы ({hidden_tables})", f"{CB_ADMIN_SHOW_FILLED}:{tournament_id}")]
+            )
         if back:
             rows.append(back)
         return rows

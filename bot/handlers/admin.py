@@ -186,7 +186,7 @@ class AdminHandler:
 
         prefix — необязательный текст (например, итог операции), который добавляется
         перед статусом через пустую строку.
-        show_filled — показывать кнопки заполненных участников.
+        show_filled — показывать заполненных участников или полностью заполненные столы.
         tg_id — кто смотрит: если включена настройка «статус по парингам» и паринги
         есть, кнопки участников раскладываются по столам (две кнопки в ряд).
         """
@@ -227,7 +227,7 @@ class AdminHandler:
         return self._tournament_status_result(tournament_id, tg_id=tg_id)
 
     def handle_admin_show_filled(self, tg_id: int, tournament_id: int) -> HandlerResult:
-        """Показывает кнопки заполненных участников (разворачивает скрытый список)."""
+        """Разворачивает скрытых заполненных участников или столы."""
         if not self.user_svc.is_privileged(tg_id):
             return HandlerResult(NOT_ADMIN)
         return self._tournament_status_result(tournament_id, show_filled=True, tg_id=tg_id)

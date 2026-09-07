@@ -183,7 +183,7 @@ async def callback_participant_custom_arch(update: Update, context: ContextTypes
 
 
 async def callback_admin_show_filled(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Кнопка «Показать заполненных (N)» — разворачивает список заполненных участников."""
+    """Разворачивает заполненных участников или столы в зависимости от режима статуса."""
     query = update.callback_query
     user = update.effective_user
     if not user:
