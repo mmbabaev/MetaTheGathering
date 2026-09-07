@@ -28,7 +28,7 @@ from bot.telegram.deck_reminder import send_deferred_deck_reminders
 from bot.telegram.round_notify import send_round_notifications
 from bot.tournament_creation import execute_due_creation_plans
 from core import models
-from core.clubs import club_identities, debug_club, default_clubs
+from core.clubs import debug_club, default_clubs
 from core.config import Club, ClubSchedule, settings
 from core.database import SessionLocal
 from core.schemas import TournamentCreate
@@ -51,6 +51,7 @@ from services.magicoculus import (
     MagicOculusImporter,
     MagicOculusImportResult,
     MagicOculusTournamentCollector,
+    magicoculus_city_for_club,
 )
 from services.meta_police_message import MetaPoliceMessageService
 from services.names import format_participant_name
@@ -1033,20 +1034,30 @@ async def maybe_announce_meta_gather_completed(bot, db, tournament_id: int, char
         logger.exception("maybe_announce_meta_gather_completed: achievements failed for #%s", tournament_id)
     # 5) Magic Oculus: отдельная сессия и worker thread, чтобы HTTP не блокировал Telegram loop.
     #    Флаг управляемый; ошибка внешнего API не откатывает закрытый турнир.
-    if FeatureFlagService(db).is_enabled(FeatureFlags.MAGIC_OCULUS_IMPORT):
-        try:
-            oculus_result = await asyncio.to_thread(import_closed_tournament_to_magicoculus, tournament_id)
-        except Exception as exc:
-            logger.exception("maybe_announce_meta_gather_completed: Magic Oculus import failed for #%s", tournament_id)
-            await _notify_magicoculus_import_error(bot, tournament_id, title, exc)
-        else:
-            await _send_magicoculus_success_link(
-                bot,
-                tournament.chat_id,
-                title,
-                oculus_result.tournament_id,
-            )
+    await maybe_import_closed_tournament_to_magicoculus(bot, db, tournament_id)
     logger.info("maybe_announce_meta_gather_completed: announced completion for #%s", tournament_id)
+
+
+async def maybe_import_closed_tournament_to_magicoculus(bot, db, tournament_id: int) -> None:
+    """Best-effort one-shot import for either AetherHub or internal Swiss completion."""
+    if not FeatureFlagService(db).is_enabled(FeatureFlags.MAGIC_OCULUS_IMPORT):
+        return
+    tournament = db.get(models.Tournament, tournament_id)
+    if tournament is None or tournament.status != models.TournamentStatus.CLOSED:
+        return
+    if tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS and not FeatureFlagService(db).is_enabled(
+        FeatureFlags.MAGIC_OCULUS_INTERNAL_SWISS_IMPORT
+    ):
+        return
+    title = tournament.title
+    chat_id = tournament.chat_id
+    try:
+        oculus_result = await asyncio.to_thread(import_closed_tournament_to_magicoculus, tournament_id)
+    except Exception as exc:
+        logger.exception("Magic Oculus import failed for #%s", tournament_id)
+        await _notify_magicoculus_import_error(bot, tournament_id, title, exc)
+    else:
+        await _send_magicoculus_success_link(bot, chat_id, title, oculus_result.tournament_id)
 
 
 def import_closed_tournament_to_magicoculus(tournament_id: int) -> MagicOculusImportResult:
@@ -1054,14 +1065,11 @@ def import_closed_tournament_to_magicoculus(tournament_id: int) -> MagicOculusIm
     db = SessionLocal()
     try:
         tournament = MagicOculusTournamentCollector(db).collect(tournament_id, validate_aetherhub=True)
-        identity = next(
-            (row for row in club_identities() if row.name.casefold() == tournament.club.casefold()),
-            None,
-        )
-        if identity is None or not identity.magicoculus_city:
-            raise ValueError(f'Для клуба "{tournament.club}" не настроен город Magic Oculus')
         client = MagicOculusClient(settings.MAGIC_OCULUS_API_URL)
-        return MagicOculusImporter(db, client).import_once(tournament, city=identity.magicoculus_city)
+        return MagicOculusImporter(db, client).import_once(
+            tournament,
+            city=magicoculus_city_for_club(tournament.club),
+        )
     finally:
         db.close()
 

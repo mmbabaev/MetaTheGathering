@@ -10,6 +10,7 @@ from telegram.ext import ContextTypes
 from bot.handlers.base import HandlerResult
 from bot.handlers.round_results import DeliveryResult, RoundResultsHandler
 from bot.keyboards import Keyboards
+from bot.scheduler import maybe_import_closed_tournament_to_magicoculus
 from bot.swiss_completion import publish_swiss_completion
 from bot.telegram.club_pairings import refresh_club_pairings, send_club_pairings
 from bot.telegram.common import parse_callback_ints
@@ -291,6 +292,7 @@ async def callback_swiss_finish_confirm(update: Update, context: ContextTypes.DE
         result = RoundResultsHandler(db).handle_swiss_finish(tournament_id, user.id)
         if await _render(query, result):
             await publish_swiss_completion(context.bot, db, tournament_id)
+            await maybe_import_closed_tournament_to_magicoculus(context.bot, db, tournament_id)
     finally:
         db.close()
 

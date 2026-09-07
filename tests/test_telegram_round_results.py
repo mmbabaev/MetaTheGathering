@@ -195,12 +195,14 @@ async def test_internal_swiss_finish_publishes_results_after_success(db, user_sv
     db.commit()
     update, query = _update(admin.tg_id, f"sw_finish_yes:{tournament.id}")
     publication = AsyncMock(return_value=True)
+    oculus_import = AsyncMock()
     bot = AsyncMock()
 
     with (
         patch("bot.telegram.round_results.SessionLocal", return_value=db),
         patch("bot.telegram.round_results.RoundResultsHandler.handle_swiss_finish") as finish,
         patch("bot.telegram.round_results.publish_swiss_completion", publication),
+        patch("bot.telegram.round_results.maybe_import_closed_tournament_to_magicoculus", oculus_import),
     ):
         finish.return_value = SimpleNamespace(
             text="Итоговые стендинги",
@@ -213,3 +215,4 @@ async def test_internal_swiss_finish_publishes_results_after_success(db, user_sv
 
     query.edit_message_text.assert_awaited_once()
     publication.assert_awaited_once_with(bot, db, tournament.id)
+    oculus_import.assert_awaited_once_with(bot, db, tournament.id)

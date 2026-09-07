@@ -30,6 +30,7 @@ class FeatureFlags:
     ACHIEVEMENTS_PLAYER_DM = "achievementsPlayerDm"
     ACHIEVEMENT_BOARD_LAB = "achievementBoardLab"
     MAGIC_OCULUS_IMPORT = "magicOculusImport"
+    MAGIC_OCULUS_INTERNAL_SWISS_IMPORT = "magicOculusInternalSwissImport"
     LIVE_REGISTRATION_COUNT = "liveRegistrationCount"
     CELLAR_DECKS = "cellarDecks"
 
@@ -69,6 +70,11 @@ KNOWN_FLAGS: dict[str, FeatureFlagMeta] = {
         description="Magic Oculus: импортировать полный турнир после штатного закрытия",
         value_type="bool",
         default_value="true",
+    ),
+    FeatureFlags.MAGIC_OCULUS_INTERNAL_SWISS_IMPORT: FeatureFlagMeta(
+        description="Magic Oculus: импортировать внутренний Swiss из CSV (экспериментальный контракт)",
+        value_type="bool",
+        default_value="false",
     ),
     FeatureFlags.LIVE_REGISTRATION_COUNT: FeatureFlagMeta(
         description="Счётчик записавшихся с редактированием сообщения о регистрации",
