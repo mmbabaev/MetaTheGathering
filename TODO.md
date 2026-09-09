@@ -145,6 +145,7 @@
   AetherHub source дедуплицируются, bye/неполные матчи исключаются, identity поддерживает
   обратный порядок ФИО, инициалы и одну однозначную опечатку внутри состава. Игрокам рейтинг
   не показывается и ничего не рассылается. Исторический preseason не станет seed будущего сезона.
+  Реализация — PR [#308](https://github.com/mmbabaev/MetaTheGathering/pull/308).
 
 - Защита инцидента [#304](https://github.com/mmbabaev/MetaTheGathering/issues/304): один числовой
   AetherHub event нельзя повторно привязать или импортировать в другой турнир MetaGatherer;
