@@ -225,6 +225,8 @@ async def callback_aetherhub_confirm(update: Update, context: ContextTypes.DEFAU
 
     await query.edit_message_text(result.text)
     await query.answer()
+    if result.is_alert:
+        return
 
     if result.new_round_numbers:
         db_notify = SessionLocal()

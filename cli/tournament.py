@@ -12,6 +12,7 @@ from core.config import app_cfg
 from core.schemas import TournamentCreate
 from services.aetherhub_import_service import AetherhubImportService
 from services.aetherhub_service import AetherhubService
+from services.errors import AetherhubTournamentAlreadyLinked
 from services.export import ExportService
 from services.tournament import TournamentService
 
@@ -131,7 +132,11 @@ def import_aetherhub(
         data = AetherhubService().fetch_tournament(url)
         typer.echo(f"Игроков: {len(data.players)}, раундов: {len(data.rounds)}")
 
-        result = AetherhubImportService(db).import_tournament(tournament_id, data)
+        try:
+            result = AetherhubImportService(db).import_tournament(tournament_id, data)
+        except AetherhubTournamentAlreadyLinked as exc:
+            typer.echo(f"✗ {exc}", err=True)
+            raise typer.Exit(1) from exc
         svc.set_aetherhub_url(tournament_id, url)
 
         typer.echo("✓ Импорт завершён")

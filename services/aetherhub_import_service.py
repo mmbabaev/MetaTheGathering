@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from core import models
 from services import errors
+from services.aetherhub_links import ensure_aetherhub_link_available
 from services.aetherhub_models import AetherhubRound, AetherhubTournamentData
 from services.names import format_participant_name, is_single_word_name_typo
 from services.round_results import RoundResultsService
@@ -412,6 +413,10 @@ class AetherhubImportService:
             raise errors.TournamentInvalidState(
                 "Для этого турнира включён внутренний Swiss; импорт AetherHub отключён."
             )
+        # This must run before matching users, saving pairings or removing no-shows.
+        # Saving the URL only after import is too late: a duplicate event would have
+        # already contaminated the second tournament (issue #304).
+        ensure_aetherhub_link_available(self.db, tournament_id=tournament_id, url=data.url)
         if tournament.status == models.TournamentStatus.CLOSED:
             # Закрытый турнир: только освежаем паринги/счёт (финальные результаты
             # часто появляются к закрытию). Без перерегистрации участников и без

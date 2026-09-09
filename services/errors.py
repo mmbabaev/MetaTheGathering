@@ -1,6 +1,7 @@
 """Re-export service errors for `from services import errors`."""
 
 from services.services_errors import (
+    AetherhubTournamentAlreadyLinked,
     MultipleActiveTournaments,
     ParticipantAlreadyRegistered,
     ParticipantError,
@@ -22,6 +23,7 @@ __all__ = [
     "TournamentNotFound",
     "TournamentAlreadyExists",
     "TournamentInvalidState",
+    "AetherhubTournamentAlreadyLinked",
     "MultipleActiveTournaments",
     "ParticipantError",
     "ParticipantAlreadyRegistered",

@@ -21,6 +21,19 @@ class TournamentInvalidState(TournamentError):
     pass
 
 
+class AetherhubTournamentAlreadyLinked(TournamentError):
+    """The same external AetherHub event belongs to another local tournament."""
+
+    def __init__(self, *, url: str, tournament_id: int, tournament_title: str):
+        self.url = url
+        self.tournament_id = tournament_id
+        self.tournament_title = tournament_title
+        super().__init__(
+            f"AetherHub-турнир уже привязан к турниру #{tournament_id} «{tournament_title}». "
+            "Повторный импорт в другой турнир запрещён."
+        )
+
+
 class MultipleActiveTournaments(TournamentError):
     """Активных турниров несколько — нужно уточнить, с каким работать."""
 

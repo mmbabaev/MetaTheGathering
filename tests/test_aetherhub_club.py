@@ -922,6 +922,22 @@ class TestAetherhubImportJob:
         mock_svc.fetch_tournament.assert_called_once_with(found_url)
         mock_import_cls.return_value.import_tournament.assert_called_once()
 
+    def test_duplicate_discovered_event_is_blocked_before_fetch_and_import(self, db, svc):
+        duplicate_url = "https://aetherhub.com/Tourney/RoundTourney/101527"
+        original = svc.create_tournament(TournamentCreate(title="08.09", chat_id=0, club="Goldfish"))
+        svc.set_aetherhub_url(original.id, duplicate_url)
+        svc.close_tournament(original.id)
+        duplicate = svc.create_tournament(TournamentCreate(title="06.09", chat_id=0, club="Goldfish"))
+        source = MagicMock()
+        source.find_todays_pauper_tournament.return_value = f"{duplicate_url}?p=4"
+
+        with patch("bot.scheduler.AetherhubImportService") as import_cls:
+            asyncio.run(_make_import_job(aetherhub_service=source).run(now=FRIDAY_NOW, db=db))
+
+        source.fetch_tournament.assert_not_called()
+        import_cls.return_value.import_tournament.assert_not_called()
+        assert db.get(cm.Tournament, duplicate.id).aetherhub_url is None
+
     def test_uses_stored_url_without_fetching_club_page(self, db, svc):
         """When tournament already has aetherhub_url stored, skip club page fetch."""
         stored_url = "https://aetherhub.com/Tourney/RoundTourney/42"
