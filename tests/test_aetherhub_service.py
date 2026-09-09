@@ -13,7 +13,7 @@ from services.aetherhub_import_service import AetherhubImportService
 from services.aetherhub_models import AetherhubPairing, AetherhubRound, AetherhubTournamentData
 from services.aetherhub_service import AetherhubService
 from services.archetype import ArchetypeService
-from services.errors import TournamentInvalidState, TournamentNotFound
+from services.errors import AetherhubTournamentAlreadyLinked, TournamentInvalidState, TournamentNotFound
 from services.user import UserService
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -1115,6 +1115,35 @@ class TestImportTournamentValidation:
         data = _make_data(players=[], rounds_pairings=[])
         result = import_svc.import_tournament(tournament.id, data)
         assert result.registered == 0
+
+    def test_duplicate_aetherhub_event_is_rejected_before_any_import_changes(self, db, svc, import_svc):
+        url = "https://aetherhub.com/Tourney/RoundTourney/101527"
+        original = svc.create_tournament(TournamentCreate(title="08.09", chat_id=304))
+        svc.set_aetherhub_url(original.id, url)
+        duplicate = svc.create_tournament(TournamentCreate(title="06.09", chat_id=304))
+        data = AetherhubTournamentData(
+            url=f"{url}?p=4",
+            players=["Новиков Федор", "Калашник Глеб"],
+            rounds=[
+                AetherhubRound(
+                    number=1,
+                    pairings=[
+                        AetherhubPairing(player="Новиков Федор", opponent="Калашник Глеб"),
+                        AetherhubPairing(player="Калашник Глеб", opponent="Новиков Федор"),
+                    ],
+                )
+            ],
+            standings=["Новиков Федор", "Калашник Глеб"],
+        )
+
+        with pytest.raises(AetherhubTournamentAlreadyLinked, match=f"#{original.id}"):
+            import_svc.import_tournament(duplicate.id, data)
+
+        duplicate_row = db.get(models.Tournament, duplicate.id)
+        assert duplicate_row.aetherhub_url is None
+        assert duplicate_row.started_at is None
+        assert db.query(models.Participant).filter_by(tournament_id=duplicate.id).count() == 0
+        assert db.query(models.RoundPairing).filter_by(tournament_id=duplicate.id).count() == 0
 
 
 # ── TestSavePairingsUpsert ───────────────────────────────────────────────────

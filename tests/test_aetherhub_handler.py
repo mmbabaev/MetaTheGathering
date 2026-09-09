@@ -8,6 +8,7 @@ import pytest
 from bot.handlers.aetherhub import AetherhubFetchResult, AetherhubHandler, tournament_event_date
 from services.aetherhub_import_service import expected_swiss_rounds
 from services.aetherhub_models import AetherhubTournamentData
+from services.errors import AetherhubTournamentAlreadyLinked
 
 EVENT_DATE = date(2026, 8, 29)
 
@@ -166,6 +167,26 @@ class TestPreviewMessage:
 
 
 class TestConfirmImportMessage:
+    def test_duplicate_link_returns_alert_and_does_not_save_url(self):
+        import_service = MagicMock()
+        import_service.import_tournament.side_effect = AetherhubTournamentAlreadyLinked(
+            url="https://aetherhub.com/Tourney/RoundTourney/101527",
+            tournament_id=91,
+            tournament_title="Pair of dice Pauper 08.09.2026",
+        )
+        tournament_service = MagicMock()
+        handler = AetherhubHandler(MagicMock(), import_service, tournament_service)
+
+        result = handler.handle_confirm_import(
+            89,
+            "https://aetherhub.com/Tourney/RoundTourney/101527",
+            _make_tournament_data(),
+        )
+
+        assert result.is_alert is True
+        assert "уже привязан к турниру #91" in result.text
+        tournament_service.set_aetherhub_url.assert_not_called()
+
     def test_reports_fetched_and_changed_data(self):
         import_service = MagicMock()
         import_service.import_tournament.return_value = MagicMock(

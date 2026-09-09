@@ -32,7 +32,9 @@ from core.clubs import club_identities, debug_club, default_clubs
 from core.config import Club, ClubSchedule, settings
 from core.database import SessionLocal
 from core.schemas import TournamentCreate
+from services import errors
 from services.aetherhub_import_service import MIN_TOURNAMENT_DURATION, AetherhubImportService
+from services.aetherhub_links import ensure_aetherhub_link_available
 from services.aetherhub_service import AetherhubService
 from services.cellar import (
     CELLAR_CLUB_NAME,
@@ -469,6 +471,11 @@ class AetherhubImportJob:
 
             logger.info(f"AetherhubImportJob: importing {url} for tournament #{tournament_id}")
             try:
+                ensure_aetherhub_link_available(db, tournament_id=tournament_id, url=url)
+            except errors.AetherhubTournamentAlreadyLinked as exc:
+                logger.warning("AetherhubImportJob: blocked duplicate link for #%s: %s", tournament_id, exc)
+                return
+            try:
                 data = self._aetherhub.fetch_tournament(url)
             except Exception:
                 logger.exception(f"AetherhubImportJob: failed to fetch tournament data from {url}")
@@ -599,9 +606,15 @@ class AetherhubTimedImportJob:
                 logger.info(f"AetherhubTimedImportJob: no pauper tournament found for #{tournament_id}")
                 return
 
-        logger.info(f"AetherhubTimedImportJob: importing {url} for tournament #{tournament_id}")
         db = SessionLocal()
         try:
+            try:
+                ensure_aetherhub_link_available(db, tournament_id=tournament_id, url=url)
+            except errors.AetherhubTournamentAlreadyLinked as exc:
+                logger.warning("AetherhubTimedImportJob: blocked duplicate link for #%s: %s", tournament_id, exc)
+                return
+
+            logger.info(f"AetherhubTimedImportJob: importing {url} for tournament #{tournament_id}")
             try:
                 data = self._aetherhub.fetch_tournament(url)
             except Exception:

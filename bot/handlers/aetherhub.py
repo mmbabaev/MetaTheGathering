@@ -95,7 +95,7 @@ class AetherhubHandler:
             return HandlerResult("В этом турнире включён внутренний Swiss; AetherHub не нужен.", is_alert=True)
         try:
             result = self._import.import_tournament(tournament_id, data)
-        except errors.TournamentInvalidState as exc:
+        except (errors.TournamentInvalidState, errors.AetherhubTournamentAlreadyLinked) as exc:
             return HandlerResult(str(exc), is_alert=True)
         self._tournament.set_aetherhub_url(tournament_id, url)
         expected_rounds = expected_swiss_rounds(result.players_received)

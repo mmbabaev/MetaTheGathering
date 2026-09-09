@@ -12,6 +12,7 @@ from core import models as m
 from core.models import Tournament, TournamentStatus, Vote, VoteType, utc_now
 from core.schemas import TournamentCreate
 from services.errors import (
+    AetherhubTournamentAlreadyLinked,
     ParticipantAlreadyRegistered,
     ParticipantNotFound,
     SelfVoteNotAllowed,
@@ -902,6 +903,37 @@ class TestSetAetherhubUrl:
         svc.set_aetherhub_url(tournament.id, "https://aetherhub.com/new")
         t = get_tournament(svc.db, tournament.id)
         assert t.aetherhub_url == "https://aetherhub.com/new"
+
+    def test_rejects_url_already_linked_to_another_tournament(self, svc, tournament):
+        url = "https://aetherhub.com/Tourney/RoundTourney/101527"
+        svc.set_aetherhub_url(tournament.id, url)
+        second = svc.create_tournament(TournamentCreate(title="Second", chat_id=100))
+
+        with pytest.raises(AetherhubTournamentAlreadyLinked, match=f"#{tournament.id}"):
+            svc.set_aetherhub_url(second.id, url)
+
+        assert get_tournament(svc.db, second.id).aetherhub_url is None
+
+    def test_rejects_equivalent_round_url_with_query_and_www(self, svc, tournament):
+        svc.set_aetherhub_url(
+            tournament.id,
+            "https://aetherhub.com/Tourney/RoundTourney/101527?p=4",
+        )
+        second = svc.create_tournament(TournamentCreate(title="Second", chat_id=100))
+
+        with pytest.raises(AetherhubTournamentAlreadyLinked):
+            svc.set_aetherhub_url(
+                second.id,
+                "http://www.aetherhub.com/tourney/roundtourney/101527/",
+            )
+
+    def test_allows_idempotent_set_on_same_tournament(self, svc, tournament):
+        url = "https://aetherhub.com/Tourney/RoundTourney/101527"
+        svc.set_aetherhub_url(tournament.id, url)
+
+        svc.set_aetherhub_url(tournament.id, f"{url}/?p=2")
+
+        assert get_tournament(svc.db, tournament.id).aetherhub_url == f"{url}/?p=2"
 
     def test_tournament_read_schema_includes_url(self, svc, tournament):
         url = "https://aetherhub.com/Tourney/RoundTourney/99"

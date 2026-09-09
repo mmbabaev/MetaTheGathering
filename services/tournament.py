@@ -19,6 +19,7 @@ from core.schemas import (
     VoteRead,
 )
 from services import errors
+from services.aetherhub_links import ensure_aetherhub_link_available
 from services.utils import ensure_tournament_status, get_tournament
 
 # доменные настройки
@@ -217,9 +218,9 @@ class TournamentService:
         return [TournamentRead.model_validate(t) for t in rows]
 
     def set_aetherhub_url(self, tournament_id: int, url: str) -> None:
-        self.db.execute(
-            update(models.Tournament).where(models.Tournament.id == tournament_id).values(aetherhub_url=url)
-        )
+        tournament = get_tournament(self.db, tournament_id)
+        ensure_aetherhub_link_available(self.db, tournament_id=tournament_id, url=url)
+        tournament.aetherhub_url = url
         self.db.commit()
 
     def set_import_time(self, tournament_id: int, time_str: str | None) -> None:
