@@ -195,7 +195,9 @@ HELP_TEXT_ADMIN = """\
 
 /achievements — полка ачивок; /achievements Иванов — посмотреть чужую\
 
-/bingo_preview [профиль] [seed] — пример bingo-поля 4×4\
+/bingo_preview [профиль] [seed] — пример bingo-поля 4×4
+
+/ranked_preseason — админский top-10 Moscow Pauper Ranked\
 """
 
 

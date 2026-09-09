@@ -580,6 +580,29 @@ class TestFindUserByName:
         assert result.first_name == "Валентин"
         assert result.last_name == "Задорожний"
 
+    def test_merges_burbaev_typo_placeholder_into_registered_player(self, import_svc, db, svc, arch_svc):
+        users = UserService(db)
+        real = users.get_or_create(
+            tg_id=9010,
+            first_name="Константин",
+            last_name="Бурбаев",
+        )
+        typo = models.User(tg_id=-9010, first_name="Бурбаев", last_name="Констанин")
+        db.add(typo)
+        db.commit()
+        tournament = svc.create_tournament(TournamentCreate(title="Burbaev identity", chat_id=9010, club="Goldfish"))
+        svc.register_participant(
+            tournament_id=tournament.id,
+            user_id=real.id,
+            archetype_id=arch_svc.get_or_create_by_name("Burn").id,
+        )
+
+        resolved = import_svc.find_user_by_name("Бурбаев Констанин", tournament.id)
+
+        assert resolved is not None
+        assert resolved.id == real.id
+        assert db.get(models.User, typo.id) is None
+
 
 # ── TestSavePairings ─────────────────────────────────────────────────────────
 

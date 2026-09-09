@@ -1,5 +1,6 @@
 # Сервис управления пользователями
 
+import re
 from typing import Optional
 
 from sqlalchemy import delete as sa_delete
@@ -13,8 +14,9 @@ from services.names import clean_person_name_component
 
 
 def _normalize_name(s: str) -> str:
-    """Нижний регистр + ё→е для сравнения имён."""
-    return s.strip().lower().replace("ё", "е")
+    """Нижний регистр + ё→е + единый вид инициалов для сравнения имён."""
+    normalized = " ".join(s.strip().lower().replace("ё", "е").split())
+    return re.sub(r"(?<=\w)\.(?=\s|$)", "", normalized)
 
 
 def normalize_endstep_username(value: str) -> str | None:
@@ -302,6 +304,7 @@ class UserService:
             .where(models.Participant.user_id == placeholder.id)
             .values(user_id=real_user.id)
         )
+        self._move_match_identity(placeholder.id, real_user.id)
 
         # If the user entered their name in reversed order, adopt the placeholder's canonical form
         if placeholder.first_name and placeholder.last_name:
@@ -398,6 +401,8 @@ class UserService:
             sa_update(models.Participant).where(models.Participant.user_id == source.id).values(user_id=target.id)
         )
 
+        self._move_match_identity(source.id, target.id)
+
         if adopt_name and source.first_name:
             target.first_name = source.first_name
             target.last_name = source.last_name
@@ -409,6 +414,29 @@ class UserService:
         self.db.delete(source)
         self.db.commit()
         return True
+
+    def _move_match_identity(self, source_id: int, target_id: int) -> None:
+        """Keep imported and canonical match ownership intact across user merges."""
+        self.db.execute(
+            sa_update(models.RoundPairing)
+            .where(models.RoundPairing.player_user_id == source_id)
+            .values(player_user_id=target_id)
+        )
+        self.db.execute(
+            sa_update(models.RoundPairing)
+            .where(models.RoundPairing.opponent_user_id == source_id)
+            .values(opponent_user_id=target_id)
+        )
+        self.db.execute(
+            sa_update(models.RoundMatch)
+            .where(models.RoundMatch.player1_user_id == source_id)
+            .values(player1_user_id=target_id)
+        )
+        self.db.execute(
+            sa_update(models.RoundMatch)
+            .where(models.RoundMatch.player2_user_id == source_id)
+            .values(player2_user_id=target_id)
+        )
 
     def is_admin(self, tg_id: int) -> bool:
         if tg_id in settings.admin_ids:
