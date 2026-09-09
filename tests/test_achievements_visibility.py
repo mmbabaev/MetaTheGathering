@@ -88,16 +88,19 @@ def test_help_for_players_has_no_achievements():
 def test_help_for_admins_mentions_achievements():
     assert "achievements" in HELP_TEXT_ADMIN.lower()
     assert "bingo_preview" in HELP_TEXT_ADMIN.lower()
+    assert "ranked_preseason" in HELP_TEXT_ADMIN.lower()
 
 
 def test_command_menu_for_players_has_no_achievements():
     assert "achievements" not in {c.command for c in main._USER_COMMANDS}
     assert "bingo_preview" not in {c.command for c in main._USER_COMMANDS}
+    assert "ranked_preseason" not in {c.command for c in main._USER_COMMANDS}
 
 
 def test_command_menu_for_admins_has_achievements():
     assert "achievements" in {c.command for c in main._ADMIN_COMMANDS}
     assert "bingo_preview" in {c.command for c in main._ADMIN_COMMANDS}
+    assert "ranked_preseason" in {c.command for c in main._ADMIN_COMMANDS}
 
 
 # ── доставка ─────────────────────────────────────────────────────────────────

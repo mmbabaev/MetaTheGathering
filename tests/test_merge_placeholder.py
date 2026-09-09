@@ -56,6 +56,71 @@ class TestMergePlaceholderByName:
         merged = svc.merge_placeholder_by_name(REAL_TG_ID, "Крипков", "Сергей")
         assert merged is True
 
+    def test_swapped_name_with_initial_is_merged_automatically(self, db):
+        placeholder = models.User(tg_id=-20, first_name="Алексей А.", last_name="Боронко")
+        real = models.User(tg_id=REAL_TG_ID, first_name="Алексей А.", last_name="Боронко")
+        db.add_all([placeholder, real])
+        db.commit()
+
+        resolved = UserService(db).resolve_and_merge_import_name("Боронко Алексей А.")
+
+        assert resolved is not None
+        assert resolved.id == real.id
+        assert db.get(models.User, placeholder.id) is None
+
+    def test_swapped_two_part_name_is_merged_during_import_resolution(self, db):
+        placeholder = models.User(tg_id=-22, first_name="Игорь", last_name="Степанов")
+        real = models.User(tg_id=REAL_TG_ID, first_name="Игорь", last_name="Степанов")
+        db.add_all([placeholder, real])
+        db.commit()
+
+        resolved = UserService(db).resolve_and_merge_import_name("Степанов Игорь")
+
+        assert resolved is not None
+        assert resolved.id == real.id
+        assert db.get(models.User, placeholder.id) is None
+
+    def test_merge_transfers_pairing_and_canonical_match_identity(self, db):
+        placeholder = models.User(tg_id=-21, first_name="Констанин", last_name="Бурбаев")
+        real = models.User(tg_id=REAL_TG_ID, first_name="Константин", last_name="Бурбаев")
+        opponent = models.User(tg_id=777_001, first_name="Никита", last_name="Мясников")
+        db.add_all([placeholder, real, opponent])
+        db.flush()
+        tournament = TournamentService(db).create_tournament(
+            TournamentCreate(title="Identity history", chat_id=777, slug="identity-history")
+        )
+        pairing = models.RoundPairing(
+            tournament_id=tournament.id,
+            round_number=1,
+            player_name="Бурбаев Констанин",
+            opponent_name="Мясников Никита",
+            player_wins=2,
+            opponent_wins=0,
+            player_user_id=placeholder.id,
+            opponent_user_id=opponent.id,
+        )
+        match = models.RoundMatch(
+            tournament_id=tournament.id,
+            round_number=1,
+            pairing_key="dummy-not-a-real-key",
+            player1_name="Бурбаев Констанин",
+            player2_name="Мясников Никита",
+            player1_user_id=placeholder.id,
+            player2_user_id=opponent.id,
+            player1_wins=2,
+            player2_wins=0,
+            status=models.RoundMatchStatus.IMPORTED,
+        )
+        db.add_all([pairing, match])
+        db.commit()
+
+        UserService(db).merge_users_by_id(placeholder.id, real.id, adopt_name=False)
+
+        db.refresh(pairing)
+        db.refresh(match)
+        assert pairing.player_user_id == real.id
+        assert match.player1_user_id == real.id
+
     def test_full_name_in_single_telegram_field_matches_split_placeholder(self, db, placeholder):
         real = models.User(tg_id=REAL_TG_ID, first_name="Сергей Крипков", last_name=None)
         db.add(real)
