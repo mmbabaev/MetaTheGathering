@@ -39,6 +39,7 @@ from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeItem, ArchetypeService
 from services.names import has_complete_person_name, parse_full_name_input
 from services.payment_service import PaymentService
+from services.ranked_activation import RANKED_ACTIVATION_SELF_BOT
 from services.tournament import TournamentService
 from services.user import UserService
 from services.utils import get_tournament
@@ -368,15 +369,18 @@ class PlayerHandler:
         arch_name = archetypes.get(archetype_id)
         if arch_name is None:
             return HandlerResult("Архетип не найден.", is_alert=True)
+        target = self.user_svc.get_by_id(participant.user_id)
         saved = self.svc.set_participant_archetype_if_missing(
             participant_id=participant_id,
             archetype_id=archetype_id,
             deck_added_by_tg_id=tg_id,
+            ranked_activation_source=(
+                RANKED_ACTIVATION_SELF_BOT if target is not None and target.tg_id == tg_id else None
+            ),
         )
         if saved is None:
             return HandlerResult(META_POLICE_DECK_ALREADY_FILLED, is_alert=True)
 
-        target = self.user_svc.get_by_id(participant.user_id)
         name = (
             format_participant_name(
                 target.first_name if target else None,
@@ -455,15 +459,19 @@ class PlayerHandler:
                     user_id=db_user.id,
                     archetype_id=archetype_id,
                     deck_added_by_tg_id=tg_id,
+                    ranked_activation_source=RANKED_ACTIVATION_SELF_BOT,
                 )
             except errors.ParticipantAlreadyRegistered:
                 participant = self.svc.get_participant(tournament_id, db_user.id)
+                if participant is not None:
+                    self.svc.activate_participant_for_ranked(participant.id, RANKED_ACTIVATION_SELF_BOT)
                 if participant is None or participant.archetype_id is not None:
                     return HandlerResult(ALREADY_REGISTERED, is_alert=True)
                 self.svc.set_participant_archetype(
                     participant_id=participant.id,
                     archetype_id=archetype_id,
                     deck_added_by_tg_id=tg_id,
+                    ranked_activation_source=RANKED_ACTIVATION_SELF_BOT,
                 )
             archetypes = {a.id: a.name for a in self.arch_svc.list_archetypes()}
             name = archetypes.get(archetype_id, "?")
@@ -495,12 +503,18 @@ class PlayerHandler:
                 tournament_id=tournament_id,
                 user_id=db_user.id,
                 deck_deferred=True,
+                ranked_activation_source=RANKED_ACTIVATION_SELF_BOT,
             )
         except errors.ParticipantAlreadyRegistered:
             participant = self.svc.get_participant(tournament_id, db_user.id)
+            if participant is not None:
+                self.svc.activate_participant_for_ranked(participant.id, RANKED_ACTIVATION_SELF_BOT)
             if participant is None or participant.archetype_id is not None:
                 return HandlerResult(ALREADY_REGISTERED, is_alert=True)
-            self.svc.mark_participant_deck_deferred(participant.id)
+            self.svc.mark_participant_deck_deferred(
+                participant.id,
+                ranked_activation_source=RANKED_ACTIVATION_SELF_BOT,
+            )
         except errors.TournamentInvalidState:
             return HandlerResult(REGISTRATION_CLOSED, is_alert=True)
         return HandlerResult(REGISTERED_DECK_LATER)
@@ -523,15 +537,19 @@ class PlayerHandler:
                     user_id=db_user.id,
                     archetype_id=archetype.id,
                     deck_added_by_tg_id=tg_id,
+                    ranked_activation_source=RANKED_ACTIVATION_SELF_BOT,
                 )
             except errors.ParticipantAlreadyRegistered:
                 participant = self.svc.get_participant(tournament_id, db_user.id)
+                if participant is not None:
+                    self.svc.activate_participant_for_ranked(participant.id, RANKED_ACTIVATION_SELF_BOT)
                 if participant is None or participant.archetype_id is not None:
                     return HandlerResult(ALREADY_REGISTERED)
                 self.svc.set_participant_archetype(
                     participant_id=participant.id,
                     archetype_id=archetype.id,
                     deck_added_by_tg_id=tg_id,
+                    ranked_activation_source=RANKED_ACTIVATION_SELF_BOT,
                 )
             return HandlerResult(REGISTERED)
         except errors.TournamentInvalidState:

@@ -106,6 +106,7 @@ class RankedSnapshot:
     algorithm_version: str
     entries: tuple[RankedEntry, ...]
     quality: RankedDataQuality
+    included_tournament_ids: tuple[int, ...]
 
     def top(self, limit: int = 10, *, calibrated_only: bool = True) -> list[RankedEntry]:
         rows = (entry for entry in self.entries if entry.calibrated or not calibrated_only)
@@ -219,7 +220,7 @@ class RankedPreseasonService:
         if min_matches <= 0 or min_tournaments <= 0 or period_days <= 0:
             raise ValueError("rating thresholds and period_days must be positive")
 
-        matches, quality = self._load_matches(start, end)
+        matches, quality, included_tournament_ids = self._load_matches(start, end)
         states, records = self._calculate_periods(matches, start=start, period_days=period_days)
         user_ids = list(states)
         users = {
@@ -254,9 +255,14 @@ class RankedPreseasonService:
             algorithm_version=RANKED_ALGORITHM_VERSION,
             entries=tuple(entries),
             quality=quality,
+            included_tournament_ids=included_tournament_ids,
         )
 
-    def _load_matches(self, start: datetime, end: datetime) -> tuple[list[RankedMatch], RankedDataQuality]:
+    def _load_matches(
+        self,
+        start: datetime,
+        end: datetime,
+    ) -> tuple[list[RankedMatch], RankedDataQuality, tuple[int, ...]]:
         quality = RankedDataQuality()
         all_users = list(self.db.execute(select(models.User)).scalars())
         identity_index: dict[tuple[str, ...], list[models.User]] = defaultdict(list)
@@ -273,6 +279,7 @@ class RankedPreseasonService:
         quality.tournaments_scanned = len(tournaments)
 
         seen_sources: set[tuple[str, int | str]] = set()
+        included_tournament_ids: list[int] = []
         result: list[RankedMatch] = []
         for tournament in tournaments:
             if tournament.status != models.TournamentStatus.CLOSED:
@@ -307,11 +314,12 @@ class RankedPreseasonService:
             seen_sources.add(source_key)
 
             quality.tournaments_included += 1
+            included_tournament_ids.append(tournament.id)
             result.extend(self._canonical_matches(tournament, pairings, quality, identity_index))
 
         result.sort(key=lambda row: (row.played_at, row.tournament_id, row.round_number, row.player1_user_id))
         quality.matches_included = len(result)
-        return result, quality
+        return result, quality, tuple(included_tournament_ids)
 
     def _canonical_matches(
         self,

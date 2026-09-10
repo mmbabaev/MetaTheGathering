@@ -398,6 +398,12 @@ class Participant(Base):
     # tg_id того, кто записал колоду (сам игрок, админ или оппонент)
     deck_added_by_tg_id = Column(BigInteger, nullable=True)
 
+    # Сохраняемое доказательство самостоятельного действия для публичного Ranked.
+    # Источник создания участия может быть AetherHub, а активация произойти позже,
+    # когда сам игрок укажет свою колоду через бота.
+    ranked_activated_at = Column(DateTime, nullable=True)
+    ranked_activation_source = Column(String(16), nullable=True)  # self_bot | cellar
+
     # Игрок сам зарегистрировался через «Укажу позже» и ожидает напоминаний о колоде.
     deck_deferred = Column(Boolean, default=False, nullable=False, server_default="false")
     deck_reminder_prestart_sent_at = Column(DateTime, nullable=True)

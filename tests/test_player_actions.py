@@ -312,6 +312,30 @@ class TestHandleArchetype:
         assert result.text == ALREADY_REGISTERED
         assert result.is_alert
 
+    def test_imported_registration_is_activated_when_player_confirms_own_deck(
+        self, handler, svc, user_svc, active_tournament, archetype_burn
+    ):
+        user = user_svc.get_or_create(tg_id=1002, username="bob", first_name="Bob")
+        svc.register_participant(
+            tournament_id=active_tournament.id,
+            user_id=user.id,
+            archetype_id=archetype_burn.id,
+        )
+
+        result = handler.handle_archetype(
+            tg_id=user.tg_id,
+            username=user.username,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            tournament_id=active_tournament.id,
+            archetype_id=archetype_burn.id,
+        )
+
+        participant = svc.get_participant(active_tournament.id, user.id)
+        assert result.text == ALREADY_REGISTERED
+        assert participant.ranked_activated_at is not None
+        assert participant.ranked_activation_source == "self_bot"
+
     def test_already_registered_without_deck_updates_archetype(
         self, handler, svc, user_svc, active_tournament, archetype_burn
     ):

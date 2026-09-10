@@ -40,6 +40,7 @@ from services.export import ExportService
 from services.internal_swiss import InternalSwissService
 from services.meta_table_import import MetaTableImportService
 from services.poll import PollService
+from services.ranked_activation import RANKED_ACTIVATION_SELF_BOT
 from services.round_results import RoundResultError
 from services.tournament import TournamentService
 from services.user import UserService
@@ -303,11 +304,15 @@ class AdminHandler:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
         archetypes = {a.id: a.name for a in self.arch_svc.list_archetypes()}
         arch_name = archetypes.get(archetype_id, "?")
+        target = self.user_svc.get_by_id(p.user_id)
         try:
             self.svc.set_participant_archetype(
                 participant_id=participant_id,
                 archetype_id=archetype_id,
                 deck_added_by_tg_id=tg_id,
+                ranked_activation_source=(
+                    RANKED_ACTIVATION_SELF_BOT if target is not None and target.tg_id == tg_id else None
+                ),
             )
         except errors.ParticipantNotFound:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
@@ -322,12 +327,16 @@ class AdminHandler:
         p = self.svc.get_participant_by_id(participant_id)
         if p is None:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
+        target = self.user_svc.get_by_id(p.user_id)
         try:
             arch = self.arch_svc.get_or_create_by_name(arch_name, is_custom=True)
             self.svc.set_participant_archetype(
                 participant_id=participant_id,
                 archetype_id=arch.id,
                 deck_added_by_tg_id=tg_id,
+                ranked_activation_source=(
+                    RANKED_ACTIVATION_SELF_BOT if target is not None and target.tg_id == tg_id else None
+                ),
             )
         except errors.ParticipantNotFound:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)

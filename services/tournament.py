@@ -20,6 +20,7 @@ from core.schemas import (
 )
 from services import errors
 from services.aetherhub_links import ensure_aetherhub_link_available
+from services.ranked_activation import activate_participant
 from services.utils import ensure_tournament_status, get_tournament
 
 # доменные настройки
@@ -313,6 +314,7 @@ class TournamentService:
         added_by_admin: bool = False,
         deck_added_by_tg_id: Optional[int] = None,
         deck_deferred: bool = False,
+        ranked_activation_source: str | None = None,
     ) -> ParticipantRead:
         tournament = get_tournament(self.db, tournament_id)
         ensure_tournament_status(tournament, allowed=[models.TournamentStatus.REGISTRATION])
@@ -337,6 +339,7 @@ class TournamentService:
             created_at=models.utc_now(),
             updated_at=models.utc_now(),
         )
+        activate_participant(participant, ranked_activation_source)
         self.db.add(participant)
         self.db.commit()
         self.db.refresh(participant)
@@ -349,6 +352,7 @@ class TournamentService:
         archetype_id: Optional[int],
         reset_votes: bool = True,
         deck_added_by_tg_id: Optional[int] = None,
+        ranked_activation_source: str | None = None,
     ) -> ParticipantRead:
         participant = self._get_participant(participant_id)
 
@@ -359,6 +363,7 @@ class TournamentService:
         participant.updated_at = models.utc_now()
         if deck_added_by_tg_id is not None:
             participant.deck_added_by_tg_id = deck_added_by_tg_id
+        activate_participant(participant, ranked_activation_source)
 
         if reset_votes:
             self.db.query(models.Vote).filter(models.Vote.participant_id == participant_id).delete(
@@ -377,6 +382,7 @@ class TournamentService:
         participant_id: int,
         archetype_id: int,
         deck_added_by_tg_id: int,
+        ranked_activation_source: str | None = None,
     ) -> Optional[ParticipantRead]:
         """Атомарно записать только ещё пустую колоду.
 
@@ -407,21 +413,36 @@ class TournamentService:
         if not updated:
             self.db.rollback()
             return None
+        participant = self._get_participant(participant_id)
+        activate_participant(participant, ranked_activation_source, activated_at=now)
         self.db.query(models.Vote).filter(models.Vote.participant_id == participant_id).delete(
             synchronize_session=False
         )
         self.db.commit()
-        participant = self._get_participant(participant_id)
         return ParticipantRead.model_validate(participant)
 
-    def mark_participant_deck_deferred(self, participant_id: int) -> ParticipantRead:
+    def mark_participant_deck_deferred(
+        self,
+        participant_id: int,
+        *,
+        ranked_activation_source: str | None = None,
+    ) -> ParticipantRead:
         """Mark an existing deckless participant as explicitly choosing «Укажу позже»."""
         participant = self._get_participant(participant_id)
         if participant.archetype_id is None:
             participant.deck_deferred = True
             participant.updated_at = models.utc_now()
+            activate_participant(participant, ranked_activation_source)
             self.db.commit()
             self.db.refresh(participant)
+        return ParticipantRead.model_validate(participant)
+
+    def activate_participant_for_ranked(self, participant_id: int, source: str) -> ParticipantRead:
+        """Persist a qualifying self-action even when the participant already had a deck."""
+        participant = self._get_participant(participant_id)
+        activate_participant(participant, source)
+        self.db.commit()
+        self.db.refresh(participant)
         return ParticipantRead.model_validate(participant)
 
     def list_participants_for_tournament(

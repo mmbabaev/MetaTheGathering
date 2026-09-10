@@ -14,6 +14,7 @@ from services.cellar import (
     format_group_reservation,
     next_cellar_dates,
 )
+from services.ranked_activation import RANKED_ACTIVATION_CELLAR, RANKED_ACTIVATION_SELF_BOT
 from services.tournament import TournamentService
 from web.routes.settings import _merge_accounts
 
@@ -173,6 +174,7 @@ def test_reservation_registers_player_in_existing_tournament_and_cancel_undoes_i
     assert reservation.tournament_id == tournament.id
     assert reservation.participant_created is True
     assert db.get(models.Archetype, participant.archetype_id).name == decks[0].archetype_name
+    assert participant.ranked_activation_source == RANKED_ACTIVATION_CELLAR
 
     service.cancel(reservation_id=reservation.id, user_id=alice.id)
     assert TournamentService(db).get_participant(tournament.id, alice.id) is None
@@ -188,12 +190,16 @@ def test_reservation_fills_but_does_not_remove_existing_empty_participant_on_can
         deck_id=decks[0].id, user_id=alice.id, event_date=EVENT_DATE, today=EVENT_DATE
     ).reservation
     assert reservation.participant_created is False
-    assert TournamentService(db).get_participant_by_id(participant.id).archetype_id is not None
+    attached = TournamentService(db).get_participant_by_id(participant.id)
+    assert attached.archetype_id is not None
+    assert attached.ranked_activation_source == RANKED_ACTIVATION_CELLAR
 
     service.cancel(reservation_id=reservation.id, user_id=alice.id)
     saved = TournamentService(db).get_participant_by_id(participant.id)
     assert saved is not None
     assert saved.archetype_id is None
+    assert saved.ranked_activated_at is None
+    assert saved.ranked_activation_source is None
 
 
 def test_reservation_temporarily_replaces_existing_deck_and_cancel_restores_it(db, user_svc, arch_svc):
@@ -206,6 +212,7 @@ def test_reservation_temporarily_replaces_existing_deck_and_cancel_restores_it(d
         user_id=alice.id,
         archetype_id=own_deck.id,
         deck_added_by_tg_id=alice.tg_id,
+        ranked_activation_source=RANKED_ACTIVATION_SELF_BOT,
     )
 
     reservation = service.reserve(
@@ -218,7 +225,9 @@ def test_reservation_temporarily_replaces_existing_deck_and_cancel_restores_it(d
     assert reservation.tournament_id == tournament.id
 
     service.cancel(reservation_id=reservation.id, user_id=alice.id)
-    assert TournamentService(db).get_participant(tournament.id, alice.id).archetype_id == own_deck.id
+    restored = TournamentService(db).get_participant(tournament.id, alice.id)
+    assert restored.archetype_id == own_deck.id
+    assert restored.ranked_activation_source == RANKED_ACTIVATION_SELF_BOT
 
 
 def test_pending_reservation_is_attached_when_tournament_is_created(db, user_svc):

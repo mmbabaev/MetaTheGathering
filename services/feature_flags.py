@@ -32,6 +32,7 @@ class FeatureFlags:
     MAGIC_OCULUS_IMPORT = "magicOculusImport"
     LIVE_REGISTRATION_COUNT = "liveRegistrationCount"
     CELLAR_DECKS = "cellarDecks"
+    RANKED_PUBLIC = "rankedPublic"
 
 
 KNOWN_FLAGS: dict[str, FeatureFlagMeta] = {
@@ -77,6 +78,11 @@ KNOWN_FLAGS: dict[str, FeatureFlagMeta] = {
     ),
     FeatureFlags.CELLAR_DECKS: FeatureFlagMeta(
         description="Колоды из ячейки: каталог, бронирование и адресные уведомления",
+        value_type="bool",
+        default_value="false",
+    ),
+    FeatureFlags.RANKED_PUBLIC: FeatureFlagMeta(
+        description="Ranked: публичный сезон и рейтинг в адресных уведомлениях",
         value_type="bool",
         default_value="false",
     ),

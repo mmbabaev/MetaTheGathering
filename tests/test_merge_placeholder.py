@@ -6,6 +6,7 @@ from sqlalchemy import select
 from core import models
 from core.schemas import TournamentCreate
 from services.archetype import ArchetypeService
+from services.ranked_activation import RANKED_ACTIVATION_CELLAR, RANKED_ACTIVATION_SELF_BOT
 from services.tournament import TournamentService
 from services.user import UserService
 
@@ -223,3 +224,36 @@ class TestMergePlaceholderByName:
 
         participant = db.execute(select(models.Participant).where(models.Participant.user_id == real.id)).scalar_one()
         assert participant.aetherhub_seen_at == seen_at
+
+    def test_conflict_preserves_stronger_self_bot_activation(self, db, placeholder, arch_svc):
+        tournament = TournamentService(db).create_tournament(
+            TournamentCreate(title="Ranked activation", chat_id=3, slug="ranked-activation")
+        )
+        cellar_at = models.utc_now()
+        self_bot_at = cellar_at
+        real = models.User(tg_id=REAL_TG_ID)
+        db.add(real)
+        db.flush()
+        db.add(
+            models.Participant(
+                tournament_id=tournament.id,
+                user_id=placeholder.id,
+                ranked_activated_at=self_bot_at,
+                ranked_activation_source=RANKED_ACTIVATION_SELF_BOT,
+            )
+        )
+        db.add(
+            models.Participant(
+                tournament_id=tournament.id,
+                user_id=real.id,
+                ranked_activated_at=cellar_at,
+                ranked_activation_source=RANKED_ACTIVATION_CELLAR,
+            )
+        )
+        db.commit()
+
+        UserService(db).merge_placeholder_by_name(REAL_TG_ID, "Сергей", "Крипков")
+
+        participant = db.execute(select(models.Participant).where(models.Participant.user_id == real.id)).scalar_one()
+        assert participant.ranked_activated_at == self_bot_at
+        assert participant.ranked_activation_source == RANKED_ACTIVATION_SELF_BOT
