@@ -17,6 +17,27 @@ RANKED_PUBLIC_PENALTY = 50
 RANKED_MISS_LIMIT = 2
 
 
+def activation_tournament_ids(
+    db: Session,
+    *,
+    start: datetime,
+    end: datetime,
+    clubs: frozenset[str],
+) -> tuple[int, ...]:
+    """Eligible tournaments where somebody opted in during the rating window."""
+    rows = db.execute(
+        select(models.Participant.tournament_id, models.Tournament.club)
+        .join(models.Tournament, models.Tournament.id == models.Participant.tournament_id)
+        .where(
+            models.Participant.ranked_activated_at.is_not(None),
+            models.Participant.ranked_activated_at >= start,
+            models.Participant.ranked_activated_at < end,
+        )
+        .distinct()
+    ).all()
+    return tuple(tournament_id for tournament_id, club in rows if (club or "").casefold() in clubs)
+
+
 def activate_participant(
     participant: models.Participant,
     source: str | None,
@@ -68,12 +89,10 @@ class RankedPublicStateService:
         self,
         included_tournament_ids: tuple[int, ...],
         *,
-        current_tournament_id: int | None = None,
+        activation_tournament_ids: tuple[int, ...] = (),
     ) -> dict[int, RankedPublicState]:
         closed_ids = set(included_tournament_ids)
-        query_ids = set(closed_ids)
-        if current_tournament_id is not None:
-            query_ids.add(current_tournament_id)
+        query_ids = closed_ids | set(activation_tournament_ids)
         if not query_ids:
             return {}
 
@@ -91,17 +110,31 @@ class RankedPublicStateService:
             by_tournament.setdefault(participant.tournament_id, []).append(participant)
 
         states: dict[int, RankedPublicState] = {}
-        ordered_closed = sorted(
-            (tournaments[tournament_id] for tournament_id in closed_ids if tournament_id in tournaments),
-            key=lambda tournament: (tournament.started_at or tournament.created_at, tournament.id),
-        )
-        for tournament in ordered_closed:
+        events: list[tuple[datetime, int, int, models.Participant | models.Tournament]] = []
+        for tournament_id in closed_ids:
+            tournament = tournaments.get(tournament_id)
+            if tournament is not None:
+                events.append((tournament.started_at or tournament.created_at, 1, tournament.id, tournament))
+        for participant in participants:
+            if self._activated(participant):
+                events.append((participant.ranked_activated_at, 0, participant.id, participant))
+
+        for _at, event_type, _event_id, event in sorted(events):
+            if event_type == 0:
+                participant = event
+                state = states.setdefault(participant.user_id, RankedPublicState())
+                state.active = True
+                state.missed_tournaments = 0
+                continue
+
+            tournament = event
             for participant in by_tournament.get(tournament.id, []):
                 state = states.setdefault(participant.user_id, RankedPublicState())
                 if self._activated(participant):
-                    state.active = True
-                    state.missed_tournaments = 0
-                elif state.active:
+                    # An action tied to this participation exempts this tournament.
+                    # Its exact activation time is processed as a separate event.
+                    continue
+                if state.active:
                     state.missed_tournaments += 1
                     if state.missed_tournaments >= RANKED_MISS_LIMIT:
                         state.active = False
@@ -109,13 +142,6 @@ class RankedPublicStateService:
                         state.penalty += RANKED_PUBLIC_PENALTY
                         state.penalty_cycles += 1
 
-        if current_tournament_id is not None and current_tournament_id not in closed_ids:
-            for participant in by_tournament.get(current_tournament_id, []):
-                if not self._activated(participant):
-                    continue
-                state = states.setdefault(participant.user_id, RankedPublicState())
-                state.active = True
-                state.missed_tournaments = 0
         return states
 
     @staticmethod

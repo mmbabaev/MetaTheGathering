@@ -84,7 +84,7 @@ KNOWN_FLAGS: dict[str, FeatureFlagMeta] = {
     FeatureFlags.RANKED_PUBLIC: FeatureFlagMeta(
         description="Ranked: публичный сезон и рейтинг в адресных уведомлениях",
         value_type="bool",
-        default_value="false",
+        default_value="true",
     ),
 }
 

@@ -103,6 +103,9 @@ from bot.keyboards import (
     CB_POLL_PING,
     CB_POLL_REGULAR_TOGGLE,
     CB_POLL_REGULARS,
+    CB_RANKED_ME,
+    CB_RANKED_PAGE,
+    CB_RANKED_RULES,
     CB_REGISTER,
     CB_REOPEN_TOURNAMENT,
     CB_REVEAL_DECKS,
@@ -201,6 +204,7 @@ if settings.DEBUG:
 
 _USER_COMMANDS = [
     BotCommand("tournaments", "Активные турниры и запись"),
+    BotCommand("leaderboard", "Moscow Pauper Ranked"),
     BotCommand("social_rating", "Социальный рейтинг"),
     BotCommand("cellar", "Колоды из ячейки"),
     BotCommand("settings", "Настройки профиля"),
@@ -354,6 +358,7 @@ def main() -> None:
     app.add_handler(CommandHandler("start", common.cmd_start, filters=private))
     app.add_handler(CommandHandler("help", common.cmd_help, filters=private))
     app.add_handler(CommandHandler("tournaments", player.cmd_tournaments, filters=private))
+    app.add_handler(CommandHandler("leaderboard", ranked_handler.cmd_leaderboard, filters=private))
     app.add_handler(CommandHandler("social_rating", rating_handler.cmd_social_rating, filters=private))
     app.add_handler(CommandHandler("cellar", cellar_handler.cmd_cellar, filters=private))
     app.add_handler(CommandHandler("settings", settings_handler.cmd_settings, filters=private))
@@ -381,6 +386,9 @@ def main() -> None:
         CallbackQueryHandler(cellar_handler.callback_cancel_confirm, pattern=f"^{CB_CELLAR_CANCEL_CONFIRM}:")
     )
     app.add_handler(CallbackQueryHandler(cellar_handler.callback_noop, pattern=f"^{CB_CELLAR_NOOP}$"))
+    app.add_handler(CallbackQueryHandler(ranked_handler.callback_leaderboard_page, pattern=f"^{CB_RANKED_PAGE}:"))
+    app.add_handler(CallbackQueryHandler(ranked_handler.callback_leaderboard_me, pattern=f"^{CB_RANKED_ME}$"))
+    app.add_handler(CallbackQueryHandler(ranked_handler.callback_leaderboard_rules, pattern=f"^{CB_RANKED_RULES}:"))
     app.add_handler(CallbackQueryHandler(clubs_handler.callback_list, pattern=f"^{CB_CLUB_SETTINGS_LIST}$"))
     app.add_handler(CallbackQueryHandler(clubs_handler.callback_club, pattern=f"^{CB_CLUB_SETTINGS_CLUB}:"))
     app.add_handler(CallbackQueryHandler(clubs_handler.callback_chat, pattern=f"^{CB_CLUB_SETTINGS_CHAT}:"))

@@ -89,7 +89,7 @@ def test_current_tournament_self_action_reactivates_without_removing_penalty(db)
 
     state = RankedPublicStateService(db).calculate(
         (first.id, second.id, third.id),
-        current_tournament_id=current.id,
+        activation_tournament_ids=(current.id,),
     )[user.id]
 
     assert state.active is True

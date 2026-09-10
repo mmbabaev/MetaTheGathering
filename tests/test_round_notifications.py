@@ -24,6 +24,7 @@ from services.aetherhub_import_service import AetherhubImportService
 from services.aetherhub_models import AetherhubPairing, AetherhubRound, AetherhubTournamentData
 from services.archetype import ArchetypeService
 from services.datalens import DataLensService, StatRow
+from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.ranked_round_info import RankedRoundInfo
 from services.round_notifications import RoundNotification, RoundNotificationService
 from services.user import UserService
@@ -101,6 +102,20 @@ def notif_svc(db):
 
 
 class TestBuildForRound:
+    def test_public_ranked_enrichment_is_enabled_by_default(self, db):
+        with patch("services.round_notifications.RankedRoundInfoService") as ranked_service:
+            RoundNotificationService(db)
+
+        ranked_service.assert_called_once_with(db)
+
+    def test_public_ranked_enrichment_can_be_disabled(self, db):
+        FeatureFlagService(db).toggle(FeatureFlags.RANKED_PUBLIC)
+
+        with patch("services.round_notifications.RankedRoundInfoService") as ranked_service:
+            RoundNotificationService(db)
+
+        ranked_service.assert_not_called()
+
     def test_self_registered_real_user_gets_full_notification(self, db, svc, user_svc, arch_svc, notif_svc):
         t = _tournament(svc)
         recipient = _user(user_svc, 2001, "Recipient")

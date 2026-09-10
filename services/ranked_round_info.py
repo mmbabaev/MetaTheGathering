@@ -10,14 +10,15 @@ from sqlalchemy.orm import Session
 from core import models
 from services.ranked import (
     MOSCOW_RANKED_CLUBS,
+    PRESEASON_START,
     Glicko2Rating,
     RankedEntry,
     RankedPreseasonService,
     update_glicko2,
 )
-from services.ranked_activation import RankedPublicStateService
+from services.ranked_activation import RankedPublicStateService, activation_tournament_ids
 
-RANKED_FIRST_SEASON_START = datetime(2026, 9, 20)
+RANKED_PUBLIC_START = PRESEASON_START
 
 
 @dataclass(frozen=True)
@@ -37,7 +38,7 @@ class RankedRoundInfoService:
         self,
         db: Session,
         *,
-        season_start: datetime = RANKED_FIRST_SEASON_START,
+        season_start: datetime = RANKED_PUBLIC_START,
         now: datetime | None = None,
     ) -> None:
         self.db = db
@@ -94,9 +95,15 @@ class RankedRoundInfoService:
             end=self.now + timedelta(microseconds=1),
         )
         self._entries = {entry.user_id: entry for entry in snapshot.entries}
+        activation_ids = activation_tournament_ids(
+            self.db,
+            start=self.season_start,
+            end=self.now + timedelta(microseconds=1),
+            clubs=MOSCOW_RANKED_CLUBS,
+        )
         self._states = RankedPublicStateService(self.db).calculate(
             snapshot.included_tournament_ids,
-            current_tournament_id=tournament_id,
+            activation_tournament_ids=activation_ids,
         )
         self._prepared_tournament_id = tournament_id
         return True

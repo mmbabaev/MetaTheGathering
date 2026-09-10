@@ -1,0 +1,199 @@
+from datetime import datetime, timedelta
+from unittest.mock import MagicMock
+
+from bot.handlers.leaderboard import LEADERBOARD_PAGE_SIZE, RankedLeaderboardHandler
+from bot.keyboards import CB_RANKED_ME, CB_RANKED_PAGE, CB_RANKED_RULES
+from bot.messages import RANKED_RULES_TEXT
+from core import models
+from core.schemas import TournamentCreate
+from services.feature_flags import FeatureFlagService
+from services.ranked import RankedPreseasonService
+from services.ranked_activation import RANKED_ACTIVATION_SELF_BOT, activate_participant
+from services.ranked_leaderboard import (
+    RankedLeaderboard,
+    RankedLeaderboardRow,
+    RankedLeaderboardService,
+)
+from services.tournament import TournamentService
+from services.user import UserService
+
+
+def _callbacks(result):
+    return [button.callback_data for row in result.keyboard.inline_keyboard for button in row]
+
+
+def _ranked_tournament(db, *, title: str, started_at: datetime, closed: bool):
+    created = TournamentService(db).create_tournament(
+        TournamentCreate(title=title, chat_id=10_000 + int(started_at.timestamp()), club="Goldfish")
+    )
+    tournament = db.get(models.Tournament, created.id)
+    tournament.started_at = started_at
+    if closed:
+        tournament.status = models.TournamentStatus.CLOSED
+    db.commit()
+    return tournament
+
+
+def _participant(db, tournament, user, *, activated_at=None):
+    participant = models.Participant(tournament_id=tournament.id, user_id=user.id)
+    if activated_at is not None:
+        activate_participant(participant, RANKED_ACTIVATION_SELF_BOT, activated_at=activated_at)
+    db.add(participant)
+    db.commit()
+    return participant
+
+
+def _pair(db, tournament, player, opponent, score=(2, 0)):
+    player_name = f"{player.last_name} {player.first_name}"
+    opponent_name = f"{opponent.last_name} {opponent.first_name}"
+    db.add_all(
+        [
+            models.RoundPairing(
+                tournament_id=tournament.id,
+                round_number=1,
+                player_name=player_name,
+                opponent_name=opponent_name,
+                player_wins=score[0],
+                opponent_wins=score[1],
+            ),
+            models.RoundPairing(
+                tournament_id=tournament.id,
+                round_number=1,
+                player_name=opponent_name,
+                opponent_name=player_name,
+                player_wins=score[1],
+                opponent_wins=score[0],
+            ),
+        ]
+    )
+    db.commit()
+
+
+def test_future_tournament_self_registration_opens_initial_public_score(db):
+    now = datetime(2026, 9, 10, 12)
+    tournament = _ranked_tournament(
+        db,
+        title="Next Friday",
+        started_at=now + timedelta(days=2),
+        closed=False,
+    )
+    player = UserService(db).get_or_create(tg_id=8101, first_name="Михаил", last_name="Бабаев")
+    _participant(db, tournament, player, activated_at=now - timedelta(minutes=1))
+
+    leaderboard = RankedLeaderboardService(db, now=now).calculate()
+
+    assert len(leaderboard.rows) == 1
+    assert leaderboard.rows[0].name == "Бабаев Михаил"
+    assert leaderboard.rows[0].score == 800
+
+
+def test_two_misses_hide_player_until_reactivation_and_keep_public_penalty(db):
+    start = datetime(2026, 9, 1)
+    users = UserService(db)
+    player = users.get_or_create(tg_id=8102, first_name="Иван", last_name="Игроков")
+    opponent = users.get_or_create(tg_id=8103, first_name="Олег", last_name="Соперников")
+    closed = [
+        _ranked_tournament(db, title=f"T{index}", started_at=start + timedelta(days=index), closed=True)
+        for index in range(3)
+    ]
+    for index, tournament in enumerate(closed):
+        _participant(db, tournament, player, activated_at=tournament.started_at if index == 0 else None)
+        _participant(db, tournament, opponent)
+        _pair(db, tournament, player, opponent)
+
+    hidden = RankedLeaderboardService(db, now=start + timedelta(days=4)).calculate()
+    assert all(row.user_id != player.id for row in hidden.rows)
+
+    current = _ranked_tournament(db, title="Return", started_at=start + timedelta(days=7), closed=False)
+    _participant(db, current, player, activated_at=start + timedelta(days=4, minutes=1))
+    returned = RankedLeaderboardService(db, now=start + timedelta(days=4, minutes=2)).calculate()
+
+    player_row = next(row for row in returned.rows if row.user_id == player.id)
+    unpenalized = next(
+        entry.ranked_score
+        for entry in RankedPreseasonService(db)
+        .calculate(start=datetime(2026, 6, 20), end=start + timedelta(days=4, minutes=3))
+        .entries
+        if entry.user_id == player.id
+    )
+    assert player_row.score == unpenalized - 50
+
+
+def _snapshot(size: int, *, id_offset: int = 0) -> RankedLeaderboard:
+    return RankedLeaderboard(
+        generated_at=datetime(2026, 9, 10),
+        rows=tuple(
+            RankedLeaderboardRow(
+                position=index,
+                user_id=index + id_offset,
+                name=f"Игрок {index:02d}",
+                score=1701 - index,
+            )
+            for index in range(1, size + 1)
+        ),
+    )
+
+
+def _handler(db, snapshot: RankedLeaderboard):
+    ranked = MagicMock()
+    ranked.calculate.return_value = snapshot
+    return RankedLeaderboardHandler(ranked, UserService(db), FeatureFlagService(db))
+
+
+def test_leaderboard_pages_contain_ten_players_and_navigation(db):
+    handler = _handler(db, _snapshot(21))
+
+    first = handler.handle_page(0)
+    second = handler.handle_page(1)
+    last = handler.handle_page(2)
+
+    assert "1 — Игрок 01 — 1700" in first.text
+    assert "10 — Игрок 10 — 1691" in first.text
+    assert "11 — Игрок 11" not in first.text
+    assert f"{CB_RANKED_PAGE}:1" in _callbacks(first)
+    assert f"{CB_RANKED_PAGE}:0" in _callbacks(second)
+    assert f"{CB_RANKED_PAGE}:2" in _callbacks(second)
+    assert f"{CB_RANKED_PAGE}:1" in _callbacks(last)
+    assert CB_RANKED_ME in _callbacks(last)
+    assert f"{CB_RANKED_RULES}:2" in _callbacks(last)
+    assert LEADERBOARD_PAGE_SIZE == 10
+
+
+def test_initial_public_leaderboard_can_be_empty(db):
+    result = _handler(db, _snapshot(0)).handle_page()
+
+    assert "Публичный рейтинг пока пуст" in result.text
+    assert CB_RANKED_ME in _callbacks(result)
+    assert f"{CB_RANKED_RULES}:0" in _callbacks(result)
+
+
+def test_where_am_i_opens_page_containing_player(db):
+    user = models.User(id=17, tg_id=8117, first_name="Игрок", last_name="17")
+    db.add(user)
+    db.commit()
+    handler = _handler(db, _snapshot(25))
+
+    result = handler.handle_me(user.tg_id)
+
+    assert "Страница 2/3" in result.text
+    assert "👉 17 — Игрок 17 — 1684" in result.text
+    assert CB_RANKED_ME not in _callbacks(result)
+
+
+def test_where_am_i_explains_when_player_is_not_public(db):
+    user = UserService(db).get_or_create(tg_id=8199, first_name="Скрытый")
+
+    result = _handler(db, _snapshot(3, id_offset=100)).handle_me(user.tg_id)
+
+    assert "пока нет в публичном рейтинге" in result.text
+    assert f"{CB_RANKED_PAGE}:0" in _callbacks(result)
+
+
+def test_rules_include_formula_and_back_button(db):
+    result = _handler(db, _snapshot(1)).handle_rules(3)
+
+    assert result.text == RANKED_RULES_TEXT
+    assert "Score = round(R − 2 × RD)" in result.text
+    assert "Glicko-2" in result.text
+    assert len(result.text) < 4096
+    assert _callbacks(result) == [f"{CB_RANKED_PAGE}:3"]
