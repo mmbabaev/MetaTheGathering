@@ -69,7 +69,7 @@ def _pair(db, tournament, player, opponent, score=(2, 0)):
     db.commit()
 
 
-def test_future_tournament_self_registration_opens_initial_public_score(db):
+def test_future_tournament_self_registration_waits_for_completed_close(db):
     now = datetime(2026, 9, 10, 12)
     tournament = _ranked_tournament(
         db,
@@ -77,17 +77,45 @@ def test_future_tournament_self_registration_opens_initial_public_score(db):
         started_at=now + timedelta(days=2),
         closed=False,
     )
-    player = UserService(db).get_or_create(tg_id=8101, first_name="Михаил", last_name="Бабаев")
+    users = UserService(db)
+    player = users.get_or_create(tg_id=8101, first_name="Михаил", last_name="Бабаев")
+    opponent = users.get_or_create(tg_id=8102, first_name="Иван", last_name="Соперников")
     _participant(db, tournament, player, activated_at=now - timedelta(minutes=1))
+    _participant(db, tournament, opponent)
+    _pair(db, tournament, player, opponent)
 
-    leaderboard = RankedLeaderboardService(db, now=now).calculate()
+    before_close = RankedLeaderboardService(db, now=now).calculate()
 
-    assert len(leaderboard.rows) == 1
-    assert leaderboard.rows[0].name == "Бабаев Михаил"
-    assert leaderboard.rows[0].score == 800
+    assert before_close.rows == ()
+
+    tournament.status = models.TournamentStatus.CLOSED
+    db.commit()
+    after_close = RankedLeaderboardService(db, now=now + timedelta(days=3)).calculate()
+
+    assert any(row.user_id == player.id for row in after_close.rows)
 
 
-def test_two_misses_hide_player_until_reactivation_and_keep_public_penalty(db):
+def test_player_who_withdraws_before_close_is_not_published(db):
+    now = datetime(2026, 9, 10, 12)
+    tournament = _ranked_tournament(db, title="Next Friday", started_at=now + timedelta(days=2), closed=False)
+    users = UserService(db)
+    withdrawn = users.get_or_create(tg_id=8110, first_name="Вышел", last_name="Заранее")
+    player = users.get_or_create(tg_id=8111, first_name="Остался", last_name="Первый")
+    opponent = users.get_or_create(tg_id=8112, first_name="Остался", last_name="Второй")
+    _participant(db, tournament, withdrawn, activated_at=now)
+    _participant(db, tournament, player)
+    _participant(db, tournament, opponent)
+    TournamentService(db).unregister_participant(tournament.id, withdrawn.id)
+    _pair(db, tournament, player, opponent)
+    tournament.status = models.TournamentStatus.CLOSED
+    db.commit()
+
+    leaderboard = RankedLeaderboardService(db, now=now + timedelta(days=3)).calculate()
+
+    assert all(row.user_id != withdrawn.id for row in leaderboard.rows)
+
+
+def test_each_miss_penalizes_player_without_hiding_them(db):
     start = datetime(2026, 9, 1)
     users = UserService(db)
     player = users.get_or_create(tg_id=8102, first_name="Иван", last_name="Игроков")
@@ -101,14 +129,8 @@ def test_two_misses_hide_player_until_reactivation_and_keep_public_penalty(db):
         _participant(db, tournament, opponent)
         _pair(db, tournament, player, opponent)
 
-    hidden = RankedLeaderboardService(db, now=start + timedelta(days=4)).calculate()
-    assert all(row.user_id != player.id for row in hidden.rows)
-
-    current = _ranked_tournament(db, title="Return", started_at=start + timedelta(days=7), closed=False)
-    _participant(db, current, player, activated_at=start + timedelta(days=4, minutes=1))
-    returned = RankedLeaderboardService(db, now=start + timedelta(days=4, minutes=2)).calculate()
-
-    player_row = next(row for row in returned.rows if row.user_id == player.id)
+    leaderboard = RankedLeaderboardService(db, now=start + timedelta(days=4)).calculate()
+    player_row = next(row for row in leaderboard.rows if row.user_id == player.id)
     entry = next(
         entry
         for entry in RankedPreseasonService(db)
@@ -119,7 +141,7 @@ def test_two_misses_hide_player_until_reactivation_and_keep_public_penalty(db):
     expected = public_ranked_score(
         Glicko2Rating(entry.rating, entry.deviation, entry.volatility),
         matches=entry.matches,
-        penalty=50,
+        penalty=20,
     )
     assert player_row.score == expected
 
@@ -127,9 +149,9 @@ def test_two_misses_hide_player_until_reactivation_and_keep_public_penalty(db):
 def test_public_score_adds_one_point_per_match_without_changing_glicko():
     rating = Glicko2Rating(rating=1500, deviation=100, volatility=0.06)
 
-    score = public_ranked_score(rating, matches=4, penalty=50)
+    score = public_ranked_score(rating, matches=4, penalty=10)
 
-    assert score == 1254
+    assert score == 1294
     assert rating == Glicko2Rating(rating=1500, deviation=100, volatility=0.06)
 
 

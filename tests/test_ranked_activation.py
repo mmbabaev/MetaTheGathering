@@ -6,6 +6,7 @@ from services.ranked import Glicko2Rating, update_glicko2
 from services.ranked_activation import (
     RANKED_ACTIVATION_CELLAR,
     RANKED_ACTIVATION_SELF_BOT,
+    RANKED_MISSED_ENTRY_PENALTY,
     RankedPublicStateService,
     activate_participant,
 )
@@ -34,6 +35,32 @@ def _participant(db, tournament, user, source=None):
     return participant
 
 
+def _pair(db, tournament, player, opponent, score=(2, 0)):
+    player_name = f"{player.last_name} {player.first_name}"
+    opponent_name = f"{opponent.last_name} {opponent.first_name}"
+    db.add_all(
+        [
+            models.RoundPairing(
+                tournament_id=tournament.id,
+                round_number=1,
+                player_name=player_name,
+                opponent_name=opponent_name,
+                player_wins=score[0],
+                opponent_wins=score[1],
+            ),
+            models.RoundPairing(
+                tournament_id=tournament.id,
+                round_number=1,
+                player_name=opponent_name,
+                opponent_name=player_name,
+                player_wins=score[1],
+                opponent_wins=score[0],
+            ),
+        ]
+    )
+    db.commit()
+
+
 def test_activation_is_durable_and_self_bot_upgrades_cellar(db):
     participant = models.Participant(tournament_id=1, user_id=1)
     first = datetime(2026, 9, 20, 12)
@@ -60,50 +87,46 @@ def test_tournament_service_records_imported_players_later_self_action(db):
     assert updated.ranked_activation_source == RANKED_ACTIVATION_SELF_BOT
 
 
-def test_two_misses_deactivate_and_each_reactivation_starts_new_penalty_cycle(db):
+def test_each_missed_self_entry_keeps_player_public_and_adds_ten_point_penalty(db):
     user = UserService(db).get_or_create(tg_id=7002, first_name="Игрок")
-    tournaments = [_tournament(db, index) for index in range(7)]
+    tournaments = [_tournament(db, index) for index in range(4)]
     _participant(db, tournaments[0], user, RANKED_ACTIVATION_SELF_BOT)
     _participant(db, tournaments[1], user)
     _participant(db, tournaments[2], user)
-    _participant(db, tournaments[3], user)  # already inactive: no repeated penalty
-    _participant(db, tournaments[4], user, RANKED_ACTIVATION_CELLAR)
-    _participant(db, tournaments[5], user)
-    _participant(db, tournaments[6], user)
+    _participant(db, tournaments[3], user, RANKED_ACTIVATION_CELLAR)
 
     state = RankedPublicStateService(db).calculate(tuple(t.id for t in tournaments))[user.id]
 
-    assert state.active is False
+    assert RANKED_MISSED_ENTRY_PENALTY == 10
+    assert state.active is True
     assert state.missed_tournaments == 0
-    assert state.penalty == 100
-    assert state.penalty_cycles == 2
+    assert state.penalty == 20
 
 
-def test_current_tournament_self_action_reactivates_without_removing_penalty(db):
+def test_missed_entry_penalty_is_tunable(db):
     user = UserService(db).get_or_create(tg_id=7003, first_name="Игрок")
     first, second, third = [_tournament(db, index) for index in range(3)]
-    current = _tournament(db, 3, closed=False)
     _participant(db, first, user, RANKED_ACTIVATION_SELF_BOT)
     _participant(db, second, user)
     _participant(db, third, user)
-    _participant(db, current, user, RANKED_ACTIVATION_CELLAR)
 
-    state = RankedPublicStateService(db).calculate(
-        (first.id, second.id, third.id),
-        activation_tournament_ids=(current.id,),
-    )[user.id]
+    state = RankedPublicStateService(db, missed_entry_penalty=7).calculate((first.id, second.id, third.id))[user.id]
 
     assert state.active is True
-    assert state.missed_tournaments == 0
-    assert state.penalty == 50
+    assert state.missed_tournaments == 2
+    assert state.penalty == 14
 
 
-def test_round_info_hides_inactive_opponent_and_forecasts_public_opponent(db):
+def test_round_info_waits_for_tournament_close_before_publishing_opponent(db):
+    previous = _tournament(db, 0)
     current = _tournament(db, 10, closed=False)
     users = UserService(db)
-    own = users.get_or_create(tg_id=7010, first_name="Свой")
-    opponent = users.get_or_create(tg_id=7011, first_name="Оппонент")
-    _participant(db, current, own, RANKED_ACTIVATION_SELF_BOT)
+    own = users.get_or_create(tg_id=7010, first_name="Свой", last_name="Игрок")
+    opponent = users.get_or_create(tg_id=7011, first_name="Другой", last_name="Игрок")
+    _participant(db, previous, own, RANKED_ACTIVATION_SELF_BOT)
+    _participant(db, previous, opponent)
+    _pair(db, previous, own, opponent)
+    _participant(db, current, own)
     opponent_participant = _participant(db, current, opponent)
     service = RankedRoundInfoService(
         db,
@@ -119,16 +142,27 @@ def test_round_info_hides_inactive_opponent_and_forecasts_public_opponent(db):
 
     activate_participant(opponent_participant, RANKED_ACTIVATION_SELF_BOT)
     db.commit()
-    refreshed = RankedRoundInfoService(
+    still_hidden = RankedRoundInfoService(
         db,
         season_start=datetime(2026, 9, 20),
         now=datetime(2026, 10, 5),
     ).for_pairing(current.id, own.id, opponent.id)
 
-    assert refreshed is not None
-    assert refreshed.opponent_hidden is False
-    assert refreshed.opponent_score == 800
-    assert all(delta is not None for delta in (refreshed.win_delta, refreshed.draw_delta, refreshed.loss_delta))
+    assert still_hidden is not None
+    assert still_hidden.opponent_hidden is True
+
+    current.status = models.TournamentStatus.CLOSED
+    _pair(db, current, own, opponent)
+    published = RankedRoundInfoService(
+        db,
+        season_start=datetime(2026, 9, 20),
+        now=datetime(2026, 10, 5),
+    ).for_pairing(current.id, own.id, opponent.id)
+
+    assert published is not None
+    assert published.opponent_hidden is False
+    assert published.opponent_score is not None
+    assert all(delta is not None for delta in (published.win_delta, published.draw_delta, published.loss_delta))
 
 
 def test_round_forecast_reports_public_delta_with_participation_bonus():

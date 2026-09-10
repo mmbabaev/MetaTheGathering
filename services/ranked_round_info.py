@@ -17,7 +17,7 @@ from services.ranked import (
     public_ranked_score,
     update_glicko2,
 )
-from services.ranked_activation import RankedPublicStateService, activation_tournament_ids
+from services.ranked_activation import RankedPublicStateService
 
 RANKED_PUBLIC_START = PRESEASON_START
 
@@ -105,16 +105,7 @@ class RankedRoundInfoService:
             end=self.now + timedelta(microseconds=1),
         )
         self._entries = {entry.user_id: entry for entry in snapshot.entries}
-        activation_ids = activation_tournament_ids(
-            self.db,
-            start=self.season_start,
-            end=self.now + timedelta(microseconds=1),
-            clubs=MOSCOW_RANKED_CLUBS,
-        )
-        self._states = RankedPublicStateService(self.db).calculate(
-            snapshot.included_tournament_ids,
-            activation_tournament_ids=activation_ids,
-        )
+        self._states = RankedPublicStateService(self.db).calculate(snapshot.included_tournament_ids)
         self._prepared_tournament_id = tournament_id
         return True
 

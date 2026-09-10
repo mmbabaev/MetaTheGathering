@@ -10,13 +10,12 @@ from sqlalchemy.orm import Session
 
 from core import models
 from services.ranked import (
-    MOSCOW_RANKED_CLUBS,
     PRESEASON_START,
     Glicko2Rating,
     RankedPreseasonService,
     public_ranked_score,
 )
-from services.ranked_activation import RankedPublicStateService, activation_tournament_ids
+from services.ranked_activation import RankedPublicStateService
 
 RANKED_PUBLIC_START = PRESEASON_START
 
@@ -52,16 +51,7 @@ class RankedLeaderboardService:
     def calculate(self) -> RankedLeaderboard:
         end = self.now + timedelta(microseconds=1)
         snapshot = RankedPreseasonService(self.db).calculate(start=self.start, end=end)
-        activation_ids = activation_tournament_ids(
-            self.db,
-            start=self.start,
-            end=end,
-            clubs=MOSCOW_RANKED_CLUBS,
-        )
-        states = RankedPublicStateService(self.db).calculate(
-            snapshot.included_tournament_ids,
-            activation_tournament_ids=activation_ids,
-        )
+        states = RankedPublicStateService(self.db).calculate(snapshot.included_tournament_ids)
         active_user_ids = [user_id for user_id, state in states.items() if state.active]
         users = {
             user.id: user
