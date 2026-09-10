@@ -83,6 +83,7 @@ async def test_wrapper_sends_nothing_on_silent(handler_factory, _session_local):
 
 def test_help_for_players_has_no_achievements():
     assert "achievements" not in HELP_TEXT.lower()
+    assert "/leaderboard" in HELP_TEXT.lower()
 
 
 def test_help_for_admins_mentions_achievements():
@@ -95,6 +96,7 @@ def test_command_menu_for_players_has_no_achievements():
     assert "achievements" not in {c.command for c in main._USER_COMMANDS}
     assert "bingo_preview" not in {c.command for c in main._USER_COMMANDS}
     assert "ranked_preseason" not in {c.command for c in main._USER_COMMANDS}
+    assert "leaderboard" in {c.command for c in main._USER_COMMANDS}
 
 
 def test_command_menu_for_admins_has_achievements():

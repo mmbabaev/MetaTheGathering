@@ -96,6 +96,9 @@ CB_CLUB_PAIRING_SETTINGS_LIST = "club_pair_cfg_list"
 CB_CLUB_PAIRING_SETTINGS = "club_pair_cfg"
 CB_CLUB_TOGGLE_PAIRINGS = "club_pair"
 CB_FEATURE_INFO = "feat_info"  # feat_info:{flag_name}
+CB_RANKED_PAGE = "rank_page"  # rank_page:{page}
+CB_RANKED_ME = "rank_me"
+CB_RANKED_RULES = "rank_rules"  # rank_rules:{return_page}
 CB_PAY = "pay"  # pay:{tournament_id}
 CB_PAY_STATUS = "pay_status"  # pay_status:{tournament_id} — no-op, показывает статус оплаты
 CB_ADMIN_IMPORT_META = "adm_meta"  # adm_meta:{tournament_id}
@@ -144,6 +147,27 @@ CB_CLUB_SETTINGS_CLUB = "club_cfg_c"
 CB_CLUB_SETTINGS_CHAT = "club_cfg_chat"
 
 CELLAR_PAGE_SIZE = 10
+
+
+def ranked_leaderboard_keyboard(page: int, total_pages: int, *, show_me: bool = True) -> InlineKeyboardMarkup:
+    rows = []
+    navigation = []
+    if page > 0:
+        navigation.append(InlineKeyboardButton("← Назад", callback_data=f"{CB_RANKED_PAGE}:{page - 1}"))
+    if page + 1 < total_pages:
+        navigation.append(InlineKeyboardButton("Вперёд →", callback_data=f"{CB_RANKED_PAGE}:{page + 1}"))
+    if navigation:
+        rows.append(navigation)
+    actions = []
+    if show_me:
+        actions.append(InlineKeyboardButton("📍 Где я?", callback_data=CB_RANKED_ME))
+    actions.append(InlineKeyboardButton("📖 Правила", callback_data=f"{CB_RANKED_RULES}:{page}"))
+    rows.append(actions)
+    return InlineKeyboardMarkup(rows)
+
+
+def ranked_back_keyboard(page: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[InlineKeyboardButton("← К рейтингу", callback_data=f"{CB_RANKED_PAGE}:{page}")]])
 
 
 def features_keyboard(flags: list) -> InlineKeyboardMarkup:
