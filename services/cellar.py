@@ -16,6 +16,7 @@ from core.config import settings
 from services.archetype import ArchetypeService
 from services.cellar_sheet import CatalogEntry, CellarCatalogSourceError, GoogleSheetsCellarCatalog
 from services.names import has_complete_person_name
+from services.ranked_activation import RANKED_ACTIVATION_CELLAR
 from services.tournament import TournamentService
 
 logger = logging.getLogger(__name__)
@@ -489,6 +490,7 @@ class CellarService:
                 user_id=reservation.user_id,
                 archetype_id=archetype.id,
                 deck_added_by_tg_id=reservation.user.tg_id,
+                ranked_activation_source=RANKED_ACTIVATION_CELLAR,
             )
             created = True
         else:
@@ -499,6 +501,7 @@ class CellarService:
                 participant_id=participant.id,
                 archetype_id=archetype.id,
                 deck_added_by_tg_id=reservation.user.tg_id,
+                ranked_activation_source=RANKED_ACTIVATION_CELLAR,
             )
         reservation.tournament_id = tournament_id
         reservation.participant_id = participant.id
@@ -517,6 +520,9 @@ class CellarService:
             or participant.tournament.status != models.TournamentStatus.REGISTRATION
         ):
             return
+        if participant.ranked_activation_source == RANKED_ACTIVATION_CELLAR:
+            participant.ranked_activated_at = None
+            participant.ranked_activation_source = None
         if reservation.participant_created:
             TournamentService(self.db).unregister_participant(participant.tournament_id, participant.user_id)
         else:

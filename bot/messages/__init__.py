@@ -513,6 +513,12 @@ def format_opponent_notification(
     *,
     datalens_decks: list | None = None,
     head_to_head=None,
+    ranked_own_score: int | None = None,
+    ranked_opponent_score: int | None = None,
+    ranked_opponent_hidden: bool = False,
+    ranked_win_delta: int | None = None,
+    ranked_draw_delta: int | None = None,
+    ranked_loss_delta: int | None = None,
 ) -> str:
     """Личное сообщение игроку о его паре в новом раунде.
 
@@ -550,6 +556,17 @@ def format_opponent_notification(
     if head_to_head is not None:
         lines.append("")
         lines.append(f"Партий против оппонента: {head_to_head.matches}, твой винрейт {round(head_to_head.winrate)}%")
+
+    if ranked_own_score is not None:
+        lines.extend(["", "📊 Ranked", f"Твой Score: {ranked_own_score}"])
+        if ranked_opponent_hidden:
+            lines.append("Рейтинг соперника скрыт.")
+        elif ranked_opponent_score is not None:
+            lines.append(f"Score соперника: {ranked_opponent_score}")
+            deltas = (ranked_win_delta, ranked_draw_delta, ranked_loss_delta)
+            if all(delta is not None for delta in deltas):
+                signed = [f"{delta:+d}" for delta in deltas if delta is not None]
+                lines.append(f"Прогноз: победа ≈ {signed[0]}, ничья ≈ {signed[1]}, поражение ≈ {signed[2]}.")
 
     return "\n".join(lines)
 

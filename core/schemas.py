@@ -111,6 +111,8 @@ class ParticipantRead(ParticipantBase):
     deck_reminder_prestart_sent_at: Optional[datetime] = None
     deck_reminder_round2_sent_at: Optional[datetime] = None
     aetherhub_seen_at: Optional[datetime] = None
+    ranked_activated_at: Optional[datetime] = None
+    ranked_activation_source: Optional[str] = None
     swiss_initial_rank: Optional[int] = None
     upvotes_count: int
     downvotes_count: int

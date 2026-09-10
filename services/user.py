@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from core import models
 from core.config import settings
 from services.names import clean_person_name_component
+from services.ranked_activation import merge_participant_activation
 
 
 def _normalize_name(s: str) -> str:
@@ -284,15 +285,21 @@ class UserService:
         already_in = set(target_parts)
         if already_in:
             source_rows = self.db.execute(
-                select(models.Participant.tournament_id, models.Participant.aetherhub_seen_at).where(
+                select(
+                    models.Participant.tournament_id,
+                    models.Participant.aetherhub_seen_at,
+                    models.Participant.ranked_activated_at,
+                    models.Participant.ranked_activation_source,
+                ).where(
                     models.Participant.user_id == placeholder.id,
                     models.Participant.tournament_id.in_(already_in),
                 )
             ).all()
-            for tournament_id, seen_at in source_rows:
+            for tournament_id, seen_at, ranked_at, ranked_source in source_rows:
                 target = target_parts[tournament_id]
                 if seen_at is not None and (target.aetherhub_seen_at is None or seen_at > target.aetherhub_seen_at):
                     target.aetherhub_seen_at = seen_at
+                merge_participant_activation(target, ranked_at, ranked_source)
             self.db.execute(
                 sa_delete(models.Participant).where(
                     models.Participant.user_id == placeholder.id,
@@ -379,10 +386,20 @@ class UserService:
                 models.Participant.final_place,
                 models.Participant.archetype_id,
                 models.Participant.aetherhub_seen_at,
+                models.Participant.ranked_activated_at,
+                models.Participant.ranked_activation_source,
             ).where(models.Participant.user_id == source.id)
         ).all()
         drop_ids = []
-        for part_id, tournament_id, final_place, archetype_id, aetherhub_seen_at in source_rows:
+        for (
+            part_id,
+            tournament_id,
+            final_place,
+            archetype_id,
+            aetherhub_seen_at,
+            ranked_activated_at,
+            ranked_activation_source,
+        ) in source_rows:
             tp = target_parts.get(tournament_id)
             if tp is None:
                 continue  # перенесётся UPDATE'ом ниже
@@ -394,6 +411,7 @@ class UserService:
                 tp.aetherhub_seen_at is None or aetherhub_seen_at > tp.aetherhub_seen_at
             ):
                 tp.aetherhub_seen_at = aetherhub_seen_at
+            merge_participant_activation(tp, ranked_activated_at, ranked_activation_source)
             drop_ids.append(part_id)
         if drop_ids:
             self.db.execute(sa_delete(models.Participant).where(models.Participant.id.in_(drop_ids)))

@@ -16,6 +16,8 @@ from core import models
 from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeService
 from services.datalens import DataLensService, StatRow
+from services.feature_flags import FeatureFlags, FeatureFlagService
+from services.ranked_round_info import RankedRoundInfoService
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +44,12 @@ class RoundNotification:
     recipient_name: str = ""  # intended recipient's display name (for DataLens / debug / logging)
     datalens_decks: list[StatRow] = field(default_factory=list)  # колоды оппонента + винрейт (DataLens)
     head_to_head: StatRow | None = None  # личные встречи получателя с оппонентом (DataLens)
+    ranked_own_score: int | None = None
+    ranked_opponent_score: int | None = None
+    ranked_opponent_hidden: bool = False
+    ranked_win_delta: int | None = None
+    ranked_draw_delta: int | None = None
+    ranked_loss_delta: int | None = None
 
 
 class RoundNotificationService:
@@ -51,12 +59,16 @@ class RoundNotificationService:
         import_service: AetherhubImportService | None = None,
         archetype_service: ArchetypeService | None = None,
         datalens_service: DataLensService | None = None,
+        ranked_service: RankedRoundInfoService | None = None,
     ) -> None:
         self.db = db
         self._import = import_service or AetherhubImportService(db)
         self._archetypes = archetype_service or ArchetypeService(db)
         # None → обогащение из DataLens отключено (например, в юнит-тестах).
         self._datalens = datalens_service
+        self._ranked = ranked_service
+        if self._ranked is None and FeatureFlagService(db).is_enabled(FeatureFlags.RANKED_PUBLIC):
+            self._ranked = RankedRoundInfoService(db)
 
     def build_for_rounds(self, tournament_id: int, round_numbers: list[int]) -> list[RoundNotification]:
         """Build notifications for every given round, flattened into one list.
@@ -142,7 +154,7 @@ class RoundNotificationService:
                     opponent.id, exclude_tournament_id=tournament_id, limit=OPPONENT_DECKS_LIMIT
                 )
             ]
-        return RoundNotification(
+        notification = RoundNotification(
             tg_id=recipient.tg_id,
             round_number=round_number,
             table_number=pairing.table_number,
@@ -151,6 +163,20 @@ class RoundNotificationService:
             opponent_decks=decks,
             recipient_name=recipient_name,
         )
+        if self._ranked is not None:
+            ranked = self._ranked.for_pairing(
+                tournament_id,
+                recipient.id,
+                opponent.id if opponent is not None else None,
+            )
+            if ranked is not None:
+                notification.ranked_own_score = ranked.own_score
+                notification.ranked_opponent_score = ranked.opponent_score
+                notification.ranked_opponent_hidden = ranked.opponent_hidden
+                notification.ranked_win_delta = ranked.win_delta
+                notification.ranked_draw_delta = ranked.draw_delta
+                notification.ranked_loss_delta = ranked.loss_delta
+        return notification
 
     def enrich(self, notification: RoundNotification) -> RoundNotification:
         """Дополнить уведомление статистикой из DataLens (in-place) и вернуть его.

@@ -24,6 +24,7 @@ from services.aetherhub_import_service import AetherhubImportService
 from services.aetherhub_models import AetherhubPairing, AetherhubRound, AetherhubTournamentData
 from services.archetype import ArchetypeService
 from services.datalens import DataLensService, StatRow
+from services.ranked_round_info import RankedRoundInfo
 from services.round_notifications import RoundNotification, RoundNotificationService
 from services.user import UserService
 
@@ -192,6 +193,30 @@ class TestBuildForRound:
         rec = notif_svc.build_for_round(t.id, 1)[0]
         assert rec.recipient_name == "Иванов Иван"
 
+    def test_ranked_info_is_copied_into_notification(self, db, svc, user_svc):
+        tournament = _tournament(svc)
+        recipient = _user(user_svc, 2001, "RecipientJenn")
+        opponent = _user(user_svc, 2002, "OpponentJenn")
+        _participant(db, tournament.id, recipient.id)
+        _participant(db, tournament.id, opponent.id)
+        _pairing(db, tournament.id, 1, "RecipientJenn", "OpponentJenn")
+        ranked = MagicMock()
+        ranked.for_pairing.return_value = RankedRoundInfo(
+            own_score=1600,
+            opponent_score=1500,
+            opponent_hidden=False,
+            win_delta=12,
+            draw_delta=-3,
+            loss_delta=-19,
+        )
+
+        notification = RoundNotificationService(db, ranked_service=ranked).build_for_round(tournament.id, 1)[0]
+
+        ranked.for_pairing.assert_called_once_with(tournament.id, recipient.id, opponent.id)
+        assert notification.ranked_own_score == 1600
+        assert notification.ranked_opponent_score == 1500
+        assert notification.ranked_win_delta == 12
+
 
 class TestClosedTournamentSuppressesNotifications:
     """issue #114 — завершённый турнир не должен порождать уведомления ни на одном пути."""
@@ -223,6 +248,7 @@ class TestClosedTournamentSuppressesNotifications:
         self._set_status(db, t, models.TournamentStatus.ONGOING)
 
         assert len(notif_svc.build_for_rounds(t.id, [1])) == 2
+
 
 class TestDisplayName:
     def test_full_name(self, db, user_svc):
@@ -619,6 +645,44 @@ class TestFormatNotification:
         text = format_opponent_notification(1, 3, "Вадим", None, [], head_to_head=h2h)
         assert "Партий против оппонента: 8" in text
         assert "33%" in text
+
+    def test_ranked_paragraph_hides_opponent_and_forecast(self):
+        text = format_opponent_notification(
+            1,
+            3,
+            "Вадим",
+            None,
+            [],
+            ranked_own_score=1389,
+            ranked_opponent_hidden=True,
+            ranked_opponent_score=None,
+            ranked_win_delta=20,
+            ranked_draw_delta=0,
+            ranked_loss_delta=-20,
+        )
+
+        assert "Твой Score: 1389" in text
+        assert "Рейтинг соперника скрыт" in text
+        assert "Прогноз" not in text
+
+    def test_ranked_paragraph_shows_public_opponent_and_forecast(self):
+        text = format_opponent_notification(
+            1,
+            3,
+            "Вадим",
+            None,
+            [],
+            ranked_own_score=1612,
+            ranked_opponent_score=1546,
+            ranked_win_delta=12,
+            ranked_draw_delta=-3,
+            ranked_loss_delta=-19,
+        )
+
+        assert "Score соперника: 1546" in text
+        assert "победа ≈ +12" in text
+        assert "ничья ≈ -3" in text
+        assert "поражение ≈ -19" in text
 
     @pytest.mark.parametrize(
         "n,expected",

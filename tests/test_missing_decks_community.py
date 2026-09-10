@@ -158,8 +158,23 @@ def test_recording_other_player_persists_filler_and_keeps_helping(
     saved = svc.get_participant(tournament.id, first.id)
     assert saved.archetype_id == archetype_burn.id
     assert saved.deck_added_by_tg_id == user_alice.tg_id
+    assert saved.ranked_activated_at is None
     assert "Глеб записан как Burn" in result.text
     assert _callbacks(result) == [f"{CB_FILL_MISSING_PICK}:{second_participant.id}"]
+
+
+def test_imported_player_activates_ranked_by_recording_own_deck(
+    player_handler, db, svc, user_svc, tournament, archetype_burn
+):
+    player = user_svc.get_or_create(tg_id=2010, first_name="Кирилл", last_name="Андреев")
+    participant = svc.register_participant(tournament_id=tournament.id, user_id=player.id)
+    _activate(db, tournament.id)
+
+    player_handler.handle_set_missing_deck(player.tg_id, participant.id, archetype_burn.id)
+
+    saved = svc.get_participant(tournament.id, player.id)
+    assert saved.ranked_activated_at is not None
+    assert saved.ranked_activation_source == "self_bot"
 
 
 def test_stale_callback_never_overwrites_filled_deck(

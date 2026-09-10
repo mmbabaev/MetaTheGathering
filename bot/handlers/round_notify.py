@@ -90,4 +90,10 @@ class RoundNotifyHandler:
             is_bye=n.is_bye,
             datalens_decks=n.datalens_decks,
             head_to_head=n.head_to_head,
+            ranked_own_score=n.ranked_own_score,
+            ranked_opponent_score=n.ranked_opponent_score,
+            ranked_opponent_hidden=n.ranked_opponent_hidden,
+            ranked_win_delta=n.ranked_win_delta,
+            ranked_draw_delta=n.ranked_draw_delta,
+            ranked_loss_delta=n.ranked_loss_delta,
         )
