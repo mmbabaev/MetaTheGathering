@@ -188,6 +188,8 @@ Env files are **never committed** to git (`.gitignored`). They are:
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` / `SMTP_FROM` | no | SMTP config for email |
 | `CELLAR_COORDINATOR_USERNAMES` | no | Preferred production-only comma-separated Telegram usernames. They receive immediate booking/cancellation DMs and the one-hour pre-event summary, and can view the `/cellar` booking overview. Debug ignores the list. |
 | `CELLAR_COORDINATOR_TG_IDS` | no | Optional legacy comma-separated IDs with the same production-only notifications and access. |
+| `ENDSTEP_API_URL` | no | Endstep origin for the ranked leaderboard client (default: `https://endstep.cc`). |
+| `ENDSTEP_API_USERNAME` / `ENDSTEP_API_PASSWORD` | no | Dedicated Endstep integration account. Required only for read-only ranked leaderboard requests; the password lives only in the environment secret. |
 
 `BOT_ENV=debug` is set via the systemd `Environment=` directive (not in the env file).
 

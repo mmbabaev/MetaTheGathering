@@ -22,7 +22,23 @@ python3 cli.py tournament create <title> # создать турнир
 python3 cli.py tournament delete-last    # удалить последний по дате создания
 python3 cli.py tournament import <url>   # импорт с AetherHub
 python3 cli.py tournament export-excel   # выгрузить Excel в текущую папку
+python3 cli.py endstep find <nick>       # точный поиск в Endstep Pauper Ranked
 ```
+
+### Поиск игроков Endstep
+
+API лидерборда Endstep требует авторизацию. Задайте в `bot/.env.debug` отдельную
+интеграционную учётную запись через `ENDSTEP_API_USERNAME` и
+`ENDSTEP_API_PASSWORD`, затем передайте один или несколько точных ников:
+
+```bash
+python3 cli.py endstep find PlayerOne PlayerTwo
+python3 cli.py endstep find PlayerOne --season <season-id>
+```
+
+Команда только читает текущий Pauper-лидерборд, дополнительно проверяет точное
+регистронезависимое совпадение ника и показывает официальный rank, rating, RD и
+W–L–D. Если игрок ещё provisional, официальный rank отсутствует.
 
 ### Статистика для сезонных ачивок
 
