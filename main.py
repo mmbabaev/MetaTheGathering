@@ -211,10 +211,7 @@ _USER_COMMANDS = [
     BotCommand("help", "Справка по командам"),
 ]
 
-_SCOREKEEPER_COMMANDS = _USER_COMMANDS + [
-    BotCommand("tournament_status", "Участники турниров"),
-    BotCommand("add_players", "Массовая запись"),
-]
+_SCOREKEEPER_COMMANDS = list(_USER_COMMANDS)
 
 _POLL_CMD = BotCommand("poll", "Меню голосований: регуляры и рассылка")
 _APP_STATS_CMD = BotCommand("app_statistics", "Статистика приложения (владелец)")
@@ -368,8 +365,6 @@ def main() -> None:
     app.add_handler(CommandHandler("bingo_preview", bingo_handler.cmd_bingo_preview, filters=private))
     app.add_handler(CommandHandler("ranked_preseason", ranked_handler.cmd_ranked_preseason, filters=private))
 
-    app.add_handler(CommandHandler("add_players", admin.cmd_add_players, filters=private))
-    app.add_handler(CommandHandler("tournament_status", admin.cmd_tournament_status, filters=private))
     app.add_handler(CommandHandler("archive", admin.cmd_archive, filters=private))
     app.add_handler(CommandHandler("create_tournament", admin.cmd_create_tournament, filters=private))
     app.add_handler(CommandHandler("clubs", clubs_handler.cmd_clubs, filters=private))
