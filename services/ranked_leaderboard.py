@@ -9,7 +9,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from core import models
-from services.ranked import MOSCOW_RANKED_CLUBS, PRESEASON_START, Glicko2Rating, RankedPreseasonService
+from services.ranked import (
+    MOSCOW_RANKED_CLUBS,
+    PRESEASON_START,
+    Glicko2Rating,
+    RankedPreseasonService,
+    public_ranked_score,
+)
 from services.ranked_activation import RankedPublicStateService, activation_tournament_ids
 
 RANKED_PUBLIC_START = PRESEASON_START
@@ -68,12 +74,18 @@ class RankedLeaderboardService:
             if user is None:
                 continue
             entry = ratings.get(user_id)
-            base_score = entry.ranked_score if entry is not None else Glicko2Rating().ranked_score
+            rating = (
+                Glicko2Rating(entry.rating, entry.deviation, entry.volatility) if entry is not None else Glicko2Rating()
+            )
             unordered.append(
                 (
                     user_id,
                     RankedPreseasonService._display_name(user),
-                    base_score - states[user_id].penalty,
+                    public_ranked_score(
+                        rating,
+                        matches=entry.matches if entry is not None else 0,
+                        penalty=states[user_id].penalty,
+                    ),
                 )
             )
         unordered.sort(key=lambda row: (-row[2], row[1].casefold(), row[0]))

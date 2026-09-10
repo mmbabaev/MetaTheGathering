@@ -211,8 +211,10 @@ v = 1 / Σ[g(φⱼ)² Eⱼ(1 − Eⱼ)]
 R' = 173,7178μ' + 1500
 RD' = 173,7178φ'
 
-Публичное число в таблице — консервативная нижняя оценка:
-Score = round(R − 2 × RD) − публичные штрафы.
+За каждый реально сыгранный матч оба игрока получают небольшой бонус участия +0,5. Bye и несыгранные после drop раунды бонуса не дают. Бонус влияет только на публичный Score и не меняет скрытые R, RD и σ.
+
+Публичное число в таблице:
+Score = round(R − 2 × RD + 0,5 × матчи) − публичные штрафы.
 
 Поэтому Score может меняться несимметрично, а у нового игрока сначала заметно растёт или падает: системе нужно набрать уверенность в его силе. Прогноз в уведомлении приблизительный, потому что фактический пересчёт выполняется сразу по всем матчам недельного периода.\
 """
@@ -598,6 +600,7 @@ def format_opponent_notification(
 
     if ranked_own_score is not None:
         lines.extend(["", "📊 Ranked", f"Твой Score: {ranked_own_score}"])
+        lines.append("Бонус за сыгранный матч: +0,5 к публичному Score.")
         if ranked_opponent_hidden:
             lines.append("Рейтинг соперника скрыт.")
         elif ranked_opponent_score is not None:
@@ -605,7 +608,9 @@ def format_opponent_notification(
             deltas = (ranked_win_delta, ranked_draw_delta, ranked_loss_delta)
             if all(delta is not None for delta in deltas):
                 signed = [f"{delta:+d}" for delta in deltas if delta is not None]
-                lines.append(f"Прогноз: победа ≈ {signed[0]}, ничья ≈ {signed[1]}, поражение ≈ {signed[2]}.")
+                lines.append(
+                    f"Прогноз публичного Score: победа ≈ {signed[0]}, ничья ≈ {signed[1]}, поражение ≈ {signed[2]}."
+                )
 
     return "\n".join(lines)
 

@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 
 from core import models
 from core.schemas import TournamentCreate
+from services.ranked import Glicko2Rating, update_glicko2
 from services.ranked_activation import (
     RANKED_ACTIVATION_CELLAR,
     RANKED_ACTIVATION_SELF_BOT,
@@ -128,3 +129,18 @@ def test_round_info_hides_inactive_opponent_and_forecasts_public_opponent(db):
     assert refreshed.opponent_hidden is False
     assert refreshed.opponent_score == 800
     assert all(delta is not None for delta in (refreshed.win_delta, refreshed.draw_delta, refreshed.loss_delta))
+
+
+def test_round_forecast_reports_public_delta_with_participation_bonus():
+    own = Glicko2Rating(rating=1500, deviation=100, volatility=0.06)
+    opponent = Glicko2Rating(rating=1500, deviation=100, volatility=0.06)
+    hidden_draw_delta = update_glicko2(own, [(opponent, 0.5)]).ranked_score - own.ranked_score
+    hidden_loss_delta = update_glicko2(own, [(opponent, 0.0)]).ranked_score - own.ranked_score
+
+    public_draw_delta = RankedRoundInfoService._forecast_delta(own, opponent, 0, 0, 0.5)
+    public_loss_delta = RankedRoundInfoService._forecast_delta(own, opponent, 0, 0, 0.0)
+
+    assert hidden_draw_delta == 6
+    assert public_draw_delta == 7
+    assert hidden_loss_delta == -20
+    assert public_loss_delta == -19
