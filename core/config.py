@@ -72,6 +72,12 @@ class Settings(BaseSettings):
     # Пользовательский frontend для ссылок в Telegram и CLI.
     MAGIC_OCULUS_PUBLIC_URL: str = "https://magicoculus.ru"
 
+    # Ranked API Endstep доступен только после входа. Использовать отдельную read-only
+    # интеграционную учётную запись; пароль хранится только в env.
+    ENDSTEP_API_URL: str = "https://endstep.cc"
+    ENDSTEP_API_USERNAME: str = ""
+    ENDSTEP_API_PASSWORD: str = ""
+
     # Структурированные owner-отчёты ачивок для послетурнирного аудита.
     # Пустая строка отключает файловый лог (по умолчанию так только внутри pytest).
     ACHIEVEMENT_LOG_DIR: str = "" if _is_pytest_running() else "logs/achievements"
