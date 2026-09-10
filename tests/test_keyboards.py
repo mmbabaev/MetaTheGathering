@@ -15,6 +15,8 @@ from bot.keyboards import (
     CB_DEBUG_FILL_TOURNAMENT,
     CB_DEBUG_META_POLICE,
     CB_DEBUG_NEXT_ROUND,
+    CB_ENDSTEP_RU_PAGE,
+    CB_ENDSTEP_RU_REFRESH,
     CB_EXPORT_SWISS_PLAYERS,
     CB_REGISTER,
     CB_REOPEN_TOURNAMENT,
@@ -24,10 +26,22 @@ from bot.keyboards import (
     admin_archetype_select_keyboard,
     archetype_keyboard,
     close_tournament_confirm_keyboard,
+    endstep_ru_leaderboard_keyboard,
     register_button,
     tournament_card_keyboard,
     tournament_list_keyboard,
 )
+
+
+def test_endstep_ru_leaderboard_keyboard_has_navigation_and_refresh():
+    markup = endstep_ru_leaderboard_keyboard(page=1, total_pages=3)
+    callbacks = [button.callback_data for row in markup.inline_keyboard for button in row]
+
+    assert callbacks == [
+        f"{CB_ENDSTEP_RU_PAGE}:0",
+        f"{CB_ENDSTEP_RU_PAGE}:2",
+        CB_ENDSTEP_RU_REFRESH,
+    ]
 
 
 class TestTournamentListKeyboard:

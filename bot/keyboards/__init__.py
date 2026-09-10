@@ -99,6 +99,8 @@ CB_FEATURE_INFO = "feat_info"  # feat_info:{flag_name}
 CB_RANKED_PAGE = "rank_page"  # rank_page:{page}
 CB_RANKED_ME = "rank_me"
 CB_RANKED_RULES = "rank_rules"  # rank_rules:{return_page}
+CB_ENDSTEP_RU_PAGE = "endru_page"  # endru_page:{page}
+CB_ENDSTEP_RU_REFRESH = "endru_refresh"
 CB_PAY = "pay"  # pay:{tournament_id}
 CB_PAY_STATUS = "pay_status"  # pay_status:{tournament_id} — no-op, показывает статус оплаты
 CB_ADMIN_IMPORT_META = "adm_meta"  # adm_meta:{tournament_id}
@@ -168,6 +170,19 @@ def ranked_leaderboard_keyboard(page: int, total_pages: int, *, show_me: bool = 
 
 def ranked_back_keyboard(page: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[InlineKeyboardButton("← К рейтингу", callback_data=f"{CB_RANKED_PAGE}:{page}")]])
+
+
+def endstep_ru_leaderboard_keyboard(page: int, total_pages: int) -> InlineKeyboardMarkup:
+    rows = []
+    navigation = []
+    if page > 0:
+        navigation.append(InlineKeyboardButton("← Назад", callback_data=f"{CB_ENDSTEP_RU_PAGE}:{page - 1}"))
+    if page + 1 < total_pages:
+        navigation.append(InlineKeyboardButton("Вперёд →", callback_data=f"{CB_ENDSTEP_RU_PAGE}:{page + 1}"))
+    if navigation:
+        rows.append(navigation)
+    rows.append([InlineKeyboardButton("🔄 Обновить", callback_data=CB_ENDSTEP_RU_REFRESH)])
+    return InlineKeyboardMarkup(rows)
 
 
 def features_keyboard(flags: list) -> InlineKeyboardMarkup:

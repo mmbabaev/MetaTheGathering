@@ -74,6 +74,8 @@ from bot.keyboards import (
     CB_DELETE_TOURNAMENT,
     CB_DELETE_TOURNAMENT_CANCEL,
     CB_DELETE_TOURNAMENT_CONFIRM,
+    CB_ENDSTEP_RU_PAGE,
+    CB_ENDSTEP_RU_REFRESH,
     CB_EXPORT_EXCEL,
     CB_EXPORT_MENU,
     CB_EXPORT_PLAYERS,
@@ -163,6 +165,7 @@ from bot.telegram import cellar as cellar_handler
 from bot.telegram import clubs as clubs_handler
 from bot.telegram import create_tournament as create_tournament_handler
 from bot.telegram import debug as debug_handler
+from bot.telegram import endstep_leaderboard as endstep_leaderboard_handler
 from bot.telegram import features as features_handler
 from bot.telegram import payment as payment_handler
 from bot.telegram import poll as poll_handler
@@ -215,6 +218,8 @@ _SCOREKEEPER_COMMANDS = list(_USER_COMMANDS)
 
 _POLL_CMD = BotCommand("poll", "Меню голосований: регуляры и рассылка")
 _APP_STATS_CMD = BotCommand("app_statistics", "Статистика приложения (владелец)")
+_ENDSTEP_RU_CMD = BotCommand("endstep_leaderboard", "Endstep Pauper RU (владелец)")
+_OWNER_COMMANDS = [_APP_STATS_CMD, _ENDSTEP_RU_CMD]
 
 _ADMIN_COMMANDS = _SCOREKEEPER_COMMANDS + [
     BotCommand("archive", "Архив закрытых турниров"),
@@ -297,8 +302,8 @@ async def _set_commands(app: Application) -> None:
 
     owner_id = settings.OWNER_CHAT_ID
     for admin_id in admin_ids:
-        # Владельцу — те же админ-команды плюс /app_statistics (статистика приложения).
-        cmds = _ADMIN_COMMANDS + [_APP_STATS_CMD] if admin_id == owner_id else _ADMIN_COMMANDS
+        # Владельцу — те же админ-команды плюс owner-only инструменты.
+        cmds = _ADMIN_COMMANDS + _OWNER_COMMANDS if admin_id == owner_id else _ADMIN_COMMANDS
         try:
             await app.bot.set_my_commands(cmds, scope=BotCommandScopeChat(chat_id=admin_id))
         except Exception:
@@ -361,6 +366,9 @@ def main() -> None:
     app.add_handler(CommandHandler("settings", settings_handler.cmd_settings, filters=private))
     app.add_handler(CommandHandler("poll", poll_handler.cmd_poll, filters=private))
     app.add_handler(CommandHandler("app_statistics", app_stats_handler.cmd_app_statistics, filters=private))
+    app.add_handler(
+        CommandHandler("endstep_leaderboard", endstep_leaderboard_handler.cmd_endstep_leaderboard, filters=private)
+    )
     app.add_handler(CommandHandler("achievements", achievements_handler.cmd_achievements, filters=private))
     app.add_handler(CommandHandler("bingo_preview", bingo_handler.cmd_bingo_preview, filters=private))
     app.add_handler(CommandHandler("ranked_preseason", ranked_handler.cmd_ranked_preseason, filters=private))
@@ -384,6 +392,18 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(ranked_handler.callback_leaderboard_page, pattern=f"^{CB_RANKED_PAGE}:"))
     app.add_handler(CallbackQueryHandler(ranked_handler.callback_leaderboard_me, pattern=f"^{CB_RANKED_ME}$"))
     app.add_handler(CallbackQueryHandler(ranked_handler.callback_leaderboard_rules, pattern=f"^{CB_RANKED_RULES}:"))
+    app.add_handler(
+        CallbackQueryHandler(
+            endstep_leaderboard_handler.callback_endstep_ru_page,
+            pattern=f"^{CB_ENDSTEP_RU_PAGE}:",
+        )
+    )
+    app.add_handler(
+        CallbackQueryHandler(
+            endstep_leaderboard_handler.callback_endstep_ru_refresh,
+            pattern=f"^{CB_ENDSTEP_RU_REFRESH}$",
+        )
+    )
     app.add_handler(CallbackQueryHandler(clubs_handler.callback_list, pattern=f"^{CB_CLUB_SETTINGS_LIST}$"))
     app.add_handler(CallbackQueryHandler(clubs_handler.callback_club, pattern=f"^{CB_CLUB_SETTINGS_CLUB}:"))
     app.add_handler(CallbackQueryHandler(clubs_handler.callback_chat, pattern=f"^{CB_CLUB_SETTINGS_CHAT}:"))
