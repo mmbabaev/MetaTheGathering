@@ -133,19 +133,24 @@
 - Дропнутые игроки остаются в промежуточных и итоговых Swiss-стендингах с очками,
   заработанными до дропа, но не попадают в новые паринги — PR
   [#298](https://github.com/mmbabaev/MetaTheGathering/pull/298).
+- Первый этап Endstep Pauper leaderboard из
+  [#312](https://github.com/mmbabaev/MetaTheGathering/issues/312): read-only клиент входит
+  выделенной интеграционной учётной записью, находит текущий Pauper queue и ищет несколько
+  точных Endstep-ников через внутренний JSON-интерфейс сайта. Для ручной проверки добавлена
+  CLI-команда `endstep find`; пароль хранится только в env, HTML-скрейпинг и гостевые аккаунты
+  не используются — PR [#313](https://github.com/mmbabaev/MetaTheGathering/pull/313).
 
 Игрокам ачивки автоматически не рассылаются: текущий режим — owner-only shadow.
 
 ### В review, но ещё не в `main`
 
-- Первый этап Endstep Pauper leaderboard из
-  [#312](https://github.com/mmbabaev/MetaTheGathering/issues/312): read-only клиент входит
-  выделенной интеграционной учётной записью, находит текущий Pauper queue и ищет несколько
-  точных Endstep-ников через ranked JSON API. Для ручной проверки добавлена CLI-команда
-  `endstep find`; пароль хранится только в env, HTML-скрейпинг и гостевые аккаунты не
-  используются. Owner-only список игроков из Endstep-ru турниров с местом на сайте и местом
-  среди RU-игроков остаётся вторым этапом после merge — PR
-  [#313](https://github.com/mmbabaev/MetaTheGathering/pull/313).
+- Второй этап Endstep Pauper leaderboard из
+  [#312](https://github.com/mmbabaev/MetaTheGathering/issues/312): owner-only
+  `/endstep_leaderboard` собирает уникальных реальных игроков всех турниров `Endstep-ru`
+  с заполненным ником, точно сопоставляет их с текущим Pauper leaderboard и показывает
+  место на сайте и место среди найденных RU-игроков. Список листается по десять записей
+  из локального снимка; отдельная кнопка обновляет данные Endstep. Ненайденные ники
+  видны владельцу для диагностики, рассылок игрокам нет.
 
 - Slash-команды `/add_players` и `/tournament_status` убраны из меню всех ролей,
   админской справки и роутинга. Добавление участников и просмотр статуса через
