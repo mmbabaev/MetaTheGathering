@@ -30,6 +30,15 @@ def test_deploy_scripts_lock_and_clean_up_each_attempt():
         assert "umask 077" in source
 
 
+def test_deploy_archives_never_include_git_metadata():
+    for script in (BOT_DEPLOY, WEB_DEPLOY):
+        source = _read(script)
+
+        assert "--exclude='.git'" in source
+        assert "--exclude='.git/'" not in source
+        assert 'rm -rf "$REMOTE_DIR/.git"' in source
+
+
 def test_bot_env_upload_is_unique_and_removed_after_failure():
     source = _read(BOT_DEPLOY)
 
