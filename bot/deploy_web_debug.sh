@@ -61,7 +61,7 @@ COPYFILE_DISABLE=1 tar -czf "$ARCHIVE" \
     --exclude='tests/' \
     --exclude='venv/' \
     --exclude='.venv/' \
-    --exclude='.git/' \
+    --exclude='.git' \
     --exclude='.claude/' \
     --exclude='.ruff_cache/' \
     --exclude='.playwright_session' \
@@ -106,6 +106,9 @@ trap cleanup_remote EXIT
 
 echo "→ Разворачиваем в $REMOTE_DIR"
 mkdir -p "$REMOTE_DIR"
+# Deploy targets are extracted artifacts, not Git working copies. A trailing
+# slash in tar's old exclude did not match `./.git`, so packs accumulated here.
+rm -rf "$REMOTE_DIR/.git"
 ENV_DEST="$REMOTE_DIR/bot/.env"
 if [ "$BOT_ENV" = "debug" ]; then
     ENV_DEST="$REMOTE_DIR/bot/.env.debug"

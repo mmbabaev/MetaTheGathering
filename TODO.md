@@ -233,7 +233,9 @@
   имена и удаляются даже после ошибки, а загрузка останавливается заранее при нехватке места.
   После эксперимента с schema-per-PR debug возвращён к одной постоянной schema: данные больше не «исчезают»
   при деплое другого PR, а конфликты unmerged-миграций исправляются в ветках — PR
-  [#285](https://github.com/mmbabaev/MetaTheGathering/pull/285). In-process Telegram
+  [#285](https://github.com/mmbabaev/MetaTheGathering/pull/285). Исправление накопления
+  ошибочно упакованных `.git`-объектов в общих debug/prod каталогах — PR
+  [#314](https://github.com/mmbabaev/MetaTheGathering/pull/314). In-process Telegram
   transport tests и real-bot smoke остаются следующими этапами — PR
   [#271](https://github.com/mmbabaev/MetaTheGathering/pull/271).
 - Pure fairness foundation перечисляет все 10 линий Bingo 4×4 и считает вероятностные

@@ -80,7 +80,7 @@ COPYFILE_DISABLE=1 tar -czf "$ARCHIVE" \
     --exclude='.pytest_cache' \
     --exclude='tests/' \
     --exclude='venv/' \
-    --exclude='.git/' \
+    --exclude='.git' \
     --exclude='output/' \
     --exclude='logs/' \
     --exclude='._*' \
@@ -139,6 +139,9 @@ trap cleanup_remote EXIT
 
 echo "→ Разворачиваем в $REMOTE_DIR"
 mkdir -p "$REMOTE_DIR"
+# Deploy targets are extracted artifacts, not Git working copies. A trailing
+# slash in tar's old exclude did not match `./.git`, so packs accumulated here.
+rm -rf "$REMOTE_DIR/.git"
 # Debug переиспользует один каталог для разных PR. Удалённые в новой ветке файлы иначе
 # остаются на сервере; для Alembic это создаёт ложные дополнительные heads от прошлого PR.
 if [ "$BOT_ENV" = "debug" ]; then
