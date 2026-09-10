@@ -138,6 +138,11 @@
 
 ### В review, но ещё не в `main`
 
+- Slash-команды `/add_players` и `/tournament_status` убраны из меню всех ролей,
+  админской справки и роутинга. Добавление участников и просмотр статуса через
+  кнопочный интерфейс турнира остаются доступны — issue
+  [#307](https://github.com/mmbabaev/MetaTheGathering/issues/307).
+
 - Moscow Pauper Ranked из [#306](https://github.com/mmbabaev/MetaTheGathering/issues/306):
   admin-only `/ranked_preseason` пересчитывает диагностический Glicko-2 top-10 за
   20 июня — 19 сентября, а публичный `/leaderboard` продолжает текущее состояние с 20 июня

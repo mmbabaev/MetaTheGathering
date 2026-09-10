@@ -136,5 +136,6 @@ class TestMessageTemplates:
     def test_help_text_covers_main_commands(self):
         for cmd in ("/tournaments", "/settings"):
             assert cmd in msg.HELP_TEXT
-        for cmd in ("/tournament_status", "/add_players", "/create_tournament"):
-            assert cmd in msg.HELP_TEXT_ADMIN
+        assert "/create_tournament" in msg.HELP_TEXT_ADMIN
+        for cmd in ("/tournament_status", "/add_players"):
+            assert cmd not in msg.HELP_TEXT_ADMIN
