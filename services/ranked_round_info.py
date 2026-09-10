@@ -14,6 +14,7 @@ from services.ranked import (
     Glicko2Rating,
     RankedEntry,
     RankedPreseasonService,
+    public_ranked_score,
     update_glicko2,
 )
 from services.ranked_activation import RankedPublicStateService, activation_tournament_ids
@@ -61,7 +62,12 @@ class RankedRoundInfoService:
             return None
 
         own_rating = self._rating(recipient_user_id)
-        own_score = own_rating.ranked_score - own_state.penalty
+        own_matches = self._matches(recipient_user_id)
+        own_score = public_ranked_score(
+            own_rating,
+            matches=own_matches,
+            penalty=own_state.penalty,
+        )
         opponent_state = self._states.get(opponent_user_id) if opponent_user_id is not None else None
         if opponent_state is None or not opponent_state.active:
             return RankedRoundInfo(
@@ -71,14 +77,18 @@ class RankedRoundInfoService:
             )
 
         opponent_rating = self._rating(opponent_user_id)
-        opponent_score = opponent_rating.ranked_score - opponent_state.penalty
+        opponent_score = public_ranked_score(
+            opponent_rating,
+            matches=self._matches(opponent_user_id),
+            penalty=opponent_state.penalty,
+        )
         return RankedRoundInfo(
             own_score=own_score,
             opponent_score=opponent_score,
             opponent_hidden=False,
-            win_delta=self._forecast_delta(own_rating, opponent_rating, 1.0),
-            draw_delta=self._forecast_delta(own_rating, opponent_rating, 0.5),
-            loss_delta=self._forecast_delta(own_rating, opponent_rating, 0.0),
+            win_delta=self._forecast_delta(own_rating, opponent_rating, own_matches, own_state.penalty, 1.0),
+            draw_delta=self._forecast_delta(own_rating, opponent_rating, own_matches, own_state.penalty, 0.5),
+            loss_delta=self._forecast_delta(own_rating, opponent_rating, own_matches, own_state.penalty, 0.0),
         )
 
     def _prepare(self, tournament_id: int) -> bool:
@@ -114,6 +124,21 @@ class RankedRoundInfoService:
             return Glicko2Rating()
         return Glicko2Rating(entry.rating, entry.deviation, entry.volatility)
 
+    def _matches(self, user_id: int) -> int:
+        entry = self._entries.get(user_id)
+        return entry.matches if entry is not None else 0
+
     @staticmethod
-    def _forecast_delta(own: Glicko2Rating, opponent: Glicko2Rating, result: float) -> int:
-        return update_glicko2(own, [(opponent, result)]).ranked_score - own.ranked_score
+    def _forecast_delta(
+        own: Glicko2Rating,
+        opponent: Glicko2Rating,
+        matches: int,
+        penalty: int,
+        result: float,
+    ) -> int:
+        updated = update_glicko2(own, [(opponent, result)])
+        return public_ranked_score(
+            updated,
+            matches=matches + 1,
+            penalty=penalty,
+        ) - public_ranked_score(own, matches=matches, penalty=penalty)

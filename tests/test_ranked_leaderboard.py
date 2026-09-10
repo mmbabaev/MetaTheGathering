@@ -7,7 +7,7 @@ from bot.messages import RANKED_RULES_TEXT
 from core import models
 from core.schemas import TournamentCreate
 from services.feature_flags import FeatureFlagService
-from services.ranked import RankedPreseasonService
+from services.ranked import Glicko2Rating, RankedPreseasonService, public_ranked_score
 from services.ranked_activation import RANKED_ACTIVATION_SELF_BOT, activate_participant
 from services.ranked_leaderboard import (
     RankedLeaderboard,
@@ -109,14 +109,28 @@ def test_two_misses_hide_player_until_reactivation_and_keep_public_penalty(db):
     returned = RankedLeaderboardService(db, now=start + timedelta(days=4, minutes=2)).calculate()
 
     player_row = next(row for row in returned.rows if row.user_id == player.id)
-    unpenalized = next(
-        entry.ranked_score
+    entry = next(
+        entry
         for entry in RankedPreseasonService(db)
         .calculate(start=datetime(2026, 6, 20), end=start + timedelta(days=4, minutes=3))
         .entries
         if entry.user_id == player.id
     )
-    assert player_row.score == unpenalized - 50
+    expected = public_ranked_score(
+        Glicko2Rating(entry.rating, entry.deviation, entry.volatility),
+        matches=entry.matches,
+        penalty=50,
+    )
+    assert player_row.score == expected
+
+
+def test_public_score_adds_half_point_per_match_without_changing_glicko():
+    rating = Glicko2Rating(rating=1500, deviation=100, volatility=0.06)
+
+    score = public_ranked_score(rating, matches=4, penalty=50)
+
+    assert score == 1252
+    assert rating == Glicko2Rating(rating=1500, deviation=100, volatility=0.06)
 
 
 def _snapshot(size: int, *, id_offset: int = 0) -> RankedLeaderboard:
@@ -193,7 +207,7 @@ def test_rules_include_formula_and_back_button(db):
     result = _handler(db, _snapshot(1)).handle_rules(3)
 
     assert result.text == RANKED_RULES_TEXT
-    assert "Score = round(R − 2 × RD)" in result.text
+    assert "Score = round(R − 2 × RD + 0,5 × матчи)" in result.text
     assert "Glicko-2" in result.text
     assert len(result.text) < 4096
     assert _callbacks(result) == [f"{CB_RANKED_PAGE}:3"]

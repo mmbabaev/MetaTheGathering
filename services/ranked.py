@@ -32,6 +32,7 @@ DEFAULT_TAU = 0.5
 DEFAULT_PERIOD_DAYS = 7
 DEFAULT_MIN_MATCHES = 10
 DEFAULT_MIN_TOURNAMENTS = 3
+PUBLIC_MATCH_PARTICIPATION_BONUS = 0.5
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,18 @@ class Glicko2Rating:
     def ranked_score(self) -> int:
         """Conservative public score: lower bound of the approximate 95% interval."""
         return round(self.rating - 2 * self.deviation)
+
+
+def public_ranked_score(
+    rating: Glicko2Rating,
+    *,
+    matches: int,
+    penalty: int = 0,
+) -> int:
+    """Public projection: conservative Glicko plus activity, minus public penalties."""
+    if matches < 0 or penalty < 0:
+        raise ValueError("matches and penalty must be non-negative")
+    return round(rating.rating - 2 * rating.deviation + PUBLIC_MATCH_PARTICIPATION_BONUS * matches) - penalty
 
 
 @dataclass(frozen=True)
