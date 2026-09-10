@@ -164,7 +164,8 @@
   несыгранные после drop раунды бонуса не дают. `/leaderboard` содержит пагинацию, «Где я?»
   и подробные правила с формулой.
   Реализация — PR [#308](https://github.com/mmbabaev/MetaTheGathering/pull/308), корректировка
-  lifecycle — issue [#310](https://github.com/mmbabaev/MetaTheGathering/issues/310).
+  lifecycle — issue [#310](https://github.com/mmbabaev/MetaTheGathering/issues/310), PR
+  [#311](https://github.com/mmbabaev/MetaTheGathering/pull/311).
 
 - Защита инцидента [#304](https://github.com/mmbabaev/MetaTheGathering/issues/304): один числовой
   AetherHub event нельзя повторно привязать или импортировать в другой турнир MetaGatherer;
