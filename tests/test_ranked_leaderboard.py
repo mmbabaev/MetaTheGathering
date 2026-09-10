@@ -124,12 +124,12 @@ def test_two_misses_hide_player_until_reactivation_and_keep_public_penalty(db):
     assert player_row.score == expected
 
 
-def test_public_score_adds_half_point_per_match_without_changing_glicko():
+def test_public_score_adds_one_point_per_match_without_changing_glicko():
     rating = Glicko2Rating(rating=1500, deviation=100, volatility=0.06)
 
     score = public_ranked_score(rating, matches=4, penalty=50)
 
-    assert score == 1252
+    assert score == 1254
     assert rating == Glicko2Rating(rating=1500, deviation=100, volatility=0.06)
 
 
@@ -207,7 +207,7 @@ def test_rules_include_formula_and_back_button(db):
     result = _handler(db, _snapshot(1)).handle_rules(3)
 
     assert result.text == RANKED_RULES_TEXT
-    assert "Score = round(R − 2 × RD + 0,5 × матчи)" in result.text
+    assert "Score = round(R − 2 × RD + матчи)" in result.text
     assert "Glicko-2" in result.text
     assert len(result.text) < 4096
     assert _callbacks(result) == [f"{CB_RANKED_PAGE}:3"]
