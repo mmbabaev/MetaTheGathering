@@ -132,15 +132,15 @@ def test_round_info_hides_inactive_opponent_and_forecasts_public_opponent(db):
 
 
 def test_round_forecast_reports_public_delta_with_participation_bonus():
-    own = Glicko2Rating(rating=1500, deviation=100, volatility=0.06)
-    opponent = Glicko2Rating(rating=1500, deviation=100, volatility=0.06)
+    own = Glicko2Rating(rating=1500, deviation=50, volatility=0.06)
+    opponent = Glicko2Rating(rating=1500, deviation=50, volatility=0.06)
+    hidden_win_delta = update_glicko2(own, [(opponent, 1.0)]).ranked_score - own.ranked_score
     hidden_draw_delta = update_glicko2(own, [(opponent, 0.5)]).ranked_score - own.ranked_score
     hidden_loss_delta = update_glicko2(own, [(opponent, 0.0)]).ranked_score - own.ranked_score
 
+    public_win_delta = RankedRoundInfoService._forecast_delta(own, opponent, 0, 0, 1.0)
     public_draw_delta = RankedRoundInfoService._forecast_delta(own, opponent, 0, 0, 0.5)
     public_loss_delta = RankedRoundInfoService._forecast_delta(own, opponent, 0, 0, 0.0)
 
-    assert hidden_draw_delta == 6
-    assert public_draw_delta == 7
-    assert hidden_loss_delta == -20
-    assert public_loss_delta == -19
+    assert (hidden_win_delta, hidden_draw_delta, hidden_loss_delta) == (6, -1, -8)
+    assert (public_win_delta, public_draw_delta, public_loss_delta) == (7, 0, -7)

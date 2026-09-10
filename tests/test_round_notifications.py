@@ -677,7 +677,7 @@ class TestFormatNotification:
         )
 
         assert "Твой Score: 1389" in text
-        assert "Бонус за сыгранный матч: +0,5" in text
+        assert "Бонус за сыгранный матч: +1" in text
         assert "Рейтинг соперника скрыт" in text
         assert "Прогноз" not in text
 
