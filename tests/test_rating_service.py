@@ -3,6 +3,7 @@
 import pytest
 
 from bot.handlers.rating import RatingHandler, _deck_noun
+from bot.keyboards import CB_LEADERBOARD_MENU
 from core.schemas import TournamentCreate
 from services.rating import RatingService
 from services.tournament import TournamentService
@@ -165,6 +166,7 @@ class TestHandleSocialRating:
     def test_no_contributors_returns_empty_message(self, handler):
         result = handler.handle_social_rating(tg_id=1)
         assert "никто" in result.text
+        assert result.keyboard.inline_keyboard[0][0].callback_data == CB_LEADERBOARD_MENU
 
     def test_shows_top_contributors(self, db, svc, user_svc, arch_svc):
         burn = arch_svc.get_or_create_by_name("Burn")

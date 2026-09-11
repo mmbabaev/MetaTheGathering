@@ -1,4 +1,5 @@
 from bot.handlers.base import HandlerResult
+from bot.keyboards import social_rating_keyboard
 from bot.messages import format_participant_name
 from core.config import settings
 from services.rating import RatingService
@@ -15,7 +16,7 @@ class RatingHandler:
         """Топ-10 игроков по количеству внесённых колод."""
         contributors = RatingService(self.svc.db).top_deck_contributors(limit=10, exclude_tg_ids=settings.admin_ids)
         if not contributors:
-            return HandlerResult("Пока никто не внёс ни одной колоды.")
+            return HandlerResult("Пока никто не внёс ни одной колоды.", keyboard=social_rating_keyboard())
         lines = ["🏆 Социальный рейтинг — кто больше всех внёс колод:\n"]
         medals = ["🥇", "🥈", "🥉"]
         for i, (user, cnt) in enumerate(contributors):
@@ -25,7 +26,7 @@ class RatingHandler:
             scorekeeper_badge = " 🧙" if user.is_scorekeeper else ""
             noun = _deck_noun(cnt)
             lines.append(f"{prefix} {name}{username_part}{scorekeeper_badge} — {cnt} {noun}")
-        return HandlerResult("\n".join(lines))
+        return HandlerResult("\n".join(lines), keyboard=social_rating_keyboard())
 
 
 def _deck_noun(n: int) -> str:

@@ -147,13 +147,15 @@
 
 - Второй этап Endstep Pauper leaderboard из
   [#312](https://github.com/mmbabaev/MetaTheGathering/issues/312): `/leaderboard` предлагает
-  кнопки `Moscow Pauper Ranked` и `Endstep ru Pauper Ranked`; вторая пока owner-only и
+  `Moscow Pauper Ranked`, `Endstep ru Pauper Ranked` и существующий социальный рейтинг;
+  Endstep-таблица пока owner-only и
   собирает уникальных реальных игроков всех турниров `Endstep-ru`
   с заполненным ником, точно сопоставляет их с текущим Pauper leaderboard и показывает
   место на сайте и место среди найденных RU-игроков. Список листается по десять записей
   из последнего успешного снимка в БД; штатный scheduler запускает отдельный worker
   в 11:00 и 23:00 МСК и восстанавливает пропущенное обновление после старта бота.
-  Telegram flow никогда не обращается к Endstep.
+  Telegram flow никогда не обращается к Endstep. Endstep-строки показаны моноширинной
+  таблицей с отдельными колонками для RU-места, места на сайте, rating, RD и W-L-D.
   Ненайденные ники и коллизии нескольких аккаунтов с одинаковым ником видны владельцу
   для диагностики, рассылок игрокам нет — PR
   [#315](https://github.com/mmbabaev/MetaTheGathering/pull/315).

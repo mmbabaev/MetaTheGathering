@@ -19,6 +19,20 @@ async def cmd_social_rating(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     db = SessionLocal()
     try:
         result = _handler(db).handle_social_rating(tg_id=user.id)
-        await msg.reply_text(result.text)
+        await msg.reply_text(result.text, reply_markup=result.keyboard)
+    finally:
+        db.close()
+
+
+async def callback_social_rating(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user = update.effective_user
+    if query is None or user is None:
+        return
+    db = SessionLocal()
+    try:
+        result = _handler(db).handle_social_rating(tg_id=user.id)
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+        await query.answer()
     finally:
         db.close()
