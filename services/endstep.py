@@ -16,10 +16,6 @@ class EndstepApiError(RuntimeError):
     """The Endstep API could not be read or returned an unexpected contract."""
 
 
-class EndstepConfigurationError(EndstepApiError):
-    """Credentials required for the auth-gated Endstep API are missing."""
-
-
 class EndstepQueue(BaseModel):
     model_config = ConfigDict(extra="ignore", frozen=True, populate_by_name=True)
 
@@ -55,29 +51,25 @@ class EndstepPlayerLookup(BaseModel):
 
     requested_username: str
     player: EndstepLeaderboardPlayer | None
+    exact_matches: tuple[EndstepLeaderboardPlayer, ...] = ()
 
 
 class EndstepClient:
     """Small session-based client for Endstep's own ranked JSON endpoints.
 
-    The website currently protects leaderboard reads with the same cookie session
-    as the browser application. A dedicated integration account is therefore
-    supplied through environment settings. The password is never logged or
-    included in raised errors.
+    The website protects leaderboard reads with the same cookie session as the
+    browser application. The client uses Endstep's ``Continue as Guest`` flow,
+    so no account credentials are required or stored.
     """
 
     def __init__(
         self,
         base_url: str = ENDSTEP_DEFAULT_BASE_URL,
         *,
-        username: str,
-        password: str,
         session: requests.Session | None = None,
         timeout: int = 15,
     ) -> None:
         self._base_url = base_url.rstrip("/")
-        self._username = username.strip()
-        self._password = password
         self._session = session or requests.Session()
         self._timeout = timeout
         self._authenticated = False
@@ -99,27 +91,23 @@ class EndstepClient:
         except ValueError as exc:
             raise EndstepApiError(f"{operation}: Endstep вернул не-JSON ответ") from exc
 
-    def _login(self) -> None:
-        if not self._username or not self._password:
-            raise EndstepConfigurationError(
-                "Не заданы ENDSTEP_API_USERNAME и ENDSTEP_API_PASSWORD для read-only интеграции"
-            )
+    def _start_guest_session(self) -> None:
         try:
             response = self._session.post(
-                f"{self._base_url}/api/auth/login",
-                json={"username": self._username, "password": self._password},
+                f"{self._base_url}/api/auth/guest",
+                json={},
                 timeout=self._timeout,
             )
         except requests.RequestException as exc:
-            raise EndstepApiError("Не удалось подключиться к Endstep при авторизации") from exc
-        body = self._json(response, "Авторизация")
+            raise EndstepApiError("Не удалось подключиться к Endstep при создании гостевой сессии") from exc
+        body = self._json(response, "Гостевая сессия")
         if not isinstance(body, dict) or not isinstance(body.get("user"), dict):
-            raise EndstepApiError("Авторизация: неожиданный формат ответа Endstep")
+            raise EndstepApiError("Гостевая сессия: неожиданный формат ответа Endstep")
         self._authenticated = True
 
     def _get_json(self, path: str, *, params: dict[str, str | int] | None = None) -> Any:
         if not self._authenticated:
-            self._login()
+            self._start_guest_session()
         for attempt in range(2):
             try:
                 response = self._session.get(
@@ -132,7 +120,7 @@ class EndstepClient:
             if response.status_code != 401 or attempt == 1:
                 return self._json(response, "Чтение лидерборда")
             self._authenticated = False
-            self._login()
+            self._start_guest_session()
         raise AssertionError("unreachable")
 
     @staticmethod
@@ -217,12 +205,11 @@ class EndstepClient:
                 query=username,
             )
             exact = [row for row in page.rows if row.username.casefold() == username.casefold()]
-            if len(exact) > 1:
-                raise EndstepApiError(f'Endstep вернул несколько точных записей для ника "{username}"')
             result.append(
                 EndstepPlayerLookup(
                     requested_username=username,
-                    player=exact[0] if exact else None,
+                    player=exact[0] if len(exact) == 1 else None,
+                    exact_matches=tuple(exact),
                 )
             )
         return tuple(result)

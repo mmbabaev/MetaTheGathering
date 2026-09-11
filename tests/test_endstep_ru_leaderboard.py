@@ -90,4 +90,28 @@ def test_empty_bot_roster_does_not_call_endstep(db):
     assert snapshot.candidate_count == 0
     assert snapshot.rows == ()
     assert snapshot.missing_usernames == ()
+    assert snapshot.ambiguous_usernames == ()
     client.find_players.assert_not_called()
+
+
+def test_duplicate_endstep_username_is_excluded_and_reported(db):
+    user = UserService(db).get_or_create(tg_id=9110, first_name="Duplicate")
+    user.endstep_username = "counterspell"
+    db.commit()
+    _participate(db, _tournament(db, club="Endstep-ru"), user)
+    ranked = _player("counterspell", rank=613, rating=1156)
+    provisional = _player("counterspell", rank=None, rating=1613, provisional=True)
+    client = MagicMock()
+    client.find_players.return_value = (
+        EndstepPlayerLookup(
+            requested_username="counterspell",
+            player=None,
+            exact_matches=(ranked, provisional),
+        ),
+    )
+
+    snapshot = EndstepRuLeaderboardService(db, client).calculate()
+
+    assert snapshot.rows == ()
+    assert snapshot.missing_usernames == ()
+    assert snapshot.ambiguous_usernames == ("counterspell",)

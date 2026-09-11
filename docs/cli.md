@@ -27,9 +27,8 @@ python3 cli.py endstep find <nick>       # точный поиск в Endstep Pa
 
 ### Поиск игроков Endstep
 
-API лидерборда Endstep требует авторизацию. Задайте в `bot/.env.debug` отдельную
-интеграционную учётную запись через `ENDSTEP_API_USERNAME` и
-`ENDSTEP_API_PASSWORD`, затем передайте один или несколько точных ников:
+Клиент автоматически использует штатный `Continue as Guest` и не требует логина
+или пароля. Передайте один или несколько точных ников:
 
 ```bash
 python3 cli.py endstep find PlayerOne PlayerTwo

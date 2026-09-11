@@ -18,6 +18,9 @@ from bot.keyboards import (
     CB_ENDSTEP_RU_PAGE,
     CB_ENDSTEP_RU_REFRESH,
     CB_EXPORT_SWISS_PLAYERS,
+    CB_LEADERBOARD_ENDSTEP,
+    CB_LEADERBOARD_MENU,
+    CB_LEADERBOARD_MOSCOW,
     CB_REGISTER,
     CB_REOPEN_TOURNAMENT,
     CB_ROUND_SUMMARY,
@@ -27,6 +30,7 @@ from bot.keyboards import (
     archetype_keyboard,
     close_tournament_confirm_keyboard,
     endstep_ru_leaderboard_keyboard,
+    leaderboard_menu_keyboard,
     register_button,
     tournament_card_keyboard,
     tournament_list_keyboard,
@@ -41,6 +45,16 @@ def test_endstep_ru_leaderboard_keyboard_has_navigation_and_refresh():
         f"{CB_ENDSTEP_RU_PAGE}:0",
         f"{CB_ENDSTEP_RU_PAGE}:2",
         CB_ENDSTEP_RU_REFRESH,
+        CB_LEADERBOARD_MENU,
+    ]
+
+
+def test_leaderboard_menu_has_requested_two_buttons():
+    markup = leaderboard_menu_keyboard()
+
+    assert [(row[0].text, row[0].callback_data) for row in markup.inline_keyboard] == [
+        ("Moscow Pauper Ranked", CB_LEADERBOARD_MOSCOW),
+        ("Endstep ru Pauper Ranked", CB_LEADERBOARD_ENDSTEP),
     ]
 
 

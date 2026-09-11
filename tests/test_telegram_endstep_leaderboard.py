@@ -8,9 +8,9 @@ from bot.handlers.base import HandlerResult
 from bot.handlers.endstep_leaderboard import EndstepRuLeaderboardLoad
 from bot.telegram.endstep_leaderboard import (
     USER_DATA_ENDSTEP_RU_SNAPSHOT,
+    callback_endstep_ru_open,
     callback_endstep_ru_page,
     callback_endstep_ru_refresh,
-    cmd_endstep_leaderboard,
 )
 from services.endstep_ru_leaderboard import EndstepRuLeaderboard
 
@@ -27,19 +27,36 @@ def _snapshot() -> EndstepRuLeaderboard:
 
 
 @pytest.mark.asyncio
-async def test_command_loads_and_caches_snapshot():
-    message = SimpleNamespace(reply_text=AsyncMock())
-    update = SimpleNamespace(effective_user=SimpleNamespace(id=OWNER_ID), effective_message=message)
+async def test_menu_button_loads_and_caches_snapshot(monkeypatch):
+    monkeypatch.setattr("bot.telegram.endstep_leaderboard.settings.OWNER_CHAT_ID", OWNER_ID)
+    query = SimpleNamespace(edit_message_text=AsyncMock(), answer=AsyncMock())
+    update = SimpleNamespace(effective_user=SimpleNamespace(id=OWNER_ID), callback_query=query)
     context = SimpleNamespace(user_data={})
     snapshot = _snapshot()
     loaded = EndstepRuLeaderboardLoad(HandlerResult("leaderboard", keyboard=MagicMock()), snapshot)
 
     with patch("bot.telegram.endstep_leaderboard._load", AsyncMock(return_value=loaded)) as load:
-        await cmd_endstep_leaderboard(update, context)
+        await callback_endstep_ru_open(update, context)
 
     load.assert_awaited_once_with(OWNER_ID)
     assert context.user_data[USER_DATA_ENDSTEP_RU_SNAPSHOT] is snapshot
-    message.reply_text.assert_awaited_once_with("leaderboard", reply_markup=loaded.result.keyboard)
+    query.answer.assert_awaited_once_with("Загружаю…")
+    query.edit_message_text.assert_awaited_once_with("leaderboard", reply_markup=loaded.result.keyboard)
+
+
+@pytest.mark.asyncio
+async def test_menu_button_blocks_non_owner(monkeypatch):
+    monkeypatch.setattr("bot.telegram.endstep_leaderboard.settings.OWNER_CHAT_ID", OWNER_ID)
+    query = SimpleNamespace(edit_message_text=AsyncMock(), answer=AsyncMock())
+    update = SimpleNamespace(effective_user=SimpleNamespace(id=OWNER_ID + 1), callback_query=query)
+    context = SimpleNamespace(user_data={})
+
+    with patch("bot.telegram.endstep_leaderboard._load", AsyncMock()) as load:
+        await callback_endstep_ru_open(update, context)
+
+    load.assert_not_awaited()
+    query.edit_message_text.assert_not_awaited()
+    query.answer.assert_awaited_once_with("Эта таблица пока доступна только владельцу бота.", show_alert=True)
 
 
 @pytest.mark.asyncio

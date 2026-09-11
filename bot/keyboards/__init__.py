@@ -99,6 +99,9 @@ CB_FEATURE_INFO = "feat_info"  # feat_info:{flag_name}
 CB_RANKED_PAGE = "rank_page"  # rank_page:{page}
 CB_RANKED_ME = "rank_me"
 CB_RANKED_RULES = "rank_rules"  # rank_rules:{return_page}
+CB_LEADERBOARD_MENU = "rank_menu"
+CB_LEADERBOARD_MOSCOW = "rank_moscow"
+CB_LEADERBOARD_ENDSTEP = "rank_endstep"
 CB_ENDSTEP_RU_PAGE = "endru_page"  # endru_page:{page}
 CB_ENDSTEP_RU_REFRESH = "endru_refresh"
 CB_PAY = "pay"  # pay:{tournament_id}
@@ -151,6 +154,19 @@ CB_CLUB_SETTINGS_CHAT = "club_cfg_chat"
 CELLAR_PAGE_SIZE = 10
 
 
+def leaderboard_menu_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("Moscow Pauper Ranked", callback_data=CB_LEADERBOARD_MOSCOW)],
+            [InlineKeyboardButton("Endstep ru Pauper Ranked", callback_data=CB_LEADERBOARD_ENDSTEP)],
+        ]
+    )
+
+
+def leaderboard_menu_back_keyboard() -> list[InlineKeyboardButton]:
+    return [InlineKeyboardButton("← К выбору рейтинга", callback_data=CB_LEADERBOARD_MENU)]
+
+
 def ranked_leaderboard_keyboard(page: int, total_pages: int, *, show_me: bool = True) -> InlineKeyboardMarkup:
     rows = []
     navigation = []
@@ -165,6 +181,7 @@ def ranked_leaderboard_keyboard(page: int, total_pages: int, *, show_me: bool = 
         actions.append(InlineKeyboardButton("📍 Где я?", callback_data=CB_RANKED_ME))
     actions.append(InlineKeyboardButton("📖 Правила", callback_data=f"{CB_RANKED_RULES}:{page}"))
     rows.append(actions)
+    rows.append(leaderboard_menu_back_keyboard())
     return InlineKeyboardMarkup(rows)
 
 
@@ -182,6 +199,7 @@ def endstep_ru_leaderboard_keyboard(page: int, total_pages: int) -> InlineKeyboa
     if navigation:
         rows.append(navigation)
     rows.append([InlineKeyboardButton("🔄 Обновить", callback_data=CB_ENDSTEP_RU_REFRESH)])
+    rows.append(leaderboard_menu_back_keyboard())
     return InlineKeyboardMarkup(rows)
 
 

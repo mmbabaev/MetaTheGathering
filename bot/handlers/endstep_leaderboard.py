@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from bot.handlers.base import HandlerResult
 from bot.keyboards import endstep_ru_leaderboard_keyboard
 from core.config import settings
-from services.endstep import EndstepApiError, EndstepConfigurationError
+from services.endstep import EndstepApiError
 from services.endstep_ru_leaderboard import EndstepRuLeaderboard, EndstepRuLeaderboardService
 
 ENDSTEP_RU_PAGE_SIZE = 10
@@ -35,15 +35,6 @@ class EndstepRuLeaderboardHandler:
             raise RuntimeError("EndstepRuLeaderboardService is required to load a snapshot")
         try:
             snapshot = self.service.calculate()
-        except EndstepConfigurationError:
-            return EndstepRuLeaderboardLoad(
-                HandlerResult(
-                    "Endstep leaderboard ещё не настроен. Добавьте ENDSTEP_API_USERNAME и "
-                    "ENDSTEP_API_PASSWORD в environment бота.",
-                    keyboard=endstep_ru_leaderboard_keyboard(0, 1),
-                ),
-                None,
-            )
         except EndstepApiError as exc:
             return EndstepRuLeaderboardLoad(
                 HandlerResult(
@@ -89,6 +80,14 @@ class EndstepRuLeaderboardHandler:
                 else ""
             )
             lines.extend(["", f"Не найдены: {', '.join(visible)}{suffix}"])
+        if snapshot.ambiguous_usernames:
+            visible = [name if len(name) <= 40 else f"{name[:39]}…" for name in snapshot.ambiguous_usernames[:5]]
+            suffix = (
+                f" и ещё {len(snapshot.ambiguous_usernames) - len(visible)}"
+                if len(snapshot.ambiguous_usernames) > len(visible)
+                else ""
+            )
+            lines.extend(["", f"Несколько аккаунтов с этим ником: {', '.join(visible)}{suffix}"])
         lines.extend(["", f"Страница {page + 1}/{total_pages}"])
         return HandlerResult(
             "\n".join(lines),
