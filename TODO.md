@@ -140,25 +140,24 @@
   CLI-команда `endstep find`; credentials и HTML-скрейпинг не используются — PR
   [#313](https://github.com/mmbabaev/MetaTheGathering/pull/313), уточнение — PR
   [#315](https://github.com/mmbabaev/MetaTheGathering/pull/315).
+- Второй этап Endstep Pauper leaderboard из
+  [#312](https://github.com/mmbabaev/MetaTheGathering/issues/312): `/leaderboard` предлагает
+  `Moscow Pauper Ranked` и owner-only `Endstep ru Pauper Ranked`. Endstep-таблица собирает
+  уникальных реальных игроков всех турниров `Endstep-ru` с заполненным ником, показывает
+  место на сайте и место среди найденных RU-игроков и листается по десять записей. Снимки
+  хранятся локально в БД; штатный scheduler запускает отдельный worker в 11:00 и 23:00 МСК
+  и восстанавливает пропущенное обновление после старта бота. Telegram flow не обращается
+  к Endstep, рассылок игрокам нет — PR
+  [#315](https://github.com/mmbabaev/MetaTheGathering/pull/315).
 
 Игрокам ачивки автоматически не рассылаются: текущий режим — owner-only shadow.
 
 ### В review, но ещё не в `main`
 
-- Второй этап Endstep Pauper leaderboard из
-  [#312](https://github.com/mmbabaev/MetaTheGathering/issues/312): `/leaderboard` предлагает
-  `Moscow Pauper Ranked`, `Endstep ru Pauper Ranked` и существующий социальный рейтинг;
-  Endstep-таблица пока owner-only и
-  собирает уникальных реальных игроков всех турниров `Endstep-ru`
-  с заполненным ником, точно сопоставляет их с текущим Pauper leaderboard и показывает
-  место на сайте и место среди найденных RU-игроков. Список листается по десять записей
-  из последнего успешного снимка в БД; штатный scheduler запускает отдельный worker
-  в 11:00 и 23:00 МСК и восстанавливает пропущенное обновление после старта бота.
-  Telegram flow никогда не обращается к Endstep. Endstep-строки показаны моноширинной
-  таблицей с отдельными колонками для RU-места, места на сайте, rating, RD и W-L-D.
-  Ненайденные ники и коллизии нескольких аккаунтов с одинаковым ником видны владельцу
-  для диагностики, рассылок игрокам нет — PR
-  [#315](https://github.com/mmbabaev/MetaTheGathering/pull/315).
+- Дополнение к меню лидербордов: существующий социальный рейтинг добавлен третьей
+  кнопкой, а Endstep-строки показаны моноширинной таблицей с отдельными колонками для
+  RU-места, ника, места на сайте, rating, RD и W-L-D — PR
+  [#317](https://github.com/mmbabaev/MetaTheGathering/pull/317).
 
 - Slash-команды `/add_players` и `/tournament_status` убраны из меню всех ролей,
   админской справки и роутинга. Добавление участников и просмотр статуса через
