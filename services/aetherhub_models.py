@@ -6,6 +6,18 @@ from dataclasses import dataclass
 from datetime import date
 
 
+def is_aetherhub_player_name(value: str | None) -> bool:
+    """Return whether a scraped value can represent a player identity.
+
+    AetherHub briefly renders partial tables while a live tournament is being
+    updated.  Rank, points and table-number cells must never become placeholder
+    users.  Real names and handles may contain digits, but must contain at least
+    one Unicode letter.
+    """
+    normalized = (value or "").strip()
+    return normalized.upper() != "BYE" and any(char.isalpha() for char in normalized)
+
+
 @dataclass
 class AetherhubPairing:
     player: str

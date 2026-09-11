@@ -13,6 +13,7 @@ from services.aetherhub_models import (
     AetherhubRound,
     AetherhubTournamentData,
     ClubTournamentLink,
+    is_aetherhub_player_name,
 )
 
 PAUPER_RE = re.compile(r"pauper|паупер|пупер", re.IGNORECASE)
@@ -130,24 +131,33 @@ class AetherhubService:
         """Returns (player_names_from_standings, max_round_found) from the main tournament page."""
         soup = BeautifulSoup(html, "html.parser")
 
-        # Prefer the explicit standings tab; fall back to the first table in the document.
-        # Completed tournaments show round N pairings in tab_pairings (which comes first),
-        # so using tab_results avoids reading the wrong table.
+        # A live AetherHub page can briefly omit tab_results and put a partially
+        # rendered pairings table first.  Selecting tables[0] and cells[1] then
+        # turns table numbers into player names (issue #318).  Locate an actual
+        # standings table and its Name column from headers instead.
         standings_table = None
+        name_column = None
         tab_results = soup.find("div", {"id": "tab_results"})
-        if tab_results:
-            standings_table = tab_results.find("table")
-        if standings_table is None:
-            tables = soup.find_all("table")
-            standings_table = tables[0] if tables else None
+        preferred_tables = tab_results.find_all("table") if tab_results else []
+        candidates = preferred_tables + [table for table in soup.find_all("table") if table not in preferred_tables]
+        for table in candidates:
+            header_row = table.find("tr")
+            if header_row is None:
+                continue
+            headers = [cell.get_text(" ", strip=True).casefold() for cell in header_row.find_all(["th", "td"])]
+            if "rank" not in headers or "name" not in headers:
+                continue
+            standings_table = table
+            name_column = headers.index("name")
+            break
 
         players: list[str] = []
-        if standings_table:
+        if standings_table is not None and name_column is not None:
             for row in standings_table.find_all("tr")[1:]:
                 cells = [td.get_text(strip=True) for td in row.find_all("td")]
-                if len(cells) >= 2 and cells[1]:
-                    name = self._strip_points(cells[1])
-                    if name and not self._is_bye(name):
+                if len(cells) > name_column and cells[name_column]:
+                    name = self._strip_points(cells[name_column])
+                    if is_aetherhub_player_name(name):
                         players.append(name)
 
         max_round = 1
