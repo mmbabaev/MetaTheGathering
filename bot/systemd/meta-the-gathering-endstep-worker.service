@@ -1,0 +1,16 @@
+[Unit]
+Description=Meta The Gathering Endstep leaderboard refresh
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=mbabaev
+WorkingDirectory=/home/mbabaev/MetaTheGathering/meta_the_gathering
+Environment="PATH=/home/mbabaev/MetaTheGathering/meta_the_gathering/venv/bin"
+Environment="PYTHONPATH=/home/mbabaev/MetaTheGathering/meta_the_gathering"
+Environment="BOT_ENV=prod"
+EnvironmentFile=/home/mbabaev/MetaTheGathering/meta_the_gathering/bot/.env
+ExecStart=/home/mbabaev/MetaTheGathering/meta_the_gathering/venv/bin/python -m workers.endstep_leaderboard
+StandardOutput=journal
+StandardError=journal

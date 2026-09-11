@@ -127,6 +127,20 @@ Offset `create_days_before` пока не редактируется из UI: о
   успешную копию в БД; в Telegram ничего не рассылается. При выключенном `cellarDecks` источник
   не запрашивается.
 
+### 1f. Endstep RU leaderboard — отдельный systemd worker
+
+- **Когда:** один раз после bot deploy и затем раз в сутки. Persistent systemd timer
+  запускает oneshot service; `RandomizedDelaySec=15m` не привязывает внешний запрос
+  к точной минуте. Production и debug используют независимые services и timers.
+- **Что делает:** `python -m workers.endstep_leaderboard` создаёт гостевую сессию
+  Endstep, сопоставляет точные ники реальных участников турниров `Endstep-ru` с
+  текущим Pauper leaderboard и атомарно добавляет immutable snapshot в локальную БД.
+  Ненайденные и неоднозначные ники сохраняются вместе с таблицей. При ошибке транзакция
+  откатывается, worker завершается с ненулевым кодом, а предыдущий успешный снимок
+  остаётся доступен. Telegram-сообщения worker не отправляет.
+- **Чтение ботом:** owner-only Endstep-кнопка в `/leaderboard` читает только последний
+  успешный snapshot из БД. Ни открытие таблицы, ни пагинация не выполняют HTTP-запрос.
+
 ### 2. Плановый импорт с AetherHub — `AetherhubImportJob`
 - **Когда:** `run_daily` в каждое `aetherhub_fetch_time` (по джобе на каждое время). Если
   последовательность времён переходит через полночь (`23:30, 00:00, 00:30`), ночные джобы

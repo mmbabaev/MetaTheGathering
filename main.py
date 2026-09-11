@@ -75,7 +75,6 @@ from bot.keyboards import (
     CB_DELETE_TOURNAMENT_CANCEL,
     CB_DELETE_TOURNAMENT_CONFIRM,
     CB_ENDSTEP_RU_PAGE,
-    CB_ENDSTEP_RU_REFRESH,
     CB_EXPORT_EXCEL,
     CB_EXPORT_MENU,
     CB_EXPORT_PLAYERS,
@@ -405,12 +404,6 @@ def main() -> None:
         CallbackQueryHandler(
             endstep_leaderboard_handler.callback_endstep_ru_page,
             pattern=f"^{CB_ENDSTEP_RU_PAGE}:",
-        )
-    )
-    app.add_handler(
-        CallbackQueryHandler(
-            endstep_leaderboard_handler.callback_endstep_ru_refresh,
-            pattern=f"^{CB_ENDSTEP_RU_REFRESH}$",
         )
     )
     app.add_handler(CallbackQueryHandler(clubs_handler.callback_list, pattern=f"^{CB_CLUB_SETTINGS_LIST}$"))

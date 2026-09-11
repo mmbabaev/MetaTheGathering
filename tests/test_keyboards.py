@@ -16,7 +16,6 @@ from bot.keyboards import (
     CB_DEBUG_META_POLICE,
     CB_DEBUG_NEXT_ROUND,
     CB_ENDSTEP_RU_PAGE,
-    CB_ENDSTEP_RU_REFRESH,
     CB_EXPORT_SWISS_PLAYERS,
     CB_LEADERBOARD_ENDSTEP,
     CB_LEADERBOARD_MENU,
@@ -37,14 +36,13 @@ from bot.keyboards import (
 )
 
 
-def test_endstep_ru_leaderboard_keyboard_has_navigation_and_refresh():
+def test_endstep_ru_leaderboard_keyboard_has_navigation_and_menu_back():
     markup = endstep_ru_leaderboard_keyboard(page=1, total_pages=3)
     callbacks = [button.callback_data for row in markup.inline_keyboard for button in row]
 
     assert callbacks == [
         f"{CB_ENDSTEP_RU_PAGE}:0",
         f"{CB_ENDSTEP_RU_PAGE}:2",
-        CB_ENDSTEP_RU_REFRESH,
         CB_LEADERBOARD_MENU,
     ]
 

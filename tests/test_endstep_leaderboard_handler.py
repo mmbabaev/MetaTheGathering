@@ -2,8 +2,7 @@ from datetime import datetime
 from unittest.mock import MagicMock
 
 from bot.handlers.endstep_leaderboard import ENDSTEP_RU_PAGE_SIZE, EndstepRuLeaderboardHandler
-from bot.keyboards import CB_ENDSTEP_RU_PAGE, CB_ENDSTEP_RU_REFRESH, CB_LEADERBOARD_MENU
-from services.endstep import EndstepApiError
+from bot.keyboards import CB_ENDSTEP_RU_PAGE, CB_LEADERBOARD_MENU
 from services.endstep_ru_leaderboard import EndstepRuLeaderboard, EndstepRuLeaderboardRow
 
 OWNER_ID = 9200
@@ -42,7 +41,7 @@ def _callbacks(result):
     return [button.callback_data for row in result.keyboard.inline_keyboard for button in row]
 
 
-def test_non_owner_cannot_trigger_external_lookup(monkeypatch):
+def test_non_owner_cannot_read_local_snapshot(monkeypatch):
     monkeypatch.setattr("bot.handlers.endstep_leaderboard.settings.OWNER_CHAT_ID", OWNER_ID)
     service = MagicMock()
 
@@ -51,7 +50,7 @@ def test_non_owner_cannot_trigger_external_lookup(monkeypatch):
     assert loaded.snapshot is None
     assert loaded.result.is_alert is True
     assert "только владельцу" in loaded.result.text
-    service.calculate.assert_not_called()
+    service.latest.assert_not_called()
 
 
 def test_pages_show_ru_and_site_positions(monkeypatch):
@@ -71,36 +70,37 @@ def test_pages_show_ru_and_site_positions(monkeypatch):
     assert "Несколько аккаунтов с этим ником: counterspell" in second.text
     assert "Страница 2/2" in second.text
     assert f"{CB_ENDSTEP_RU_PAGE}:0" in _callbacks(second)
-    assert CB_ENDSTEP_RU_REFRESH in _callbacks(second)
+    assert CB_LEADERBOARD_MENU in _callbacks(second)
     assert ENDSTEP_RU_PAGE_SIZE == 10
 
 
 def test_load_returns_snapshot_for_callback_cache(monkeypatch):
     monkeypatch.setattr("bot.handlers.endstep_leaderboard.settings.OWNER_CHAT_ID", OWNER_ID)
     service = MagicMock()
-    service.calculate.return_value = _snapshot(2)
+    service.latest.return_value = _snapshot(2)
 
     loaded = EndstepRuLeaderboardHandler(service).load(OWNER_ID)
 
-    assert loaded.snapshot is service.calculate.return_value
+    assert loaded.snapshot is service.latest.return_value
     assert "найдено 2 из 2" in loaded.result.text
+    assert "Обновлено 10.09.2026 03:00 МСК" in loaded.result.text
 
 
-def test_api_error_is_safe_and_refresh_remains_available(monkeypatch):
+def test_missing_local_snapshot_is_explained(monkeypatch):
     monkeypatch.setattr("bot.handlers.endstep_leaderboard.settings.OWNER_CHAT_ID", OWNER_ID)
     service = MagicMock()
-    service.calculate.side_effect = EndstepApiError("Endstep временно ограничил частоту запросов")
+    service.latest.return_value = None
 
     loaded = EndstepRuLeaderboardHandler(service).load(OWNER_ID)
 
     assert loaded.snapshot is None
-    assert "временно ограничил" in loaded.result.text
-    assert _callbacks(loaded.result) == [CB_ENDSTEP_RU_REFRESH, CB_LEADERBOARD_MENU]
+    assert "ещё не обновлялся" in loaded.result.text
+    assert _callbacks(loaded.result) == [CB_LEADERBOARD_MENU]
 
 
-def test_empty_roster_has_owner_only_refresh_button(monkeypatch):
+def test_empty_roster_has_menu_back_button(monkeypatch):
     monkeypatch.setattr("bot.handlers.endstep_leaderboard.settings.OWNER_CHAT_ID", OWNER_ID)
     result = EndstepRuLeaderboardHandler().render(OWNER_ID, _snapshot(0))
 
     assert "нет игроков с заполненным Endstep-ником" in result.text
-    assert _callbacks(result) == [CB_ENDSTEP_RU_REFRESH, CB_LEADERBOARD_MENU]
+    assert _callbacks(result) == [CB_LEADERBOARD_MENU]
