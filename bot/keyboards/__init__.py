@@ -102,6 +102,7 @@ CB_RANKED_RULES = "rank_rules"  # rank_rules:{return_page}
 CB_LEADERBOARD_MENU = "rank_menu"
 CB_LEADERBOARD_MOSCOW = "rank_moscow"
 CB_LEADERBOARD_ENDSTEP = "rank_endstep"
+CB_LEADERBOARD_SOCIAL = "rank_social"
 CB_ENDSTEP_RU_PAGE = "endru_page"  # endru_page:{page}
 CB_PAY = "pay"  # pay:{tournament_id}
 CB_PAY_STATUS = "pay_status"  # pay_status:{tournament_id} — no-op, показывает статус оплаты
@@ -158,12 +159,17 @@ def leaderboard_menu_keyboard() -> InlineKeyboardMarkup:
         [
             [InlineKeyboardButton("Moscow Pauper Ranked", callback_data=CB_LEADERBOARD_MOSCOW)],
             [InlineKeyboardButton("Endstep ru Pauper Ranked", callback_data=CB_LEADERBOARD_ENDSTEP)],
+            [InlineKeyboardButton("Социальный рейтинг", callback_data=CB_LEADERBOARD_SOCIAL)],
         ]
     )
 
 
 def leaderboard_menu_back_keyboard() -> list[InlineKeyboardButton]:
     return [InlineKeyboardButton("← К выбору рейтинга", callback_data=CB_LEADERBOARD_MENU)]
+
+
+def social_rating_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([leaderboard_menu_back_keyboard()])
 
 
 def ranked_leaderboard_keyboard(page: int, total_pages: int, *, show_me: bool = True) -> InlineKeyboardMarkup:

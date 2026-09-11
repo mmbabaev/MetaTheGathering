@@ -89,6 +89,7 @@ from bot.keyboards import (
     CB_LEADERBOARD_ENDSTEP,
     CB_LEADERBOARD_MENU,
     CB_LEADERBOARD_MOSCOW,
+    CB_LEADERBOARD_SOCIAL,
     CB_LEAVE,
     CB_LEAVE_CANCEL,
     CB_LEAVE_CONFIRM,
@@ -397,6 +398,7 @@ def main() -> None:
             pattern=f"^{CB_LEADERBOARD_ENDSTEP}$",
         )
     )
+    app.add_handler(CallbackQueryHandler(rating_handler.callback_social_rating, pattern=f"^{CB_LEADERBOARD_SOCIAL}$"))
     app.add_handler(CallbackQueryHandler(ranked_handler.callback_leaderboard_page, pattern=f"^{CB_RANKED_PAGE}:"))
     app.add_handler(CallbackQueryHandler(ranked_handler.callback_leaderboard_me, pattern=f"^{CB_RANKED_ME}$"))
     app.add_handler(CallbackQueryHandler(ranked_handler.callback_leaderboard_rules, pattern=f"^{CB_RANKED_RULES}:"))

@@ -43,7 +43,11 @@ async def callback_endstep_ru_open(update: Update, context: ContextTypes.DEFAULT
         context.user_data[USER_DATA_ENDSTEP_RU_SNAPSHOT] = loaded.snapshot
     else:
         context.user_data.pop(USER_DATA_ENDSTEP_RU_SNAPSHOT, None)
-    await query.edit_message_text(loaded.result.text, reply_markup=loaded.result.keyboard)
+    await query.edit_message_text(
+        loaded.result.text,
+        reply_markup=loaded.result.keyboard,
+        parse_mode=loaded.result.parse_mode,
+    )
 
 
 async def callback_endstep_ru_page(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -66,5 +70,5 @@ async def callback_endstep_ru_page(update: Update, context: ContextTypes.DEFAULT
         result = loaded.result
         if loaded.snapshot is not None:
             context.user_data[USER_DATA_ENDSTEP_RU_SNAPSHOT] = loaded.snapshot
-    await query.edit_message_text(result.text, reply_markup=result.keyboard)
+    await query.edit_message_text(result.text, reply_markup=result.keyboard, parse_mode=result.parse_mode)
     await query.answer()

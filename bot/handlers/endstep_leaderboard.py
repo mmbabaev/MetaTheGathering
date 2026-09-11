@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 from dataclasses import dataclass
 from datetime import timezone
 from zoneinfo import ZoneInfo
@@ -12,6 +13,7 @@ from core.config import settings
 from services.endstep_ru_leaderboard import EndstepRuLeaderboard, EndstepRuLeaderboardService
 
 ENDSTEP_RU_PAGE_SIZE = 10
+ENDSTEP_USERNAME_COLUMN_WIDTH = 16
 ENDSTEP_RU_NOT_OWNER = "Эта команда доступна только владельцу бота."
 MOSCOW_TZ = ZoneInfo("Europe/Moscow")
 
@@ -62,13 +64,27 @@ class EndstepRuLeaderboardHandler:
             "",
         ]
         if rows:
+            position_width = max(2, max(len(str(row.position)) for row in rows))
+            table = [
+                f"{'RU':>{position_width}} {'Ник':<{ENDSTEP_USERNAME_COLUMN_WIDTH}} "
+                f"{'Сайт':>5} {'R':>4} {'RD':>3} {'W-L-D':>7}"
+            ]
             for row in rows:
-                site_place = f"#{row.site_rank}" if row.site_rank is not None else "без места"
-                provisional = " · provisional" if row.provisional else ""
-                lines.append(
-                    f"{row.position}. {row.username} — сайт {site_place} · "
-                    f"{row.rating} ±{row.rd} · {row.wins}–{row.losses}–{row.draws}{provisional}"
+                username = _truncate(row.username, ENDSTEP_USERNAME_COLUMN_WIDTH)
+                site_place = str(row.site_rank) if row.site_rank is not None else "—*"
+                record = f"{row.wins}-{row.losses}-{row.draws}"
+                table.append(
+                    f"{row.position:>{position_width}} {username:<{ENDSTEP_USERNAME_COLUMN_WIDTH}} "
+                    f"{site_place:>5} {row.rating:>4} {row.rd:>3} {record:>7}"
                 )
+            lines.extend(
+                [
+                    f"<pre>{html.escape(chr(10).join(table))}</pre>",
+                    "R — рейтинг, RD — отклонение; W-L-D — победы/поражения/ничьи.",
+                ]
+            )
+            if any(row.provisional for row in rows):
+                lines.append("* provisional — Endstep ещё не назначил место на сайте.")
         elif snapshot.candidate_count == 0:
             lines.append("В турнирах Endstep-ru пока нет игроков с заполненным Endstep-ником.")
         else:
@@ -81,7 +97,7 @@ class EndstepRuLeaderboardHandler:
                 if len(snapshot.missing_usernames) > len(visible)
                 else ""
             )
-            lines.extend(["", f"Не найдены: {', '.join(visible)}{suffix}"])
+            lines.extend(["", f"Не найдены: {html.escape(', '.join(visible))}{suffix}"])
         if snapshot.ambiguous_usernames:
             visible = [name if len(name) <= 40 else f"{name[:39]}…" for name in snapshot.ambiguous_usernames[:5]]
             suffix = (
@@ -89,9 +105,14 @@ class EndstepRuLeaderboardHandler:
                 if len(snapshot.ambiguous_usernames) > len(visible)
                 else ""
             )
-            lines.extend(["", f"Несколько аккаунтов с этим ником: {', '.join(visible)}{suffix}"])
+            lines.extend(["", f"Несколько аккаунтов с этим ником: {html.escape(', '.join(visible))}{suffix}"])
         lines.extend(["", f"Страница {page + 1}/{total_pages}"])
         return HandlerResult(
             "\n".join(lines),
             keyboard=endstep_ru_leaderboard_keyboard(page, total_pages),
+            parse_mode="HTML",
         )
+
+
+def _truncate(value: str, width: int) -> str:
+    return value if len(value) <= width else f"{value[: width - 1]}…"

@@ -6,6 +6,7 @@ from bot.keyboards import (
     CB_LEADERBOARD_ENDSTEP,
     CB_LEADERBOARD_MENU,
     CB_LEADERBOARD_MOSCOW,
+    CB_LEADERBOARD_SOCIAL,
     CB_RANKED_ME,
     CB_RANKED_PAGE,
     CB_RANKED_RULES,
@@ -29,11 +30,11 @@ def _callbacks(result):
     return [button.callback_data for row in result.keyboard.inline_keyboard for button in row]
 
 
-def test_leaderboard_menu_offers_moscow_and_endstep():
+def test_leaderboard_menu_offers_moscow_endstep_and_social():
     result = leaderboard_menu()
 
     assert result.text == ("🏆 Pauper Ranked\n\nВыберите лидерборд:\n\nEndstep RU пока доступен только владельцу бота.")
-    assert _callbacks(result) == [CB_LEADERBOARD_MOSCOW, CB_LEADERBOARD_ENDSTEP]
+    assert _callbacks(result) == [CB_LEADERBOARD_MOSCOW, CB_LEADERBOARD_ENDSTEP, CB_LEADERBOARD_SOCIAL]
 
 
 def _ranked_tournament(db, *, title: str, started_at: datetime, closed: bool):

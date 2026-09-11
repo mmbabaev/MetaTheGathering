@@ -20,6 +20,7 @@ from bot.keyboards import (
     CB_LEADERBOARD_ENDSTEP,
     CB_LEADERBOARD_MENU,
     CB_LEADERBOARD_MOSCOW,
+    CB_LEADERBOARD_SOCIAL,
     CB_REGISTER,
     CB_REOPEN_TOURNAMENT,
     CB_ROUND_SUMMARY,
@@ -47,12 +48,13 @@ def test_endstep_ru_leaderboard_keyboard_has_navigation_and_menu_back():
     ]
 
 
-def test_leaderboard_menu_has_requested_two_buttons():
+def test_leaderboard_menu_has_three_ratings():
     markup = leaderboard_menu_keyboard()
 
     assert [(row[0].text, row[0].callback_data) for row in markup.inline_keyboard] == [
         ("Moscow Pauper Ranked", CB_LEADERBOARD_MOSCOW),
         ("Endstep ru Pauper Ranked", CB_LEADERBOARD_ENDSTEP),
+        ("Социальный рейтинг", CB_LEADERBOARD_SOCIAL),
     ]
 
 

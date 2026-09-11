@@ -58,7 +58,11 @@ async def test_menu_button_loads_and_caches_snapshot(monkeypatch):
     load.assert_awaited_once_with(OWNER_ID)
     assert context.user_data[USER_DATA_ENDSTEP_RU_SNAPSHOT] is snapshot
     query.answer.assert_awaited_once_with()
-    query.edit_message_text.assert_awaited_once_with("leaderboard", reply_markup=loaded.result.keyboard)
+    query.edit_message_text.assert_awaited_once_with(
+        "leaderboard",
+        reply_markup=loaded.result.keyboard,
+        parse_mode=None,
+    )
 
 
 @pytest.mark.asyncio
@@ -94,7 +98,7 @@ async def test_cached_page_does_not_reload_endstep(monkeypatch):
 
     load.assert_not_awaited()
     handler.return_value.render.assert_called_once_with(OWNER_ID, snapshot, 2)
-    query.edit_message_text.assert_awaited_once_with("cached", reply_markup=rendered.keyboard)
+    query.edit_message_text.assert_awaited_once_with("cached", reply_markup=rendered.keyboard, parse_mode=None)
     query.answer.assert_awaited_once_with()
 
 
@@ -112,7 +116,11 @@ async def test_page_without_cache_loads_once(monkeypatch):
 
     load.assert_awaited_once_with(OWNER_ID, 1)
     assert context.user_data[USER_DATA_ENDSTEP_RU_SNAPSHOT] is snapshot
-    query.edit_message_text.assert_awaited_once_with("loaded", reply_markup=loaded.result.keyboard)
+    query.edit_message_text.assert_awaited_once_with(
+        "loaded",
+        reply_markup=loaded.result.keyboard,
+        parse_mode=None,
+    )
     query.answer.assert_awaited_once_with()
 
 
