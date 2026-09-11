@@ -3,7 +3,7 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from bot.handlers.leaderboard import RankedLeaderboardHandler
+from bot.handlers.leaderboard import RankedLeaderboardHandler, leaderboard_menu
 from bot.handlers.ranked import RankedPreseasonHandler
 from bot.telegram.common import parse_callback_ints
 from core.database import SessionLocal
@@ -29,10 +29,28 @@ async def cmd_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     msg = update.effective_message
     if not msg:
         return
+    result = leaderboard_menu()
+    await msg.reply_text(result.text, reply_markup=result.keyboard)
+
+
+async def callback_leaderboard_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if query is None:
+        return
+    result = leaderboard_menu()
+    await query.edit_message_text(result.text, reply_markup=result.keyboard)
+    await query.answer()
+
+
+async def callback_leaderboard_moscow(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if query is None:
+        return
     db = SessionLocal()
     try:
         result = _leaderboard_handler(db).handle_page()
-        await msg.reply_text(result.text, reply_markup=result.keyboard)
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+        await query.answer()
     finally:
         db.close()
 

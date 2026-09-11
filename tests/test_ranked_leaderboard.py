@@ -1,8 +1,15 @@
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock
 
-from bot.handlers.leaderboard import LEADERBOARD_PAGE_SIZE, RankedLeaderboardHandler
-from bot.keyboards import CB_RANKED_ME, CB_RANKED_PAGE, CB_RANKED_RULES
+from bot.handlers.leaderboard import LEADERBOARD_PAGE_SIZE, RankedLeaderboardHandler, leaderboard_menu
+from bot.keyboards import (
+    CB_LEADERBOARD_ENDSTEP,
+    CB_LEADERBOARD_MENU,
+    CB_LEADERBOARD_MOSCOW,
+    CB_RANKED_ME,
+    CB_RANKED_PAGE,
+    CB_RANKED_RULES,
+)
 from bot.messages import RANKED_RULES_TEXT
 from core import models
 from core.schemas import TournamentCreate
@@ -20,6 +27,13 @@ from services.user import UserService
 
 def _callbacks(result):
     return [button.callback_data for row in result.keyboard.inline_keyboard for button in row]
+
+
+def test_leaderboard_menu_offers_moscow_and_endstep():
+    result = leaderboard_menu()
+
+    assert result.text == ("🏆 Pauper Ranked\n\nВыберите лидерборд:\n\nEndstep RU пока доступен только владельцу бота.")
+    assert _callbacks(result) == [CB_LEADERBOARD_MOSCOW, CB_LEADERBOARD_ENDSTEP]
 
 
 def _ranked_tournament(db, *, title: str, started_at: datetime, closed: bool):
@@ -192,6 +206,7 @@ def test_leaderboard_pages_contain_ten_players_and_navigation(db):
     assert f"{CB_RANKED_PAGE}:1" in _callbacks(last)
     assert CB_RANKED_ME in _callbacks(last)
     assert f"{CB_RANKED_RULES}:2" in _callbacks(last)
+    assert CB_LEADERBOARD_MENU in _callbacks(last)
     assert LEADERBOARD_PAGE_SIZE == 10
 
 

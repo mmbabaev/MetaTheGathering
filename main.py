@@ -87,6 +87,9 @@ from bot.keyboards import (
     CB_FILL_MISSING_PICK,
     CB_FILL_MISSING_SET,
     CB_HIDE_DECKS,
+    CB_LEADERBOARD_ENDSTEP,
+    CB_LEADERBOARD_MENU,
+    CB_LEADERBOARD_MOSCOW,
     CB_LEAVE,
     CB_LEAVE_CANCEL,
     CB_LEAVE_CONFIRM,
@@ -207,7 +210,7 @@ if settings.DEBUG:
 
 _USER_COMMANDS = [
     BotCommand("tournaments", "Активные турниры и запись"),
-    BotCommand("leaderboard", "Moscow Pauper Ranked"),
+    BotCommand("leaderboard", "Лидерборды Pauper"),
     BotCommand("social_rating", "Социальный рейтинг"),
     BotCommand("cellar", "Колоды из ячейки"),
     BotCommand("settings", "Настройки профиля"),
@@ -218,8 +221,7 @@ _SCOREKEEPER_COMMANDS = list(_USER_COMMANDS)
 
 _POLL_CMD = BotCommand("poll", "Меню голосований: регуляры и рассылка")
 _APP_STATS_CMD = BotCommand("app_statistics", "Статистика приложения (владелец)")
-_ENDSTEP_RU_CMD = BotCommand("endstep_leaderboard", "Endstep Pauper RU (владелец)")
-_OWNER_COMMANDS = [_APP_STATS_CMD, _ENDSTEP_RU_CMD]
+_OWNER_COMMANDS = [_APP_STATS_CMD]
 
 _ADMIN_COMMANDS = _SCOREKEEPER_COMMANDS + [
     BotCommand("archive", "Архив закрытых турниров"),
@@ -366,9 +368,6 @@ def main() -> None:
     app.add_handler(CommandHandler("settings", settings_handler.cmd_settings, filters=private))
     app.add_handler(CommandHandler("poll", poll_handler.cmd_poll, filters=private))
     app.add_handler(CommandHandler("app_statistics", app_stats_handler.cmd_app_statistics, filters=private))
-    app.add_handler(
-        CommandHandler("endstep_leaderboard", endstep_leaderboard_handler.cmd_endstep_leaderboard, filters=private)
-    )
     app.add_handler(CommandHandler("achievements", achievements_handler.cmd_achievements, filters=private))
     app.add_handler(CommandHandler("bingo_preview", bingo_handler.cmd_bingo_preview, filters=private))
     app.add_handler(CommandHandler("ranked_preseason", ranked_handler.cmd_ranked_preseason, filters=private))
@@ -389,6 +388,16 @@ def main() -> None:
         CallbackQueryHandler(cellar_handler.callback_cancel_confirm, pattern=f"^{CB_CELLAR_CANCEL_CONFIRM}:")
     )
     app.add_handler(CallbackQueryHandler(cellar_handler.callback_noop, pattern=f"^{CB_CELLAR_NOOP}$"))
+    app.add_handler(CallbackQueryHandler(ranked_handler.callback_leaderboard_menu, pattern=f"^{CB_LEADERBOARD_MENU}$"))
+    app.add_handler(
+        CallbackQueryHandler(ranked_handler.callback_leaderboard_moscow, pattern=f"^{CB_LEADERBOARD_MOSCOW}$")
+    )
+    app.add_handler(
+        CallbackQueryHandler(
+            endstep_leaderboard_handler.callback_endstep_ru_open,
+            pattern=f"^{CB_LEADERBOARD_ENDSTEP}$",
+        )
+    )
     app.add_handler(CallbackQueryHandler(ranked_handler.callback_leaderboard_page, pattern=f"^{CB_RANKED_PAGE}:"))
     app.add_handler(CallbackQueryHandler(ranked_handler.callback_leaderboard_me, pattern=f"^{CB_RANKED_ME}$"))
     app.add_handler(CallbackQueryHandler(ranked_handler.callback_leaderboard_rules, pattern=f"^{CB_RANKED_RULES}:"))

@@ -20,11 +20,7 @@ USER_DATA_ENDSTEP_RU_SNAPSHOT = "endstep_ru_leaderboard_snapshot"
 def _load_sync(tg_id: int, page: int = 0) -> EndstepRuLeaderboardLoad:
     db = SessionLocal()
     try:
-        client = EndstepClient(
-            settings.ENDSTEP_API_URL,
-            username=settings.ENDSTEP_API_USERNAME,
-            password=settings.ENDSTEP_API_PASSWORD,
-        )
+        client = EndstepClient(settings.ENDSTEP_API_URL)
         handler = EndstepRuLeaderboardHandler(EndstepRuLeaderboardService(db, client))
         return handler.load(tg_id, page)
     finally:
@@ -35,17 +31,21 @@ async def _load(tg_id: int, page: int = 0) -> EndstepRuLeaderboardLoad:
     return await asyncio.to_thread(_load_sync, tg_id, page)
 
 
-async def cmd_endstep_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def callback_endstep_ru_open(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
     user = update.effective_user
-    msg = update.effective_message
-    if user is None or msg is None:
+    if query is None or user is None:
         return
+    if settings.OWNER_CHAT_ID is None or user.id != settings.OWNER_CHAT_ID:
+        await query.answer("Эта таблица пока доступна только владельцу бота.", show_alert=True)
+        return
+    await query.answer("Загружаю…")
     loaded = await _load(user.id)
     if loaded.snapshot is not None:
         context.user_data[USER_DATA_ENDSTEP_RU_SNAPSHOT] = loaded.snapshot
     else:
         context.user_data.pop(USER_DATA_ENDSTEP_RU_SNAPSHOT, None)
-    await msg.reply_text(loaded.result.text, reply_markup=loaded.result.keyboard)
+    await query.edit_message_text(loaded.result.text, reply_markup=loaded.result.keyboard)
 
 
 async def callback_endstep_ru_page(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

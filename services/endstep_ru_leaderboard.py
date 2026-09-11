@@ -34,6 +34,7 @@ class EndstepRuLeaderboard:
     candidate_count: int
     rows: tuple[EndstepRuLeaderboardRow, ...]
     missing_usernames: tuple[str, ...]
+    ambiguous_usernames: tuple[str, ...] = ()
 
 
 class EndstepRuLeaderboardService:
@@ -81,9 +82,12 @@ class EndstepRuLeaderboardService:
         lookups = self.client.find_players(usernames)
         matched: list[tuple[models.User, EndstepLeaderboardPlayer]] = []
         missing: list[str] = []
+        ambiguous: list[str] = []
         for lookup in lookups:
             user = by_username[lookup.requested_username.casefold()]
-            if lookup.player is None:
+            if len(lookup.exact_matches) > 1:
+                ambiguous.append(lookup.requested_username)
+            elif lookup.player is None:
                 missing.append(lookup.requested_username)
             else:
                 matched.append((user, lookup.player))
@@ -117,4 +121,5 @@ class EndstepRuLeaderboardService:
             candidate_count=len(by_username),
             rows=rows,
             missing_usernames=tuple(sorted(missing, key=str.casefold)),
+            ambiguous_usernames=tuple(sorted(ambiguous, key=str.casefold)),
         )

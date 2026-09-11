@@ -59,10 +59,10 @@ def test_retired_commands_are_hidden_from_every_command_menu():
     assert retired.isdisjoint(c.command for c in main._ADMIN_COMMANDS)
 
 
-def test_endstep_leaderboard_is_owner_only_in_command_menus():
+def test_endstep_leaderboard_has_no_separate_slash_command():
     command = "endstep_leaderboard"
 
     assert command not in {item.command for item in main._USER_COMMANDS}
     assert command not in {item.command for item in main._SCOREKEEPER_COMMANDS}
     assert command not in {item.command for item in main._ADMIN_COMMANDS}
-    assert command in {item.command for item in main._OWNER_COMMANDS}
+    assert command not in {item.command for item in main._OWNER_COMMANDS}

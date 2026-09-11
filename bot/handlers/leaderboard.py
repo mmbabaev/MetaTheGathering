@@ -1,13 +1,20 @@
 """Pure handler for the public Moscow Pauper Ranked leaderboard."""
 
 from bot.handlers.base import HandlerResult
-from bot.keyboards import ranked_back_keyboard, ranked_leaderboard_keyboard
+from bot.keyboards import leaderboard_menu_keyboard, ranked_back_keyboard, ranked_leaderboard_keyboard
 from bot.messages import RANKED_RULES_TEXT
 from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.ranked_leaderboard import RankedLeaderboard, RankedLeaderboardService
 from services.user import UserService
 
 LEADERBOARD_PAGE_SIZE = 10
+
+
+def leaderboard_menu() -> HandlerResult:
+    return HandlerResult(
+        "🏆 Pauper Ranked\n\nВыберите лидерборд:\n\nEndstep RU пока доступен только владельцу бота.",
+        keyboard=leaderboard_menu_keyboard(),
+    )
 
 
 class RankedLeaderboardHandler:

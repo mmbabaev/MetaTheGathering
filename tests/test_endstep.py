@@ -3,11 +3,7 @@ from unittest.mock import MagicMock, call
 import pytest
 import requests
 
-from services.endstep import (
-    EndstepApiError,
-    EndstepClient,
-    EndstepConfigurationError,
-)
+from services.endstep import EndstepApiError, EndstepClient
 
 
 def _response(body, *, status=200):
@@ -33,7 +29,7 @@ def _player(username: str, *, rank: int | None = 7, provisional: bool = False):
     }
 
 
-def test_finds_exact_players_with_one_authenticated_session():
+def test_finds_exact_players_with_one_guest_session():
     session = MagicMock()
     session.post.return_value = _response({"user": {"id": "integration"}})
     session.get.side_effect = [
@@ -47,13 +43,7 @@ def test_finds_exact_players_with_one_authenticated_session():
         ),
         _response({"rows": [], "total": 0, "provisionalCount": 0}),
     ]
-    client = EndstepClient(
-        "https://endstep.example/",
-        username="integration",
-        password="dummy-not-a-real-password",
-        session=session,
-        timeout=10,
-    )
+    client = EndstepClient("https://endstep.example/", session=session, timeout=10)
 
     result = client.find_players(["  anna ", "Missing", "ANNA"])
 
@@ -63,8 +53,8 @@ def test_finds_exact_players_with_one_authenticated_session():
     assert result[0].player.rank == 7
     assert result[1].player is None
     session.post.assert_called_once_with(
-        "https://endstep.example/api/auth/login",
-        json={"username": "integration", "password": "dummy-not-a-real-password"},
+        "https://endstep.example/api/auth/guest",
+        json={},
         timeout=10,
     )
     assert session.get.call_args_list == [
@@ -96,11 +86,7 @@ def test_supports_wrapped_queue_response_and_provisional_player():
         ),
     ]
 
-    result = EndstepClient(
-        username="integration",
-        password="dummy-not-a-real-password",
-        session=session,
-    ).find_players(["newplayer"])
+    result = EndstepClient(session=session).find_players(["newplayer"])
 
     assert result[0].player is not None
     assert result[0].player.rank is None
@@ -117,35 +103,26 @@ def test_reauthenticates_once_after_expired_cookie():
         _response({"error": "Unauthorized"}, status=401),
         _response([{"formatId": "pauper", "displayName": "Pauper"}]),
     ]
-    client = EndstepClient(
-        username="integration",
-        password="dummy-not-a-real-password",
-        session=session,
-    )
+    client = EndstepClient(session=session)
 
     assert client.resolve_format_id() == "pauper"
     assert session.post.call_count == 2
 
 
-def test_missing_credentials_fail_before_network_request():
+def test_guest_session_does_not_require_credentials():
     session = MagicMock()
-    client = EndstepClient(username="", password="", session=session)
+    session.post.return_value = _response({"user": {"id": "guest"}})
+    session.get.return_value = _response([{"formatId": "pauper", "displayName": "Pauper"}])
 
-    with pytest.raises(EndstepConfigurationError, match="ENDSTEP_API_USERNAME"):
-        client.resolve_format_id()
+    assert EndstepClient(session=session).resolve_format_id() == "pauper"
 
-    session.post.assert_not_called()
-    session.get.assert_not_called()
+    session.post.assert_called_once()
 
 
-def test_transport_errors_are_wrapped_without_credentials():
+def test_guest_transport_errors_are_wrapped():
     session = MagicMock()
     session.post.side_effect = requests.ConnectionError("password=dummy-not-a-real-password")
-    client = EndstepClient(
-        username="integration",
-        password="dummy-not-a-real-password",
-        session=session,
-    )
+    client = EndstepClient(session=session)
 
     with pytest.raises(EndstepApiError) as error:
         client.resolve_format_id()
@@ -157,11 +134,30 @@ def test_rejects_changed_leaderboard_contract():
     session = MagicMock()
     session.post.return_value = _response({"user": {"id": "integration"}})
     session.get.return_value = _response({"players": []})
-    client = EndstepClient(
-        username="integration",
-        password="dummy-not-a-real-password",
-        session=session,
-    )
+    client = EndstepClient(session=session)
 
     with pytest.raises(EndstepApiError, match="формат ranked-лидерборда"):
         client.leaderboard(format_id="pauper")
+
+
+def test_duplicate_exact_username_is_reported_without_failing_other_players():
+    session = MagicMock()
+    session.post.return_value = _response({"user": {"id": "guest"}})
+    session.get.side_effect = [
+        _response([{"formatId": "pauper", "displayName": "Pauper"}]),
+        _response(
+            {
+                "rows": [_player("counterspell", rank=613), _player("counterspell", rank=None, provisional=True)],
+                "total": 1,
+                "provisionalCount": 1,
+            }
+        ),
+        _response({"rows": [_player("Unique")], "total": 1, "provisionalCount": 0}),
+    ]
+
+    duplicate, unique = EndstepClient(session=session).find_players(["counterspell", "Unique"])
+
+    assert duplicate.player is None
+    assert len(duplicate.exact_matches) == 2
+    assert unique.player is not None
+    assert len(unique.exact_matches) == 1

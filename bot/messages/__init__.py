@@ -175,7 +175,7 @@ HELP_TEXT = """\
 
 /cellar — выбрать и забронировать колоду из ячейки
 
-/leaderboard — публичный Moscow Pauper Ranked
+/leaderboard — выбрать Moscow Pauper Ranked или Endstep RU Pauper Ranked
 
 /settings — сохранить имя и фамилию для автоматической записи\
 """
