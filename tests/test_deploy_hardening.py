@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BOT_DEPLOY = ROOT / "bot" / "deploy_bot_debug.sh"
 WEB_DEPLOY = ROOT / "bot" / "deploy_web_debug.sh"
+SYSTEMD_DIR = ROOT / "bot" / "systemd"
 
 
 def _read(path: Path) -> str:
@@ -75,3 +76,27 @@ def test_workflows_serialize_deploys_by_environment():
 
         assert f"group: {expected_group}" in workflow
         assert "cancel-in-progress: false" in workflow
+
+
+def test_endstep_worker_has_separate_daily_persistent_timers():
+    for prefix in ("meta-the-gathering-endstep-worker", "meta-the-gathering-debug-endstep-worker"):
+        service = _read(SYSTEMD_DIR / f"{prefix}.service")
+        timer = _read(SYSTEMD_DIR / f"{prefix}.timer")
+
+        assert "Type=oneshot" in service
+        assert "python -m workers.endstep_leaderboard" in service
+        assert "OnCalendar=daily" in timer
+        assert "Persistent=true" in timer
+        assert f"Unit={prefix}.service" in timer
+
+
+def test_bot_deploy_installs_and_starts_endstep_worker_timer():
+    source = _read(BOT_DEPLOY)
+
+    assert 'ENDSTEP_WORKER_NAME="meta-the-gathering-endstep-worker"' in source
+    assert 'ENDSTEP_WORKER_NAME="meta-the-gathering-debug-endstep-worker"' in source
+    assert 'sudo cp "$ENDSTEP_WORKER_SERVICE_FILE" /etc/systemd/system/' in source
+    assert 'sudo cp "$ENDSTEP_WORKER_TIMER_FILE" /etc/systemd/system/' in source
+    assert 'sudo systemctl enable "$ENDSTEP_WORKER_NAME.timer"' in source
+    assert 'sudo systemctl restart "$ENDSTEP_WORKER_NAME.timer"' in source
+    assert 'sudo systemctl start "$ENDSTEP_WORKER_NAME.service"' in source

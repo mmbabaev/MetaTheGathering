@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Meta The Gathering Endstep leaderboard refresh
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=15m
+Unit=meta-the-gathering-endstep-worker.service
+
+[Install]
+WantedBy=timers.target

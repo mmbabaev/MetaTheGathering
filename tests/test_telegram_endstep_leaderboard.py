@@ -8,9 +8,9 @@ from bot.handlers.base import HandlerResult
 from bot.handlers.endstep_leaderboard import EndstepRuLeaderboardLoad
 from bot.telegram.endstep_leaderboard import (
     USER_DATA_ENDSTEP_RU_SNAPSHOT,
+    _load_sync,
     callback_endstep_ru_open,
     callback_endstep_ru_page,
-    callback_endstep_ru_refresh,
 )
 from services.endstep_ru_leaderboard import EndstepRuLeaderboard
 
@@ -24,6 +24,23 @@ def _snapshot() -> EndstepRuLeaderboard:
         rows=(),
         missing_usernames=(),
     )
+
+
+def test_sync_load_reads_database_service_without_constructing_http_client():
+    db = MagicMock()
+    expected = EndstepRuLeaderboardLoad(HandlerResult("cached"), _snapshot())
+    with (
+        patch("bot.telegram.endstep_leaderboard.SessionLocal", return_value=db),
+        patch("bot.telegram.endstep_leaderboard.EndstepRuLeaderboardService") as service,
+        patch("bot.telegram.endstep_leaderboard.EndstepRuLeaderboardHandler") as handler,
+    ):
+        handler.return_value.load.return_value = expected
+        loaded = _load_sync(OWNER_ID)
+
+    assert loaded is expected
+    service.assert_called_once_with(db)
+    handler.assert_called_once_with(service.return_value)
+    db.close.assert_called_once_with()
 
 
 @pytest.mark.asyncio
@@ -40,7 +57,7 @@ async def test_menu_button_loads_and_caches_snapshot(monkeypatch):
 
     load.assert_awaited_once_with(OWNER_ID)
     assert context.user_data[USER_DATA_ENDSTEP_RU_SNAPSHOT] is snapshot
-    query.answer.assert_awaited_once_with("Загружаю…")
+    query.answer.assert_awaited_once_with()
     query.edit_message_text.assert_awaited_once_with("leaderboard", reply_markup=loaded.result.keyboard)
 
 
@@ -100,56 +117,14 @@ async def test_page_without_cache_loads_once(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_refresh_acknowledges_immediately_and_replaces_cache(monkeypatch):
-    monkeypatch.setattr("bot.telegram.endstep_leaderboard.settings.OWNER_CHAT_ID", OWNER_ID)
-    calls = []
-
-    async def answer(text=None, **kwargs):
-        calls.append(("answer", text, kwargs))
-
-    async def edit_message_text(text, **kwargs):
-        calls.append(("edit", text, kwargs))
-
-    query = SimpleNamespace(data="endru_refresh", edit_message_text=edit_message_text, answer=answer)
-    update = SimpleNamespace(callback_query=query, effective_user=SimpleNamespace(id=OWNER_ID))
-    context = SimpleNamespace(user_data={USER_DATA_ENDSTEP_RU_SNAPSHOT: _snapshot()})
-    fresh = _snapshot()
-    loaded = EndstepRuLeaderboardLoad(HandlerResult("fresh", keyboard=MagicMock()), fresh)
-
-    with patch("bot.telegram.endstep_leaderboard._load", AsyncMock(return_value=loaded)) as load:
-        await callback_endstep_ru_refresh(update, context)
-
-    load.assert_awaited_once_with(OWNER_ID)
-    assert calls[0] == ("answer", "Обновляю…", {})
-    assert calls[1][0:2] == ("edit", "fresh")
-    assert context.user_data[USER_DATA_ENDSTEP_RU_SNAPSHOT] is fresh
-
-
-@pytest.mark.asyncio
-async def test_failed_refresh_discards_stale_cache(monkeypatch):
-    monkeypatch.setattr("bot.telegram.endstep_leaderboard.settings.OWNER_CHAT_ID", OWNER_ID)
-    query = SimpleNamespace(data="endru_refresh", edit_message_text=AsyncMock(), answer=AsyncMock())
-    update = SimpleNamespace(callback_query=query, effective_user=SimpleNamespace(id=OWNER_ID))
-    context = SimpleNamespace(user_data={USER_DATA_ENDSTEP_RU_SNAPSHOT: _snapshot()})
-    loaded = EndstepRuLeaderboardLoad(HandlerResult("temporary error", keyboard=MagicMock()), None)
-
-    with patch("bot.telegram.endstep_leaderboard._load", AsyncMock(return_value=loaded)):
-        await callback_endstep_ru_refresh(update, context)
-
-    assert USER_DATA_ENDSTEP_RU_SNAPSHOT not in context.user_data
-    query.edit_message_text.assert_awaited_once_with("temporary error", reply_markup=loaded.result.keyboard)
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("callback", [callback_endstep_ru_page, callback_endstep_ru_refresh])
-async def test_non_owner_callback_never_loads_or_edits(callback, monkeypatch):
+async def test_non_owner_page_callback_never_loads_or_edits(monkeypatch):
     monkeypatch.setattr("bot.telegram.endstep_leaderboard.settings.OWNER_CHAT_ID", OWNER_ID)
     query = SimpleNamespace(data="endru_page:0", edit_message_text=AsyncMock(), answer=AsyncMock())
     update = SimpleNamespace(callback_query=query, effective_user=SimpleNamespace(id=OWNER_ID + 1))
     context = SimpleNamespace(user_data={})
 
     with patch("bot.telegram.endstep_leaderboard._load", AsyncMock()) as load:
-        await callback(update, context)
+        await callback_endstep_ru_page(update, context)
 
     load.assert_not_awaited()
     query.edit_message_text.assert_not_awaited()

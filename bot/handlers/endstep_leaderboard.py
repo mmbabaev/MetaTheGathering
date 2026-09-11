@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import timezone
+from zoneinfo import ZoneInfo
 
 from bot.handlers.base import HandlerResult
 from bot.keyboards import endstep_ru_leaderboard_keyboard
 from core.config import settings
-from services.endstep import EndstepApiError
 from services.endstep_ru_leaderboard import EndstepRuLeaderboard, EndstepRuLeaderboardService
 
 ENDSTEP_RU_PAGE_SIZE = 10
 ENDSTEP_RU_NOT_OWNER = "Эта команда доступна только владельцу бота."
+MOSCOW_TZ = ZoneInfo("Europe/Moscow")
 
 
 @dataclass(frozen=True)
@@ -33,12 +35,11 @@ class EndstepRuLeaderboardHandler:
             return EndstepRuLeaderboardLoad(HandlerResult(ENDSTEP_RU_NOT_OWNER, is_alert=True), None)
         if self.service is None:
             raise RuntimeError("EndstepRuLeaderboardService is required to load a snapshot")
-        try:
-            snapshot = self.service.calculate()
-        except EndstepApiError as exc:
+        snapshot = self.service.latest()
+        if snapshot is None:
             return EndstepRuLeaderboardLoad(
                 HandlerResult(
-                    f"Не удалось загрузить Endstep leaderboard: {exc}",
+                    "Endstep RU leaderboard ещё не обновлялся. Ежедневный worker создаст первый снимок автоматически.",
                     keyboard=endstep_ru_leaderboard_keyboard(0, 1),
                 ),
                 None,
@@ -54,9 +55,10 @@ class EndstepRuLeaderboardHandler:
         page = min(max(0, page), total_pages - 1)
         start = page * ENDSTEP_RU_PAGE_SIZE
         rows = snapshot.rows[start : start + ENDSTEP_RU_PAGE_SIZE]
+        generated_at = snapshot.generated_at.replace(tzinfo=timezone.utc).astimezone(MOSCOW_TZ)
         lines = [
             "🏆 Endstep Pauper — RU",
-            f"Текущий сезон · найдено {total_rows} из {snapshot.candidate_count}",
+            f"Обновлено {generated_at.strftime('%d.%m.%Y %H:%M')} МСК · найдено {total_rows} из {snapshot.candidate_count}",
             "",
         ]
         if rows:

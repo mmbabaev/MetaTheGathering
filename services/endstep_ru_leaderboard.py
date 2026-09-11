@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import json
+from dataclasses import asdict, dataclass
 from datetime import datetime
 
 from sqlalchemy import func, select
@@ -40,7 +41,7 @@ class EndstepRuLeaderboard:
 class EndstepRuLeaderboardService:
     """Match Endstep-ru tournament members to the current Endstep Pauper ladder."""
 
-    def __init__(self, db: Session, client: EndstepClient) -> None:
+    def __init__(self, db: Session, client: EndstepClient | None = None) -> None:
         self.db = db
         self.client = client
 
@@ -63,6 +64,8 @@ class EndstepRuLeaderboardService:
         )
 
     def calculate(self) -> EndstepRuLeaderboard:
+        if self.client is None:
+            raise RuntimeError("EndstepClient is required to refresh the leaderboard")
         candidates = self._candidates()
         by_username: dict[str, models.User] = {}
         for user in candidates:
@@ -122,4 +125,55 @@ class EndstepRuLeaderboardService:
             rows=rows,
             missing_usernames=tuple(sorted(missing, key=str.casefold)),
             ambiguous_usernames=tuple(sorted(ambiguous, key=str.casefold)),
+        )
+
+    def refresh(self) -> EndstepRuLeaderboard:
+        """Fetch Endstep and atomically append one immutable local snapshot."""
+
+        snapshot = self.calculate()
+        self.db.add(
+            models.EndstepRuLeaderboardSnapshot(
+                generated_at=snapshot.generated_at,
+                candidate_count=snapshot.candidate_count,
+                rows_json=json.dumps(
+                    [asdict(row) for row in snapshot.rows],
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+                missing_usernames_json=json.dumps(
+                    snapshot.missing_usernames,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+                ambiguous_usernames_json=json.dumps(
+                    snapshot.ambiguous_usernames,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+            )
+        )
+        self.db.commit()
+        return snapshot
+
+    def latest(self) -> EndstepRuLeaderboard | None:
+        """Read the latest successful snapshot without contacting Endstep."""
+
+        stored = (
+            self.db.execute(
+                select(models.EndstepRuLeaderboardSnapshot).order_by(
+                    models.EndstepRuLeaderboardSnapshot.generated_at.desc(),
+                    models.EndstepRuLeaderboardSnapshot.id.desc(),
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if stored is None:
+            return None
+        return EndstepRuLeaderboard(
+            generated_at=stored.generated_at,
+            candidate_count=stored.candidate_count,
+            rows=tuple(EndstepRuLeaderboardRow(**row) for row in json.loads(stored.rows_json)),
+            missing_usernames=tuple(json.loads(stored.missing_usernames_json)),
+            ambiguous_usernames=tuple(json.loads(stored.ambiguous_usernames_json)),
         )

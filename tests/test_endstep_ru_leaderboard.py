@@ -1,7 +1,11 @@
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock
 
+import pytest
+from sqlalchemy import func, select
+
 from core import models
-from services.endstep import EndstepLeaderboardPlayer, EndstepPlayerLookup
+from services.endstep import EndstepApiError, EndstepLeaderboardPlayer, EndstepPlayerLookup
 from services.endstep_ru_leaderboard import EndstepRuLeaderboardService
 from services.user import UserService
 
@@ -115,3 +119,74 @@ def test_duplicate_endstep_username_is_excluded_and_reported(db):
     assert snapshot.rows == ()
     assert snapshot.missing_usernames == ()
     assert snapshot.ambiguous_usernames == ("counterspell",)
+
+
+def test_refresh_persists_snapshot_and_latest_reads_it_without_client(db):
+    user = UserService(db).get_or_create(tg_id=9120, first_name="Cached")
+    user.endstep_username = "CachedNick"
+    db.commit()
+    _participate(db, _tournament(db, club="Endstep-ru"), user)
+    client = MagicMock()
+    client.find_players.return_value = (
+        EndstepPlayerLookup(
+            requested_username="CachedNick",
+            player=_player("CachedNick", rank=12, rating=1750),
+        ),
+    )
+
+    refreshed = EndstepRuLeaderboardService(db, client).refresh()
+    loaded = EndstepRuLeaderboardService(db).latest()
+
+    assert loaded == refreshed
+    assert db.scalar(select(func.count()).select_from(models.EndstepRuLeaderboardSnapshot)) == 1
+
+
+def test_latest_uses_newest_successful_snapshot(db):
+    older = models.EndstepRuLeaderboardSnapshot(
+        generated_at=datetime(2026, 9, 9),
+        candidate_count=0,
+        rows_json="[]",
+        missing_usernames_json="[]",
+        ambiguous_usernames_json="[]",
+    )
+    newer = models.EndstepRuLeaderboardSnapshot(
+        generated_at=older.generated_at + timedelta(days=1),
+        candidate_count=1,
+        rows_json="[]",
+        missing_usernames_json='["Missing"]',
+        ambiguous_usernames_json="[]",
+    )
+    db.add_all([older, newer])
+    db.commit()
+
+    loaded = EndstepRuLeaderboardService(db).latest()
+
+    assert loaded is not None
+    assert loaded.generated_at == newer.generated_at
+    assert loaded.candidate_count == 1
+    assert loaded.missing_usernames == ("Missing",)
+
+
+def test_failed_refresh_does_not_replace_previous_snapshot(db):
+    previous = models.EndstepRuLeaderboardSnapshot(
+        generated_at=datetime(2026, 9, 10),
+        candidate_count=1,
+        rows_json="[]",
+        missing_usernames_json='["Previous"]',
+        ambiguous_usernames_json="[]",
+    )
+    db.add(previous)
+    db.commit()
+    client = MagicMock()
+    client.find_players.side_effect = EndstepApiError("temporary")
+    user = UserService(db).get_or_create(tg_id=9130, first_name="Candidate")
+    user.endstep_username = "Candidate"
+    db.commit()
+    _participate(db, _tournament(db, club="Endstep-ru"), user)
+
+    with pytest.raises(EndstepApiError):
+        EndstepRuLeaderboardService(db, client).refresh()
+    db.rollback()
+
+    assert EndstepRuLeaderboardService(db).latest().missing_usernames == ("Previous",)
+    assert db.scalar(select(func.count()).select_from(models.EndstepRuLeaderboardSnapshot)) == 1

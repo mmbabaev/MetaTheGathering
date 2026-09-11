@@ -917,3 +917,17 @@ class ClubAnnouncementSetting(Base):
     destination = Column(String(16), nullable=False, default="none", server_default="none")
     created_at = Column(DateTime, default=utc_now, nullable=False)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+
+class EndstepRuLeaderboardSnapshot(Base):
+    """Immutable locally cached result of one Endstep RU leaderboard refresh."""
+
+    __tablename__ = "endstep_ru_leaderboard_snapshots"
+
+    id = Column(Integer, primary_key=True)
+    generated_at = Column(DateTime, nullable=False, index=True)
+    candidate_count = Column(Integer, nullable=False)
+    rows_json = Column(Text, nullable=False)
+    missing_usernames_json = Column(Text, nullable=False)
+    ambiguous_usernames_json = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)

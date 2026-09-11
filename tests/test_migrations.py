@@ -48,6 +48,28 @@ def test_single_alembic_head():
     assert len(heads) == 1, f"Expected exactly 1 alembic head, got {len(heads)}: {heads}"
 
 
+def test_endstep_leaderboard_snapshot_migration_creates_cache_table():
+    engine = sa.create_engine("sqlite://")
+    migration = runpy.run_path(str(VERSIONS_DIR / "e2c9d12d05ed_add_endstep_ru_leaderboard_snapshots.py"))
+
+    with engine.begin() as connection:
+        context = MigrationContext.configure(connection)
+        with Operations.context(context):
+            migration["upgrade"]()
+        table = sa.Table("endstep_ru_leaderboard_snapshots", sa.MetaData(), autoload_with=connection)
+        assert {
+            "generated_at",
+            "candidate_count",
+            "rows_json",
+            "missing_usernames_json",
+            "ambiguous_usernames_json",
+        } <= set(table.c.keys())
+
+        with Operations.context(context):
+            migration["downgrade"]()
+        assert not sa.inspect(connection).has_table("endstep_ru_leaderboard_snapshots")
+
+
 def test_round_pairings_message_tracking_migration_creates_table():
     metadata = sa.MetaData()
     sa.Table("tournaments", metadata, sa.Column("id", sa.Integer, primary_key=True))

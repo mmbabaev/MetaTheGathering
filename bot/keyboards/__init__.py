@@ -103,7 +103,6 @@ CB_LEADERBOARD_MENU = "rank_menu"
 CB_LEADERBOARD_MOSCOW = "rank_moscow"
 CB_LEADERBOARD_ENDSTEP = "rank_endstep"
 CB_ENDSTEP_RU_PAGE = "endru_page"  # endru_page:{page}
-CB_ENDSTEP_RU_REFRESH = "endru_refresh"
 CB_PAY = "pay"  # pay:{tournament_id}
 CB_PAY_STATUS = "pay_status"  # pay_status:{tournament_id} — no-op, показывает статус оплаты
 CB_ADMIN_IMPORT_META = "adm_meta"  # adm_meta:{tournament_id}
@@ -198,7 +197,6 @@ def endstep_ru_leaderboard_keyboard(page: int, total_pages: int) -> InlineKeyboa
         navigation.append(InlineKeyboardButton("Вперёд →", callback_data=f"{CB_ENDSTEP_RU_PAGE}:{page + 1}"))
     if navigation:
         rows.append(navigation)
-    rows.append([InlineKeyboardButton("🔄 Обновить", callback_data=CB_ENDSTEP_RU_REFRESH)])
     rows.append(leaderboard_menu_back_keyboard())
     return InlineKeyboardMarkup(rows)
 

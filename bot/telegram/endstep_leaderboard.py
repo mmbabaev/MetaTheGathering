@@ -11,7 +11,6 @@ from bot.handlers.endstep_leaderboard import EndstepRuLeaderboardHandler, Endste
 from bot.telegram.common import parse_callback_ints
 from core.config import settings
 from core.database import SessionLocal
-from services.endstep import EndstepClient
 from services.endstep_ru_leaderboard import EndstepRuLeaderboard, EndstepRuLeaderboardService
 
 USER_DATA_ENDSTEP_RU_SNAPSHOT = "endstep_ru_leaderboard_snapshot"
@@ -20,8 +19,7 @@ USER_DATA_ENDSTEP_RU_SNAPSHOT = "endstep_ru_leaderboard_snapshot"
 def _load_sync(tg_id: int, page: int = 0) -> EndstepRuLeaderboardLoad:
     db = SessionLocal()
     try:
-        client = EndstepClient(settings.ENDSTEP_API_URL)
-        handler = EndstepRuLeaderboardHandler(EndstepRuLeaderboardService(db, client))
+        handler = EndstepRuLeaderboardHandler(EndstepRuLeaderboardService(db))
         return handler.load(tg_id, page)
     finally:
         db.close()
@@ -39,7 +37,7 @@ async def callback_endstep_ru_open(update: Update, context: ContextTypes.DEFAULT
     if settings.OWNER_CHAT_ID is None or user.id != settings.OWNER_CHAT_ID:
         await query.answer("Эта таблица пока доступна только владельцу бота.", show_alert=True)
         return
-    await query.answer("Загружаю…")
+    await query.answer()
     loaded = await _load(user.id)
     if loaded.snapshot is not None:
         context.user_data[USER_DATA_ENDSTEP_RU_SNAPSHOT] = loaded.snapshot
@@ -70,21 +68,3 @@ async def callback_endstep_ru_page(update: Update, context: ContextTypes.DEFAULT
             context.user_data[USER_DATA_ENDSTEP_RU_SNAPSHOT] = loaded.snapshot
     await query.edit_message_text(result.text, reply_markup=result.keyboard)
     await query.answer()
-
-
-async def callback_endstep_ru_refresh(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    user = update.effective_user
-    if query is None or user is None:
-        return
-    if settings.OWNER_CHAT_ID is None or user.id != settings.OWNER_CHAT_ID:
-        await query.answer("Эта команда доступна только владельцу бота.", show_alert=True)
-        return
-
-    await query.answer("Обновляю…")
-    loaded = await _load(user.id)
-    if loaded.snapshot is not None:
-        context.user_data[USER_DATA_ENDSTEP_RU_SNAPSHOT] = loaded.snapshot
-    else:
-        context.user_data.pop(USER_DATA_ENDSTEP_RU_SNAPSHOT, None)
-    await query.edit_message_text(loaded.result.text, reply_markup=loaded.result.keyboard)
