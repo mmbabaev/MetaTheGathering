@@ -8,6 +8,7 @@ import asyncio
 import io
 import logging
 from collections import Counter, defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -47,6 +48,7 @@ from services.cellar_sheet import CellarCatalogSourceError, GoogleSheetsCellarCa
 from services.datalens import DataLensService
 from services.deck_mapping import refresh_archetype_macro
 from services.deck_reminders import DeckReminderStage
+from services.endstep_ru_leaderboard import EndstepRuLeaderboard
 from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.magicoculus import (
     MagicOculusClient,
@@ -59,10 +61,13 @@ from services.names import format_participant_name
 from services.schedule import ScheduleService
 from services.stats import StatsService
 from services.tournament import MAX_ACTIVE_TOURNAMENTS_PER_CLUB, TournamentService
+from workers.endstep_leaderboard import run_refresh as run_endstep_leaderboard_refresh
 
 logger = logging.getLogger(__name__)
 
 CELLAR_CATALOG_SYNC_TIME = "23:00"
+ENDSTEP_LEADERBOARD_REFRESH_TIMES = ("11:00", "23:00")
+ENDSTEP_LEADERBOARD_STARTUP_DELAY_SECONDS = 30
 
 
 @dataclass(frozen=True)
@@ -370,6 +375,34 @@ class CellarCatalogSyncJob:
         finally:
             if close_db:
                 db.close()
+
+
+class EndstepLeaderboardRefreshJob:
+    """Refresh Endstep snapshots in a worker thread without blocking Telegram."""
+
+    def __init__(
+        self,
+        refresh: Callable[..., EndstepRuLeaderboard | None] = run_endstep_leaderboard_refresh,
+    ) -> None:
+        self._refresh = refresh
+
+    async def run(self, *, only_if_stale: bool = False) -> EndstepRuLeaderboard | None:
+        try:
+            snapshot = await asyncio.to_thread(self._refresh, only_if_stale=only_if_stale)
+        except Exception:
+            logger.exception("EndstepLeaderboardRefreshJob: refresh failed; keeping the previous snapshot")
+            return None
+        if snapshot is None:
+            logger.info("EndstepLeaderboardRefreshJob: recent snapshot exists; startup refresh skipped")
+            return None
+        logger.info(
+            "EndstepLeaderboardRefreshJob: candidates=%s found=%s missing=%s ambiguous=%s",
+            snapshot.candidate_count,
+            len(snapshot.rows),
+            len(snapshot.missing_usernames),
+            len(snapshot.ambiguous_usernames),
+        )
+        return snapshot
 
 
 # ---------------------------------------------------------------------------
@@ -1453,6 +1486,35 @@ def setup_scheduler(app: Application) -> None:
     )
     app.job_queue.run_daily(_sync_cellar_catalog, time=cellar_catalog_sync_time, days=(0,))
     logger.info("Scheduler: CellarCatalogSyncJob registered (Sunday %s Europe/Moscow)", CELLAR_CATALOG_SYNC_TIME)
+
+    endstep_job = EndstepLeaderboardRefreshJob()
+
+    async def _refresh_endstep_on_startup(_context: ContextTypes.DEFAULT_TYPE) -> None:
+        await endstep_job.run(only_if_stale=True)
+
+    _refresh_endstep_on_startup.__name__ = "endstep_leaderboard_refresh[startup]"
+    app.job_queue.run_once(
+        _refresh_endstep_on_startup,
+        when=ENDSTEP_LEADERBOARD_STARTUP_DELAY_SECONDS,
+        name=_refresh_endstep_on_startup.__name__,
+    )
+
+    def _make_endstep_refresh(time_str: str):
+        async def _refresh_endstep(_context: ContextTypes.DEFAULT_TYPE) -> None:
+            await endstep_job.run()
+
+        _refresh_endstep.__name__ = f"endstep_leaderboard_refresh[{time_str}]"
+        return _refresh_endstep
+
+    for time_str in ENDSTEP_LEADERBOARD_REFRESH_TIMES:
+        refresh_time = datetime.strptime(time_str, "%H:%M").time().replace(tzinfo=tz)
+        callback = _make_endstep_refresh(time_str)
+        app.job_queue.run_daily(callback, time=refresh_time, name=callback.__name__)
+    logger.info(
+        "Scheduler: EndstepLeaderboardRefreshJob registered (daily %s %s)",
+        ", ".join(ENDSTEP_LEADERBOARD_REFRESH_TIMES),
+        settings.TOURNAMENT_TIMEZONE,
+    )
 
 
 def _register_schedule_jobs(app: Application) -> None:

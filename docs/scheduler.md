@@ -127,17 +127,18 @@ Offset `create_days_before` пока не редактируется из UI: о
   успешную копию в БД; в Telegram ничего не рассылается. При выключенном `cellarDecks` источник
   не запрашивается.
 
-### 1f. Endstep RU leaderboard — отдельный systemd worker
+### 1f. Endstep RU leaderboard — `EndstepLeaderboardRefreshJob`
 
-- **Когда:** один раз после bot deploy и затем ежедневно в 11:00 и 23:00 по
-  `Europe/Moscow`. Persistent systemd timer запускает oneshot service. Production и
-  debug используют независимые services и timers.
-- **Что делает:** `python -m workers.endstep_leaderboard` создаёт гостевую сессию
-  Endstep, сопоставляет точные ники реальных участников турниров `Endstep-ru` с
-  текущим Pauper leaderboard и атомарно добавляет immutable snapshot в локальную БД.
-  Ненайденные и неоднозначные ники сохраняются вместе с таблицей. При ошибке транзакция
-  откатывается, worker завершается с ненулевым кодом, а предыдущий успешный снимок
-  остаётся доступен. Telegram-сообщения worker не отправляет.
+- **Когда:** `run_daily` ежедневно в 11:00 и 23:00 по `Europe/Moscow`. Через 30 секунд
+  после старта бота `run_once` восстанавливает пропущенное обновление, только если
+  последнему снимку больше 12 часов или его ещё нет.
+- **Что делает:** штатный scheduler запускает `workers.endstep_leaderboard.run_refresh`
+  через `asyncio.to_thread`, поэтому синхронные HTTP и БД не блокируют Telegram event
+  loop. Worker создаёт гостевую сессию Endstep, сопоставляет точные ники реальных
+  участников турниров `Endstep-ru` с текущим Pauper leaderboard и атомарно добавляет
+  immutable snapshot в локальную БД. Ненайденные и неоднозначные ники сохраняются вместе
+  с таблицей. При ошибке транзакция откатывается, а предыдущий успешный снимок остаётся
+  доступен. Telegram-сообщения worker не отправляет.
 - **Чтение ботом:** owner-only Endstep-кнопка в `/leaderboard` читает только последний
   успешный snapshot из БД. Ни открытие таблицы, ни пагинация не выполняют HTTP-запрос.
 

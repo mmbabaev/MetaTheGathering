@@ -39,7 +39,7 @@ class EndstepRuLeaderboardHandler:
         if snapshot is None:
             return EndstepRuLeaderboardLoad(
                 HandlerResult(
-                    "Endstep RU leaderboard ещё не обновлялся. Ежедневный worker создаст первый снимок автоматически.",
+                    "Endstep RU leaderboard ещё не обновлялся. Фоновый worker создаст первый снимок автоматически.",
                     keyboard=endstep_ru_leaderboard_keyboard(0, 1),
                 ),
                 None,

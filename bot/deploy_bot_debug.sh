@@ -115,17 +115,15 @@ if [ "$MODE" = "release" ]; then
     SYSTEMD_SERVICE_FILE="$REMOTE_DIR/bot/systemd/meta-the-gathering.service"
     OTEL_SERVICE_FILE="$REMOTE_DIR/bot/systemd/otel-collector.service"
     OTEL_SERVICE_NAME="otel-collector"
-    ENDSTEP_WORKER_NAME="meta-the-gathering-endstep-worker"
+    LEGACY_ENDSTEP_WORKER_NAME="meta-the-gathering-endstep-worker"
 else
     ENV_DEST="$REMOTE_DIR/bot/.env.debug"
     SYSTEMD_SERVICE_FILE="$REMOTE_DIR/bot/systemd/meta-the-gathering-debug.service"
     SYSTEMD_WEB_SERVICE_FILE="$REMOTE_DIR/bot/systemd/meta-the-gathering-debug-web.service"
     OTEL_SERVICE_FILE="$REMOTE_DIR/bot/systemd/otel-collector-debug.service"
     OTEL_SERVICE_NAME="otel-collector-debug"
-    ENDSTEP_WORKER_NAME="meta-the-gathering-debug-endstep-worker"
+    LEGACY_ENDSTEP_WORKER_NAME="meta-the-gathering-debug-endstep-worker"
 fi
-ENDSTEP_WORKER_SERVICE_FILE="$REMOTE_DIR/bot/systemd/$ENDSTEP_WORKER_NAME.service"
-ENDSTEP_WORKER_TIMER_FILE="$REMOTE_DIR/bot/systemd/$ENDSTEP_WORKER_NAME.timer"
 
 ssh -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no "$SSH_TARGET" \
     ARCHIVE_NAME="$ARCHIVE_NAME" REMOTE_DIR="$REMOTE_DIR" SERVICE_NAME="$SERVICE_NAME" \
@@ -133,9 +131,7 @@ ssh -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no "$SSH_TARGET" \
     SYSTEMD_SERVICE_FILE="$SYSTEMD_SERVICE_FILE" \
     SYSTEMD_WEB_SERVICE_FILE="${SYSTEMD_WEB_SERVICE_FILE:-}" \
     OTEL_SERVICE_FILE="$OTEL_SERVICE_FILE" OTEL_SERVICE_NAME="$OTEL_SERVICE_NAME" \
-    ENDSTEP_WORKER_NAME="$ENDSTEP_WORKER_NAME" \
-    ENDSTEP_WORKER_SERVICE_FILE="$ENDSTEP_WORKER_SERVICE_FILE" \
-    ENDSTEP_WORKER_TIMER_FILE="$ENDSTEP_WORKER_TIMER_FILE" \
+    LEGACY_ENDSTEP_WORKER_NAME="$LEGACY_ENDSTEP_WORKER_NAME" \
     "flock -w 900 '$REMOTE_LOCK' bash -s" <<'REMOTE'
 set -Eeuo pipefail
 
@@ -195,23 +191,19 @@ fi
 
 sudo cp "$OTEL_SERVICE_FILE" /etc/systemd/system/
 sudo cp "$SYSTEMD_SERVICE_FILE" /etc/systemd/system/
-sudo cp "$ENDSTEP_WORKER_SERVICE_FILE" /etc/systemd/system/
-sudo cp "$ENDSTEP_WORKER_TIMER_FILE" /etc/systemd/system/
 if [ -n "$SYSTEMD_WEB_SERVICE_FILE" ]; then
     sudo cp "$SYSTEMD_WEB_SERVICE_FILE" /etc/systemd/system/
 fi
+# Endstep refreshes now use the bot's standard PTB JobQueue. Remove the legacy
+# per-environment systemd scheduler left by earlier deploys of this branch.
+sudo systemctl disable --now "$LEGACY_ENDSTEP_WORKER_NAME.timer" 2>/dev/null || true
+sudo rm -f "/etc/systemd/system/$LEGACY_ENDSTEP_WORKER_NAME.timer"
+sudo rm -f "/etc/systemd/system/$LEGACY_ENDSTEP_WORKER_NAME.service"
 sudo systemctl daemon-reload
 sudo systemctl enable "$OTEL_SERVICE_NAME"
 sudo systemctl restart "$OTEL_SERVICE_NAME"
 sudo systemctl enable "$SERVICE_NAME"
 sudo systemctl restart "$SERVICE_NAME"
-sudo systemctl enable "$ENDSTEP_WORKER_NAME.timer"
-sudo systemctl restart "$ENDSTEP_WORKER_NAME.timer"
-# Populate a fresh snapshot immediately after deploy. An external Endstep outage
-# must not roll back an otherwise healthy deploy; the previous snapshot remains.
-if ! sudo systemctl start "$ENDSTEP_WORKER_NAME.service"; then
-    echo "WARNING: Endstep leaderboard refresh failed; keeping the previous snapshot"
-fi
 if [ -n "$SYSTEMD_WEB_SERVICE_FILE" ]; then
     WEB_SERVICE_NAME="$(basename "$SYSTEMD_WEB_SERVICE_FILE" .service)"
     sudo systemctl enable "$WEB_SERVICE_NAME"
