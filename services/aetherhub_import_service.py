@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from core import models
 from services import errors
 from services.aetherhub_links import ensure_aetherhub_link_available
-from services.aetherhub_models import AetherhubRound, AetherhubTournamentData
+from services.aetherhub_models import AetherhubRound, AetherhubTournamentData, is_aetherhub_player_name
 from services.names import format_participant_name, is_single_word_name_typo
 from services.round_results import RoundResultsService
 from services.user import UserService
@@ -257,7 +257,11 @@ class AetherhubImportService:
         ).scalar_one_or_none()
 
     def _build_place_maps(self, standings: list[str]) -> tuple[dict[str, int], dict[str, int]]:
-        direct = {name: place for place, name in enumerate(standings, start=1) if name.upper() != "BYE"}
+        direct = {
+            name: place
+            for place, name in enumerate(standings, start=1)
+            if is_aetherhub_player_name(self._normalize_import_name(name))
+        }
         normalized = {self._normalize_import_name(name): place for name, place in direct.items()}
         return direct, normalized
 
@@ -288,9 +292,10 @@ class AetherhubImportService:
         result: list[str] = []
         seen: set[tuple[str, ...]] = set()
         for name in candidates:
-            if not name or name.upper() == "BYE":
+            normalized_name = self._normalize_import_name(name)
+            if not is_aetherhub_player_name(normalized_name):
                 continue
-            key = tuple(sorted(self._normalize_import_name(name).casefold().replace("ё", "е").split()))
+            key = tuple(sorted(normalized_name.casefold().replace("ё", "е").split()))
             if key in seen:
                 continue
             seen.add(key)

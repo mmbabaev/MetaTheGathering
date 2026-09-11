@@ -326,6 +326,27 @@ class TestParseStandingsPage:
         assert players == []
         assert max_round == 1
 
+    def test_ignores_live_pairings_table_instead_of_importing_table_numbers(self):
+        """Issue #318: the transient first table produced placeholder users 3..11."""
+        html = """<html><body>
+        <table id="matchList">
+          <tr><th></th><th>Table</th><th>Player 1</th><th>Player 2</th></tr>
+          <tr><td></td><td>3</td><td>Alice</td><td>Bob</td></tr>
+          <tr><td></td><td>4</td><td>Carol</td><td>Dave</td></tr>
+        </table>
+        </body></html>"""
+        players, _ = self.svc._parse_standings_page(html)
+        assert players == []
+
+    def test_finds_name_column_by_header_when_standings_columns_shift(self):
+        html = """<html><body><div id="tab_results"><table>
+          <tr><th></th><th>Rank</th><th>Name</th><th>Points</th></tr>
+          <tr><td></td><td>1</td><td>Alice</td><td>9</td></tr>
+          <tr><td></td><td>2</td><td>Bob</td><td>6</td></tr>
+        </table></div></body></html>"""
+        players, _ = self.svc._parse_standings_page(html)
+        assert players == ["Alice", "Bob"]
+
 
 # ── TestParsePairingsPage ────────────────────────────────────────────────────
 
@@ -662,6 +683,27 @@ class TestImportTournament:
         result = import_svc.import_tournament(tournament.id, data)
         assert result.registered == 1
         assert "Ghost User" in result.created_names
+
+    def test_numeric_scraped_values_never_create_placeholder_users(self, import_svc, db, tournament, user_alice):
+        """Defense in depth for issue #318 if malformed scraper data reaches import."""
+        data = _make_data(
+            players=["Alice", "3"],
+            rounds_pairings=[],
+            standings=["3", "Alice", "11"],
+        )
+
+        result = import_svc.import_tournament(tournament.id, data)
+
+        participants = (
+            db.execute(select(models.Participant).where(models.Participant.tournament_id == tournament.id))
+            .scalars()
+            .all()
+        )
+        assert result.registered == 1
+        assert result.created_names == []
+        assert [participant.user_id for participant in participants] == [user_alice.id]
+        assert participants[0].final_place == 2
+        assert db.execute(select(models.User).where(models.User.first_name.in_(["3", "11"]))).scalars().all() == []
 
     def test_registers_player_present_only_in_final_standings(self, import_svc, db, tournament, user_svc):
         """Issue #184: round-one roster had 23 names while final standings had 24."""
