@@ -129,9 +129,9 @@ Offset `create_days_before` пока не редактируется из UI: о
 
 ### 1f. Endstep RU leaderboard — отдельный systemd worker
 
-- **Когда:** один раз после bot deploy и затем раз в сутки. Persistent systemd timer
-  запускает oneshot service; `RandomizedDelaySec=15m` не привязывает внешний запрос
-  к точной минуте. Production и debug используют независимые services и timers.
+- **Когда:** один раз после bot deploy и затем ежедневно в 11:00 и 23:00 по
+  `Europe/Moscow`. Persistent systemd timer запускает oneshot service. Production и
+  debug используют независимые services и timers.
 - **Что делает:** `python -m workers.endstep_leaderboard` создаёт гостевую сессию
   Endstep, сопоставляет точные ники реальных участников турниров `Endstep-ru` с
   текущим Pauper leaderboard и атомарно добавляет immutable snapshot в локальную БД.

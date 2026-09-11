@@ -78,15 +78,18 @@ def test_workflows_serialize_deploys_by_environment():
         assert "cancel-in-progress: false" in workflow
 
 
-def test_endstep_worker_has_separate_daily_persistent_timers():
+def test_endstep_worker_has_separate_twice_daily_persistent_timers():
     for prefix in ("meta-the-gathering-endstep-worker", "meta-the-gathering-debug-endstep-worker"):
         service = _read(SYSTEMD_DIR / f"{prefix}.service")
         timer = _read(SYSTEMD_DIR / f"{prefix}.timer")
 
         assert "Type=oneshot" in service
         assert "python -m workers.endstep_leaderboard" in service
-        assert "OnCalendar=daily" in timer
+        assert "OnCalendar=*-*-* 11:00:00 Europe/Moscow" in timer
+        assert "OnCalendar=*-*-* 23:00:00 Europe/Moscow" in timer
         assert "Persistent=true" in timer
+        assert "AccuracySec=1m" in timer
+        assert "RandomizedDelaySec" not in timer
         assert f"Unit={prefix}.service" in timer
 
 
