@@ -474,6 +474,8 @@ class Keyboards:
         payment_confirmed: bool = False,
         show_round_result_action: bool = False,
         internal_swiss: bool = False,
+        can_add_players: bool = False,
+        can_close: bool = False,
     ) -> InlineKeyboardMarkup:
         if is_registered:
             action_btn = InlineKeyboardButton("🚪 Выйти из турнира", callback_data=f"{CB_LEAVE}:{tournament_id}")
@@ -496,6 +498,14 @@ class Keyboards:
         if is_registered and show_fill_opponents:
             rows.append(
                 [InlineKeyboardButton("🤝 Записать оппонентов", callback_data=f"{CB_ADMIN_OPPONENTS}:{tournament_id}")]
+            )
+        if can_add_players:
+            rows.append(
+                [InlineKeyboardButton("➕ Добавить участников", callback_data=f"{CB_BULK_ADD}:{tournament_id}")]
+            )
+        if can_close:
+            rows.append(
+                [InlineKeyboardButton("🔒 Закрыть турнир", callback_data=f"{CB_CLOSE_TOURNAMENT}:{tournament_id}")]
             )
         if is_admin:
             admin_row = [InlineKeyboardButton("📊 Опрос", callback_data=f"{CB_POLL_MENU}:{tournament_id}")]
@@ -1391,6 +1401,8 @@ def tournament_card_keyboard(
     payment_confirmed: bool = False,
     show_round_result_action: bool = False,
     internal_swiss: bool = False,
+    can_add_players: bool = False,
+    can_close: bool = False,
 ) -> InlineKeyboardMarkup:
     return _default.tournament_card_keyboard(
         tournament_id,
@@ -1405,6 +1417,8 @@ def tournament_card_keyboard(
         payment_confirmed=payment_confirmed,
         show_round_result_action=show_round_result_action,
         internal_swiss=internal_swiss,
+        can_add_players=can_add_players,
+        can_close=can_close,
     )
 
 

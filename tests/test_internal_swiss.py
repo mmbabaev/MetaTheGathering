@@ -271,6 +271,28 @@ def test_four_round_internal_event_finishes_and_persists_places(db):
     assert f"rr_open:{tournament.id}" not in callbacks
 
 
+def test_scorekeeper_can_finish_internal_event_and_is_recorded(db):
+    tournament, users, admin, engine = _setup(db, 4)
+    scorekeeper = users[1]
+    scorekeeper.is_scorekeeper = True
+    db.commit()
+    results = RoundResultsService(db)
+    for expected_round in range(1, 5):
+        engine.generate_next_round(tournament.id, admin.tg_id)
+        for match in results.list_round(tournament.id, expected_round):
+            if match.player2_user_id is not None:
+                results.admin_set(match.id, admin.tg_id, 2, 0)
+
+    prompt = RoundResultsHandler(db).handle_swiss_finish_prompt(tournament.id, scorekeeper.tg_id)
+    standings = engine.finish(tournament.id, scorekeeper.tg_id)
+
+    assert not prompt.is_alert
+    assert len(standings) == 4
+    stored = db.get(models.Tournament, tournament.id)
+    assert stored.status == models.TournamentStatus.CLOSED
+    assert stored.closed_by_tg_id == scorekeeper.tg_id
+
+
 def test_finish_includes_dropped_player_and_persists_final_place(db):
     tournament, users, admin, engine = _setup(db, 4)
     results = RoundResultsService(db)

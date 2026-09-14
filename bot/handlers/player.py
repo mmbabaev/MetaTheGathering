@@ -122,6 +122,7 @@ class PlayerHandler:
     def _tournament_card(self, t, tg_id: int | None) -> HandlerResult:
         is_registered = False
         is_admin = False
+        is_scorekeeper = False
         has_deck = True
         if tg_id is not None:
             user = self.user_svc.get_by_tg_id(tg_id)
@@ -131,6 +132,7 @@ class PlayerHandler:
                 if participant is not None:
                     has_deck = participant.archetype_id is not None
             is_admin = self.user_svc.is_admin(tg_id)
+            is_scorekeeper = self.user_svc.is_scorekeeper(tg_id)
         participants = self.svc.list_participants_for_tournament(t.id)
         with_deck = sum(1 for p in participants if p.archetype)
         has_pairings = self._has_pairings(t)
@@ -164,6 +166,8 @@ class PlayerHandler:
                 payment_confirmed=payment_confirmed,
                 show_round_result_action=(t.is_online and has_pairings and t.status != models.TournamentStatus.CLOSED),
                 internal_swiss=(t.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS),
+                can_add_players=(is_scorekeeper and not is_admin and t.status == models.TournamentStatus.REGISTRATION),
+                can_close=(is_scorekeeper and not is_admin and t.status != models.TournamentStatus.CLOSED),
             ),
         )
 
