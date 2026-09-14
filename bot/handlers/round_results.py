@@ -372,8 +372,8 @@ class RoundResultsHandler:
             return HandlerResult(str(exc), is_alert=True)
 
     def handle_swiss_finish_prompt(self, tournament_id: int, admin_tg_id: int) -> HandlerResult:
-        if not self.users.is_admin(admin_tg_id):
-            return HandlerResult("Нет прав администратора.", is_alert=True)
+        if not self.users.is_privileged(admin_tg_id):
+            return HandlerResult("Нет прав.", is_alert=True)
         tournament = self.db.get(models.Tournament, tournament_id)
         if tournament is None or tournament.engine_mode != models.TournamentEngineMode.INTERNAL_SWISS:
             return HandlerResult("Внутренний Swiss-турнир не найден.", is_alert=True)

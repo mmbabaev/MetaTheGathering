@@ -7,6 +7,7 @@ import pytest
 from bot.handlers.player import DEFER_DECK_WINDOW, PlayerHandler
 from bot.keyboards import (
     CB_ARCHETYPE,
+    CB_BULK_ADD,
     CB_CLOSE_TOURNAMENT,
     CB_CUSTOM_ARCHETYPE,
     CB_DEFER_DECK,
@@ -103,13 +104,45 @@ class TestHandleTournamentSelect:
         assert result.text == TOURNAMENT_NOT_FOUND
         assert result.is_alert
 
-    def test_scorekeeper_card_does_not_show_close_button(self, handler, user_svc, active_tournament):
+    def test_scorekeeper_card_shows_tournament_actions(self, handler, user_svc, active_tournament):
         scorekeeper = user_svc.get_or_create(tg_id=5101, username="keeper", first_name="Keeper")
         user_svc.toggle_scorekeeper(scorekeeper.tg_id)
 
         result = handler.handle_tournament_select(active_tournament.id, tg_id=scorekeeper.tg_id)
 
         callbacks = [button.callback_data for row in result.keyboard.inline_keyboard for button in row]
+        assert f"{CB_BULK_ADD}:{active_tournament.id}" in callbacks
+        assert f"{CB_CLOSE_TOURNAMENT}:{active_tournament.id}" in callbacks
+
+    def test_regular_player_card_does_not_show_scorekeeper_actions(self, handler, user_svc, active_tournament):
+        player = user_svc.get_or_create(tg_id=5103, username="player", first_name="Player")
+
+        result = handler.handle_tournament_select(active_tournament.id, tg_id=player.tg_id)
+
+        callbacks = [button.callback_data for row in result.keyboard.inline_keyboard for button in row]
+        assert f"{CB_BULK_ADD}:{active_tournament.id}" not in callbacks
+        assert f"{CB_CLOSE_TOURNAMENT}:{active_tournament.id}" not in callbacks
+
+    def test_ongoing_tournament_only_shows_scorekeeper_close_action(self, handler, svc, user_svc, active_tournament):
+        scorekeeper = user_svc.get_or_create(tg_id=5104, username="keeper", first_name="Keeper")
+        user_svc.toggle_scorekeeper(scorekeeper.tg_id)
+        svc.start_tournament(active_tournament.id)
+
+        result = handler.handle_tournament_select(active_tournament.id, tg_id=scorekeeper.tg_id)
+
+        callbacks = [button.callback_data for row in result.keyboard.inline_keyboard for button in row]
+        assert f"{CB_BULK_ADD}:{active_tournament.id}" not in callbacks
+        assert f"{CB_CLOSE_TOURNAMENT}:{active_tournament.id}" in callbacks
+
+    def test_closed_tournament_hides_scorekeeper_actions(self, handler, svc, user_svc, active_tournament):
+        scorekeeper = user_svc.get_or_create(tg_id=5105, username="keeper", first_name="Keeper")
+        user_svc.toggle_scorekeeper(scorekeeper.tg_id)
+        svc.close_tournament(active_tournament.id)
+
+        result = handler.handle_tournament_select(active_tournament.id, tg_id=scorekeeper.tg_id)
+
+        callbacks = [button.callback_data for row in result.keyboard.inline_keyboard for button in row]
+        assert f"{CB_BULK_ADD}:{active_tournament.id}" not in callbacks
         assert f"{CB_CLOSE_TOURNAMENT}:{active_tournament.id}" not in callbacks
 
     def test_swiss_player_card_remains_enterable_after_first_round(self, handler, user_svc, db, active_tournament):

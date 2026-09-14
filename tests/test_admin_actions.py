@@ -1248,12 +1248,14 @@ class TestScorekeeperPermissions:
         result = handler.handle_tournament_status(tg_id=SCOREKEEPER_TG_ID)
         assert result.text != NOT_ADMIN
 
-    def test_scorekeeper_cannot_close_tournament(self, handler, db, scorekeeper_user, active_tournament):
+    def test_scorekeeper_can_close_tournament_and_is_recorded(self, handler, db, scorekeeper_user, active_tournament):
         result = handler.handle_close_tournament(tg_id=SCOREKEEPER_TG_ID)
-        assert NOT_ADMIN in result.text
-        assert db.get(m.Tournament, active_tournament.id).status != TournamentStatus.CLOSED
+        assert result.text == TOURNAMENT_CLOSED_MSG
+        tournament = db.get(m.Tournament, active_tournament.id)
+        assert tournament.status == TournamentStatus.CLOSED
+        assert tournament.closed_by_tg_id == SCOREKEEPER_TG_ID
 
-    def test_scorekeeper_cannot_confirm_closing_tournament(
+    def test_scorekeeper_can_confirm_closing_tournament_and_is_recorded(
         self, handler, svc, db, scorekeeper_user, active_tournament, user_alice
     ):
         svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
@@ -1263,9 +1265,20 @@ class TestScorekeeperPermissions:
             tournament_id=active_tournament.id,
             confirmed=True,
         )
-        assert result.is_alert
-        assert NOT_ADMIN in result.text
-        assert db.get(m.Tournament, active_tournament.id).status != TournamentStatus.CLOSED
+        assert result.text == TOURNAMENT_CLOSED_MSG
+        tournament = db.get(m.Tournament, active_tournament.id)
+        assert tournament.status == TournamentStatus.CLOSED
+        assert tournament.closed_by_tg_id == SCOREKEEPER_TG_ID
+
+    def test_scorekeeper_can_add_participants(self, handler, svc, scorekeeper_user, active_tournament):
+        result = handler.handle_bulk_add_by_name(
+            tg_id=SCOREKEEPER_TG_ID,
+            tournament_id=active_tournament.id,
+            names=["Иванов Иван"],
+        )
+
+        assert NOT_ADMIN not in result.text
+        assert len(svc.list_participants_for_tournament(active_tournament.id)) == 1
 
     def test_scorekeeper_cannot_create_tournament(self, handler, scorekeeper_user):
         result = handler.handle_create_tournament(tg_id=SCOREKEEPER_TG_ID, chat_id=CHAT_ID, title="Test")

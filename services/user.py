@@ -467,7 +467,7 @@ class UserService:
         return user is not None and bool(user.is_scorekeeper)
 
     def is_privileged(self, tg_id: int) -> bool:
-        """Admin or scorekeeper — can add/edit decks and export."""
+        """Admin or scorekeeper — can add participants, edit decks, export and close tournaments."""
         return self.is_admin(tg_id) or self.is_scorekeeper(tg_id)
 
     def toggle_scorekeeper(self, tg_id: int) -> Optional[bool]:
