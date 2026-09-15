@@ -1248,6 +1248,10 @@ class Keyboards:
                     )
                 ]
             )
+        delete_button = InlineKeyboardButton(
+            "🗑 Дропнуть" if swiss_ongoing else "🗑 Удалить",
+            callback_data=f"{CB_ADMIN_REMOVE_CONFIRM}:{participant_id}:{tournament_id}",
+        )
         if is_admin:
             sk_label = "🧙 Снять метаписца" if is_target_scorekeeper else "🧙 Метаписец"
             buttons.append(
@@ -1256,10 +1260,7 @@ class Keyboards:
                         sk_label,
                         callback_data=f"{CB_ADMIN_TOGGLE_SCOREKEEPER}:{participant_id}:{tournament_id}",
                     ),
-                    InlineKeyboardButton(
-                        "🗑 Дропнуть" if swiss_ongoing else "🗑 Удалить",
-                        callback_data=f"{CB_ADMIN_REMOVE_CONFIRM}:{participant_id}:{tournament_id}",
-                    ),
+                    delete_button,
                 ]
             )
             po_label = "📊 Снять организатора" if is_target_poll_organizer else "📊 Организатор голосований"
@@ -1271,6 +1272,8 @@ class Keyboards:
                     )
                 ]
             )
+        elif is_privileged:
+            buttons.append([delete_button])
         buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_ADMIN_PICK_ARCH}:{participant_id}")])
         return InlineKeyboardMarkup(buttons)
 
@@ -1298,7 +1301,7 @@ class Keyboards:
         has_more: bool = False,
         show_emoji: bool = True,
         tournament_id: int | None = None,
-        is_admin: bool = False,
+        show_actions: bool = False,
     ) -> InlineKeyboardMarkup:
         buttons = [
             [
@@ -1314,7 +1317,7 @@ class Keyboards:
                 [InlineKeyboardButton("... ещё колоды", callback_data=f"{CB_ADMIN_ARCH_MORE}:{participant_id}")]
             )
         buttons.append([InlineKeyboardButton("Свой вариант", callback_data=f"{CB_ADMIN_CUSTOM_ARCH}:{participant_id}")])
-        if is_admin and tournament_id is not None:
+        if show_actions and tournament_id is not None:
             buttons.append(
                 [
                     InlineKeyboardButton(
@@ -1623,14 +1626,14 @@ def admin_archetype_select_keyboard(
     archetypes: list,
     has_more: bool = False,
     tournament_id: int | None = None,
-    is_admin: bool = False,
+    show_actions: bool = False,
 ) -> InlineKeyboardMarkup:
     return _default.admin_archetype_select_keyboard(
         participant_id,
         archetypes,
         has_more=has_more,
         tournament_id=tournament_id,
-        is_admin=is_admin,
+        show_actions=show_actions,
     )
 
 

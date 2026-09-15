@@ -21,6 +21,7 @@ from bot.keyboards import (
     CB_ADMIN_SET_ARCH,
     CB_ADMIN_SHOW_FILLED,
     CB_ADMIN_SHOW_OPPONENTS,
+    CB_ADMIN_TOGGLE_POLL_ORGANIZER,
     CB_ADMIN_TOGGLE_SCOREKEEPER,
     CB_CLOSE_TOURNAMENT_CONFIRM,
     CB_TSTATUS,
@@ -1284,11 +1285,34 @@ class TestScorekeeperPermissions:
         result = handler.handle_create_tournament(tg_id=SCOREKEEPER_TG_ID, chat_id=CHAT_ID, title="Test")
         assert NOT_ADMIN in result.text
 
-    def test_scorekeeper_cannot_delete_participant(self, handler, svc, scorekeeper_user, active_tournament, user_alice):
+    def test_scorekeeper_can_delete_participant(self, handler, svc, scorekeeper_user, active_tournament, user_alice):
         svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
         p = svc.get_participant(active_tournament.id, user_alice.id)
+
+        prompt = handler.handle_remove_participant_confirm(SCOREKEEPER_TG_ID, p.id, active_tournament.id)
         result = handler.handle_remove_participant(SCOREKEEPER_TG_ID, p.id, active_tournament.id)
-        assert NOT_ADMIN in result.text
+
+        assert not prompt.is_alert
+        assert "Удалить Alice" in prompt.text
+        prompt_callbacks = [b.callback_data for row in prompt.keyboard.inline_keyboard for b in row]
+        assert f"{CB_ADMIN_REMOVE_DO}:{p.id}:{active_tournament.id}" in prompt_callbacks
+        assert not result.is_alert
+        assert "удалён" in result.text
+        assert svc.get_participant(active_tournament.id, user_alice.id) is None
+
+    def test_scorekeeper_cannot_remove_participant_through_another_tournament(
+        self, handler, svc, scorekeeper_user, active_tournament, user_alice
+    ):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        participant = svc.get_participant(active_tournament.id, user_alice.id)
+        other = svc.create_tournament(TournamentCreate(title="Other", chat_id=CHAT_ID + 1))
+
+        prompt = handler.handle_remove_participant_confirm(SCOREKEEPER_TG_ID, participant.id, other.id)
+        result = handler.handle_remove_participant(SCOREKEEPER_TG_ID, participant.id, other.id)
+
+        assert prompt.is_alert and prompt.text == PARTICIPANT_NOT_FOUND
+        assert result.is_alert and result.text == PARTICIPANT_NOT_FOUND
+        assert svc.get_participant(active_tournament.id, user_alice.id) is not None
 
     def test_scorekeeper_admin_status_has_player_buttons(
         self, handler, svc, scorekeeper_user, active_tournament, user_alice
@@ -1311,10 +1335,10 @@ class TestScorekeeperPermissions:
         labels = [b.text for row in result.keyboard.inline_keyboard for b in row]
         assert any("Изменить колоду" in label for label in labels)
 
-    def test_scorekeeper_no_admin_buttons_in_player_actions(
+    def test_scorekeeper_sees_delete_but_not_role_buttons_in_player_actions(
         self, handler, svc, scorekeeper_user, active_tournament, user_alice
     ):
-        """Метаписец НЕ видит кнопки «🧙 Метаписец» и «🗑 Удалить» в меню действий."""
+        """Метаписец может удалить игрока, но не может назначать роли."""
         svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
         p = svc.get_participant(active_tournament.id, user_alice.id)
         result = handler.handle_player_actions(
@@ -1322,17 +1346,18 @@ class TestScorekeeperPermissions:
         )
         cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
         assert not any(cb.startswith(CB_ADMIN_TOGGLE_SCOREKEEPER) for cb in cbs)
-        assert not any(cb.startswith(CB_ADMIN_REMOVE_CONFIRM) for cb in cbs)
+        assert not any(cb.startswith(CB_ADMIN_TOGGLE_POLL_ORGANIZER) for cb in cbs)
+        assert any(cb.startswith(CB_ADMIN_REMOVE_CONFIRM) for cb in cbs)
 
-    def test_scorekeeper_no_actions_menu_on_archetype_screen(
+    def test_scorekeeper_sees_actions_menu_on_archetype_screen(
         self, handler, svc, scorekeeper_user, active_tournament, user_alice, archetype_burn
     ):
-        """Метаписец НЕ видит кнопку «☰ Меню» на экране выбора архетипа."""
+        """Метаписец может открыть меню игрока и добраться до удаления."""
         svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
         p = svc.get_participant(active_tournament.id, user_alice.id)
         result = handler.handle_pick_participant_arch(tg_id=SCOREKEEPER_TG_ID, participant_id=p.id)
         cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
-        assert not any(cb.startswith(CB_ADMIN_PLAYER_ACTIONS) for cb in cbs)
+        assert any(cb.startswith(CB_ADMIN_PLAYER_ACTIONS) for cb in cbs)
 
 
 # ── Toggle метаписец ──────────────────────────────────────────────────────────
