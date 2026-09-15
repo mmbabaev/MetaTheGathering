@@ -265,7 +265,7 @@ class AdminHandler:
         arch_list, has_more = build_archetype_menu(self.arch_svc, player_tg_id, expanded)
         caller = self.user_svc.get_by_tg_id(caller_tg_id) if caller_tg_id else None
         show_emoji = not (caller and caller.hide_deck_emoji)
-        is_admin = self.user_svc.is_admin(caller_tg_id) if caller_tg_id else False
+        show_actions = self.user_svc.is_privileged(caller_tg_id) if caller_tg_id else False
         return HandlerResult(
             CHOOSE_ARCHETYPE,
             keyboard=self.keyboards.admin_archetype_select_keyboard(
@@ -274,7 +274,7 @@ class AdminHandler:
                 has_more,
                 show_emoji,
                 tournament_id=tournament_id,
-                is_admin=is_admin,
+                show_actions=show_actions,
             ),
         )
 
@@ -345,7 +345,7 @@ class AdminHandler:
         )
 
     def handle_player_actions(self, tg_id: int, participant_id: int, tournament_id: int) -> HandlerResult:
-        """Меню действий с игроком (⋯). Доступно всем; удаление — только для админов."""
+        """Меню действий с игроком (⋯); права отдельных кнопок задаёт клавиатура."""
         is_admin = self.user_svc.is_admin(tg_id)
         is_privileged = self.user_svc.is_privileged(tg_id)
         p = self.svc.get_participant_by_id(participant_id)
@@ -454,10 +454,10 @@ class AdminHandler:
 
     def handle_remove_participant_confirm(self, tg_id: int, participant_id: int, tournament_id: int) -> HandlerResult:
         """Запрос подтверждения перед удалением участника."""
-        if not self.user_svc.is_admin(tg_id):
+        if not self.user_svc.is_privileged(tg_id):
             return HandlerResult(NOT_ADMIN, is_alert=True)
         p = self.svc.get_participant_by_id(participant_id)
-        if p is None:
+        if p is None or p.tournament_id != tournament_id:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
         user = self.user_svc.get_by_id(p.user_id)
         name = (
@@ -476,10 +476,10 @@ class AdminHandler:
 
     def handle_remove_participant(self, tg_id: int, participant_id: int, tournament_id: int) -> HandlerResult:
         """Удаляет участника из турнира и возвращает обновлённый статус."""
-        if not self.user_svc.is_admin(tg_id):
+        if not self.user_svc.is_privileged(tg_id):
             return HandlerResult(NOT_ADMIN, is_alert=True)
         p = self.svc.get_participant_by_id(participant_id)
-        if p is None:
+        if p is None or p.tournament_id != tournament_id:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
         user = self.user_svc.get_by_id(p.user_id)
         name = (
