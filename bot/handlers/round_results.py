@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlalchemy import select
 from telegram import InlineKeyboardMarkup
 
 from bot.handlers.base import HandlerResult
@@ -21,6 +22,7 @@ from bot.keyboards import (
 from bot.messages import format_aetherhub_round_summary, format_round_pairings, format_swiss_standings
 from core import models
 from core.config import settings
+from services.endstep_table_titles import format_endstep_table_title, is_endstep_swiss
 from services.internal_swiss import InternalSwissService
 from services.round_results import FINAL_STATUSES, RoundResultError, RoundResultsService
 from services.user import UserService
@@ -66,6 +68,20 @@ class RoundResultsHandler:
         )
         is_admin = bool(tg_id is not None and self.users.is_admin(tg_id))
         internal_swiss = tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS
+        own_match = (
+            next(
+                (
+                    match
+                    for match in matches
+                    if user is not None
+                    and match.player2_name is not None
+                    and user.id in (match.player1_user_id, match.player2_user_id)
+                ),
+                None,
+            )
+            if is_endstep_swiss(tournament)
+            else None
+        )
         round_ready = (
             self.results.is_round_ready(tournament_id, selected)
             if internal_swiss and selected == available[-1]
@@ -90,6 +106,7 @@ class RoundResultsHandler:
                 planned_rounds=tournament.swiss_rounds,
                 round_ready=round_ready,
                 is_closed=tournament.status == models.TournamentStatus.CLOSED,
+                table_title=format_endstep_table_title(own_match) if own_match is not None else None,
             ),
             parse_mode="HTML",
         )
@@ -127,12 +144,18 @@ class RoundResultsHandler:
                     ),
                 )
             own_name, opponent_name = self._actor_names(match, actor.id)
+            tournament = self.db.get(models.Tournament, match.tournament_id)
             return HandlerResult(
                 f"Раунд {match.round_number} · {own_name} против {opponent_name}\n\nСколько игр выиграли вы?",
                 keyboard=self.keyboards.round_score_values_keyboard(
                     match.id,
                     prefix=CB_ROUND_RESULT_OWN,
                     back_callback_data=back_callback_data,
+                    table_title=(
+                        format_endstep_table_title(match)
+                        if tournament is not None and is_endstep_swiss(tournament)
+                        else None
+                    ),
                 ),
             )
         except RoundResultError as exc:
@@ -429,13 +452,31 @@ class RoundResultsHandler:
             raise RoundResultError("Этот матч не принадлежит вам.")
         return match, actor
 
-    @staticmethod
-    def _score(match: models.RoundMatch) -> str:
-        return RoundResultsHandler._score_values(match, match.player1_wins, match.player2_wins)
+    def _score(self, match: models.RoundMatch) -> str:
+        return self._score_values(match, match.player1_wins, match.player2_wins)
 
-    @staticmethod
-    def _score_values(match: models.RoundMatch, player1_wins: int, player2_wins: int) -> str:
-        return f"{match.player1_name} {player1_wins}–{player2_wins} {match.player2_name}"
+    def _score_values(self, match: models.RoundMatch, player1_wins: int, player2_wins: int) -> str:
+        tournament = self.db.get(models.Tournament, match.tournament_id)
+        if tournament is None or not is_endstep_swiss(tournament):
+            return f"{match.player1_name} {player1_wins}–{player2_wins} {match.player2_name}"
+        decks = self._declared_decks(match)
+        player1 = f"{match.player1_name} - {decks.get(match.player1_user_id, 'колода не указана')}"
+        player2 = f"{match.player2_name} - {decks.get(match.player2_user_id, 'колода не указана')}"
+        return f"{player1} {player1_wins}–{player2_wins} {player2}"
+
+    def _declared_decks(self, match: models.RoundMatch) -> dict[int, str]:
+        user_ids = {user_id for user_id in (match.player1_user_id, match.player2_user_id) if user_id is not None}
+        if not user_ids:
+            return {}
+        rows = self.db.execute(
+            select(models.Participant.user_id, models.Archetype.name)
+            .join(models.Archetype, models.Participant.archetype_id == models.Archetype.id)
+            .where(
+                models.Participant.tournament_id == match.tournament_id,
+                models.Participant.user_id.in_(user_ids),
+            )
+        ).all()
+        return {user_id: deck_name for user_id, deck_name in rows}
 
     @staticmethod
     def _actor_names(match: models.RoundMatch, actor_user_id: int) -> tuple[str, str]:
