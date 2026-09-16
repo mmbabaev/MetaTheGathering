@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from datetime import date
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import CopyTextButton, InlineKeyboardButton, InlineKeyboardMarkup
 
 from bot.deck_emoji import deck_emoji
 from bot.messages import format_participant_name
@@ -659,12 +659,22 @@ class Keyboards:
         extra: str = "",
         allow_two: bool = True,
         back_callback_data: str | None = None,
+        table_title: str | None = None,
     ) -> InlineKeyboardMarkup:
         values = (0, 1, 2) if allow_two else (0, 1)
         suffix = f":{extra}" if extra else ""
         rows = [
             [InlineKeyboardButton(str(value), callback_data=f"{prefix}:{match_id}{suffix}:{value}") for value in values]
         ]
+        if table_title:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        "📋 Скопировать название стола",
+                        copy_text=CopyTextButton(table_title),
+                    )
+                ]
+            )
         if back_callback_data:
             rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back_callback_data)])
         return InlineKeyboardMarkup(rows)
@@ -716,6 +726,7 @@ class Keyboards:
         planned_rounds: int | None = None,
         round_ready: bool = False,
         is_closed: bool = False,
+        table_title: str | None = None,
     ) -> InlineKeyboardMarkup:
         rows = []
         navigation = []
@@ -735,6 +746,15 @@ class Keyboards:
                 )
             )
         rows.append(navigation)
+        if table_title and not is_closed:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        "📋 Скопировать название стола",
+                        copy_text=CopyTextButton(table_title),
+                    )
+                ]
+            )
         if can_report and not is_closed:
             rows.append(
                 [InlineKeyboardButton("🎯 Внести результат", callback_data=f"{CB_ROUND_RESULT_OPEN}:{tournament_id}")]

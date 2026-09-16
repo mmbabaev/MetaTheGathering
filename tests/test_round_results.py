@@ -33,6 +33,20 @@ def _participant(db, tournament_id, user):
     db.commit()
 
 
+def _set_deck(db, tournament_id, user_id, name):
+    archetype = models.Archetype(name=name)
+    db.add(archetype)
+    db.flush()
+    participant = db.execute(
+        select(models.Participant).where(
+            models.Participant.tournament_id == tournament_id,
+            models.Participant.user_id == user_id,
+        )
+    ).scalar_one()
+    participant.archetype_id = archetype.id
+    db.commit()
+
+
 def _round(db, tournament_id, number, left, right, table=1, score=None):
     left_score, right_score = score or (None, None)
     db.add_all(
@@ -180,6 +194,63 @@ def test_result_open_always_returns_to_tournament(db, online_match):
 
     assert "Результат уже подтверждён" in completed.text
     assert completed.keyboard.inline_keyboard[-1][0].callback_data == expected_callback
+
+
+def test_endstep_swiss_result_reveals_both_declared_decks_to_both_players(db, online_match):
+    tournament, alice, bob, match = online_match
+    stored = db.get(models.Tournament, tournament.id)
+    stored.club = "Endstep-ru"
+    stored.engine_mode = models.TournamentEngineMode.INTERNAL_SWISS
+    _set_deck(db, tournament.id, alice.id, "Blue Terror")
+    _set_deck(db, tournament.id, bob.id, "Spy")
+    handler = RoundResultsHandler(db)
+
+    delivery = handler.handle_send(match.id, alice.tg_id, 0, 2)
+
+    expected = "Иванова Алиса - Blue Terror 0–2 Петров Борис - Spy"
+    assert expected in delivery.screen.text
+    assert expected in delivery.recipient_text
+    assert "Петров Борис - Spy" in delivery.screen.text
+    assert "Иванова Алиса - Blue Terror" in delivery.recipient_text
+
+    confirmed = handler.handle_confirm(match.id, db.get(models.RoundMatch, match.id).revision, bob.tg_id)
+    assert expected in confirmed.screen.text
+    assert expected in confirmed.recipient_text
+
+
+def test_endstep_swiss_player_gets_personal_copy_button_for_current_pair(db, online_match):
+    tournament, alice, _bob, _match = online_match
+    stored = db.get(models.Tournament, tournament.id)
+    stored.club = "Endstep-ru"
+    stored.engine_mode = models.TournamentEngineMode.INTERNAL_SWISS
+    db.commit()
+    expected = "MTG Pauper Endstep Иванова Алиса - Петров Борис"
+    handler = RoundResultsHandler(db)
+
+    result_entry = handler.handle_open(tournament.id, alice.tg_id)
+    result_copy_buttons = [
+        button for row in result_entry.keyboard.inline_keyboard for button in row if button.copy_text is not None
+    ]
+    assert [button.copy_text.text for button in result_copy_buttons] == [expected]
+
+    round_status = handler.handle_round_status(tournament.id, alice.tg_id)
+    status_copy_buttons = [
+        button for row in round_status.keyboard.inline_keyboard for button in row if button.copy_text is not None
+    ]
+    assert [button.copy_text.text for button in status_copy_buttons] == [expected]
+
+
+def test_non_endstep_online_result_keeps_existing_score_and_has_no_copy_button(db, online_match):
+    tournament, alice, _bob, match = online_match
+    handler = RoundResultsHandler(db)
+
+    result_entry = handler.handle_open(tournament.id, alice.tg_id)
+    buttons = [button for row in result_entry.keyboard.inline_keyboard for button in row]
+    assert all(button.copy_text is None for button in buttons)
+
+    delivery = handler.handle_send(match.id, alice.tg_id, 2, 1)
+    assert "Иванова Алиса 2–1 Петров Борис" in delivery.screen.text
+    assert "колода" not in delivery.screen.text
 
 
 def test_result_open_error_returns_message_with_tournament_button(db, online_match):

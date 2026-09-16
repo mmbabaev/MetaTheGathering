@@ -92,6 +92,34 @@ async def test_delivery_posts_single_message_to_club_chat(db, svc):
     )
 
 
+async def test_endstep_swiss_group_card_has_one_copy_button_per_playable_table(db, svc):
+    tournament = _online_tournament(svc)
+    stored = db.get(models.Tournament, tournament.id)
+    stored.engine_mode = models.TournamentEngineMode.INTERNAL_SWISS
+    _add_pair(db, tournament.id, "Иванова Алиса", "Петров Борис", table=1)
+    _add_pair(db, tournament.id, "Сидорова Вера", "Орлов Олег", table=2)
+    _add_pair(db, tournament.id, "Свиридов Сергей", None, table=3)
+    db.add(models.ClubSettingsRow(club_name="Endstep-ru", publish_pairings=True))
+    db.commit()
+    bot = AsyncMock()
+    bot.get_me.return_value = SimpleNamespace(username="MetaGathererBot")
+    bot.send_message.return_value = SimpleNamespace(message_id=321)
+
+    assert await send_club_pairings(bot, db, tournament.id, [1]) is True
+
+    keyboard = bot.send_message.await_args.kwargs["reply_markup"]
+    assert keyboard.inline_keyboard[0][0].text == "🎯 Открыть турнир"
+    copy_buttons = [row[0] for row in keyboard.inline_keyboard[1:]]
+    assert [button.text for button in copy_buttons] == [
+        "📋 Скопировать название · стол 1",
+        "📋 Скопировать название · стол 2",
+    ]
+    assert [button.copy_text.text for button in copy_buttons] == [
+        "MTG Pauper Endstep Иванова Алиса - Петров Борис",
+        "MTG Pauper Endstep Сидорова Вера - Орлов Олег",
+    ]
+
+
 async def test_each_new_round_gets_its_own_editable_message(db, svc):
     tournament = _online_tournament(svc)
     _add_pair(db, tournament.id, "Alice", "Bob", round_number=1)

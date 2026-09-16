@@ -4,25 +4,33 @@ from __future__ import annotations
 
 import logging
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import CopyTextButton, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import BadRequest, Forbidden, TelegramError
 
 from bot.deeplink import round_deeplink
-from services.club_pairings import ClubPairingsService
+from services.club_pairings import ClubPairingsMessage, ClubPairingsService
 from services.round_pairings_message import RoundPairingsMessageService
 
 logger = logging.getLogger(__name__)
 
 
-async def _round_keyboard(bot, tournament_id: int) -> InlineKeyboardMarkup | None:
+async def _round_keyboard(bot, tournament_id: int, message: ClubPairingsMessage) -> InlineKeyboardMarkup | None:
     try:
         me = await bot.get_me()
         username = getattr(me, "username", None)
         if not username:
             return None
-        return InlineKeyboardMarkup(
-            [[InlineKeyboardButton("🎯 Открыть турнир", url=round_deeplink(username, tournament_id))]]
+        rows = [[InlineKeyboardButton("🎯 Открыть турнир", url=round_deeplink(username, tournament_id))]]
+        rows.extend(
+            [
+                InlineKeyboardButton(
+                    f"📋 Скопировать название · стол {table.table_number}",
+                    copy_text=CopyTextButton(table.text),
+                )
+            ]
+            for table in message.table_copies
         )
+        return InlineKeyboardMarkup(rows)
     except Exception:  # noqa: BLE001 — отсутствие кнопки не должно блокировать публикацию раунда
         logger.warning("[club_pairings] could not build tournament deep-link button", exc_info=True)
         return None
@@ -33,12 +41,12 @@ async def send_club_pairings(bot, db, tournament_id: int, round_numbers: list[in
         return False
     builder = ClubPairingsService(db)
     tracker = RoundPairingsMessageService(db)
-    keyboard = await _round_keyboard(bot, tournament_id)
     sent = False
     for round_number in sorted(set(round_numbers)):
         message = builder.build_for_round(tournament_id, round_number)
         if message is None:
             continue
+        keyboard = await _round_keyboard(bot, tournament_id, message)
         try:
             delivered = await bot.send_message(
                 chat_id=message.chat_id,
@@ -82,7 +90,7 @@ async def refresh_club_pairings(bot, db, tournament_id: int, round_number: int) 
         return False
     if message is None:
         return False
-    keyboard = await _round_keyboard(bot, tournament_id)
+    keyboard = await _round_keyboard(bot, tournament_id, message)
     try:
         await bot.edit_message_text(
             chat_id=tracked.chat_id,
