@@ -92,7 +92,7 @@ async def test_delivery_posts_single_message_to_club_chat(db, svc):
     )
 
 
-async def test_endstep_swiss_group_card_has_one_copy_button_per_playable_table(db, svc):
+async def test_endstep_swiss_group_card_has_one_static_table_copy_button(db, svc):
     tournament = _online_tournament(svc)
     stored = db.get(models.Tournament, tournament.id)
     stored.engine_mode = models.TournamentEngineMode.INTERNAL_SWISS
@@ -109,15 +109,10 @@ async def test_endstep_swiss_group_card_has_one_copy_button_per_playable_table(d
 
     keyboard = bot.send_message.await_args.kwargs["reply_markup"]
     assert keyboard.inline_keyboard[0][0].text == "🎯 Открыть турнир"
-    copy_buttons = [row[0] for row in keyboard.inline_keyboard[1:]]
-    assert [button.text for button in copy_buttons] == [
-        "📋 Скопировать название · стол 1",
-        "📋 Скопировать название · стол 2",
-    ]
-    assert [button.copy_text.text for button in copy_buttons] == [
-        "MTG Pauper Endstep Иванова Алиса - Петров Борис",
-        "MTG Pauper Endstep Сидорова Вера - Орлов Олег",
-    ]
+    assert len(keyboard.inline_keyboard) == 2
+    copy_button = keyboard.inline_keyboard[1][0]
+    assert copy_button.text == "📋 Скопировать название стола"
+    assert copy_button.copy_text.text == "MTG Pauper Endstep - table"
 
 
 async def test_each_new_round_gets_its_own_editable_message(db, svc):

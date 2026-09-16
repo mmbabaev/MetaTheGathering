@@ -218,13 +218,13 @@ def test_endstep_swiss_result_reveals_both_declared_decks_to_both_players(db, on
     assert expected in confirmed.recipient_text
 
 
-def test_endstep_swiss_player_gets_personal_copy_button_for_current_pair(db, online_match):
+def test_endstep_swiss_player_gets_static_table_copy_button(db, online_match):
     tournament, alice, _bob, _match = online_match
     stored = db.get(models.Tournament, tournament.id)
     stored.club = "Endstep-ru"
     stored.engine_mode = models.TournamentEngineMode.INTERNAL_SWISS
     db.commit()
-    expected = "MTG Pauper Endstep Иванова Алиса - Петров Борис"
+    expected = "MTG Pauper Endstep - table"
     handler = RoundResultsHandler(db)
 
     result_entry = handler.handle_open(tournament.id, alice.tg_id)

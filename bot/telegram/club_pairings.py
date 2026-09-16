@@ -21,15 +21,15 @@ async def _round_keyboard(bot, tournament_id: int, message: ClubPairingsMessage)
         if not username:
             return None
         rows = [[InlineKeyboardButton("🎯 Открыть турнир", url=round_deeplink(username, tournament_id))]]
-        rows.extend(
-            [
-                InlineKeyboardButton(
-                    f"📋 Скопировать название · стол {table.table_number}",
-                    copy_text=CopyTextButton(table.text),
-                )
-            ]
-            for table in message.table_copies
-        )
+        if message.table_copy_text:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        "📋 Скопировать название стола",
+                        copy_text=CopyTextButton(message.table_copy_text),
+                    )
+                ]
+            )
         return InlineKeyboardMarkup(rows)
     except Exception:  # noqa: BLE001 — отсутствие кнопки не должно блокировать публикацию раунда
         logger.warning("[club_pairings] could not build tournament deep-link button", exc_info=True)

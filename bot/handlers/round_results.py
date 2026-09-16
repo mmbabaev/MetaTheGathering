@@ -22,7 +22,7 @@ from bot.keyboards import (
 from bot.messages import format_aetherhub_round_summary, format_round_pairings, format_swiss_standings
 from core import models
 from core.config import settings
-from services.endstep_table_titles import format_endstep_table_title, is_endstep_swiss
+from services.endstep_table_titles import ENDSTEP_TABLE_TITLE, is_endstep_swiss
 from services.internal_swiss import InternalSwissService
 from services.round_results import FINAL_STATUSES, RoundResultError, RoundResultsService
 from services.user import UserService
@@ -106,7 +106,7 @@ class RoundResultsHandler:
                 planned_rounds=tournament.swiss_rounds,
                 round_ready=round_ready,
                 is_closed=tournament.status == models.TournamentStatus.CLOSED,
-                table_title=format_endstep_table_title(own_match) if own_match is not None else None,
+                table_title=ENDSTEP_TABLE_TITLE if own_match is not None else None,
             ),
             parse_mode="HTML",
         )
@@ -152,9 +152,7 @@ class RoundResultsHandler:
                     prefix=CB_ROUND_RESULT_OWN,
                     back_callback_data=back_callback_data,
                     table_title=(
-                        format_endstep_table_title(match)
-                        if tournament is not None and is_endstep_swiss(tournament)
-                        else None
+                        ENDSTEP_TABLE_TITLE if tournament is not None and is_endstep_swiss(tournament) else None
                     ),
                 ),
             )
