@@ -451,11 +451,18 @@ class RoundResultsHandler:
         return match, actor
 
     def _score(self, match: models.RoundMatch) -> str:
-        return self._score_values(match, match.player1_wins, match.player2_wins)
+        return self._score_values(match, match.player1_wins, match.player2_wins, reveal_decks=True)
 
-    def _score_values(self, match: models.RoundMatch, player1_wins: int, player2_wins: int) -> str:
+    def _score_values(
+        self,
+        match: models.RoundMatch,
+        player1_wins: int,
+        player2_wins: int,
+        *,
+        reveal_decks: bool = False,
+    ) -> str:
         tournament = self.db.get(models.Tournament, match.tournament_id)
-        if tournament is None or not is_endstep_swiss(tournament):
+        if not reveal_decks or tournament is None or not is_endstep_swiss(tournament):
             return f"{match.player1_name} {player1_wins}–{player2_wins} {match.player2_name}"
         decks = self._declared_decks(match)
         player1 = f"{match.player1_name} - {decks.get(match.player1_user_id, 'колода не указана')}"
