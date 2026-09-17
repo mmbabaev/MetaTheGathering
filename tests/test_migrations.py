@@ -48,6 +48,40 @@ def test_single_alembic_head():
     assert len(heads) == 1, f"Expected exactly 1 alembic head, got {len(heads)}: {heads}"
 
 
+def test_swiss_decklist_migration_keeps_existing_tournaments_out_of_reminders():
+    metadata = sa.MetaData()
+    tournaments = sa.Table("tournaments", metadata, sa.Column("id", sa.Integer, primary_key=True))
+    sa.Table("participants", metadata, sa.Column("id", sa.Integer, primary_key=True))
+    sa.Table(
+        "tournament_creation_plans",
+        metadata,
+        sa.Column("id", sa.Integer, primary_key=True),
+        sa.Column("tournament_id", sa.Integer),
+        sa.Column("created_by_tg_id", sa.BigInteger, nullable=False),
+    )
+    engine = sa.create_engine("sqlite://")
+    metadata.create_all(engine)
+    migration = runpy.run_path(str(VERSIONS_DIR / "e2c203099387_add_swiss_decklists.py"))
+
+    with engine.begin() as connection:
+        connection.execute(tournaments.insert().values(id=1))
+        plans = metadata.tables["tournament_creation_plans"]
+        connection.execute(plans.insert().values(id=1, tournament_id=1, created_by_tg_id=42))
+        context = MigrationContext.configure(connection)
+        with Operations.context(context):
+            migration["upgrade"]()
+
+        migrated = sa.Table("tournaments", sa.MetaData(), autoload_with=connection)
+        row = connection.execute(
+            sa.select(
+                migrated.c.created_by_tg_id,
+                migrated.c.decklist_reminders_enabled,
+            )
+        ).one()
+
+    assert row == (42, False)
+
+
 def test_endstep_leaderboard_snapshot_migration_creates_cache_table():
     engine = sa.create_engine("sqlite://")
     migration = runpy.run_path(str(VERSIONS_DIR / "e2c9d12d05ed_add_endstep_ru_leaderboard_snapshots.py"))

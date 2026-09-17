@@ -1,3 +1,4 @@
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -139,8 +140,17 @@ async def test_admin_result_refreshes_public_round_message(db, user_svc):
 
 async def test_internal_swiss_toggle_and_first_round_publish_only_to_configured_club_chat(db, user_svc, monkeypatch):
     tournament = TournamentService(db).create_tournament(
-        TournamentCreate(title="Internal", chat_id=-100500, club="Endstep-ru", is_online=True)
+        TournamentCreate(
+            title="Internal",
+            chat_id=-100500,
+            club="Endstep-ru",
+            is_online=True,
+            registration_close_at=datetime(2026, 9, 20, 16, 0),
+        )
     )
+    archetype = models.Archetype(name="Test Archetype")
+    db.add(archetype)
+    db.flush()
     users = []
     for index in range(4):
         player = user_svc.get_or_create(
@@ -149,7 +159,7 @@ async def test_internal_swiss_toggle_and_first_round_publish_only_to_configured_
             first_name=f"Имя{index}",
             last_name=f"Фамилия{index}",
         )
-        db.add(models.Participant(tournament_id=tournament.id, user_id=player.id))
+        db.add(models.Participant(tournament_id=tournament.id, user_id=player.id, archetype_id=archetype.id))
         users.append(player)
     users[0].is_admin = True
     db.commit()

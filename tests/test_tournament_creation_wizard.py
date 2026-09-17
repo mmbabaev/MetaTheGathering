@@ -119,6 +119,8 @@ async def test_execute_plan_creates_online_tournament_and_announces(db, monkeypa
     tournament = db.get(models.Tournament, result.tournament_id)
     assert tournament.club == "Endstep-ru"
     assert tournament.is_online is True
+    assert tournament.created_by_tg_id == ADMIN_ID
+    assert tournament.decklist_reminders_enabled is True
     assert tournament.registration_close_at == datetime(2026, 9, 5, 16, 30)
     announcement = bot.send_message.await_args.kwargs["text"]
     assert bot.send_message.await_args.kwargs["chat_id"] == -1003631429183
@@ -147,6 +149,7 @@ async def test_no_announcement_plan_is_not_blocked_by_other_clubs_using_chat_zer
     tournament = db.get(models.Tournament, result.tournament_id)
     assert tournament.club == "Endstep-ru"
     assert tournament.chat_id == 0
+    assert tournament.created_by_tg_id == ADMIN_ID
 
 
 async def test_failed_announcement_retries_without_duplicate_tournament(db):

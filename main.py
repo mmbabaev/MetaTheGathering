@@ -70,6 +70,10 @@ from bot.keyboards import (
     CB_DEBUG_META_POLICE,
     CB_DEBUG_NEXT_ROUND,
     CB_DEBUG_ROUND_NOTIFY,
+    CB_DECKLIST_EDIT,
+    CB_DECKLIST_LIST,
+    CB_DECKLIST_OWN,
+    CB_DECKLIST_VIEW,
     CB_DEFER_DECK,
     CB_DELETE_TOURNAMENT,
     CB_DELETE_TOURNAMENT_CANCEL,
@@ -461,6 +465,10 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(player.callback_missing_deck_more, pattern=f"^{CB_FILL_MISSING_MORE}:"))
     app.add_handler(CallbackQueryHandler(player.callback_missing_custom_deck, pattern=f"^{CB_FILL_MISSING_CUSTOM}:"))
     app.add_handler(CallbackQueryHandler(player.callback_tournament_status, pattern=f"^{CB_TSTATUS}:"))
+    app.add_handler(CallbackQueryHandler(player.callback_decklist_edit, pattern=f"^{CB_DECKLIST_EDIT}:"))
+    app.add_handler(CallbackQueryHandler(player.callback_own_decklist, pattern=f"^{CB_DECKLIST_OWN}:"))
+    app.add_handler(CallbackQueryHandler(player.callback_decklist_list, pattern=f"^{CB_DECKLIST_LIST}:"))
+    app.add_handler(CallbackQueryHandler(player.callback_decklist_view, pattern=f"^{CB_DECKLIST_VIEW}:"))
     app.add_handler(CallbackQueryHandler(player.callback_leave_tournament, pattern=f"^{CB_LEAVE}:"))
     app.add_handler(CallbackQueryHandler(player.callback_leave_confirm, pattern=f"^{CB_LEAVE_CONFIRM}:"))
     app.add_handler(CallbackQueryHandler(player.callback_leave_cancel, pattern=f"^{CB_LEAVE_CANCEL}:"))

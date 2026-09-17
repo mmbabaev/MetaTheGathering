@@ -138,6 +138,7 @@ class TournamentCreationPlanService:
                     club=identity.name,
                     is_online=identity.is_online,
                     registration_close_at=plan.event_at,
+                    created_by_tg_id=plan.created_by_tg_id,
                 )
             )
             plan.tournament_id = tournament.id

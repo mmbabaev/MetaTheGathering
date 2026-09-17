@@ -70,6 +70,8 @@ class TournamentBase(BaseModel):
 
 class TournamentCreate(TournamentBase):
     registration_close_at: Optional[datetime] = None
+    created_by_tg_id: Optional[int] = None
+    decklist_reminders_enabled: bool = True
 
 
 class TournamentRead(TournamentBase):
@@ -85,6 +87,8 @@ class TournamentRead(TournamentBase):
     started_at: Optional[datetime] = None
     ended_at: Optional[datetime] = None
     closed_by_tg_id: Optional[int] = None
+    created_by_tg_id: Optional[int] = None
+    decklist_reminders_enabled: bool = False
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -110,6 +114,7 @@ class ParticipantRead(ParticipantBase):
     deck_deferred: bool = False
     deck_reminder_prestart_sent_at: Optional[datetime] = None
     deck_reminder_round2_sent_at: Optional[datetime] = None
+    swiss_requirements_reminder_sent_at: Optional[datetime] = None
     aetherhub_seen_at: Optional[datetime] = None
     ranked_activated_at: Optional[datetime] = None
     ranked_activation_source: Optional[str] = None

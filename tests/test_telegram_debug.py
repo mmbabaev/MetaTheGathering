@@ -1,3 +1,4 @@
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -98,7 +99,14 @@ async def test_debug_fill_offers_real_swiss_round_when_internal_mode_is_enabled(
     admin = user_svc.get_or_create(tg_id=211, first_name="Анна", last_name="Админова")
     admin.is_admin = True
     db.commit()
-    tournament = TournamentService(db).create_tournament(TournamentCreate(title="Internal", chat_id=5, is_online=True))
+    tournament = TournamentService(db).create_tournament(
+        TournamentCreate(
+            title="Internal",
+            chat_id=5,
+            is_online=True,
+            registration_close_at=datetime(2026, 9, 20, 16, 0),
+        )
+    )
     InternalSwissService(db).set_enabled(tournament.id, admin.tg_id, True)
     update = _update(user_id=admin.tg_id, data=f"dbg_fill_t:{tournament.id}")
 

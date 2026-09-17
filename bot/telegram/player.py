@@ -14,6 +14,7 @@ from bot.messages import CUSTOM_ARCHETYPE_PROMPT
 from bot.meta_police_message import refresh_meta_police_message
 from bot.telegram.common import announce_completion_if_ready, parse_callback_ints
 from bot.telegram.common import log_event as _log
+from core import models
 from core.database import SessionLocal
 from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeService
@@ -33,6 +34,7 @@ USER_DATA_PENDING_ADMIN_CUSTOM_ARCH = "pending_admin_custom_arch_participant_id"
 USER_DATA_OPPONENTS_MODE = "opponents_tournament_id"
 USER_DATA_PENDING_META_IMPORT = "pending_meta_import_tournament_id"
 USER_DATA_PENDING_MISSING_CUSTOM_ARCH = "pending_missing_custom_arch_participant_id"
+USER_DATA_PENDING_DECKLIST = "pending_decklist_tournament_id"
 
 
 def _make_features(db) -> FeatureService:
@@ -339,7 +341,14 @@ async def callback_tournament_status(update: Update, context: ContextTypes.DEFAU
     db = SessionLocal()
     try:
         admin_h = _admin_handler(db)
-        if user and admin_h.user_svc.is_privileged(user.id):
+        tournament = db.get(models.Tournament, tournament_id)
+        if (
+            tournament is not None
+            and tournament.status == models.TournamentStatus.CLOSED
+            and tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS
+        ):
+            result = _player_handler(db).handle_tournament_public_status(tournament_id, tg_id=user.id if user else None)
+        elif user and admin_h.user_svc.is_privileged(user.id):
             result = admin_h.handle_admin_status(user.id, tournament_id)
         else:
             result = _player_handler(db).handle_tournament_public_status(tournament_id, tg_id=user.id if user else None)
@@ -347,6 +356,93 @@ async def callback_tournament_status(update: Update, context: ContextTypes.DEFAU
             await query.answer(result.text, show_alert=True)
             return
         await query.edit_message_text(result.text, reply_markup=result.keyboard, parse_mode=result.parse_mode)
+        await query.answer()
+    finally:
+        db.close()
+
+
+async def callback_decklist_edit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+    db = SessionLocal()
+    try:
+        result = _player_handler(db).handle_decklist_start(user.id, tournament_id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        if context.user_data is None:
+            context.user_data = {}
+        context.user_data[USER_DATA_PENDING_DECKLIST] = tournament_id
+        await query.edit_message_text(result.text)
+        await query.answer()
+    finally:
+        db.close()
+
+
+async def callback_own_decklist(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+    db = SessionLocal()
+    try:
+        result = _player_handler(db).handle_own_decklist(user.id, tournament_id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+        await query.answer()
+    finally:
+        db.close()
+
+
+async def callback_decklist_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 2)
+    if ids is None:
+        return
+    tournament_id, page = ids
+    db = SessionLocal()
+    try:
+        result = _player_handler(db).handle_decklist_players(user.id, tournament_id, page)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+        await query.answer()
+    finally:
+        db.close()
+
+
+async def callback_decklist_view(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 3)
+    if ids is None:
+        return
+    participant_id, tournament_id, page = ids
+    db = SessionLocal()
+    try:
+        result = _player_handler(db).handle_decklist_view(user.id, participant_id, tournament_id, page)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
     finally:
         db.close()
@@ -621,6 +717,24 @@ async def _handle_pending_custom_arch(msg, user, text, context) -> bool:
     return True
 
 
+async def _handle_pending_decklist(msg, user, text, context) -> bool:
+    tournament_id = context.user_data.get(USER_DATA_PENDING_DECKLIST)
+    if tournament_id is None:
+        return False
+    db = SessionLocal()
+    try:
+        result = _player_handler(db).handle_decklist_text(user.id, tournament_id, text)
+        await msg.reply_text(result.text)
+        if result.is_alert:
+            return True
+        context.user_data.pop(USER_DATA_PENDING_DECKLIST, None)
+        card = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id)
+        await msg.reply_text(card.text, reply_markup=card.keyboard)
+    finally:
+        db.close()
+    return True
+
+
 from bot.telegram.aetherhub import handle_pending_aetherhub_url as _handle_pending_aetherhub_url
 from bot.telegram.aetherhub import handle_pending_import_time as _handle_pending_import_time
 from bot.telegram.poll import handle_pending_link_poll as _handle_pending_link_poll
@@ -648,6 +762,7 @@ async def _handle_pending_meta_import(msg, user, text, context) -> bool:
 
 
 _TEXT_INPUT_HANDLERS = [
+    _handle_pending_decklist,
     _handle_pending_name,
     _handle_pending_cellar_name,
     _handle_pending_settings_name,

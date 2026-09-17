@@ -37,6 +37,7 @@ from core import models
 from services import errors
 from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeItem, ArchetypeService
+from services.decklists import DecklistService
 from services.names import has_complete_person_name, parse_full_name_input
 from services.payment_service import PaymentService
 from services.ranked_activation import RANKED_ACTIVATION_SELF_BOT
@@ -124,6 +125,7 @@ class PlayerHandler:
         is_admin = False
         is_scorekeeper = False
         has_deck = True
+        participant = None
         if tg_id is not None:
             user = self.user_svc.get_by_tg_id(tg_id)
             if user:
@@ -144,6 +146,21 @@ class PlayerHandler:
             with_deck=with_deck,
         )
         payment_enabled = self.feature_svc.is_payment_enabled()
+        decklists = DecklistService(self.svc.db)
+        internal_swiss = t.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS
+        decklist_action = None
+        if internal_swiss and participant is not None:
+            has_decklist = participant.decklist is not None
+            if t.status == models.TournamentStatus.REGISTRATION:
+                decklist_action = "Изменить деклист" if has_decklist else "Загрузить деклист"
+            else:
+                decklist_action = "Мой деклист"
+        can_view_decklists = (
+            internal_swiss
+            and t.status != models.TournamentStatus.CLOSED
+            and tg_id is not None
+            and decklists.can_view_all(t, tg_id)
+        )
         payment_confirmed = (
             payment_enabled
             and is_registered
@@ -165,9 +182,11 @@ class PlayerHandler:
                 payment_enabled=payment_enabled,
                 payment_confirmed=payment_confirmed,
                 show_round_result_action=(t.is_online and has_pairings and t.status != models.TournamentStatus.CLOSED),
-                internal_swiss=(t.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS),
+                internal_swiss=internal_swiss,
                 can_add_players=(is_scorekeeper and not is_admin and t.status == models.TournamentStatus.REGISTRATION),
                 can_close=(is_scorekeeper and not is_admin and t.status != models.TournamentStatus.CLOSED),
+                decklist_action=decklist_action,
+                can_view_decklists=can_view_decklists,
             ),
         )
 
@@ -181,6 +200,7 @@ class PlayerHandler:
         show_emoji = not (user and user.hide_deck_emoji)
         can_defer = (
             tournament.status == models.TournamentStatus.REGISTRATION
+            and tournament.engine_mode != models.TournamentEngineMode.INTERNAL_SWISS
             and models.utc_now() < _defer_deck_deadline(tournament)
         )
         return HandlerResult(
@@ -498,6 +518,8 @@ class PlayerHandler:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
         if tournament.status != models.TournamentStatus.REGISTRATION:
             return HandlerResult(REGISTRATION_CLOSED, is_alert=True)
+        if tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS:
+            return HandlerResult("Для записи на Swiss-турнир нужно выбрать архетип.", is_alert=True)
         if models.utc_now() >= _defer_deck_deadline(tournament):
             return HandlerResult(DEFER_DECK_EXPIRED, is_alert=True)
 
@@ -566,12 +588,79 @@ class PlayerHandler:
         except errors.TournamentNotFound:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
         if t.status == models.TournamentStatus.CLOSED and t.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS:
-            return RoundResultsHandler(self.svc.db, self.keyboards).handle_swiss_standings(tournament_id, tg_id or 0)
+            return self.handle_decklist_players(tg_id or 0, tournament_id)
         if t.show_round_pairings and self._has_pairings(t):
             return RoundResultsHandler(self.svc.db, self.keyboards).handle_round_status(tournament_id, tg_id)
         participants = sort_participants(self.svc.list_participants_for_tournament(tournament_id))
         text = format_tournament_status(t.title, t.status.label_ru, participants, decks_hidden=t.decks_hidden)
         return HandlerResult(text)
+
+    def handle_decklist_start(self, tg_id: int, tournament_id: int) -> HandlerResult:
+        try:
+            tournament = get_tournament(self.svc.db, tournament_id)
+            DecklistService._ensure_internal(tournament)
+            if tournament.status != models.TournamentStatus.REGISTRATION:
+                raise errors.DecklistError("После начала турнира деклист нельзя изменить.")
+            participant = DecklistService(self.svc.db).participant_for_user(tournament_id, tg_id)
+            if participant is None:
+                raise errors.DecklistError("Сначала запишитесь на турнир.")
+            if participant.archetype_id is None:
+                raise errors.DecklistError("Сначала выберите архетип колоды.")
+        except (errors.TournamentNotFound, errors.DecklistError) as exc:
+            return HandlerResult(str(exc) or TOURNAMENT_NOT_FOUND, is_alert=True)
+        return HandlerResult(
+            "Отправьте деклист одним текстовым сообщением. Можно вставить список карт в любом формате.\n\n"
+            "До начала турнира новый текст заменит предыдущий деклист."
+        )
+
+    def handle_decklist_text(self, tg_id: int, tournament_id: int, text: str) -> HandlerResult:
+        try:
+            DecklistService(self.svc.db).save(tournament_id, tg_id, text)
+        except (errors.TournamentNotFound, errors.DecklistError) as exc:
+            return HandlerResult(str(exc) or TOURNAMENT_NOT_FOUND, is_alert=True)
+        return HandlerResult("✅ Деклист сохранён.")
+
+    def handle_own_decklist(self, tg_id: int, tournament_id: int) -> HandlerResult:
+        service = DecklistService(self.svc.db)
+        participant = service.participant_for_user(tournament_id, tg_id)
+        if participant is None:
+            return HandlerResult("Вы не записаны на этот турнир.", is_alert=True)
+        return self._decklist_view_result(service, participant.id, tg_id, tournament_id)
+
+    def handle_decklist_players(self, tg_id: int, tournament_id: int, page: int = 0) -> HandlerResult:
+        try:
+            players = DecklistService(self.svc.db).list_players(tournament_id, tg_id)
+        except (errors.TournamentNotFound, errors.DecklistError) as exc:
+            return HandlerResult(str(exc) or TOURNAMENT_NOT_FOUND, is_alert=True)
+        return HandlerResult(
+            "Деклисты игроков:\n✅ — деклист загружен, — — деклиста пока нет.",
+            keyboard=self.keyboards.decklist_players_keyboard(tournament_id, players, page=page),
+        )
+
+    def handle_decklist_view(self, tg_id: int, participant_id: int, tournament_id: int, page: int = 0) -> HandlerResult:
+        return self._decklist_view_result(
+            DecklistService(self.svc.db), participant_id, tg_id, tournament_id, page=page, back_to_list=True
+        )
+
+    def _decklist_view_result(
+        self,
+        service: DecklistService,
+        participant_id: int,
+        tg_id: int,
+        tournament_id: int,
+        *,
+        page: int = 0,
+        back_to_list: bool = False,
+    ) -> HandlerResult:
+        try:
+            view = service.view(participant_id, tg_id)
+        except (errors.ParticipantNotFound, errors.DecklistError) as exc:
+            return HandlerResult(str(exc) or PARTICIPANT_NOT_FOUND, is_alert=True)
+        body = view.raw_text or "Деклист не загружен."
+        return HandlerResult(
+            f"{view.name} — {view.archetype}\n\n{body}",
+            keyboard=self.keyboards.decklist_view_keyboard(tournament_id, page=page, back_to_list=back_to_list),
+        )
 
     def _has_pairings(self, tournament) -> bool:
         if self.aetherhub_svc.has_pairings(tournament.id):

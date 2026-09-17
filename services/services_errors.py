@@ -57,6 +57,10 @@ class ParticipantNotFound(ParticipantError):
     pass
 
 
+class DecklistError(ParticipantError):
+    pass
+
+
 # --- Voting ---
 
 

@@ -151,6 +151,12 @@ class Tournament(Base):
     ended_at = Column(DateTime, nullable=True)
     # Telegram id of the admin/scorekeeper who closed the tournament manually; NULL for automatic closure.
     closed_by_tg_id = Column(BigInteger, nullable=True)
+    # Telegram id of the person who created the tournament.  Unlike admin roles,
+    # this grants access to private decklists before the event is closed.
+    created_by_tg_id = Column(BigInteger, nullable=True, index=True)
+    # Kept false for rows that predate decklist support.  TournamentService sets
+    # it for newly created tournaments so old events never receive new DMs.
+    decklist_reminders_enabled = Column(Boolean, nullable=False, default=False, server_default="false")
 
     decks_hidden = Column(Boolean, nullable=False, default=True, server_default="true")
     aetherhub_url = Column(String(512), nullable=True)
@@ -408,6 +414,7 @@ class Participant(Base):
     deck_deferred = Column(Boolean, default=False, nullable=False, server_default="false")
     deck_reminder_prestart_sent_at = Column(DateTime, nullable=True)
     deck_reminder_round2_sent_at = Column(DateTime, nullable=True)
+    swiss_requirements_reminder_sent_at = Column(DateTime, nullable=True)
 
     # подтверждена ли колода (по голосованию или руками админа)
     confirmed = Column(Boolean, default=False, nullable=False)
@@ -432,11 +439,34 @@ class Participant(Base):
     user = relationship("User", back_populates="participants")
     archetype = relationship("Archetype", back_populates="participants")
     votes = relationship("Vote", back_populates="participant", cascade="all, delete-orphan")
+    decklist = relationship(
+        "ParticipantDecklist", back_populates="participant", uselist=False, cascade="all, delete-orphan"
+    )
 
     __table_args__ = (
         UniqueConstraint("tournament_id", "user_id", name="uq_tournament_user"),
         Index("ix_tournament_archetype", "tournament_id", "archetype_id"),
     )
+
+
+class ParticipantDecklist(Base):
+    """Plain-text decklist submitted for one Swiss tournament entry."""
+
+    __tablename__ = "participant_decklists"
+
+    id = Column(Integer, primary_key=True)
+    participant_id = Column(
+        Integer,
+        ForeignKey("participants.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    raw_text = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
+
+    participant = relationship("Participant", back_populates="decklist")
 
 
 class UserDeckHistory(Base):

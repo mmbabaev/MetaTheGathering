@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+from datetime import datetime
 
 import pytest
 
@@ -19,8 +20,17 @@ from services.user import UserService
 
 def _setup(db, count: int = 8):
     tournament = TournamentService(db).create_tournament(
-        TournamentCreate(title="Internal", chat_id=-1001, club="Endstep-ru", is_online=True)
+        TournamentCreate(
+            title="Internal",
+            chat_id=-1001,
+            club="Endstep-ru",
+            is_online=True,
+            registration_close_at=datetime(2026, 9, 20, 16, 0),
+        )
     )
+    archetype = models.Archetype(name="Test Archetype")
+    db.add(archetype)
+    db.flush()
     users = []
     for index in range(count):
         user = UserService(db).get_or_create(
@@ -29,7 +39,7 @@ def _setup(db, count: int = 8):
             first_name=f"Имя{index}",
             last_name=f"Фамилия{index}",
         )
-        db.add(models.Participant(tournament_id=tournament.id, user_id=user.id))
+        db.add(models.Participant(tournament_id=tournament.id, user_id=user.id, archetype_id=archetype.id))
         users.append(user)
     admin = users[0]
     admin.is_admin = True
