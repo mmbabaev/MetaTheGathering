@@ -146,13 +146,17 @@
   [#315](https://github.com/mmbabaev/MetaTheGathering/pull/315).
 - Второй этап Endstep Pauper leaderboard из
   [#312](https://github.com/mmbabaev/MetaTheGathering/issues/312): `/leaderboard` предлагает
-  `Moscow Pauper Ranked` и owner-only `Endstep ru Pauper Ranked`. Endstep-таблица собирает
+  `Moscow Pauper Ranked` и `Endstep ru Pauper Ranked`. Endstep-таблица собирает
   уникальных реальных игроков всех турниров `Endstep-ru` с заполненным ником, показывает
   место на сайте и место среди найденных RU-игроков и листается по десять записей. Снимки
   хранятся локально в БД; штатный scheduler запускает отдельный worker в 11:00 и 23:00 МСК
   и восстанавливает пропущенное обновление после старта бота. Telegram flow не обращается
-  к Endstep, рассылок игрокам нет — PR
-  [#315](https://github.com/mmbabaev/MetaTheGathering/pull/315).
+  к Endstep, рассылок игрокам нет. Публичная выдача использует компактные мобильные карточки;
+  кнопка «Где я?» открывает страницу игрока и подсвечивает его строку — базовый PR
+  [#315](https://github.com/mmbabaev/MetaTheGathering/pull/315), дополнение — текущая ветка.
+- В меню лидербордов добавлен существующий социальный рейтинг; для Endstep выводятся
+  RU-место, ник, место на сайте, rating, RD и W-L-D — PR
+  [#317](https://github.com/mmbabaev/MetaTheGathering/pull/317).
 - Метаписцы получили в карточке активного турнира действия добавления
   участников и закрытия; Telegram ID инициатора ручного закрытия сохраняется
   в турнире — issue [#316](https://github.com/mmbabaev/MetaTheGathering/issues/316), PR
@@ -192,11 +196,6 @@
   дубль с обязательным подтверждением. Назначение ролей остаётся admin-only; в идущем
   внутреннем Swiss действие безопасно дропает игрока вместо удаления — PR
   [#321](https://github.com/mmbabaev/MetaTheGathering/pull/321).
-
-- Дополнение к меню лидербордов: существующий социальный рейтинг добавлен третьей
-  кнопкой, а Endstep-строки показаны моноширинной таблицей с отдельными колонками для
-  RU-места, ника, места на сайте, rating, RD и W-L-D — PR
-  [#317](https://github.com/mmbabaev/MetaTheGathering/pull/317).
 
 - Slash-команды `/add_players` и `/tournament_status` убраны из меню всех ролей,
   админской справки и роутинга. Добавление участников и просмотр статуса через

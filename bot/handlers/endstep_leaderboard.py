@@ -1,20 +1,18 @@
-"""Owner-only presentation of Russian players in Endstep Pauper Ranked."""
+"""Public presentation of Russian players in Endstep Pauper Ranked."""
 
 from __future__ import annotations
 
-import html
 from dataclasses import dataclass
 from datetime import timezone
 from zoneinfo import ZoneInfo
 
 from bot.handlers.base import HandlerResult
-from bot.keyboards import endstep_ru_leaderboard_keyboard
+from bot.keyboards import endstep_ru_back_keyboard, endstep_ru_leaderboard_keyboard
 from core.config import settings
 from services.endstep_ru_leaderboard import EndstepRuLeaderboard, EndstepRuLeaderboardService
+from services.user import UserService
 
 ENDSTEP_RU_PAGE_SIZE = 10
-ENDSTEP_USERNAME_COLUMN_WIDTH = 16
-ENDSTEP_RU_NOT_OWNER = "Эта команда доступна только владельцу бота."
 MOSCOW_TZ = ZoneInfo("Europe/Moscow")
 
 
@@ -25,16 +23,15 @@ class EndstepRuLeaderboardLoad:
 
 
 class EndstepRuLeaderboardHandler:
-    def __init__(self, service: EndstepRuLeaderboardService | None = None) -> None:
+    def __init__(
+        self,
+        service: EndstepRuLeaderboardService | None = None,
+        users: UserService | None = None,
+    ) -> None:
         self.service = service
-
-    @staticmethod
-    def _is_owner(tg_id: int) -> bool:
-        return settings.OWNER_CHAT_ID is not None and tg_id == settings.OWNER_CHAT_ID
+        self.users = users
 
     def load(self, tg_id: int, page: int = 0) -> EndstepRuLeaderboardLoad:
-        if not self._is_owner(tg_id):
-            return EndstepRuLeaderboardLoad(HandlerResult(ENDSTEP_RU_NOT_OWNER, is_alert=True), None)
         if self.service is None:
             raise RuntimeError("EndstepRuLeaderboardService is required to load a snapshot")
         snapshot = self.service.latest()
@@ -48,10 +45,39 @@ class EndstepRuLeaderboardHandler:
             )
         return EndstepRuLeaderboardLoad(self.render(tg_id, snapshot, page), snapshot)
 
-    def render(self, tg_id: int, snapshot: EndstepRuLeaderboard, page: int = 0) -> HandlerResult:
-        if not self._is_owner(tg_id):
-            return HandlerResult(ENDSTEP_RU_NOT_OWNER, is_alert=True)
+    def load_me(self, tg_id: int) -> EndstepRuLeaderboardLoad:
+        if self.service is None or self.users is None:
+            raise RuntimeError("Endstep leaderboard and user services are required to find a player")
+        snapshot = self.service.latest()
+        if snapshot is None:
+            return self.load(tg_id)
 
+        user = self.users.get_by_tg_id(tg_id)
+        row = next((row for row in snapshot.rows if user is not None and row.user_id == user.id), None)
+        if row is None:
+            return EndstepRuLeaderboardLoad(
+                HandlerResult(
+                    "Тебя пока нет в Endstep RU рейтинге. Укажи точный Endstep-ник "
+                    "в настройках бота и сыграй турнир Endstep-ru. Если всё уже заполнено, "
+                    "дождись следующего обновления рейтинга.",
+                    keyboard=endstep_ru_back_keyboard(),
+                ),
+                snapshot,
+            )
+        page = (row.position - 1) // ENDSTEP_RU_PAGE_SIZE
+        return EndstepRuLeaderboardLoad(
+            self.render(tg_id, snapshot, page, highlight_user_id=row.user_id),
+            snapshot,
+        )
+
+    def render(
+        self,
+        tg_id: int,
+        snapshot: EndstepRuLeaderboard,
+        page: int = 0,
+        *,
+        highlight_user_id: int | None = None,
+    ) -> HandlerResult:
         total_rows = len(snapshot.rows)
         total_pages = max(1, (total_rows + ENDSTEP_RU_PAGE_SIZE - 1) // ENDSTEP_RU_PAGE_SIZE)
         page = min(max(0, page), total_pages - 1)
@@ -59,30 +85,21 @@ class EndstepRuLeaderboardHandler:
         rows = snapshot.rows[start : start + ENDSTEP_RU_PAGE_SIZE]
         generated_at = snapshot.generated_at.replace(tzinfo=timezone.utc).astimezone(MOSCOW_TZ)
         lines = [
-            "🏆 Endstep Pauper — RU",
-            f"Обновлено {generated_at.strftime('%d.%m.%Y %H:%M')} МСК · найдено {total_rows} из {snapshot.candidate_count}",
+            "🏆 Endstep Pauper Ranked — RU",
+            f"Обновлено {generated_at.strftime('%d.%m.%Y %H:%M')} МСК · игроков: {total_rows}",
             "",
         ]
         if rows:
-            position_width = max(2, max(len(str(row.position)) for row in rows))
-            table = [
-                f"{'RU':>{position_width}} {'Ник':<{ENDSTEP_USERNAME_COLUMN_WIDTH}} "
-                f"{'Сайт':>5} {'R':>4} {'RD':>3} {'W-L-D':>7}"
-            ]
             for row in rows:
-                username = _truncate(row.username, ENDSTEP_USERNAME_COLUMN_WIDTH)
-                site_place = str(row.site_rank) if row.site_rank is not None else "—*"
-                record = f"{row.wins}-{row.losses}-{row.draws}"
-                table.append(
-                    f"{row.position:>{position_width}} {username:<{ENDSTEP_USERNAME_COLUMN_WIDTH}} "
-                    f"{site_place:>5} {row.rating:>4} {row.rd:>3} {record:>7}"
+                marker = "👉 " if row.user_id == highlight_user_id else ""
+                site_place = f"#{row.site_rank}" if row.site_rank is not None else "—*"
+                lines.extend(
+                    [
+                        f"{marker}<b>{row.position}. {_escape(row.username)}</b>",
+                        f"    сайт {site_place} · {row.rating} (RD {row.rd}) · {row.wins}–{row.losses}–{row.draws}",
+                    ]
                 )
-            lines.extend(
-                [
-                    f"<pre>{html.escape(chr(10).join(table))}</pre>",
-                    "R — рейтинг, RD — отклонение; W-L-D — победы/поражения/ничьи.",
-                ]
-            )
+            lines.extend(["", "Формат: победы–поражения–ничьи. RD — отклонение рейтинга."])
             if any(row.provisional for row in rows):
                 lines.append("* provisional — Endstep ещё не назначил место на сайте.")
         elif snapshot.candidate_count == 0:
@@ -90,29 +107,34 @@ class EndstepRuLeaderboardHandler:
         else:
             lines.append("Ни один указанный Endstep-ник пока не найден в Pauper leaderboard.")
 
-        if snapshot.missing_usernames:
-            visible = [name if len(name) <= 40 else f"{name[:39]}…" for name in snapshot.missing_usernames[:5]]
-            suffix = (
-                f" и ещё {len(snapshot.missing_usernames) - len(visible)}"
-                if len(snapshot.missing_usernames) > len(visible)
-                else ""
-            )
-            lines.extend(["", f"Не найдены: {html.escape(', '.join(visible))}{suffix}"])
-        if snapshot.ambiguous_usernames:
-            visible = [name if len(name) <= 40 else f"{name[:39]}…" for name in snapshot.ambiguous_usernames[:5]]
-            suffix = (
-                f" и ещё {len(snapshot.ambiguous_usernames) - len(visible)}"
-                if len(snapshot.ambiguous_usernames) > len(visible)
-                else ""
-            )
-            lines.extend(["", f"Несколько аккаунтов с этим ником: {html.escape(', '.join(visible))}{suffix}"])
+        if settings.OWNER_CHAT_ID is not None and tg_id == settings.OWNER_CHAT_ID:
+            if snapshot.missing_usernames:
+                lines.extend(["", f"Не найдены: {_visible_usernames(snapshot.missing_usernames)}"])
+            if snapshot.ambiguous_usernames:
+                lines.extend(
+                    [
+                        "",
+                        f"Несколько аккаунтов с этим ником: {_visible_usernames(snapshot.ambiguous_usernames)}",
+                    ]
+                )
+
         lines.extend(["", f"Страница {page + 1}/{total_pages}"])
         return HandlerResult(
             "\n".join(lines),
-            keyboard=endstep_ru_leaderboard_keyboard(page, total_pages),
+            keyboard=endstep_ru_leaderboard_keyboard(
+                page,
+                total_pages,
+                show_me=highlight_user_id is None,
+            ),
             parse_mode="HTML",
         )
 
 
-def _truncate(value: str, width: int) -> str:
-    return value if len(value) <= width else f"{value[: width - 1]}…"
+def _escape(value: str) -> str:
+    return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _visible_usernames(usernames: tuple[str, ...]) -> str:
+    visible = [name if len(name) <= 40 else f"{name[:39]}…" for name in usernames[:5]]
+    suffix = f" и ещё {len(usernames) - len(visible)}" if len(usernames) > len(visible) else ""
+    return f"{_escape(', '.join(visible))}{suffix}"

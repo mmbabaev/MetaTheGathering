@@ -12,7 +12,7 @@ LEADERBOARD_PAGE_SIZE = 10
 
 def leaderboard_menu() -> HandlerResult:
     return HandlerResult(
-        "🏆 Pauper Ranked\n\nВыберите лидерборд:\n\nEndstep RU пока доступен только владельцу бота.",
+        "🏆 Pauper Ranked\n\nВыберите лидерборд:",
         keyboard=leaderboard_menu_keyboard(),
     )
 
