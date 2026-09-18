@@ -2,6 +2,7 @@
 
 from services.services_errors import (
     AetherhubTournamentAlreadyLinked,
+    DecklistError,
     MultipleActiveTournaments,
     ParticipantAlreadyRegistered,
     ParticipantError,
@@ -27,6 +28,7 @@ __all__ = [
     "MultipleActiveTournaments",
     "ParticipantError",
     "ParticipantAlreadyRegistered",
+    "DecklistError",
     "ParticipantNotFound",
     "VotingError",
     "VotingNotAllowed",

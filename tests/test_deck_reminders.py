@@ -22,9 +22,7 @@ def _participant(svc, user_svc, tournament_id, tg_id, *, deferred, archetype_id=
     )
 
 
-def test_pending_recipients_are_only_real_explicitly_deferred_players(
-    db, svc, user_svc, arch_svc
-):
+def test_pending_recipients_are_only_real_explicitly_deferred_players(db, svc, user_svc, arch_svc):
     tournament = _tournament(svc)
     deck = arch_svc.get_or_create_by_name("Burn")
     deferred = _participant(svc, user_svc, tournament.id, 21801, deferred=True)
@@ -44,14 +42,26 @@ def test_pending_recipients_are_only_real_explicitly_deferred_players(
         DeckReminderStage.PRESTART,
     )
 
-    assert [(row.participant_id, row.tg_id) for row in recipients] == [
-        (deferred.id, 21801)
-    ]
+    assert [(row.participant_id, row.tg_id) for row in recipients] == [(deferred.id, 21801)]
 
 
-async def test_prestart_delivery_is_idempotent_and_round2_remains_independent(
-    db, svc, user_svc
-):
+def test_legacy_internal_swiss_keeps_existing_archetype_reminder(db, svc, user_svc):
+    tournament = _tournament(svc)
+    participant = _participant(svc, user_svc, tournament.id, 21805, deferred=True)
+    stored = db.get(models.Tournament, tournament.id)
+    stored.engine_mode = models.TournamentEngineMode.INTERNAL_SWISS
+    stored.decklist_reminders_enabled = False
+    db.commit()
+
+    recipients = DeckReminderService(db).pending_recipients(
+        tournament.id,
+        DeckReminderStage.PRESTART,
+    )
+
+    assert [row.participant_id for row in recipients] == [participant.id]
+
+
+async def test_prestart_delivery_is_idempotent_and_round2_remains_independent(db, svc, user_svc):
     tournament = _tournament(svc)
     participant = _participant(svc, user_svc, tournament.id, 21811, deferred=True)
     bot = AsyncMock()

@@ -36,6 +36,7 @@ from core.schemas import TournamentCreate
 from services import errors
 from services.aetherhub_import_service import MIN_TOURNAMENT_DURATION, AetherhubImportService
 from services.archetype import ArchetypeService
+from services.decklists import DecklistService
 from services.export import ExportService
 from services.internal_swiss import InternalSwissService
 from services.meta_table_import import MetaTableImportService
@@ -196,10 +197,14 @@ class AdminHandler:
         except errors.TournamentNotFound:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
         if t.status == models.TournamentStatus.CLOSED and t.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS:
-            result = RoundResultsHandler(self.svc.db, self.keyboards).handle_swiss_standings(tournament_id, tg_id)
-            if prefix and not result.is_alert:
-                result.text = f"{prefix}\n\n{result.text}"
-            return result
+            players = DecklistService(self.svc.db).list_players(tournament_id, tg_id)
+            text = "Деклисты игроков:\n✅ — деклист загружен, — — деклиста пока нет."
+            if prefix:
+                text = f"{prefix}\n\n{text}"
+            return HandlerResult(
+                text,
+                keyboard=self.keyboards.decklist_players_keyboard(tournament_id, players),
+            )
         if t.show_round_pairings and AetherhubImportService(self.svc.db).has_pairings(tournament_id):
             result = RoundResultsHandler(self.svc.db, self.keyboards).handle_round_status(tournament_id, tg_id)
             if prefix and not result.is_alert:
@@ -640,7 +645,13 @@ class AdminHandler:
             title = f"{title_prefix}{title}"
         try:
             t = self.svc.create_tournament(
-                TournamentCreate(title=title, chat_id=chat_id, club=club, is_online=is_online)
+                TournamentCreate(
+                    title=title,
+                    chat_id=chat_id,
+                    club=club,
+                    is_online=is_online,
+                    created_by_tg_id=tg_id,
+                )
             )
         except errors.TournamentAlreadyExists:
             return HandlerResult(TOURNAMENT_ALREADY_EXISTS_MSG, is_alert=True)

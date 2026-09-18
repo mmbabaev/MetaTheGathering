@@ -120,6 +120,8 @@ class InternalSwissService:
         ).scalar_one_or_none()
         if has_pairings is not None or tournament.aetherhub_url:
             raise RoundResultError("У турнира уже есть данные AetherHub или паринги; режим менять нельзя.")
+        if enabled and tournament.registration_close_at is None:
+            raise RoundResultError("Для внутреннего Swiss сначала укажите время начала турнира.")
         tournament.engine_mode = (
             models.TournamentEngineMode.INTERNAL_SWISS if enabled else models.TournamentEngineMode.AETHERHUB
         )
@@ -142,6 +144,10 @@ class InternalSwissService:
         if current_round is None:
             if tournament.status != models.TournamentStatus.REGISTRATION:
                 raise RoundResultError("Первый раунд уже нельзя создать в текущем статусе турнира.")
+            if tournament.registration_close_at is None:
+                raise RoundResultError("У турнира не указано время начала.")
+            if any(participant.archetype_id is None for participant in participants):
+                raise RoundResultError("Перед первым раундом у всех игроков должен быть указан архетип.")
             self._assign_initial_ranks(participants)
             tournament.swiss_rounds = recommended_swiss_rounds(len(participants))
             tournament.status = models.TournamentStatus.ONGOING

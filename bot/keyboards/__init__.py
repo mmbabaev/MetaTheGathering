@@ -129,6 +129,10 @@ CB_SWISS_NEXT_ROUND = "sw_next"  # sw_next:{tournament_id}
 CB_SWISS_STANDINGS = "sw_table"  # sw_table:{tournament_id}
 CB_SWISS_FINISH = "sw_finish"  # sw_finish:{tournament_id}
 CB_SWISS_FINISH_CONFIRM = "sw_finish_yes"  # sw_finish_yes:{tournament_id}
+CB_DECKLIST_EDIT = "dl_edit"  # dl_edit:{tournament_id}
+CB_DECKLIST_OWN = "dl_own"  # dl_own:{tournament_id}
+CB_DECKLIST_LIST = "dl_list"  # dl_list:{tournament_id}:{page}
+CB_DECKLIST_VIEW = "dl_view"  # dl_view:{participant_id}:{tournament_id}:{page}
 CB_APP_STATS_HOME = "appstat_home"  # appstat_home — меню статистики приложения (владелец)
 CB_APP_STATS_NOTIFY_ROUNDS = "appstat_nr"  # appstat_nr — список включивших уведомления о раундах
 CB_CELLAR_DATES = "cellar_dates"
@@ -476,6 +480,8 @@ class Keyboards:
         internal_swiss: bool = False,
         can_add_players: bool = False,
         can_close: bool = False,
+        decklist_action: str | None = None,
+        can_view_decklists: bool = False,
     ) -> InlineKeyboardMarkup:
         if is_registered:
             action_btn = InlineKeyboardButton("🚪 Выйти из турнира", callback_data=f"{CB_LEAVE}:{tournament_id}")
@@ -483,6 +489,13 @@ class Keyboards:
             action_btn = InlineKeyboardButton("Записаться", callback_data=f"{CB_REGISTER}:{tournament_id}")
         status_btn = InlineKeyboardButton("📋 Статус", callback_data=f"{CB_TSTATUS}:{tournament_id}")
         rows = [[action_btn], [status_btn]]
+        if decklist_action:
+            callback = CB_DECKLIST_EDIT if decklist_action != "Мой деклист" else CB_DECKLIST_OWN
+            rows.insert(1, [InlineKeyboardButton(f"📄 {decklist_action}", callback_data=f"{callback}:{tournament_id}")])
+        if can_view_decklists:
+            rows.append(
+                [InlineKeyboardButton("📚 Деклисты игроков", callback_data=f"{CB_DECKLIST_LIST}:{tournament_id}:0")]
+            )
         if show_round_result_action and is_registered:
             rows.insert(
                 1,
@@ -524,6 +537,41 @@ class Keyboards:
                 ]
             )
         return InlineKeyboardMarkup(rows)
+
+    def decklist_players_keyboard(
+        self, tournament_id: int, players: list, *, page: int = 0, page_size: int = 20
+    ) -> InlineKeyboardMarkup:
+        page_count = max(1, (len(players) + page_size - 1) // page_size)
+        page = min(max(page, 0), page_count - 1)
+        visible = players[page * page_size : (page + 1) * page_size]
+        rows = [
+            [
+                InlineKeyboardButton(
+                    f"{'✅' if player.has_decklist else '—'} {player.name} · {player.archetype}",
+                    callback_data=f"{CB_DECKLIST_VIEW}:{player.participant_id}:{tournament_id}:{page}",
+                )
+            ]
+            for player in visible
+        ]
+        navigation = []
+        if page > 0:
+            navigation.append(
+                InlineKeyboardButton("← Назад", callback_data=f"{CB_DECKLIST_LIST}:{tournament_id}:{page - 1}")
+            )
+        if page + 1 < page_count:
+            navigation.append(
+                InlineKeyboardButton("Вперёд →", callback_data=f"{CB_DECKLIST_LIST}:{tournament_id}:{page + 1}")
+            )
+        if navigation:
+            rows.append(navigation)
+        rows.append([InlineKeyboardButton("⬅️ К турниру", callback_data=f"{CB_TOURNAMENT}:{tournament_id}")])
+        return InlineKeyboardMarkup(rows)
+
+    def decklist_view_keyboard(
+        self, tournament_id: int, *, page: int = 0, back_to_list: bool = False
+    ) -> InlineKeyboardMarkup:
+        callback = f"{CB_DECKLIST_LIST}:{tournament_id}:{page}" if back_to_list else f"{CB_TOURNAMENT}:{tournament_id}"
+        return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data=callback)]])
 
     def export_menu_keyboard(self, tournament_id: int, *, show_swiss_players: bool = False) -> InlineKeyboardMarkup:
         rows = [
@@ -1426,6 +1474,8 @@ def tournament_card_keyboard(
     internal_swiss: bool = False,
     can_add_players: bool = False,
     can_close: bool = False,
+    decklist_action: str | None = None,
+    can_view_decklists: bool = False,
 ) -> InlineKeyboardMarkup:
     return _default.tournament_card_keyboard(
         tournament_id,
@@ -1442,6 +1492,8 @@ def tournament_card_keyboard(
         internal_swiss=internal_swiss,
         can_add_players=can_add_players,
         can_close=can_close,
+        decklist_action=decklist_action,
+        can_view_decklists=can_view_decklists,
     )
 
 

@@ -111,6 +111,8 @@ class TournamentService:
             engine_mode=data.engine_mode,
             status=models.TournamentStatus.REGISTRATION,
             registration_close_at=data.registration_close_at,
+            created_by_tg_id=data.created_by_tg_id,
+            decklist_reminders_enabled=data.decklist_reminders_enabled,
             created_at=models.utc_now(),
         )
         self.db.add(tournament)
@@ -318,6 +320,12 @@ class TournamentService:
     ) -> ParticipantRead:
         tournament = get_tournament(self.db, tournament_id)
         ensure_tournament_status(tournament, allowed=[models.TournamentStatus.REGISTRATION])
+        if (
+            tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS
+            and archetype_id is None
+            and not added_by_admin
+        ):
+            raise errors.ParticipantError("Для записи на Swiss-турнир нужно выбрать архетип.")
 
         stmt = select(models.Participant).where(
             models.Participant.tournament_id == tournament_id,

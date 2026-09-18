@@ -27,6 +27,7 @@ from bot.telegram.achievements import send_achievements_report
 from bot.telegram.club_pairings import send_club_pairings
 from bot.telegram.deck_reminder import send_deferred_deck_reminders
 from bot.telegram.round_notify import send_round_notifications
+from bot.telegram.swiss_requirements_reminder import send_swiss_requirements_reminders
 from bot.tournament_creation import execute_due_creation_plans
 from core import models
 from core.clubs import club_identities, debug_club, default_clubs
@@ -1426,6 +1427,21 @@ def setup_scheduler(app: Application) -> None:
     _remind_cellar_coordinators.__name__ = "cellar_coordinator_reminder"
     app.job_queue.run_repeating(_remind_cellar_coordinators, interval=60, first=20)
     logger.info("Scheduler: CellarCoordinatorReminderJob registered (every 60s)")
+
+    async def _remind_swiss_requirements(context: ContextTypes.DEFAULT_TYPE) -> None:
+        db = SessionLocal()
+        try:
+            await send_swiss_requirements_reminders(
+                context.bot,
+                db,
+                datetime.now(timezone.utc),
+            )
+        finally:
+            db.close()
+
+    _remind_swiss_requirements.__name__ = "swiss_requirements_reminder"
+    app.job_queue.run_repeating(_remind_swiss_requirements, interval=60, first=25)
+    logger.info("Scheduler: SwissRequirementsReminder registered (every 60s)")
 
     final_job = AetherhubFinalReimportJob(AetherhubService())
 

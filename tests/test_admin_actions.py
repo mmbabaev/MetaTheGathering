@@ -393,7 +393,7 @@ class TestHandleAdminStatus:
         assert result.text == TOURNAMENT_NOT_FOUND
         assert result.is_alert
 
-    def test_closed_internal_swiss_status_shows_text_standings(self, handler, svc, admin_user, active_tournament):
+    def test_closed_internal_swiss_status_shows_decklist_players(self, handler, svc, admin_user, active_tournament):
         tournament = svc.db.get(m.Tournament, active_tournament.id)
         tournament.status = TournamentStatus.CLOSED
         tournament.engine_mode = m.TournamentEngineMode.INTERNAL_SWISS
@@ -402,8 +402,8 @@ class TestHandleAdminStatus:
 
         result = handler.handle_admin_status(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
 
-        assert "📊 Стендинги · раунд 0/4" in result.text
-        assert result.parse_mode == "HTML"
+        assert "Деклисты игроков" in result.text
+        assert result.parse_mode is None
         assert result.keyboard.inline_keyboard[-1][0].callback_data == f"t:{active_tournament.id}"
         assert result.keyboard.inline_keyboard[-1][0].text == "⬅️ К турниру"
 
@@ -1606,7 +1606,10 @@ class TestHandleCreateTournament:
         result = handler.handle_create_tournament(tg_id=ADMIN_TG_ID, chat_id=CHAT_ID)
         assert "Pauper" in result.text
         assert result.tournament_id is not None
-        assert handler.svc.db.get(m.Tournament, result.tournament_id).is_online is False
+        tournament = handler.svc.db.get(m.Tournament, result.tournament_id)
+        assert tournament.is_online is False
+        assert tournament.created_by_tg_id == ADMIN_TG_ID
+        assert tournament.decklist_reminders_enabled is True
 
     def test_selected_club_is_stored_and_its_icon_prefixes_auto_title(self, handler, admin_user):
         result = handler.handle_create_tournament(
