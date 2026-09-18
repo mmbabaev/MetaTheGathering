@@ -153,7 +153,8 @@
   и восстанавливает пропущенное обновление после старта бота. Telegram flow не обращается
   к Endstep, рассылок игрокам нет. Публичная выдача использует компактные мобильные карточки;
   кнопка «Где я?» открывает страницу игрока и подсвечивает его строку — базовый PR
-  [#315](https://github.com/mmbabaev/MetaTheGathering/pull/315), дополнение — текущая ветка.
+  [#315](https://github.com/mmbabaev/MetaTheGathering/pull/315), дополнение — PR
+  [#328](https://github.com/mmbabaev/MetaTheGathering/pull/328).
 - В меню лидербордов добавлен существующий социальный рейтинг; для Endstep выводятся
   RU-место, ник, место на сайте, rating, RD и W-L-D — PR
   [#317](https://github.com/mmbabaev/MetaTheGathering/pull/317).
