@@ -5,6 +5,7 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from bot.command_menu import sync_user_command_menu
 from bot.deeplink import (
     is_cellar_payload,
     parse_deck_payload,
@@ -92,7 +93,12 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     _log("cmd_start", user)
     db = SessionLocal()
     try:
-        db_user = UserService(db).get_by_tg_id(user.id)
+        users = UserService(db)
+        db_user = users.get_by_tg_id(user.id)
+        try:
+            await sync_user_command_menu(context.bot, users, user.id)
+        except Exception:
+            logger.exception("Failed to refresh command menu for requester tg_id=%s", user.id)
     finally:
         db.close()
 
