@@ -5,7 +5,7 @@ import logging
 from datetime import datetime
 
 from sqlalchemy import select
-from telegram import BotCommand, BotCommandScopeChat, BotCommandScopeDefault
+from telegram import BotCommandScopeDefault
 from telegram import Update as TGUpdate
 from telegram.ext import (
     Application,
@@ -16,6 +16,7 @@ from telegram.ext import (
     filters,
 )
 
+from bot import command_menu
 from bot.keyboards import (
     CB_ADMIN_ARCH_MORE,
     CB_ADMIN_CUSTOM_ARCH,
@@ -190,6 +191,7 @@ from services.cellar import CellarService
 from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.schedule import ScheduleService
 from services.tournament import TournamentService
+from services.user import UserService
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -212,35 +214,13 @@ async def _error_handler(update: object, context) -> None:
 if settings.DEBUG:
     logging.getLogger("services.tournament").setLevel(logging.DEBUG)
 
-
-_USER_COMMANDS = [
-    BotCommand("tournaments", "Активные турниры и запись"),
-    BotCommand("leaderboard", "Лидерборды Pauper"),
-    BotCommand("social_rating", "Социальный рейтинг"),
-    BotCommand("cellar", "Колоды из ячейки"),
-    BotCommand("settings", "Настройки профиля"),
-    BotCommand("help", "Справка по командам"),
-]
-
-_SCOREKEEPER_COMMANDS = list(_USER_COMMANDS)
-
-_POLL_CMD = BotCommand("poll", "Меню голосований: регуляры и рассылка")
-_CREATE_TOURNAMENT_CMD = BotCommand("create_tournament", "Создать турнир")
-_APP_STATS_CMD = BotCommand("app_statistics", "Статистика приложения (владелец)")
-_OWNER_COMMANDS = [_APP_STATS_CMD]
-
-_ADMIN_COMMANDS = _SCOREKEEPER_COMMANDS + [
-    BotCommand("archive", "Архив закрытых турниров"),
-    _CREATE_TOURNAMENT_CMD,
-    BotCommand("clubs", "Клубы и чаты объявлений"),
-    BotCommand("delete_tournament", "Удалить турнир"),
-    BotCommand("schedule", "Расписание автозаданий"),
-    BotCommand("features", "Feature flags"),
-    BotCommand("achievements", "Ачивки игрока"),
-    BotCommand("bingo_preview", "Пример bingo-поля 4×4"),
-    BotCommand("ranked_preseason", "Preseason-рейтинг Pauper"),
-    _POLL_CMD,
-]
+_USER_COMMANDS = command_menu.USER_COMMANDS
+_SCOREKEEPER_COMMANDS = command_menu.SCOREKEEPER_COMMANDS
+_POLL_CMD = command_menu.POLL_COMMAND
+_CREATE_TOURNAMENT_CMD = command_menu.CREATE_TOURNAMENT_COMMAND
+_APP_STATS_CMD = command_menu.APP_STATS_COMMAND
+_OWNER_COMMANDS = command_menu.OWNER_COMMANDS
+_ADMIN_COMMANDS = command_menu.ADMIN_COMMANDS
 
 
 async def _post_init(app: Application) -> None:
@@ -319,41 +299,17 @@ async def _set_commands(app: Application) -> None:
     scorekeeper_ids = set(db_scorekeepers) - admin_ids
     tournament_organizer_ids = set(db_tournament_organizers) - admin_ids
 
-    owner_id = settings.OWNER_CHAT_ID
-    for admin_id in admin_ids:
-        # Владельцу — те же админ-команды плюс owner-only инструменты.
-        cmds = _ADMIN_COMMANDS + _OWNER_COMMANDS if admin_id == owner_id else _ADMIN_COMMANDS
-        try:
-            await app.bot.set_my_commands(cmds, scope=BotCommandScopeChat(chat_id=admin_id))
-        except Exception:
-            pass
-
-    for sk_id in scorekeeper_ids:
-        cmds = _SCOREKEEPER_COMMANDS + ([_POLL_CMD] if sk_id in organizer_ids else [])
-        if sk_id in tournament_organizer_ids:
-            cmds.append(_CREATE_TOURNAMENT_CMD)
-        try:
-            await app.bot.set_my_commands(cmds, scope=BotCommandScopeChat(chat_id=sk_id))
-        except Exception:
-            pass
-
-    # Чистые организаторы голосований (не админ, не метаписец) — пользовательские команды + /poll
-    for org_id in organizer_ids - scorekeeper_ids:
-        cmds = _USER_COMMANDS + [_POLL_CMD]
-        if org_id in tournament_organizer_ids:
-            cmds.append(_CREATE_TOURNAMENT_CMD)
-        try:
-            await app.bot.set_my_commands(cmds, scope=BotCommandScopeChat(chat_id=org_id))
-        except Exception:
-            pass
-
-    for org_id in tournament_organizer_ids - scorekeeper_ids - organizer_ids:
-        try:
-            await app.bot.set_my_commands(
-                _USER_COMMANDS + [_CREATE_TOURNAMENT_CMD], scope=BotCommandScopeChat(chat_id=org_id)
-            )
-        except Exception:
-            pass
+    role_ids = admin_ids | scorekeeper_ids | organizer_ids | tournament_organizer_ids
+    db = SessionLocal()
+    try:
+        users = UserService(db)
+        for tg_id in role_ids:
+            try:
+                await command_menu.sync_user_command_menu(app.bot, users, tg_id)
+            except Exception:
+                logger.exception("Failed to register role-aware commands for tg_id=%s", tg_id)
+    finally:
+        db.close()
 
     logger.info(
         f"Bot commands registered. Admins: {admin_ids}, Scorekeepers: {scorekeeper_ids}, "

@@ -80,6 +80,28 @@ class TestPayload:
         assert is_cellar_payload("cellar_extra") is False
 
 
+@pytest.mark.asyncio
+async def test_plain_start_refreshes_requester_command_menu():
+    update = MagicMock()
+    update.effective_user = SimpleNamespace(id=123, username=None)
+    update.effective_message = AsyncMock()
+    context = MagicMock(args=[], bot=AsyncMock())
+    db = MagicMock()
+    users = MagicMock()
+    users.get_by_tg_id.return_value = None
+
+    with (
+        patch("bot.telegram.common.SessionLocal", return_value=db),
+        patch("bot.telegram.common.UserService", return_value=users),
+        patch("bot.telegram.common.sync_user_command_menu", new_callable=AsyncMock) as sync_menu,
+    ):
+        await cmd_start(update, context)
+
+    sync_menu.assert_awaited_once_with(context.bot, users, update.effective_user.id)
+    update.effective_message.reply_text.assert_awaited_once()
+    db.close.assert_called_once()
+
+
 @pytest.fixture
 def player_handler(svc, user_svc, arch_svc, keyboards, aetherhub_svc, features):
     return PlayerHandler(svc, user_svc, arch_svc, keyboards, aetherhub_svc, features)
