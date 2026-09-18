@@ -72,7 +72,7 @@ class DecklistService:
         participant = self.participant_for_user(tournament_id, tg_id)
         if participant is None:
             raise errors.DecklistError("Сначала запишитесь на турнир.")
-        if participant.archetype_id is None:
+        if participant.archetype_id is None and not tournament.is_draft:
             raise errors.DecklistError("Сначала выберите архетип колоды.")
         text = raw_text.strip()
         if not text:

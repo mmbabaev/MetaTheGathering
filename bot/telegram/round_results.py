@@ -246,7 +246,8 @@ async def callback_swiss_next_round(update: Update, context: ContextTypes.DEFAUL
     (tournament_id,) = values
     db = SessionLocal()
     try:
-        if not UserService(db).is_admin(user.id):
+        tournament = db.get(models.Tournament, tournament_id)
+        if tournament is None or not UserService(db).can_manage_tournament(user.id, tournament):
             await query.answer("Нет прав.", show_alert=True)
             return
         result = RoundResultsHandler(db).handle_swiss_next_round(tournament_id, user.id)
@@ -254,6 +255,32 @@ async def callback_swiss_next_round(update: Update, context: ContextTypes.DEFAUL
             return
         if result.new_round_numbers:
             await send_club_pairings(context.bot, db, tournament_id, result.new_round_numbers)
+    finally:
+        db.close()
+
+
+async def callback_draft_seating(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user = update.effective_user
+    if query is None or user is None:
+        return
+    values = await parse_callback_ints(query, 1)
+    if values is None:
+        return
+    (tournament_id,) = values
+    db = SessionLocal()
+    try:
+        tournament = db.get(models.Tournament, tournament_id)
+        was_new = bool(tournament is not None and tournament.draft_seating_generated_at is None)
+        result = RoundResultsHandler(db).handle_draft_seating(tournament_id, user.id)
+        if not await _render(query, result):
+            return
+        tournament = db.get(models.Tournament, tournament_id)
+        if was_new and tournament is not None and tournament.chat_id:
+            try:
+                await context.bot.send_message(chat_id=tournament.chat_id, text=result.text)
+            except Exception as exc:  # noqa: BLE001 — seating remains persisted and visible to organizer
+                logger.warning("Could not publish draft seating for tournament=%s: %s", tournament_id, exc)
     finally:
         db.close()
 
@@ -285,7 +312,11 @@ async def callback_swiss_finish_confirm(update: Update, context: ContextTypes.DE
     (tournament_id,) = values
     db = SessionLocal()
     try:
-        if not UserService(db).is_admin(user.id):
+        tournament = db.get(models.Tournament, tournament_id)
+        if tournament is None or (
+            not UserService(db).can_manage_tournament(user.id, tournament)
+            and not UserService(db).is_privileged(user.id)
+        ):
             await query.answer("Нет прав.", show_alert=True)
             return
         result = RoundResultsHandler(db).handle_swiss_finish(tournament_id, user.id)
@@ -310,6 +341,8 @@ def _admin_more_keyboard(db, tournament_id: int, tg_id: int):
         show_round_pairings=tournament.show_round_pairings,
         show_internal_beta=UserService(db).is_admin(tg_id),
         internal_swiss=tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS,
+        is_draft=tournament.is_draft,
+        draft_seating_ready=tournament.draft_seating_generated_at is not None,
     )
 
 

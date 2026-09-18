@@ -73,6 +73,7 @@ CB_AETHERHUB_CONFIRM = "ah_confirm"  # ah_confirm:{tournament_id}
 CB_AETHERHUB_CANCEL = "ah_cancel"  # ah_cancel:{tournament_id}
 CB_SET_IMPORT_TIME = "set_import_time"  # set_import_time:{tournament_id}
 CB_ADMIN_MORE = "adm_more"  # adm_more:{tournament_id}
+CB_DRAFT_SEATING = "draft_seat"  # draft_seat:{tournament_id}
 CB_ADMIN_PLAYER_ACTIONS = "adm_act"  # adm_act:{participant_id}:{tournament_id}
 CB_ADMIN_REMOVE_CONFIRM = "adm_rm"  # adm_rm:{participant_id}:{tournament_id}
 CB_ADMIN_REMOVE_DO = "adm_rm_do"  # adm_rm_do:{participant_id}:{tournament_id}
@@ -482,13 +483,18 @@ class Keyboards:
         can_close: bool = False,
         decklist_action: str | None = None,
         can_view_decklists: bool = False,
+        registration_locked: bool = False,
+        can_manage_draft: bool = False,
+        draft_seating_ready: bool = False,
     ) -> InlineKeyboardMarkup:
-        if is_registered:
-            action_btn = InlineKeyboardButton("🚪 Выйти из турнира", callback_data=f"{CB_LEAVE}:{tournament_id}")
-        else:
-            action_btn = InlineKeyboardButton("Записаться", callback_data=f"{CB_REGISTER}:{tournament_id}")
         status_btn = InlineKeyboardButton("📋 Статус", callback_data=f"{CB_TSTATUS}:{tournament_id}")
-        rows = [[action_btn], [status_btn]]
+        rows = [[status_btn]]
+        if not registration_locked:
+            if is_registered:
+                action_btn = InlineKeyboardButton("🚪 Выйти из турнира", callback_data=f"{CB_LEAVE}:{tournament_id}")
+            else:
+                action_btn = InlineKeyboardButton("Записаться", callback_data=f"{CB_REGISTER}:{tournament_id}")
+            rows.insert(0, [action_btn])
         if decklist_action:
             callback = CB_DECKLIST_EDIT if decklist_action != "Мой деклист" else CB_DECKLIST_OWN
             rows.insert(1, [InlineKeyboardButton(f"📄 {decklist_action}", callback_data=f"{callback}:{tournament_id}")])
@@ -501,8 +507,21 @@ class Keyboards:
                 1,
                 [InlineKeyboardButton("🎯 Внести результат", callback_data=f"{CB_ROUND_RESULT_OPEN}:{tournament_id}")],
             )
-        if is_registered and not has_deck:
+        if is_registered and not has_deck and not registration_locked:
             rows.insert(1, [InlineKeyboardButton("🃏 Выбрать колоду", callback_data=f"{CB_REGISTER}:{tournament_id}")])
+        if can_manage_draft:
+            if draft_seating_ready:
+                rows.append(
+                    [InlineKeyboardButton("▶️ Начать раунд 1", callback_data=f"{CB_SWISS_NEXT_ROUND}:{tournament_id}")]
+                )
+            else:
+                rows.append(
+                    [
+                        InlineKeyboardButton(
+                            "🪑 Сформировать рассадку", callback_data=f"{CB_DRAFT_SEATING}:{tournament_id}"
+                        )
+                    ]
+                )
         if payment_enabled and is_registered:
             if payment_confirmed:
                 rows.insert(1, [InlineKeyboardButton("✅ Оплачено", callback_data=f"{CB_PAY_STATUS}:{tournament_id}")])
@@ -567,6 +586,14 @@ class Keyboards:
         rows.append([InlineKeyboardButton("⬅️ К турниру", callback_data=f"{CB_TOURNAMENT}:{tournament_id}")])
         return InlineKeyboardMarkup(rows)
 
+    def draft_seating_keyboard(self, tournament_id: int) -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("▶️ Начать раунд 1", callback_data=f"{CB_SWISS_NEXT_ROUND}:{tournament_id}")],
+                [InlineKeyboardButton("⬅️ К турниру", callback_data=f"{CB_TOURNAMENT}:{tournament_id}")],
+            ]
+        )
+
     def decklist_view_keyboard(
         self, tournament_id: int, *, page: int = 0, back_to_list: bool = False
     ) -> InlineKeyboardMarkup:
@@ -627,6 +654,8 @@ class Keyboards:
         show_round_pairings: bool = False,
         show_internal_beta: bool = False,
         internal_swiss: bool = False,
+        is_draft: bool = False,
+        draft_seating_ready: bool = False,
     ) -> InlineKeyboardMarkup:
         rows = [
             [InlineKeyboardButton("➕ Добавить участников", callback_data=f"{CB_BULK_ADD}:{tournament_id}")],
@@ -640,8 +669,19 @@ class Keyboards:
             rows.append([InlineKeyboardButton(engine_label, callback_data=f"{CB_SWISS_MODE_TOGGLE}:{tournament_id}")])
         if internal_swiss:
             if not is_closed:
-                next_label = "🎲 Создать раунд 1" if not has_pairings else "➡️ Следующий раунд"
-                rows.append([InlineKeyboardButton(next_label, callback_data=f"{CB_SWISS_NEXT_ROUND}:{tournament_id}")])
+                if is_draft and not draft_seating_ready:
+                    rows.append(
+                        [
+                            InlineKeyboardButton(
+                                "🪑 Сформировать рассадку", callback_data=f"{CB_DRAFT_SEATING}:{tournament_id}"
+                            )
+                        ]
+                    )
+                else:
+                    next_label = "🎲 Создать раунд 1" if not has_pairings else "➡️ Следующий раунд"
+                    rows.append(
+                        [InlineKeyboardButton(next_label, callback_data=f"{CB_SWISS_NEXT_ROUND}:{tournament_id}")]
+                    )
             if has_pairings and not is_closed:
                 rows.append(
                     [
@@ -1024,11 +1064,14 @@ class Keyboards:
     def app_stats_back_keyboard(self) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data=CB_APP_STATS_HOME)]])
 
-    def create_tournament_club_keyboard(self, clubs: list[tuple[int, str]]) -> InlineKeyboardMarkup:
+    def create_tournament_club_keyboard(
+        self, clubs: list[tuple[int, str]], *, show_settings: bool = True
+    ) -> InlineKeyboardMarkup:
         rows = [
             [InlineKeyboardButton(label, callback_data=f"{CB_CREATE_WIZARD_CLUB}:{index}")] for index, label in clubs
         ]
-        rows.append([InlineKeyboardButton("⚙️ Куда отправлять объявления", callback_data=CB_CLUB_SETTINGS_LIST)])
+        if show_settings:
+            rows.append([InlineKeyboardButton("⚙️ Куда отправлять объявления", callback_data=CB_CLUB_SETTINGS_LIST)])
         rows.append([InlineKeyboardButton("❌ Отмена", callback_data=CB_CREATE_WIZARD_CANCEL)])
         return InlineKeyboardMarkup(rows)
 
@@ -1512,6 +1555,8 @@ def admin_more_keyboard(
     show_round_pairings: bool = False,
     show_internal_beta: bool = False,
     internal_swiss: bool = False,
+    is_draft: bool = False,
+    draft_seating_ready: bool = False,
 ) -> InlineKeyboardMarkup:
     return _default.admin_more_keyboard(
         tournament_id,
@@ -1524,6 +1569,8 @@ def admin_more_keyboard(
         show_round_pairings=show_round_pairings,
         show_internal_beta=show_internal_beta,
         internal_swiss=internal_swiss,
+        is_draft=is_draft,
+        draft_seating_ready=draft_seating_ready,
     )
 
 

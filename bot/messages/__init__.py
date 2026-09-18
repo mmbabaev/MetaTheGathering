@@ -282,11 +282,11 @@ def format_tournament_card(
     return header
 
 
-def _status_header(title: str, status: str, participants: list) -> str:
+def _status_header(title: str, status: str, participants: list, *, show_deck_counts: bool = True) -> str:
     total = len(participants)
     with_deck = sum(1 for p in participants if p.archetype)
     header = f"🏆 {title} · {status} · {total} чел."
-    if total:
+    if total and show_deck_counts:
         header += f"\n✅ {with_deck} с колодой  ⬜ {total - with_deck} без"
     return header
 
@@ -308,10 +308,17 @@ def format_participant_line(p, decks_hidden: bool = False, *, aetherhub_imported
     return f"{icon} {display} — {archetype}"
 
 
-def format_tournament_status(title: str, status: str, participants: list, decks_hidden: bool = False) -> str:
+def format_tournament_status(
+    title: str,
+    status: str,
+    participants: list,
+    decks_hidden: bool = False,
+    *,
+    show_deck_counts: bool = True,
+) -> str:
     """Структурированный список участников турнира (плоский)."""
     aetherhub_imported = any(getattr(p, "aetherhub_seen_at", None) is not None for p in participants)
-    lines = [_status_header(title, status, participants), ""]
+    lines = [_status_header(title, status, participants, show_deck_counts=show_deck_counts), ""]
     lines.extend(format_participant_line(p, decks_hidden, aetherhub_imported=aetherhub_imported) for p in participants)
     if aetherhub_imported and any(getattr(p, "aetherhub_seen_at", None) is None for p in participants):
         lines.extend(["", "❓ — пока не найден в AetherHub"])

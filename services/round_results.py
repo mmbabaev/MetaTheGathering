@@ -319,10 +319,11 @@ class RoundResultsService:
             raise RoundResultError("Этот матч не принадлежит вам.")
 
     def admin_set(self, match_id: int, admin_tg_id: int, player1_wins: int, player2_wins: int) -> models.RoundMatch:
-        if not self.users.is_admin(admin_tg_id):
-            raise RoundResultError("Нет прав администратора.")
         self.validate_score(player1_wins, player2_wins)
         match = self.get_match(match_id, lock=True)
+        tournament = self.db.get(models.Tournament, match.tournament_id)
+        if tournament is None or not self.users.can_manage_tournament(admin_tg_id, tournament):
+            raise RoundResultError("Нет прав организатора.")
         if match.player2_name is None:
             raise RoundResultError("Для bye результат вводить не нужно.")
         actor = self.users.get_by_tg_id(admin_tg_id)

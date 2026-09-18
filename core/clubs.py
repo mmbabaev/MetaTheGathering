@@ -67,6 +67,7 @@ class ClubIdentity:
     is_online: bool = False
     real_chat_id: int | None = None
     real_chat_label: str | None = None
+    is_draft: bool = False
 
 
 TEST_ANNOUNCEMENT_CHAT_ID = -1003631429183
@@ -126,6 +127,18 @@ def club_identities() -> list[ClubIdentity]:
             is_online=True,
             real_chat_id=-1003925371109,
             real_chat_label="@endstep_ru",
+        ),
+        ClubIdentity(
+            name="Endstep draft",
+            chat_id=app_cfg.endstep_draft_chat_id or 0,
+            aetherhub_url=None,
+            title_prefix="⏭️🦶 ",
+            magicoculus_city="Endstep",
+            timezone="Europe/Moscow",
+            is_online=True,
+            real_chat_id=app_cfg.endstep_draft_chat_id or 0,
+            real_chat_label="Endstep draft",
+            is_draft=True,
         ),
     ]
 

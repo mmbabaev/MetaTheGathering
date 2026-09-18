@@ -66,6 +66,7 @@ class RoundResultsHandler:
                 for match in matches
             )
         )
+        can_manage = bool(tg_id is not None and self.users.can_manage_tournament(tg_id, tournament))
         is_admin = bool(tg_id is not None and self.users.is_admin(tg_id))
         internal_swiss = tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS
         own_match = (
@@ -100,7 +101,7 @@ class RoundResultsHandler:
                 selected,
                 available,
                 can_report=can_report,
-                is_admin=is_admin,
+                is_admin=can_manage,
                 show_debug_next=settings.DEBUG and is_admin,
                 internal_swiss=internal_swiss,
                 planned_rounds=tournament.swiss_rounds,
@@ -260,8 +261,9 @@ class RoundResultsHandler:
             return DeliveryResult(screen=HandlerResult(str(exc), is_alert=True))
 
     def handle_admin_list(self, tournament_id: int, admin_tg_id: int) -> HandlerResult:
-        if not self.users.is_admin(admin_tg_id):
-            return HandlerResult("Нет прав администратора.", is_alert=True)
+        tournament = self.db.get(models.Tournament, tournament_id)
+        if tournament is None or not self.users.can_manage_tournament(admin_tg_id, tournament):
+            return HandlerResult("Нет прав организатора.", is_alert=True)
         round_number = self.results.latest_round_number(tournament_id)
         if round_number is None:
             return HandlerResult("Паринги ещё не загружены.", is_alert=True)
@@ -272,10 +274,11 @@ class RoundResultsHandler:
         )
 
     def handle_admin_match(self, match_id: int, admin_tg_id: int) -> HandlerResult:
-        if not self.users.is_admin(admin_tg_id):
-            return HandlerResult("Нет прав администратора.", is_alert=True)
         try:
             match = self.results.get_match(match_id)
+            tournament = self.db.get(models.Tournament, match.tournament_id)
+            if tournament is None or not self.users.can_manage_tournament(admin_tg_id, tournament):
+                return HandlerResult("Нет прав организатора.", is_alert=True)
             return HandlerResult(
                 f"{match.player1_name} против {match.player2_name}\n\nСколько выиграл {match.player1_name}?",
                 keyboard=self.keyboards.round_score_values_keyboard(
@@ -288,10 +291,11 @@ class RoundResultsHandler:
             return HandlerResult(str(exc), is_alert=True)
 
     def handle_admin_p1(self, match_id: int, admin_tg_id: int, player1_wins: int) -> HandlerResult:
-        if not self.users.is_admin(admin_tg_id):
-            return HandlerResult("Нет прав администратора.", is_alert=True)
         try:
             match = self.results.get_match(match_id)
+            tournament = self.db.get(models.Tournament, match.tournament_id)
+            if tournament is None or not self.users.can_manage_tournament(admin_tg_id, tournament):
+                return HandlerResult("Нет прав организатора.", is_alert=True)
             return HandlerResult(
                 f"{match.player1_name} выиграл {player1_wins}.\nСколько выиграл {match.player2_name}?",
                 keyboard=self.keyboards.round_score_values_keyboard(
@@ -316,8 +320,9 @@ class RoundResultsHandler:
             return HandlerResult(str(exc), is_alert=True)
 
     def handle_summary(self, tournament_id: int, admin_tg_id: int) -> HandlerResult:
-        if not self.users.is_admin(admin_tg_id):
-            return HandlerResult("Нет прав администратора.", is_alert=True)
+        tournament = self.db.get(models.Tournament, tournament_id)
+        if tournament is None or not self.users.can_manage_tournament(admin_tg_id, tournament):
+            return HandlerResult("Нет прав организатора.", is_alert=True)
         round_number = self.results.latest_round_number(tournament_id)
         if round_number is None:
             return HandlerResult("Паринги ещё не загружены.", is_alert=True)
@@ -357,6 +362,18 @@ class RoundResultsHandler:
         screen.new_round_numbers = [generated.round_number]
         return screen
 
+    def handle_draft_seating(self, tournament_id: int, actor_tg_id: int) -> HandlerResult:
+        try:
+            seats = InternalSwissService(self.db).generate_draft_seating(tournament_id, actor_tg_id)
+        except RoundResultError as exc:
+            return HandlerResult(str(exc), is_alert=True)
+        text = "🪑 Рассадка игроков\n\n" + "\n".join(f"{row.seat}. {row.display_name}" for row in seats)
+        return HandlerResult(
+            text,
+            keyboard=self.keyboards.draft_seating_keyboard(tournament_id),
+            tournament_id=tournament_id,
+        )
+
     def handle_swiss_standings(self, tournament_id: int, tg_id: int, page: int = 0) -> HandlerResult:
         try:
             tournament = self.db.get(models.Tournament, tournament_id)
@@ -393,11 +410,11 @@ class RoundResultsHandler:
             return HandlerResult(str(exc), is_alert=True)
 
     def handle_swiss_finish_prompt(self, tournament_id: int, admin_tg_id: int) -> HandlerResult:
-        if not self.users.is_privileged(admin_tg_id):
-            return HandlerResult("Нет прав.", is_alert=True)
         tournament = self.db.get(models.Tournament, tournament_id)
         if tournament is None or tournament.engine_mode != models.TournamentEngineMode.INTERNAL_SWISS:
             return HandlerResult("Внутренний Swiss-турнир не найден.", is_alert=True)
+        if not self.users.can_manage_tournament(admin_tg_id, tournament) and not self.users.is_privileged(admin_tg_id):
+            return HandlerResult("Нет прав.", is_alert=True)
         round_number = self.results.latest_round_number(tournament_id)
         if round_number is None or round_number < (tournament.swiss_rounds or 0):
             return HandlerResult(f"Сыграно раундов: {round_number or 0}/{tournament.swiss_rounds or 0}.", is_alert=True)

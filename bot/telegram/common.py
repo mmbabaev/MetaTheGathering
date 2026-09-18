@@ -126,6 +126,9 @@ async def _start_deck_deeplink(update: Update, context: ContextTypes.DEFAULT_TYP
         result = _player_handler(db).handle_deeplink_deck(tournament_id, tg_id=user.id)
         _set_registration_pending(context, result, tournament_id)
         await update.effective_message.reply_text(result.text, reply_markup=result.keyboard)
+        if result.tournament_id is not None:
+            card = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id)
+            await update.effective_message.reply_text(card.text, reply_markup=card.keyboard)
     finally:
         db.close()
 
@@ -142,6 +145,9 @@ async def _start_registration_deeplink(
         result = _player_handler(db).handle_deeplink_registration(tournament_id, tg_id=user.id)
         _set_registration_pending(context, result, tournament_id)
         await update.effective_message.reply_text(result.text, reply_markup=result.keyboard)
+        if result.tournament_id is not None:
+            card = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id)
+            await update.effective_message.reply_text(card.text, reply_markup=card.keyboard)
     finally:
         db.close()
 

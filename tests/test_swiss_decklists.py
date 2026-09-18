@@ -136,6 +136,20 @@ def test_reminder_selects_only_new_internal_events_with_missing_data(svc, user_s
     legacy = _internal_tournament(svc, creator=9002, reminders=False)
     _register(svc, user_svc, arch_svc, fresh.id, 1001, "Алиса")
     _register(svc, user_svc, arch_svc, legacy.id, 1002, "Боб")
+    draft = svc.create_tournament(
+        TournamentCreate(
+            title="Draft",
+            chat_id=-102,
+            is_online=True,
+            is_draft=True,
+            engine_mode=models.TournamentEngineMode.INTERNAL_SWISS,
+            registration_close_at=NOW + timedelta(minutes=15),
+            created_by_tg_id=9003,
+            decklist_reminders_enabled=True,
+        )
+    )
+    draft_player = user_svc.get_or_create(tg_id=1003, first_name="Драфтер")
+    svc.register_participant(tournament_id=draft.id, user_id=draft_player.id)
 
     recipients = SwissRequirementsReminderService(svc.db).pending(NOW)
 
@@ -185,3 +199,32 @@ def test_player_card_has_upload_then_read_only_action(db, svc, user_svc, arch_sv
     db.commit()
     card = handler.handle_tournament_select(tournament.id, 1001)
     assert any(button.text == "📄 Мой деклист" for row in card.keyboard.inline_keyboard for button in row)
+
+
+def test_draft_player_can_open_decklist_upload_without_archetype(
+    svc, user_svc, arch_svc, keyboards, aetherhub_svc, features
+):
+    tournament = svc.create_tournament(
+        TournamentCreate(
+            title="Draft",
+            chat_id=-103,
+            is_online=True,
+            is_draft=True,
+            engine_mode=models.TournamentEngineMode.INTERNAL_SWISS,
+            registration_close_at=NOW + timedelta(minutes=15),
+            created_by_tg_id=9001,
+            decklist_reminders_enabled=False,
+        )
+    )
+    player = user_svc.get_or_create(tg_id=1010, first_name="Draft", last_name="Player")
+    handler = PlayerHandler(svc, user_svc, arch_svc, keyboards, aetherhub_svc, features)
+    registration = handler.handle_register(tournament.id, player.tg_id)
+    assert registration.tournament_id == tournament.id
+    assert svc.get_participant(tournament.id, player.id).archetype_id is None
+
+    result = handler.handle_decklist_start(player.tg_id, tournament.id)
+
+    assert not result.is_alert
+    assert "Отправьте деклист" in result.text
+    card = handler.handle_tournament_select(tournament.id, player.tg_id)
+    assert all(button.text != "🃏 Выбрать колоду" for row in card.keyboard.inline_keyboard for button in row)

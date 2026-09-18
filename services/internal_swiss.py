@@ -24,6 +24,7 @@ MATCH_WIN_POINTS = 3
 MATCH_DRAW_POINTS = 1
 MIN_PERCENTAGE = 1 / 3
 INTERNAL_SWISS_ROUNDS = 4
+DRAFT_SWISS_ROUNDS = 3
 
 
 def recommended_swiss_rounds(player_count: int) -> int:
@@ -61,6 +62,14 @@ class SwissRoundResult:
     planned_rounds: int
     matches: int
     bye_user_id: int | None
+
+
+@dataclass(frozen=True)
+class DraftSeat:
+    seat: int
+    participant_id: int
+    user_id: int
+    display_name: str
 
 
 @dataclass
@@ -131,10 +140,47 @@ class InternalSwissService:
         self.db.refresh(tournament)
         return tournament
 
-    def generate_next_round(self, tournament_id: int, admin_tg_id: int) -> SwissRoundResult:
-        if not self.users.is_admin(admin_tg_id):
-            raise RoundResultError("Нет прав администратора.")
+    def generate_draft_seating(self, tournament_id: int, actor_tg_id: int) -> list[DraftSeat]:
         tournament = self._tournament(tournament_id, lock=True)
+        if not self.users.can_manage_tournament(actor_tg_id, tournament):
+            raise RoundResultError("Нет прав организатора турнира.")
+        self._ensure_internal(tournament)
+        if not tournament.is_draft:
+            raise RoundResultError("Рассадка доступна только для драфта.")
+        if tournament.status != models.TournamentStatus.REGISTRATION:
+            raise RoundResultError("Рассадку можно сформировать только до первого раунда.")
+        participants = self._participants(tournament_id)
+        if len(participants) < 2:
+            raise RoundResultError("Для рассадки нужны минимум два игрока.")
+        if tournament.draft_seating_generated_at is None:
+            shuffled = participants[:]
+            self.rng.shuffle(shuffled)
+            for seat, participant in enumerate(shuffled, start=1):
+                participant.draft_seat = seat
+                participant.swiss_initial_rank = seat
+            tournament.draft_seating_generated_at = models.utc_now()
+            tournament.swiss_rounds = DRAFT_SWISS_ROUNDS
+            self.db.commit()
+            participants = shuffled
+        else:
+            participants.sort(key=lambda row: row.draft_seat or 10**9)
+        return [
+            DraftSeat(
+                seat=participant.draft_seat or index,
+                participant_id=participant.id,
+                user_id=participant.user_id,
+                display_name=(
+                    format_participant_name(participant.user.first_name, participant.user.last_name)
+                    or (f"@{participant.user.username}" if participant.user.username else f"Игрок {participant.id}")
+                ),
+            )
+            for index, participant in enumerate(participants, start=1)
+        ]
+
+    def generate_next_round(self, tournament_id: int, admin_tg_id: int) -> SwissRoundResult:
+        tournament = self._tournament(tournament_id, lock=True)
+        if not self.users.can_manage_tournament(admin_tg_id, tournament):
+            raise RoundResultError("Нет прав организатора турнира.")
         self._ensure_internal(tournament)
         participants = self._participants(tournament_id)
         if len(participants) < 2:
@@ -146,10 +192,17 @@ class InternalSwissService:
                 raise RoundResultError("Первый раунд уже нельзя создать в текущем статусе турнира.")
             if tournament.registration_close_at is None:
                 raise RoundResultError("У турнира не указано время начала.")
-            if any(participant.archetype_id is None for participant in participants):
+            if tournament.is_draft and tournament.draft_seating_generated_at is None:
+                raise RoundResultError("Сначала сформируйте рассадку игроков.")
+            if any(participant.archetype_id is None for participant in participants) and not tournament.is_draft:
                 raise RoundResultError("Перед первым раундом у всех игроков должен быть указан архетип.")
-            self._assign_initial_ranks(participants)
-            tournament.swiss_rounds = recommended_swiss_rounds(len(participants))
+            if tournament.is_draft:
+                if any(participant.draft_seat is None for participant in participants):
+                    raise RoundResultError("Рассадка повреждена. Сформируйте её заново.")
+                tournament.swiss_rounds = DRAFT_SWISS_ROUNDS
+            else:
+                self._assign_initial_ranks(participants)
+                tournament.swiss_rounds = recommended_swiss_rounds(len(participants))
             tournament.status = models.TournamentStatus.ONGOING
             tournament.started_at = tournament.started_at or models.utc_now()
             tournament.show_round_pairings = True
@@ -164,7 +217,10 @@ class InternalSwissService:
 
         next_round = (current_round or 0) + 1
         standings = self.standings(tournament_id)
-        pairs, bye_user_id = self._build_pairings(tournament_id, standings)
+        if tournament.is_draft and next_round == 1:
+            pairs, bye_user_id = self._draft_first_round_pairings(participants)
+        else:
+            pairs, bye_user_id = self._build_pairings(tournament_id, standings)
         by_user_id = {participant.user_id: participant for participant in participants}
         source_names = self._source_names(participants)
 
@@ -220,9 +276,9 @@ class InternalSwissService:
         )
 
     def finish(self, tournament_id: int, admin_tg_id: int) -> list[SwissStanding]:
-        if not self.users.is_privileged(admin_tg_id):
-            raise RoundResultError("Нет прав.")
         tournament = self._tournament(tournament_id, lock=True)
+        if not self.users.can_manage_tournament(admin_tg_id, tournament) and not self.users.is_privileged(admin_tg_id):
+            raise RoundResultError("Нет прав.")
         self._ensure_internal(tournament)
         if tournament.status != models.TournamentStatus.ONGOING:
             raise RoundResultError("Завершить можно только идущий Swiss-турнир.")
@@ -244,6 +300,16 @@ class InternalSwissService:
         tournament.closed_by_tg_id = admin_tg_id
         self.db.commit()
         return standings
+
+    @staticmethod
+    def _draft_first_round_pairings(
+        participants: list[models.Participant],
+    ) -> tuple[list[tuple[int, int]], int | None]:
+        ordered = sorted(participants, key=lambda row: row.draft_seat or 10**9)
+        bye = ordered.pop() if len(ordered) % 2 else None
+        half = len(ordered) // 2
+        pairs = [(ordered[index].user_id, ordered[index + half].user_id) for index in range(half)]
+        return pairs, bye.user_id if bye else None
 
     def standings(self, tournament_id: int) -> list[SwissStanding]:
         tournament = self._tournament(tournament_id)

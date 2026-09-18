@@ -147,6 +147,8 @@ class Settings(BaseSettings):
             ids.append(_app_cfg.hobby_games_chat_id)
         if _app_cfg.endstep_ru_chat_id:
             ids.append(_app_cfg.endstep_ru_chat_id)
+        if _app_cfg.endstep_draft_chat_id:
+            ids.append(_app_cfg.endstep_draft_chat_id)
         return list(dict.fromkeys(ids))
 
 

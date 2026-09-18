@@ -5,7 +5,8 @@ import logging
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import BadRequest, Forbidden, TelegramError
 
-from bot.deeplink import deck_deeplink
+from bot.deeplink import deck_deeplink, registration_deeplink
+from core import models
 from core.config import Club
 from core.database import SessionLocal
 from services.feature_flags import FeatureFlags, FeatureFlagService
@@ -18,10 +19,10 @@ from services.registration_message import (
 logger = logging.getLogger(__name__)
 
 
-def _markup(button_url: str | None):
+def _markup(button_url: str | None, button_label: str = "📝 Записать колоду"):
     if not button_url:
         return None
-    return InlineKeyboardMarkup([[InlineKeyboardButton("📝 Записать колоду", url=button_url)]])
+    return InlineKeyboardMarkup([[InlineKeyboardButton(button_label, url=button_url)]])
 
 
 async def send_registration_open(
@@ -33,21 +34,31 @@ async def send_registration_open(
     if not targets:
         return 0
 
+    tournament = db.get(models.Tournament, tournament_id)
     button_url = None
     try:
         me = await bot.get_me()
-        button_url = deck_deeplink(me.username, tournament_id)
+        button_url = (
+            registration_deeplink(me.username, tournament_id)
+            if tournament is not None and tournament.is_draft
+            else deck_deeplink(me.username, tournament_id)
+        )
     except TelegramError:
         logger.exception("send_registration_open: get_me failed for #%s — шлём без кнопки", tournament_id)
 
     live_count_enabled = FeatureFlagService(db).is_enabled(FeatureFlags.LIVE_REGISTRATION_COUNT)
     service = RegistrationMessageService(db)
+    button_label = "📝 Записаться" if tournament is not None and tournament.is_draft else "📝 Записать колоду"
     participant_count = service.participant_count(tournament_id)
     text = format_registration_message(base_text, participant_count) if live_count_enabled else base_text
     sent = 0
     for chat_id in targets:
         try:
-            message = await bot.send_message(chat_id=chat_id, text=text, reply_markup=_markup(button_url))
+            message = await bot.send_message(
+                chat_id=chat_id,
+                text=text,
+                reply_markup=_markup(button_url, button_label),
+            )
             sent += 1
             if not isinstance(message.message_id, int):
                 continue
@@ -84,11 +95,12 @@ class RegistrationMessageRefreshJob:
                     else row.base_text
                 )
                 try:
+                    button_label = "📝 Записаться" if row.tournament.is_draft else "📝 Записать колоду"
                     await bot.edit_message_text(
                         chat_id=row.chat_id,
                         message_id=row.message_id,
                         text=text,
-                        reply_markup=_markup(row.button_url),
+                        reply_markup=_markup(row.button_url, button_label),
                     )
                 except BadRequest as exc:
                     message = str(exc).lower()

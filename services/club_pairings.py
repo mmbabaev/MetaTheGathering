@@ -52,7 +52,7 @@ class ClubPairingsService:
             tournament is None
             or tournament.status == models.TournamentStatus.CLOSED
             or not tournament.chat_id
-            or not self._schedule.pairings_publication_enabled(tournament.club)
+            or (not tournament.is_draft and not self._schedule.pairings_publication_enabled(tournament.club))
         ):
             return None
 

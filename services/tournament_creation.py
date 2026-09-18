@@ -15,7 +15,7 @@ from core.clubs import ClubIdentity, club_identities
 from core.config import Club
 from core.schemas import TournamentCreate, TournamentRead
 from services.cellar import CELLAR_CLUB_NAME, CellarService
-from services.club_settings import ClubAnnouncementSettingsService
+from services.club_settings import AnnouncementTarget, ClubAnnouncementSettingsService
 from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.tournament import TournamentService
 from services.utils import get_tournament
@@ -82,6 +82,8 @@ class TournamentCreationPlanService:
         if existing is not None:
             raise InvalidCreationPlan("Турнир этого клуба на выбранное время уже запланирован.")
         target = ClubAnnouncementSettingsService(self.db).current_target(identity)
+        if identity.is_draft:
+            target = AnnouncementTarget("real", identity.chat_id, identity.real_chat_label or identity.name)
         row = models.TournamentCreationPlan(
             club_name=club_name,
             created_by_tg_id=created_by_tg_id,
@@ -130,15 +132,29 @@ class TournamentCreationPlanService:
         if plan.tournament_id is None:
             date_str = event_at_local.strftime("%Y-%m-%d")
             club_slug = "-".join(identity.name.lower().split())
+            internal_swiss = identity.is_draft or identity.name == "Endstep-ru"
+            slug_suffix = "draft" if identity.is_draft else "pauper"
+            title = (
+                f"{identity.title_prefix}{identity.name} {event_at_local.strftime('%d.%m.%Y')}"
+                if identity.is_draft
+                else f"{identity.title_prefix}{identity.name} Pauper {event_at_local.strftime('%d.%m.%Y')}"
+            )
             tournament = TournamentService(self.db).create_tournament(
                 TournamentCreate(
-                    title=f"{identity.title_prefix}{identity.name} Pauper {event_at_local.strftime('%d.%m.%Y')}",
+                    title=title,
                     chat_id=plan.announcement_chat_id or 0,
-                    slug=f"{date_str}-{club_slug}-pauper",
+                    slug=f"{date_str}-{club_slug}-{slug_suffix}",
                     club=identity.name,
                     is_online=identity.is_online,
+                    is_draft=identity.is_draft,
+                    engine_mode=(
+                        models.TournamentEngineMode.INTERNAL_SWISS
+                        if internal_swiss
+                        else models.TournamentEngineMode.AETHERHUB
+                    ),
                     registration_close_at=plan.event_at,
                     created_by_tg_id=plan.created_by_tg_id,
+                    decklist_reminders_enabled=not identity.is_draft,
                 )
             )
             plan.tournament_id = tournament.id

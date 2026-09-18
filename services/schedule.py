@@ -149,6 +149,8 @@ class ScheduleService:
         existing = set(self.db.execute(select(models.ClubSettingsRow.club_name)).scalars().all())
         created = 0
         for identity in club_identities():
+            if identity.is_draft:
+                continue
             if identity.name in existing:
                 continue
             self.db.add(models.ClubSettingsRow(club_name=identity.name, publish_pairings=False))

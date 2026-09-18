@@ -135,6 +135,8 @@ class PlayerHandler:
                     has_deck = participant.archetype_id is not None
             is_admin = self.user_svc.is_admin(tg_id)
             is_scorekeeper = self.user_svc.is_scorekeeper(tg_id)
+        can_manage_draft = bool(tg_id is not None and t.is_draft and self.user_svc.can_manage_tournament(tg_id, t))
+        registration_locked = bool(t.is_draft and t.draft_seating_generated_at is not None)
         participants = self.svc.list_participants_for_tournament(t.id)
         with_deck = sum(1 for p in participants if p.archetype)
         has_pairings = self._has_pairings(t)
@@ -143,8 +145,11 @@ class PlayerHandler:
             t.title,
             t.status.label_ru,
             total=len(participants),
-            with_deck=with_deck,
+            with_deck=None if t.is_draft else with_deck,
         )
+        if t.is_draft and t.status == models.TournamentStatus.REGISTRATION:
+            stage = "рассадка сформирована; ожидаем первый раунд" if registration_locked else "идёт регистрация"
+            text += f"\nЭтап драфта: {stage}."
         payment_enabled = self.feature_svc.is_payment_enabled()
         decklists = DecklistService(self.svc.db)
         internal_swiss = t.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS
@@ -176,7 +181,7 @@ class PlayerHandler:
                 is_admin=is_admin,
                 decks_hidden=t.decks_hidden,
                 show_fill_opponents=show_fill_opponents,
-                has_deck=has_deck,
+                has_deck=has_deck or t.is_draft,
                 aetherhub_url=getattr(t, "aetherhub_url", None),
                 import_time=getattr(t, "aetherhub_import_time", None),
                 payment_enabled=payment_enabled,
@@ -187,6 +192,9 @@ class PlayerHandler:
                 can_close=(is_scorekeeper and not is_admin and t.status != models.TournamentStatus.CLOSED),
                 decklist_action=decklist_action,
                 can_view_decklists=can_view_decklists,
+                registration_locked=registration_locked,
+                can_manage_draft=can_manage_draft and t.status == models.TournamentStatus.REGISTRATION,
+                draft_seating_ready=registration_locked,
             ),
         )
 
@@ -236,6 +244,15 @@ class PlayerHandler:
             user = self.user_svc.get_by_tg_id(tg_id)
             if user is None or not has_complete_person_name(user.first_name, user.last_name):
                 return HandlerResult(NAME_REQUIRED_FOR_REGISTRATION, needs_name=True)
+            tournament = get_tournament(self.svc.db, tournament_id)
+            if tournament.is_draft:
+                try:
+                    self.svc.register_participant(tournament_id=tournament_id, user_id=user.id)
+                except errors.ParticipantAlreadyRegistered:
+                    return HandlerResult(ALREADY_REGISTERED, is_alert=True)
+                except (errors.ParticipantError, errors.TournamentInvalidState) as exc:
+                    return HandlerResult(str(exc) or REGISTRATION_CLOSED, is_alert=True)
+                return HandlerResult("✅ Вы записаны на драфт.", tournament_id=tournament_id)
         return self._archetype_keyboard_for_player(tournament_id, tg_id)
 
     def handle_deeplink_deck(self, tournament_id: int, tg_id: int) -> HandlerResult:
@@ -592,7 +609,13 @@ class PlayerHandler:
         if t.show_round_pairings and self._has_pairings(t):
             return RoundResultsHandler(self.svc.db, self.keyboards).handle_round_status(tournament_id, tg_id)
         participants = sort_participants(self.svc.list_participants_for_tournament(tournament_id))
-        text = format_tournament_status(t.title, t.status.label_ru, participants, decks_hidden=t.decks_hidden)
+        text = format_tournament_status(
+            t.title,
+            t.status.label_ru,
+            participants,
+            decks_hidden=t.decks_hidden,
+            show_deck_counts=not t.is_draft,
+        )
         return HandlerResult(text)
 
     def handle_decklist_start(self, tg_id: int, tournament_id: int) -> HandlerResult:
@@ -604,7 +627,7 @@ class PlayerHandler:
             participant = DecklistService(self.svc.db).participant_for_user(tournament_id, tg_id)
             if participant is None:
                 raise errors.DecklistError("Сначала запишитесь на турнир.")
-            if participant.archetype_id is None:
+            if participant.archetype_id is None and not tournament.is_draft:
                 raise errors.DecklistError("Сначала выберите архетип колоды.")
         except (errors.TournamentNotFound, errors.DecklistError) as exc:
             return HandlerResult(str(exc) or TOURNAMENT_NOT_FOUND, is_alert=True)
@@ -686,6 +709,8 @@ class PlayerHandler:
                 SWISS_DROP_CONFIRM_PROMPT,
                 keyboard=self.keyboards.swiss_drop_confirm_keyboard(tournament_id),
             )
+        if tournament.is_draft and tournament.draft_seating_generated_at is not None:
+            return HandlerResult("После формирования рассадки выйти из турнира нельзя.", is_alert=True)
         return HandlerResult(LEAVE_CONFIRM_PROMPT, keyboard=self.keyboards.leave_confirm_keyboard(tournament_id))
 
     def handle_leave_confirm(self, tg_id: int, tournament_id: int) -> HandlerResult:
@@ -703,5 +728,7 @@ class PlayerHandler:
                 return HandlerResult(SWISS_DROPPED)
             self.svc.unregister_participant(tournament_id, user.id)
             return HandlerResult(LEFT_TOURNAMENT)
-        except errors.ParticipantNotFound:
+        except (errors.ParticipantNotFound, errors.ParticipantError) as exc:
+            if isinstance(exc, errors.ParticipantError) and str(exc):
+                return HandlerResult(str(exc), is_alert=True)
             return HandlerResult(NOT_REGISTERED_IN_TOURNAMENT, is_alert=True)

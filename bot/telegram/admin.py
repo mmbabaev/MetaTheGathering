@@ -354,6 +354,7 @@ async def cmd_create_tournament(update: Update, context: ContextTypes.DEFAULT_TY
             title,
             club=identity.name if identity else None,
             is_online=identity.is_online if identity else False,
+            is_draft=identity.is_draft if identity else False,
             title_prefix=identity.title_prefix if identity else "",
         )
         if result.is_alert:
@@ -753,6 +754,8 @@ async def callback_admin_more(update: Update, context: ContextTypes.DEFAULT_TYPE
             is_online = t.is_online
             show_round_pairings = t.show_round_pairings
             internal_swiss = t.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS
+            is_draft = t.is_draft
+            draft_seating_ready = t.draft_seating_generated_at is not None
             has_pairings = AetherhubImportService(db).has_pairings(tournament_id)
         except svc_errors.TournamentNotFound:
             is_closed = False
@@ -760,6 +763,8 @@ async def callback_admin_more(update: Update, context: ContextTypes.DEFAULT_TYPE
             is_online = False
             show_round_pairings = False
             internal_swiss = False
+            is_draft = False
+            draft_seating_ready = False
             has_pairings = False
     finally:
         db.close()
@@ -776,6 +781,8 @@ async def callback_admin_more(update: Update, context: ContextTypes.DEFAULT_TYPE
             show_round_pairings=show_round_pairings,
             show_internal_beta=True,
             internal_swiss=internal_swiss,
+            is_draft=is_draft,
+            draft_seating_ready=draft_seating_ready,
         ),
     )
     await query.answer()
@@ -885,6 +892,8 @@ async def callback_reveal_decks_cancel(update: Update, context: ContextTypes.DEF
                 show_round_pairings=t.show_round_pairings,
                 show_internal_beta=UserService(db).is_admin(user.id),
                 internal_swiss=t.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS,
+                is_draft=t.is_draft,
+                draft_seating_ready=t.draft_seating_generated_at is not None,
             ),
         )
     except svc_errors.TournamentNotFound:

@@ -29,6 +29,7 @@ class ClubSettingsHandler:
         buttons = [
             (index, f"{identity.title_prefix}{identity.name} · {self.settings.current_target(identity).label}")
             for index, identity in enumerate(clubs)
+            if not identity.is_draft
         ]
         return HandlerResult(
             "⚙️ Чаты клубов\n\nВыберите клуб. Настройка действует на новые ручные турниры:",
@@ -73,4 +74,5 @@ class ClubSettingsHandler:
     @staticmethod
     def _identity(club_index: int) -> ClubIdentity | None:
         identities = club_identities()
-        return identities[club_index] if 0 <= club_index < len(identities) else None
+        identity = identities[club_index] if 0 <= club_index < len(identities) else None
+        return identity if identity is not None and not identity.is_draft else None
