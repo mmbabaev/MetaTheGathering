@@ -413,7 +413,9 @@ class RoundResultsHandler:
         tournament = self.db.get(models.Tournament, tournament_id)
         if tournament is None or tournament.engine_mode != models.TournamentEngineMode.INTERNAL_SWISS:
             return HandlerResult("Внутренний Swiss-турнир не найден.", is_alert=True)
-        if not self.users.can_manage_tournament(admin_tg_id, tournament) and not self.users.is_privileged(admin_tg_id):
+        if not self.users.can_manage_tournament(
+            admin_tg_id, tournament
+        ) and not self.users.is_privileged_for_tournament(admin_tg_id, tournament):
             return HandlerResult("Нет прав.", is_alert=True)
         round_number = self.results.latest_round_number(tournament_id)
         if round_number is None or round_number < (tournament.swiss_rounds or 0):

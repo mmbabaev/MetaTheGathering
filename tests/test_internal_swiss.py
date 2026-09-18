@@ -374,7 +374,7 @@ def test_four_round_internal_event_finishes_and_persists_places(db):
     assert f"rr_open:{tournament.id}" not in callbacks
 
 
-def test_scorekeeper_can_finish_internal_event_and_is_recorded(db):
+def test_scorekeeper_cannot_finish_online_internal_event(db):
     tournament, users, admin, engine = _setup(db, 4)
     scorekeeper = users[1]
     scorekeeper.is_scorekeeper = True
@@ -387,13 +387,13 @@ def test_scorekeeper_can_finish_internal_event_and_is_recorded(db):
                 results.admin_set(match.id, admin.tg_id, 2, 0)
 
     prompt = RoundResultsHandler(db).handle_swiss_finish_prompt(tournament.id, scorekeeper.tg_id)
-    standings = engine.finish(tournament.id, scorekeeper.tg_id)
-
-    assert not prompt.is_alert
-    assert len(standings) == 4
+    assert prompt.is_alert
+    assert prompt.text == "Нет прав."
+    with pytest.raises(RoundResultError, match="Нет прав"):
+        engine.finish(tournament.id, scorekeeper.tg_id)
     stored = db.get(models.Tournament, tournament.id)
-    assert stored.status == models.TournamentStatus.CLOSED
-    assert stored.closed_by_tg_id == scorekeeper.tg_id
+    assert stored.status == models.TournamentStatus.ONGOING
+    assert stored.closed_by_tg_id is None
 
 
 def test_finish_includes_dropped_player_and_persists_final_place(db):

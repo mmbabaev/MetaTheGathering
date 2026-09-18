@@ -91,6 +91,10 @@ class AdminHandler:
         except errors.MultipleActiveTournaments:
             return None, HandlerResult(MULTIPLE_TOURNAMENTS_MSG)
 
+    def _is_privileged_for_tournament(self, tg_id: int, tournament_id: int) -> bool:
+        tournament = self.svc.db.get(models.Tournament, tournament_id)
+        return bool(tournament and self.user_svc.is_privileged_for_tournament(tg_id, tournament))
+
     def handle_add_players(
         self,
         tg_id: int,
@@ -104,6 +108,8 @@ class AdminHandler:
         active, err = self._resolve_tournament()
         if err:
             return err
+        if not self.user_svc.is_privileged_for_tournament(tg_id, active):
+            return HandlerResult(NOT_ADMIN)
         results = []
         for target_tg_id, uname, fname, deck_name in entries:
             user_label = _player_display_label(uname, fname, target_tg_id)
@@ -140,7 +146,10 @@ class AdminHandler:
         Игроки ищутся в БД по имени; если не найдены — создаются с placeholder tg_id.
         Уже зарегистрированные пропускаются.
         """
-        if not self.user_svc.is_privileged(tg_id):
+        tournament = self.svc.db.get(models.Tournament, tournament_id)
+        if tournament is None:
+            return HandlerResult(TOURNAMENT_NOT_FOUND)
+        if not self.user_svc.is_privileged_for_tournament(tg_id, tournament):
             return HandlerResult(NOT_ADMIN)
 
         parsed: list[tuple[str, str | None]] = []
@@ -228,13 +237,16 @@ class AdminHandler:
 
     def handle_admin_status(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Список участников с кнопками для редактирования колоды (admin view)."""
-        if not self.user_svc.is_privileged(tg_id):
+        tournament = self.svc.db.get(models.Tournament, tournament_id)
+        if tournament is None:
+            return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
+        if not self.user_svc.is_privileged_for_tournament(tg_id, tournament):
             return HandlerResult(NOT_ADMIN)
         return self._tournament_status_result(tournament_id, tg_id=tg_id)
 
     def handle_admin_show_filled(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Разворачивает скрытых заполненных участников или столы."""
-        if not self.user_svc.is_privileged(tg_id):
+        if not self._is_privileged_for_tournament(tg_id, tournament_id):
             return HandlerResult(NOT_ADMIN)
         return self._tournament_status_result(tournament_id, show_filled=True, tg_id=tg_id)
 
@@ -270,7 +282,11 @@ class AdminHandler:
         arch_list, has_more = build_archetype_menu(self.arch_svc, player_tg_id, expanded)
         caller = self.user_svc.get_by_tg_id(caller_tg_id) if caller_tg_id else None
         show_emoji = not (caller and caller.hide_deck_emoji)
-        show_actions = self.user_svc.is_privileged(caller_tg_id) if caller_tg_id else False
+        show_actions = bool(
+            caller_tg_id
+            and tournament_id is not None
+            and self._is_privileged_for_tournament(caller_tg_id, tournament_id)
+        )
         return HandlerResult(
             CHOOSE_ARCHETYPE,
             keyboard=self.keyboards.admin_archetype_select_keyboard(
@@ -285,11 +301,14 @@ class AdminHandler:
 
     def handle_pick_participant_arch(self, tg_id: int, participant_id: int, expanded: bool = False) -> HandlerResult:
         """Показывает выбор архетипа для конкретного участника."""
-        if not self.user_svc.is_privileged(tg_id) and not self._features.can_fill_opponent_decks():
-            return HandlerResult(NOT_ADMIN)
         p = self.svc.get_participant_by_id(participant_id)
         if p is None:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
+        if (
+            not self._is_privileged_for_tournament(tg_id, p.tournament_id)
+            and not self._features.can_fill_opponent_decks()
+        ):
+            return HandlerResult(NOT_ADMIN)
         user = self.user_svc.get_by_id(p.user_id)
         player_tg_id = user.tg_id if user else None
         return self._archetype_keyboard_for_participant(
@@ -302,11 +321,14 @@ class AdminHandler:
 
     def handle_set_participant_arch(self, tg_id: int, participant_id: int, archetype_id: int) -> HandlerResult:
         """Устанавливает архетип участнику, затем возвращает обновлённый статус турнира."""
-        if not self.user_svc.is_privileged(tg_id) and not self._features.can_fill_opponent_decks():
-            return HandlerResult(NOT_ADMIN)
         p = self.svc.get_participant_by_id(participant_id)
         if p is None:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
+        if (
+            not self._is_privileged_for_tournament(tg_id, p.tournament_id)
+            and not self._features.can_fill_opponent_decks()
+        ):
+            return HandlerResult(NOT_ADMIN)
         archetypes = {a.id: a.name for a in self.arch_svc.list_archetypes()}
         arch_name = archetypes.get(archetype_id, "?")
         target = self.user_svc.get_by_id(p.user_id)
@@ -327,11 +349,14 @@ class AdminHandler:
 
     def handle_set_participant_custom_arch(self, tg_id: int, participant_id: int, arch_name: str) -> HandlerResult:
         """Создаёт архетип по введённому названию и присваивает участнику."""
-        if not self.user_svc.is_privileged(tg_id) and not self._features.can_fill_opponent_decks():
-            return HandlerResult(NOT_ADMIN)
         p = self.svc.get_participant_by_id(participant_id)
         if p is None:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
+        if (
+            not self._is_privileged_for_tournament(tg_id, p.tournament_id)
+            and not self._features.can_fill_opponent_decks()
+        ):
+            return HandlerResult(NOT_ADMIN)
         target = self.user_svc.get_by_id(p.user_id)
         try:
             arch = self.arch_svc.get_or_create_by_name(arch_name, is_custom=True)
@@ -352,21 +377,23 @@ class AdminHandler:
     def handle_player_actions(self, tg_id: int, participant_id: int, tournament_id: int) -> HandlerResult:
         """Меню действий с игроком (⋯); права отдельных кнопок задаёт клавиатура."""
         is_admin = self.user_svc.is_admin(tg_id)
-        is_privileged = self.user_svc.is_privileged(tg_id)
         p = self.svc.get_participant_by_id(participant_id)
         if p is None:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
         user = self.user_svc.get_by_id(p.user_id)
         has_pairings = AetherhubImportService(self.svc.db).has_pairings(tournament_id)
         tournament = get_tournament(self.svc.db, tournament_id)
+        is_privileged = self.user_svc.is_privileged_for_tournament(tg_id, tournament)
         is_target_scorekeeper = bool(user.is_scorekeeper) if user else False
         is_target_poll_organizer = bool(user.is_poll_organizer) if user else False
         name = (
             format_participant_name(user.first_name if user else None, user.last_name if user else None) or f"id{p.id}"
         )
-        arch_name = p.archetype.name if p.archetype else "колода не указана"
         username_str = f"\n@{user.username}" if user and user.username else ""
-        text = f"Игрок: {name}{username_str}\nКолода: {arch_name}"
+        text = f"Игрок: {name}{username_str}"
+        if is_privileged:
+            arch_name = p.archetype.name if p.archetype else "колода не указана"
+            text += f"\nКолода: {arch_name}"
         return HandlerResult(
             text,
             keyboard=self.keyboards.admin_player_actions_keyboard(
@@ -420,6 +447,8 @@ class AdminHandler:
 
     def handle_player_opponents(self, tg_id: int, participant_id: int, tournament_id: int) -> HandlerResult:
         """Список оппонентов игрока из AetherHub-пейрингов."""
+        if not self._is_privileged_for_tournament(tg_id, tournament_id):
+            return HandlerResult(NOT_ADMIN, is_alert=True)
         p = self.svc.get_participant_by_id(participant_id)
         if p is None:
             return HandlerResult(PARTICIPANT_NOT_FOUND, is_alert=True)
@@ -459,7 +488,7 @@ class AdminHandler:
 
     def handle_remove_participant_confirm(self, tg_id: int, participant_id: int, tournament_id: int) -> HandlerResult:
         """Запрос подтверждения перед удалением участника."""
-        if not self.user_svc.is_privileged(tg_id):
+        if not self._is_privileged_for_tournament(tg_id, tournament_id):
             return HandlerResult(NOT_ADMIN, is_alert=True)
         p = self.svc.get_participant_by_id(participant_id)
         if p is None or p.tournament_id != tournament_id:
@@ -481,7 +510,7 @@ class AdminHandler:
 
     def handle_remove_participant(self, tg_id: int, participant_id: int, tournament_id: int) -> HandlerResult:
         """Удаляет участника из турнира и возвращает обновлённый статус."""
-        if not self.user_svc.is_privileged(tg_id):
+        if not self._is_privileged_for_tournament(tg_id, tournament_id):
             return HandlerResult(NOT_ADMIN, is_alert=True)
         p = self.svc.get_participant_by_id(participant_id)
         if p is None or p.tournament_id != tournament_id:
@@ -544,6 +573,12 @@ class AdminHandler:
         if not self.user_svc.is_privileged(tg_id):
             return HandlerResult(NOT_ADMIN)
         tournaments = self.svc.list_all_active_tournaments()
+        if not self.user_svc.is_admin(tg_id):
+            tournaments = [
+                tournament
+                for tournament in tournaments
+                if self.user_svc.is_privileged_for_tournament(tg_id, tournament)
+            ]
         if not tournaments:
             return HandlerResult(NO_ACTIVE_TOURNAMENT)
         blocks = [
@@ -565,6 +600,8 @@ class AdminHandler:
         active, err = self._resolve_tournament()
         if err:
             return err
+        if not self.user_svc.is_privileged_for_tournament(tg_id, active):
+            return HandlerResult(NOT_ADMIN)
         return self.handle_close_tournament_by_id(tg_id, active.id)
 
     def handle_close_tournament_by_id(
@@ -573,12 +610,12 @@ class AdminHandler:
         tournament_id: int,
         confirmed: bool = False,
     ) -> HandlerResult:
-        if not self.user_svc.is_privileged(tg_id):
-            return HandlerResult(NOT_ADMIN, is_alert=True)
         try:
             tournament = get_tournament(self.svc.db, tournament_id)
         except errors.TournamentNotFound:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
+        if not self.user_svc.is_privileged_for_tournament(tg_id, tournament):
+            return HandlerResult(NOT_ADMIN, is_alert=True)
         if tournament.status == models.TournamentStatus.CLOSED:
             return HandlerResult("⚠️ Турнир уже закрыт.", is_alert=True)
 
@@ -679,27 +716,36 @@ class AdminHandler:
 
     def handle_export_players(self, tg_id: int, tournament_id: int) -> str | None:
         """Возвращает plain-text список «Имя Фамилия» или None если нет прав."""
-        if not self.user_svc.is_privileged(tg_id):
-            return None
         try:
+            tournament = self.svc.db.get(models.Tournament, tournament_id)
+            if not self.user_svc.is_admin(tg_id) and (
+                tournament is None or not self.user_svc.is_privileged_for_tournament(tg_id, tournament)
+            ):
+                return None
             return ExportService(self.svc.db).export_players_list(tournament_id)
         except errors.TournamentNotFound:
             return None
 
     def handle_export_swiss_players(self, tg_id: int, tournament_id: int) -> str | None:
         """Возвращает Swiss-список с Telegram-никами, очками и городами."""
-        if not self.user_svc.is_privileged(tg_id):
-            return None
         try:
+            tournament = self.svc.db.get(models.Tournament, tournament_id)
+            if not self.user_svc.is_admin(tg_id) and (
+                tournament is None or not self.user_svc.is_privileged_for_tournament(tg_id, tournament)
+            ):
+                return None
             return ExportService(self.svc.db).export_swiss_players_with_points(tournament_id)
         except errors.TournamentNotFound:
             return None
 
     def handle_export_excel(self, tg_id: int, tournament_id: int) -> list[tuple[bytes, str]] | None:
         """Файлы Excel-выгрузки: участники + паринги (если известны). None если нет прав."""
-        if not self.user_svc.is_privileged(tg_id):
-            return None
         try:
+            tournament = self.svc.db.get(models.Tournament, tournament_id)
+            if not self.user_svc.is_admin(tg_id) and (
+                tournament is None or not self.user_svc.is_privileged_for_tournament(tg_id, tournament)
+            ):
+                return None
             export = ExportService(self.svc.db)
             files = [export.export_participants_excel(tournament_id)]
             pairings = export.export_pairings_excel(tournament_id)
@@ -716,13 +762,11 @@ class AdminHandler:
         картинку собирает `bot.chart` — рисование уходит в поток, и держать эту механику
         в чистом хендлере незачем.
         """
-        if not self.user_svc.is_privileged(tg_id):
-            return False
         try:
-            get_tournament(self.svc.db, tournament_id)
+            tournament = get_tournament(self.svc.db, tournament_id)
         except errors.TournamentNotFound:
             return False
-        return True
+        return self.user_svc.is_privileged_for_tournament(tg_id, tournament)
 
     def standings_availability(self, tg_id: int, tournament_id: int) -> str:
         """Доступность «Итоговых стендингов»: 'no_access' | 'not_ready' | 'ok'.
@@ -787,19 +831,20 @@ class AdminHandler:
 
     def handle_meta_import_start(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Показывает инструкцию — бот ждёт текст таблицы."""
-        if not self.user_svc.is_privileged(tg_id):
-            return HandlerResult(NOT_ADMIN, is_alert=True)
         try:
-            get_tournament(self.svc.db, tournament_id)
+            tournament = get_tournament(self.svc.db, tournament_id)
         except errors.TournamentNotFound:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
+        if not self.user_svc.is_privileged_for_tournament(tg_id, tournament):
+            return HandlerResult(NOT_ADMIN, is_alert=True)
         return HandlerResult(META_IMPORT_PROMPT, tournament_id=tournament_id)
 
     def handle_meta_import_table(self, tg_id: int, tournament_id: int, text: str) -> HandlerResult:
         """Парсит и импортирует таблицу мета-данных."""
-        if not self.user_svc.is_privileged(tg_id):
-            return HandlerResult(NOT_ADMIN, is_alert=True)
         try:
+            tournament = get_tournament(self.svc.db, tournament_id)
+            if not self.user_svc.is_privileged_for_tournament(tg_id, tournament):
+                return HandlerResult(NOT_ADMIN, is_alert=True)
             result = MetaTableImportService(self.svc.db).import_from_table(tournament_id, text, added_by_tg_id=tg_id)
         except errors.TournamentNotFound:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)

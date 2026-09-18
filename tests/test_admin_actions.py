@@ -1359,6 +1359,42 @@ class TestScorekeeperPermissions:
         cbs = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
         assert any(cb.startswith(CB_ADMIN_PLAYER_ACTIONS) for cb in cbs)
 
+    def test_scorekeeper_has_no_admin_access_to_online_tournament(
+        self, db, handler, svc, scorekeeper_user, active_tournament, user_alice
+    ):
+        tournament = db.get(m.Tournament, active_tournament.id)
+        tournament.is_online = True
+        svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id)
+        participant = svc.get_participant(tournament.id, user_alice.id)
+        db.commit()
+
+        status = handler.handle_admin_status(SCOREKEEPER_TG_ID, tournament.id)
+        bulk_add = handler.handle_bulk_add_by_name(SCOREKEEPER_TG_ID, tournament.id, ["Иванов Иван"])
+        player_actions = handler.handle_player_actions(SCOREKEEPER_TG_ID, participant.id, tournament.id)
+        close = handler.handle_close_tournament_by_id(SCOREKEEPER_TG_ID, tournament.id)
+
+        assert status.text == NOT_ADMIN
+        assert bulk_add.text == NOT_ADMIN
+        player_action_labels = [button.text for row in player_actions.keyboard.inline_keyboard for button in row]
+        player_action_callbacks = [
+            button.callback_data for row in player_actions.keyboard.inline_keyboard for button in row
+        ]
+        assert not any("Изменить колоду" in label for label in player_action_labels)
+        assert not any(callback.startswith(CB_ADMIN_REMOVE_CONFIRM) for callback in player_action_callbacks)
+        assert "Колода:" not in player_actions.text
+        assert close.is_alert and close.text == NOT_ADMIN
+        assert handler.handle_export_excel(SCOREKEEPER_TG_ID, tournament.id) is None
+
+    def test_scorekeeper_status_command_excludes_online_tournaments(
+        self, db, handler, scorekeeper_user, active_tournament
+    ):
+        db.get(m.Tournament, active_tournament.id).is_online = True
+        db.commit()
+
+        result = handler.handle_tournament_status(SCOREKEEPER_TG_ID)
+
+        assert result.text == NO_ACTIVE_TOURNAMENT
+
 
 # ── Toggle метаписец ──────────────────────────────────────────────────────────
 
