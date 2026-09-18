@@ -188,8 +188,15 @@ class PlayerHandler:
                 payment_confirmed=payment_confirmed,
                 show_round_result_action=(t.is_online and has_pairings and t.status != models.TournamentStatus.CLOSED),
                 internal_swiss=internal_swiss,
-                can_add_players=(is_scorekeeper and not is_admin and t.status == models.TournamentStatus.REGISTRATION),
-                can_close=(is_scorekeeper and not is_admin and t.status != models.TournamentStatus.CLOSED),
+                can_add_players=(
+                    is_scorekeeper
+                    and not is_admin
+                    and not t.is_online
+                    and t.status == models.TournamentStatus.REGISTRATION
+                ),
+                can_close=(
+                    is_scorekeeper and not is_admin and not t.is_online and t.status != models.TournamentStatus.CLOSED
+                ),
                 decklist_action=decklist_action,
                 can_view_decklists=can_view_decklists,
                 registration_locked=registration_locked,

@@ -313,9 +313,10 @@ async def callback_swiss_finish_confirm(update: Update, context: ContextTypes.DE
     db = SessionLocal()
     try:
         tournament = db.get(models.Tournament, tournament_id)
+        users = UserService(db)
         if tournament is None or (
-            not UserService(db).can_manage_tournament(user.id, tournament)
-            and not UserService(db).is_privileged(user.id)
+            not users.can_manage_tournament(user.id, tournament)
+            and not users.is_privileged_for_tournament(user.id, tournament)
         ):
             await query.answer("Нет прав.", show_alert=True)
             return

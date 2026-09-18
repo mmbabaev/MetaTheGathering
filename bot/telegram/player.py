@@ -354,7 +354,7 @@ async def callback_tournament_status(update: Update, context: ContextTypes.DEFAU
             and tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS
         ):
             result = _player_handler(db).handle_tournament_public_status(tournament_id, tg_id=user.id if user else None)
-        elif user and admin_h.user_svc.is_privileged(user.id):
+        elif user and tournament is not None and admin_h.user_svc.is_privileged_for_tournament(user.id, tournament):
             result = admin_h.handle_admin_status(user.id, tournament_id)
         else:
             result = _player_handler(db).handle_tournament_public_status(tournament_id, tg_id=user.id if user else None)

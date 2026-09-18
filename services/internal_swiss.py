@@ -277,7 +277,9 @@ class InternalSwissService:
 
     def finish(self, tournament_id: int, admin_tg_id: int) -> list[SwissStanding]:
         tournament = self._tournament(tournament_id, lock=True)
-        if not self.users.can_manage_tournament(admin_tg_id, tournament) and not self.users.is_privileged(admin_tg_id):
+        if not self.users.can_manage_tournament(
+            admin_tg_id, tournament
+        ) and not self.users.is_privileged_for_tournament(admin_tg_id, tournament):
             raise RoundResultError("Нет прав.")
         self._ensure_internal(tournament)
         if tournament.status != models.TournamentStatus.ONGOING:

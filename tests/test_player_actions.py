@@ -123,6 +123,18 @@ class TestHandleTournamentSelect:
         assert f"{CB_BULK_ADD}:{active_tournament.id}" not in callbacks
         assert f"{CB_CLOSE_TOURNAMENT}:{active_tournament.id}" not in callbacks
 
+    def test_online_scorekeeper_card_has_only_player_actions(self, db, handler, user_svc, active_tournament):
+        scorekeeper = user_svc.get_or_create(tg_id=5106, username="keeper", first_name="Keeper")
+        user_svc.toggle_scorekeeper(scorekeeper.tg_id)
+        db.get(models.Tournament, active_tournament.id).is_online = True
+        db.commit()
+
+        result = handler.handle_tournament_select(active_tournament.id, tg_id=scorekeeper.tg_id)
+
+        callbacks = [button.callback_data for row in result.keyboard.inline_keyboard for button in row]
+        assert f"{CB_BULK_ADD}:{active_tournament.id}" not in callbacks
+        assert f"{CB_CLOSE_TOURNAMENT}:{active_tournament.id}" not in callbacks
+
     def test_ongoing_tournament_only_shows_scorekeeper_close_action(self, handler, svc, user_svc, active_tournament):
         scorekeeper = user_svc.get_or_create(tg_id=5104, username="keeper", first_name="Keeper")
         user_svc.toggle_scorekeeper(scorekeeper.tg_id)

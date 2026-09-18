@@ -470,6 +470,10 @@ class UserService:
         """Admin or scorekeeper — can add participants, edit decks, export and close tournaments."""
         return self.is_admin(tg_id) or self.is_scorekeeper(tg_id)
 
+    def is_privileged_for_tournament(self, tg_id: int, tournament: models.Tournament) -> bool:
+        """Admins manage every event; scorekeepers only manage offline tournaments."""
+        return self.is_admin(tg_id) or (not tournament.is_online and self.is_scorekeeper(tg_id))
+
     def toggle_scorekeeper(self, tg_id: int) -> Optional[bool]:
         """Toggle is_scorekeeper for user by tg_id. Returns new value, or None if user not found."""
         user = self.get_by_tg_id(tg_id)

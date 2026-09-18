@@ -31,6 +31,7 @@ from bot.telegram.player import (
     callback_register,
     callback_set_missing_deck,
     callback_tournament_select,
+    callback_tournament_status,
     cmd_tournaments,
     message_text_input,
 )
@@ -164,6 +165,36 @@ async def test_callback_tournament_select_edits_message():
 
     mock_ph.return_value.handle_tournament_select.assert_called_once_with(5, tg_id=update.effective_user.id)
     update.callback_query.edit_message_text.assert_called_once()
+
+
+async def test_online_scorekeeper_tournament_status_uses_player_view():
+    result = HandlerResult("Обычная карточка игрока")
+    update = _make_callback_update("tstatus:5")
+    tournament = MagicMock()
+    tournament.status = MagicMock()
+    tournament.is_online = True
+
+    with (
+        patch("bot.telegram.player.SessionLocal") as mock_sl,
+        patch("bot.telegram.player._admin_handler") as mock_admin_handler,
+        patch("bot.telegram.player._player_handler") as mock_player_handler,
+    ):
+        db = mock_sl.return_value
+        db.get.return_value = tournament
+        admin_handler = mock_admin_handler.return_value
+        admin_handler.user_svc.is_privileged_for_tournament.return_value = False
+        player_handler = mock_player_handler.return_value
+        player_handler.handle_tournament_public_status.return_value = result
+
+        await callback_tournament_status(update, _make_context())
+
+    admin_handler.handle_admin_status.assert_not_called()
+    player_handler.handle_tournament_public_status.assert_called_once_with(5, tg_id=update.effective_user.id)
+    update.callback_query.edit_message_text.assert_awaited_once_with(
+        result.text,
+        reply_markup=None,
+        parse_mode=None,
+    )
 
 
 # ── callback_archetype ────────────────────────────────────────────────────────
