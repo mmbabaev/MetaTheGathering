@@ -39,8 +39,9 @@ async def execute_creation_plan(bot, db, plan_id: int) -> CreationExecutionResul
         return CreationExecutionResult(plan_id, None, False, error=str(exc))
 
     event_icon = "🎮" if prepared.club.is_online else "🏆"
+    format_label = "" if prepared.tournament.is_draft else " Pauper"
     base_text = (
-        f"{event_icon} {prepared.club.title_prefix}{prepared.club.name} Pauper — "
+        f"{event_icon} {prepared.club.title_prefix}{prepared.club.name}{format_label} — "
         f"{prepared.event_at_local.strftime('%d.%m.%Y')} "
         f"в {prepared.event_at_local.strftime('%H:%M')}\n"
         "Турнир создан. Регистрация открыта."

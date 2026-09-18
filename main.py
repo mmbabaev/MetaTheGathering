@@ -78,6 +78,7 @@ from bot.keyboards import (
     CB_DELETE_TOURNAMENT,
     CB_DELETE_TOURNAMENT_CANCEL,
     CB_DELETE_TOURNAMENT_CONFIRM,
+    CB_DRAFT_SEATING,
     CB_ENDSTEP_RU_PAGE,
     CB_EXPORT_EXCEL,
     CB_EXPORT_MENU,
@@ -224,12 +225,13 @@ _USER_COMMANDS = [
 _SCOREKEEPER_COMMANDS = list(_USER_COMMANDS)
 
 _POLL_CMD = BotCommand("poll", "Меню голосований: регуляры и рассылка")
+_CREATE_TOURNAMENT_CMD = BotCommand("create_tournament", "Создать турнир")
 _APP_STATS_CMD = BotCommand("app_statistics", "Статистика приложения (владелец)")
 _OWNER_COMMANDS = [_APP_STATS_CMD]
 
 _ADMIN_COMMANDS = _SCOREKEEPER_COMMANDS + [
     BotCommand("archive", "Архив закрытых турниров"),
-    BotCommand("create_tournament", "Создать турнир"),
+    _CREATE_TOURNAMENT_CMD,
     BotCommand("clubs", "Клубы и чаты объявлений"),
     BotCommand("delete_tournament", "Удалить турнир"),
     BotCommand("schedule", "Расписание автозаданий"),
@@ -299,12 +301,23 @@ async def _set_commands(app: Application) -> None:
             .scalars()
             .all()
         )
+        db_tournament_organizers = (
+            db.execute(
+                select(models.User.tg_id).where(
+                    models.User.tg_id > 0,
+                    models.User.is_tournament_organizer == True,  # noqa: E712
+                )
+            )
+            .scalars()
+            .all()
+        )
     finally:
         db.close()
 
     admin_ids = set(settings.admin_ids) | set(db_admins)
     organizer_ids = set(db_organizers) - admin_ids  # у админов /poll уже есть
     scorekeeper_ids = set(db_scorekeepers) - admin_ids
+    tournament_organizer_ids = set(db_tournament_organizers) - admin_ids
 
     owner_id = settings.OWNER_CHAT_ID
     for admin_id in admin_ids:
@@ -317,6 +330,8 @@ async def _set_commands(app: Application) -> None:
 
     for sk_id in scorekeeper_ids:
         cmds = _SCOREKEEPER_COMMANDS + ([_POLL_CMD] if sk_id in organizer_ids else [])
+        if sk_id in tournament_organizer_ids:
+            cmds.append(_CREATE_TOURNAMENT_CMD)
         try:
             await app.bot.set_my_commands(cmds, scope=BotCommandScopeChat(chat_id=sk_id))
         except Exception:
@@ -324,13 +339,25 @@ async def _set_commands(app: Application) -> None:
 
     # Чистые организаторы голосований (не админ, не метаписец) — пользовательские команды + /poll
     for org_id in organizer_ids - scorekeeper_ids:
+        cmds = _USER_COMMANDS + [_POLL_CMD]
+        if org_id in tournament_organizer_ids:
+            cmds.append(_CREATE_TOURNAMENT_CMD)
         try:
-            await app.bot.set_my_commands(_USER_COMMANDS + [_POLL_CMD], scope=BotCommandScopeChat(chat_id=org_id))
+            await app.bot.set_my_commands(cmds, scope=BotCommandScopeChat(chat_id=org_id))
+        except Exception:
+            pass
+
+    for org_id in tournament_organizer_ids - scorekeeper_ids - organizer_ids:
+        try:
+            await app.bot.set_my_commands(
+                _USER_COMMANDS + [_CREATE_TOURNAMENT_CMD], scope=BotCommandScopeChat(chat_id=org_id)
+            )
         except Exception:
             pass
 
     logger.info(
-        f"Bot commands registered. Admins: {admin_ids}, Scorekeepers: {scorekeeper_ids}, Organizers: {organizer_ids}"
+        f"Bot commands registered. Admins: {admin_ids}, Scorekeepers: {scorekeeper_ids}, "
+        f"Poll organizers: {organizer_ids}, Tournament organizers: {tournament_organizer_ids}"
     )
 
 
@@ -612,6 +639,7 @@ def main() -> None:
     app.add_handler(
         CallbackQueryHandler(round_results_handler.callback_swiss_next_round, pattern=f"^{CB_SWISS_NEXT_ROUND}:")
     )
+    app.add_handler(CallbackQueryHandler(round_results_handler.callback_draft_seating, pattern=f"^{CB_DRAFT_SEATING}:"))
     app.add_handler(
         CallbackQueryHandler(round_results_handler.callback_swiss_standings, pattern=f"^{CB_SWISS_STANDINGS}:")
     )

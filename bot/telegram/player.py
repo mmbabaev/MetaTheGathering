@@ -113,8 +113,14 @@ async def callback_register(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     try:
         result = _player_handler(db).handle_register(tournament_id, tg_id=user.id if user else None)
         _set_registration_pending(context, result, tournament_id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
+        if result.tournament_id is not None and user is not None:
+            card = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id)
+            await query.message.reply_text(card.text, reply_markup=card.keyboard)
     finally:
         db.close()
 
@@ -531,6 +537,9 @@ async def _handle_pending_name(msg, user, text, context) -> bool:
         if not result.needs_name:
             context.user_data.pop(USER_DATA_PENDING_NAME, None)
         await msg.reply_text(result.text, reply_markup=result.keyboard)
+        if result.tournament_id is not None:
+            card = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id)
+            await msg.reply_text(card.text, reply_markup=card.keyboard)
     finally:
         db.close()
     return True

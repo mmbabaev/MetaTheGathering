@@ -108,7 +108,10 @@ class TournamentService:
             slug=data.slug,
             club=data.club,
             is_online=data.is_online,
+            is_draft=data.is_draft,
             engine_mode=data.engine_mode,
+            show_round_pairings=data.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS,
+            swiss_rounds=3 if data.is_draft else None,
             status=models.TournamentStatus.REGISTRATION,
             registration_close_at=data.registration_close_at,
             created_by_tg_id=data.created_by_tg_id,
@@ -320,10 +323,13 @@ class TournamentService:
     ) -> ParticipantRead:
         tournament = get_tournament(self.db, tournament_id)
         ensure_tournament_status(tournament, allowed=[models.TournamentStatus.REGISTRATION])
+        if tournament.is_draft and tournament.draft_seating_generated_at is not None:
+            raise errors.ParticipantError("Регистрация закрыта: рассадка уже сформирована.")
         if (
             tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS
             and archetype_id is None
             and not added_by_admin
+            and not tournament.is_draft
         ):
             raise errors.ParticipantError("Для записи на Swiss-турнир нужно выбрать архетип.")
 
@@ -506,6 +512,9 @@ class TournamentService:
 
     def unregister_participant(self, tournament_id: int, user_id: int) -> None:
         """Удалить участника из турнира. Raises ParticipantNotFound если не найден."""
+        tournament = get_tournament(self.db, tournament_id)
+        if tournament.is_draft and tournament.draft_seating_generated_at is not None:
+            raise errors.ParticipantError("После формирования рассадки выйти из турнира нельзя.")
         participant = self.get_participant(tournament_id, user_id)
         if participant is None:
             raise errors.ParticipantNotFound()
@@ -540,6 +549,8 @@ class TournamentService:
         """
         tournament = get_tournament(self.db, tournament_id)
         ensure_tournament_status(tournament, allowed=[models.TournamentStatus.REGISTRATION])
+        if tournament.is_draft and tournament.draft_seating_generated_at is not None:
+            raise errors.ParticipantError("Регистрация закрыта: рассадка уже сформирована.")
 
         results: list[tuple[str, str]] = []
         registered_in_batch: set[int] = set()

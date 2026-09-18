@@ -72,6 +72,7 @@ class User(Base):
     is_scorekeeper = Column(Boolean, default=False, nullable=False)
     # организатор голосований (дейликов): создаёт опросы через бота и рассылает уведомления (issue #157)
     is_poll_organizer = Column(Boolean, default=False, nullable=False, server_default="false")
+    is_tournament_organizer = Column(Boolean, default=False, nullable=False, server_default="false")
     hide_deck_emoji = Column(Boolean, default=False, nullable=False)
     notify_opponent_rounds = Column(Boolean, default=False, nullable=False)
     notify_achievements = Column(Boolean, default=False, nullable=False, server_default="false")
@@ -131,6 +132,7 @@ class Tournament(Base):
     status = Column(Enum(TournamentStatus), default=TournamentStatus.REGISTRATION, nullable=False)
     club = Column(String(64), nullable=True, index=True)  # canonical ClubIdentity.name / None
     is_online = Column(Boolean, nullable=False, default=False, server_default="false")
+    is_draft = Column(Boolean, nullable=False, default=False, server_default="false", index=True)
     # Public status screen can show the latest round's pairings and live scores
     # instead of the flat participant list. This is configured per tournament.
     show_round_pairings = Column(Boolean, nullable=False, default=False, server_default="false")
@@ -143,6 +145,7 @@ class Tournament(Base):
     # Frozen when internal round 1 is generated. Magic tournament rules say the
     # announced number of rounds must not change after the tournament starts.
     swiss_rounds = Column(Integer, nullable=True)
+    draft_seating_generated_at = Column(DateTime, nullable=True)
 
     registration_open_at = Column(DateTime, nullable=True)
     registration_close_at = Column(DateTime, nullable=True)
@@ -423,6 +426,7 @@ class Participant(Base):
     # Stable random order assigned at the start of an internal Swiss event. It
     # resolves otherwise exact standings ties without alphabetical bias.
     swiss_initial_rank = Column(Integer, nullable=True)
+    draft_seat = Column(Integer, nullable=True)
     # Time when the player dropped from an ongoing internal Swiss tournament.
     dropped_at = Column(DateTime, nullable=True, index=True)
     # Последний импорт AetherHub, в котором участник действительно присутствовал.

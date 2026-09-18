@@ -633,6 +633,7 @@ class AdminHandler:
         *,
         club: str | None = None,
         is_online: bool = False,
+        is_draft: bool = False,
         title_prefix: str = "",
     ) -> HandlerResult:
         """Создать новый турнир в текущем чате."""
@@ -640,7 +641,8 @@ class AdminHandler:
             return HandlerResult(NOT_ADMIN)
         if not title:
             club_label = f"{club} " if club else ""
-            title = f"{title_prefix}{club_label}Pauper {datetime.now().strftime('%d.%m.%Y')}"
+            format_label = "" if is_draft else "Pauper "
+            title = f"{title_prefix}{club_label}{format_label}{datetime.now().strftime('%d.%m.%Y')}"
         elif title_prefix and not title.startswith(title_prefix):
             title = f"{title_prefix}{title}"
         try:
@@ -650,7 +652,14 @@ class AdminHandler:
                     chat_id=chat_id,
                     club=club,
                     is_online=is_online,
+                    is_draft=is_draft,
+                    engine_mode=(
+                        models.TournamentEngineMode.INTERNAL_SWISS
+                        if is_draft or club == "Endstep-ru"
+                        else models.TournamentEngineMode.AETHERHUB
+                    ),
                     created_by_tg_id=tg_id,
+                    decklist_reminders_enabled=not is_draft,
                 )
             )
         except errors.TournamentAlreadyExists:

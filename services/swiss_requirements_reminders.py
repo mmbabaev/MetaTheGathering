@@ -49,6 +49,7 @@ class SwissRequirementsReminderService:
             )
             .where(
                 models.Tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS,
+                models.Tournament.is_draft.is_(False),
                 models.Tournament.status == models.TournamentStatus.REGISTRATION,
                 models.Tournament.decklist_reminders_enabled.is_(True),
                 models.Tournament.registration_close_at > now,

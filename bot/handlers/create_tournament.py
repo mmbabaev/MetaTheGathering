@@ -39,21 +39,28 @@ class CreateTournamentWizardHandler:
         self.club_settings = club_settings
 
     def handle_start(self, tg_id: int) -> HandlerResult:
-        if not self.users.is_admin(tg_id):
+        if not self.users.can_create_tournament(tg_id):
             return HandlerResult(NOT_ADMIN)
-        clubs = [(index, f"{identity.title_prefix}{identity.name}") for index, identity in enumerate(club_identities())]
+        is_admin = self.users.is_admin(tg_id)
+        clubs = [
+            (index, f"{identity.title_prefix}{identity.name}")
+            for index, identity in enumerate(club_identities())
+            if is_admin or identity.is_draft
+        ]
         return HandlerResult(
             "🏆 Создание турнира\n\n1/4. Выберите клуб:",
-            keyboard=self.keyboards.create_tournament_club_keyboard(clubs),
+            keyboard=self.keyboards.create_tournament_club_keyboard(clubs, show_settings=is_admin),
         )
 
     def handle_club(self, tg_id: int, draft: dict, club_index: int, now: datetime | None = None) -> HandlerResult:
-        if not self.users.is_admin(tg_id):
+        if not self.users.can_create_tournament(tg_id):
             return HandlerResult(NOT_ADMIN, is_alert=True)
         identities = club_identities()
         if not (0 <= club_index < len(identities)):
             return HandlerResult("Клуб не найден.", is_alert=True)
         identity = identities[club_index]
+        if not self.users.is_admin(tg_id) and not identity.is_draft:
+            return HandlerResult(NOT_ADMIN, is_alert=True)
         draft.clear()
         draft.update({"club_name": identity.name, "step": "announce_date"})
         return self._announce_date_result(identity, now)
@@ -221,11 +228,15 @@ class CreateTournamentWizardHandler:
         )
         event_date = date.fromisoformat(draft["event_date"])
         target = self.club_settings.current_target(identity)
+        if identity.is_draft:
+            target_label = identity.real_chat_label or identity.name
+        else:
+            target_label = target.label
         text = (
             "Проверьте создание турнира:\n\n"
             f"Клуб: {identity.title_prefix}{identity.name}\n"
             f"Объявление в чат: {publication}\n"
-            f"Чат для объявления: {target.label}\n"
+            f"Чат для объявления: {target_label}\n"
             f"Турнир: {self._date_label(event_date)} в {draft['event_time']}\n"
             f"Часовой пояс: {identity.timezone}"
         )
@@ -234,13 +245,15 @@ class CreateTournamentWizardHandler:
     def _authorized_identity(
         self, tg_id: int, draft: dict, expected_step: str | None = None
     ) -> ClubIdentity | HandlerResult:
-        if not self.users.is_admin(tg_id):
+        if not self.users.can_create_tournament(tg_id):
             return HandlerResult(NOT_ADMIN, is_alert=True)
         if expected_step is not None and draft.get("step") != expected_step:
             return HandlerResult(WIZARD_EXPIRED, is_alert=True)
         name = draft.get("club_name")
         identity = next((row for row in club_identities() if row.name == name), None)
-        return identity or HandlerResult(WIZARD_EXPIRED, is_alert=True)
+        if identity is None or (not self.users.is_admin(tg_id) and not identity.is_draft):
+            return HandlerResult(WIZARD_EXPIRED, is_alert=True)
+        return identity
 
     def _date_options(self, identity: ClubIdentity, now: datetime | None, days: int) -> list[tuple[str, str]]:
         today = self._now_local(identity, now).date()

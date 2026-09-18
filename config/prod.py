@@ -10,5 +10,6 @@ app_config = AppConfig(
     pair_of_dice_chat_id=-1001236834154,  # «Питерский паупер» в Pair of dice
     hobby_games_chat_id=-1002787710855,  # Калининград
     endstep_ru_chat_id=-1003631429183,  # @metathegatheringtestgroup; заменить при переезде Endstep-ru
+    endstep_draft_chat_id=-1003964019099,
     owner_chat_id=232778570,  # mbabaev (владелец) — пока все служебные анонсы шлём ему в личку
 )

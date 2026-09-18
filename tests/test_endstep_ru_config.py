@@ -76,6 +76,7 @@ async def test_manual_create_command_targets_endstep_chat_and_sets_club():
         None,
         club="Endstep-ru",
         is_online=True,
+        is_draft=False,
         title_prefix="⏭️🦶 ",
     )
     session_local.return_value.close.assert_called_once()
@@ -91,3 +92,14 @@ async def test_create_tournament_without_args_opens_wizard():
         await cmd_create_tournament(update, context)
 
     wizard.assert_awaited_once_with(update, context)
+
+
+def test_endstep_draft_uses_environment_specific_chat_and_has_no_schedule():
+    identity = next(row for row in club_identities() if row.name == "Endstep draft")
+
+    assert identity.is_draft is True
+    assert identity.is_online is True
+    assert identity.aetherhub_url is None
+    assert debug_config.endstep_draft_chat_id == -1003631429183
+    assert prod_config.endstep_draft_chat_id == -1003964019099
+    assert all(row.club_name != "Endstep draft" for row in default_schedules())

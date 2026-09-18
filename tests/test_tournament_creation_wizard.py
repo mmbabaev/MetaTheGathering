@@ -99,6 +99,55 @@ def test_non_admin_cannot_start_wizard(db):
     assert "нет прав" in result.text.lower()
 
 
+def test_tournament_organizer_only_sees_endstep_draft_and_plan_targets_environment_chat(db, monkeypatch):
+    monkeypatch.setattr(models, "utc_now", lambda: datetime(2026, 9, 4, 8, 0))
+    organizer_id = 88002
+    user = UserService(db).get_or_create(tg_id=organizer_id, username="playasdevil")
+    user.is_tournament_organizer = True
+    db.commit()
+    handler = CreateTournamentWizardHandler(
+        TournamentCreationPlanService(db),
+        UserService(db),
+        Keyboards(),
+        ClubAnnouncementSettingsService(db),
+    )
+
+    start = handler.handle_start(organizer_id)
+    buttons = [button for row in start.keyboard.inline_keyboard for button in row]
+    assert [button.text for button in buttons if not button.text.startswith("❌")] == ["⏭️🦶 Endstep draft"]
+
+    draft = {}
+    assert not handler.handle_club(organizer_id, draft, 5, now=NOW).is_alert
+    handler.handle_announce_now(organizer_id, draft, now=NOW)
+    handler.handle_event_date(organizer_id, draft, "20260905", now=NOW)
+    confirmation = handler.handle_event_time(organizer_id, draft, "1930", now=NOW)
+    assert "Чат для объявления: Endstep draft" in confirmation.text
+    result = handler.handle_confirm(organizer_id, draft, now=NOW)
+    plan = TournamentCreationPlanService(db).get(result.creation_plan_id)
+    assert plan.announcement_chat_id == -1003964019099
+
+    prepared = TournamentCreationPlanService(db).prepare_tournament(plan.id)
+    tournament = db.get(models.Tournament, prepared.tournament.id)
+    assert tournament.is_draft is True
+    assert tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS
+    assert tournament.swiss_rounds == 3
+    assert tournament.decklist_reminders_enabled is False
+
+
+def test_regular_endstep_manual_tournament_defaults_to_internal_swiss(db, monkeypatch):
+    monkeypatch.setattr(models, "utc_now", lambda: datetime(2026, 9, 4, 8, 0))
+    service = TournamentCreationPlanService(db)
+    ClubAnnouncementSettingsService(db).set_destination("Endstep-ru", "test")
+    plan = service.create_plan(
+        club_name="Endstep-ru",
+        created_by_tg_id=ADMIN_ID,
+        announce_at=datetime(2026, 9, 4, 9, 0),
+        event_at=datetime(2026, 9, 5, 16, 30),
+    )
+    tournament = db.get(models.Tournament, service.prepare_tournament(plan.id).tournament.id)
+    assert tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS
+
+
 async def test_execute_plan_creates_online_tournament_and_announces(db, monkeypatch):
     monkeypatch.setattr(models, "utc_now", lambda: datetime(2026, 9, 4, 8, 0))
     service = TournamentCreationPlanService(db)
@@ -129,6 +178,31 @@ async def test_execute_plan_creates_online_tournament_and_announces(db, monkeypa
     db.refresh(plan)
     assert plan.status == "completed"
     assert plan.announcement_sent_at is not None
+
+
+async def test_execute_draft_plan_announces_join_without_pauper_or_deck_choice(db, monkeypatch):
+    monkeypatch.setattr(models, "utc_now", lambda: datetime(2026, 9, 4, 8, 0))
+    service = TournamentCreationPlanService(db)
+    plan = service.create_plan(
+        club_name="Endstep draft",
+        created_by_tg_id=ADMIN_ID,
+        announce_at=datetime(2026, 9, 4, 9, 0),
+        event_at=datetime(2026, 9, 5, 16, 30),
+    )
+    bot = AsyncMock()
+    bot.get_me.return_value.username = "test_bot"
+    bot.send_message.return_value.message_id = 321
+
+    result = await execute_creation_plan(bot, db, plan.id)
+
+    assert result.announced is True
+    sent = bot.send_message.await_args.kwargs
+    assert sent["chat_id"] == -1003964019099
+    assert sent["text"].startswith("🎮 ⏭️🦶 Endstep draft —")
+    assert "Pauper" not in sent["text"]
+    button = sent["reply_markup"].inline_keyboard[0][0]
+    assert button.text == "📝 Записаться"
+    assert button.url.endswith(f"register_{result.tournament_id}")
 
 
 async def test_no_announcement_plan_is_not_blocked_by_other_clubs_using_chat_zero(db, svc):

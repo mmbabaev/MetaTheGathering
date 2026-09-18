@@ -15,4 +15,5 @@ class AppConfig:
     pair_of_dice_chat_id: Optional[int] = None
     hobby_games_chat_id: Optional[int] = None
     endstep_ru_chat_id: Optional[int] = None
+    endstep_draft_chat_id: Optional[int] = None
     owner_chat_id: Optional[int] = None  # личка владельца бота для служебных анонсов (создан турнир, колоды раскрыты)

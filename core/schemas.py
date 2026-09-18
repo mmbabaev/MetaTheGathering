@@ -51,6 +51,7 @@ class UserRead(UserBase):
     is_admin: bool
     is_superadmin: bool
     is_scorekeeper: bool
+    is_tournament_organizer: bool
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -65,6 +66,7 @@ class TournamentBase(BaseModel):
     slug: Optional[str] = None
     club: Optional[str] = None
     is_online: bool = False
+    is_draft: bool = False
     engine_mode: str = TournamentEngineMode.AETHERHUB
 
 
@@ -80,6 +82,7 @@ class TournamentRead(TournamentBase):
     decks_hidden: bool = True
     show_round_pairings: bool = False
     swiss_rounds: Optional[int] = None
+    draft_seating_generated_at: Optional[datetime] = None
     aetherhub_url: Optional[str] = None
     aetherhub_import_time: Optional[str] = None
     registration_open_at: Optional[datetime] = None

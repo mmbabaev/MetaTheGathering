@@ -11,6 +11,7 @@ from core import models
 from core.schemas import TournamentCreate
 from services import errors
 from services.aetherhub_import_service import AetherhubImportService
+from services.decklists import DecklistService
 from services.export import ExportService
 from services.internal_swiss import InternalSwissService, recommended_swiss_rounds
 from services.round_results import RoundResultError, RoundResultsService
@@ -55,6 +56,98 @@ def _setup(db, count: int = 8):
 )
 def test_internal_beta_always_uses_four_rounds(players, rounds):
     assert recommended_swiss_rounds(players) == rounds
+
+
+def test_draft_seating_is_separate_stage_and_first_round_uses_opposite_seats(db):
+    organizer = UserService(db).get_or_create(tg_id=7001, username="draft_owner", first_name="Owner")
+    organizer.is_tournament_organizer = True
+    tournament = TournamentService(db).create_tournament(
+        TournamentCreate(
+            title="Endstep draft",
+            chat_id=-1003964019099,
+            club="Endstep draft",
+            is_online=True,
+            is_draft=True,
+            engine_mode=models.TournamentEngineMode.INTERNAL_SWISS,
+            registration_close_at=datetime(2026, 9, 20, 16, 0),
+            created_by_tg_id=organizer.tg_id,
+            decklist_reminders_enabled=False,
+        )
+    )
+    users = []
+    for index in range(8):
+        user = UserService(db).get_or_create(
+            tg_id=7100 + index,
+            username=f"drafter{index}",
+            first_name=f"Игрок{index}",
+        )
+        TournamentService(db).register_participant(tournament_id=tournament.id, user_id=user.id)
+        users.append(user)
+    db.commit()
+    engine = InternalSwissService(db, rng=random.Random(11))
+
+    seats = engine.generate_draft_seating(tournament.id, organizer.tg_id)
+
+    stored = db.get(models.Tournament, tournament.id)
+    assert stored.status == models.TournamentStatus.REGISTRATION
+    assert stored.draft_seating_generated_at is not None
+    assert stored.swiss_rounds == 3
+    assert [row.seat for row in seats] == list(range(1, 9))
+    with pytest.raises(errors.ParticipantError, match="рассадка"):
+        TournamentService(db).register_participant(tournament_id=tournament.id, user_id=organizer.id)
+
+    # Optional draft decklists remain editable after seating and need no archetype.
+    saved = DecklistService(db).save(tournament.id, users[0].tg_id, "4 Lightning Bolt")
+    assert saved.raw_text == "4 Lightning Bolt"
+
+    generated = engine.generate_next_round(tournament.id, organizer.tg_id)
+    assert (generated.round_number, generated.planned_rounds) == (1, 3)
+    assert db.get(models.Tournament, tournament.id).status == models.TournamentStatus.ONGOING
+    by_seat = {row.seat: row.user_id for row in seats}
+    actual_pairs = {
+        frozenset((match.player1_user_id, match.player2_user_id))
+        for match in RoundResultsService(db).list_round(tournament.id, 1)
+    }
+    expected_pairs = {frozenset((by_seat[seat], by_seat[seat + 4])) for seat in range(1, 5)}
+    assert actual_pairs == expected_pairs
+
+    results = RoundResultsService(db)
+    for round_number in range(1, 4):
+        for match in results.list_round(tournament.id, round_number):
+            if match.player2_user_id is not None:
+                results.admin_set(match.id, organizer.tg_id, 2, 0)
+        if round_number < 3:
+            engine.generate_next_round(tournament.id, organizer.tg_id)
+    standings = engine.finish(tournament.id, organizer.tg_id)
+    assert len(standings) == 8
+    assert db.get(models.Tournament, tournament.id).status == models.TournamentStatus.CLOSED
+
+
+def test_odd_draft_seating_gives_last_seat_the_first_round_bye(db):
+    organizer = UserService(db).get_or_create(tg_id=7201, username="draft_owner", first_name="Owner")
+    organizer.is_tournament_organizer = True
+    tournament = TournamentService(db).create_tournament(
+        TournamentCreate(
+            title="Endstep draft",
+            chat_id=-1002,
+            is_online=True,
+            is_draft=True,
+            engine_mode=models.TournamentEngineMode.INTERNAL_SWISS,
+            registration_close_at=datetime(2026, 9, 20, 16, 0),
+            created_by_tg_id=organizer.tg_id,
+        )
+    )
+    for index in range(7):
+        user = UserService(db).get_or_create(tg_id=7300 + index, first_name=f"P{index}")
+        TournamentService(db).register_participant(tournament_id=tournament.id, user_id=user.id)
+    db.commit()
+    engine = InternalSwissService(db, rng=random.Random(3))
+    seats = engine.generate_draft_seating(tournament.id, organizer.tg_id)
+    engine.generate_next_round(tournament.id, organizer.tg_id)
+
+    matches = RoundResultsService(db).list_round(tournament.id, 1)
+    bye = next(match for match in matches if match.player2_user_id is None)
+    assert bye.player1_user_id == next(row.user_id for row in seats if row.seat == 7)
 
 
 def test_internal_mode_is_opt_in_and_cannot_replace_existing_pairings(db):

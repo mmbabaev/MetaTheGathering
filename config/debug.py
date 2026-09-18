@@ -11,5 +11,6 @@ app_config = AppConfig(
     pair_of_dice_chat_id=None,  # никогда не использовать production-чат Pair of dice в debug
     hobby_games_chat_id=None,  # никогда не использовать production-чат Калининграда в debug
     endstep_ru_chat_id=-1003631429183,  # @metathegatheringtestgroup — безопасный тестовый чат
+    endstep_draft_chat_id=-1003631429183,
     owner_chat_id=232778570,  # mbabaev (владелец) — служебные анонсы в личку
 )
