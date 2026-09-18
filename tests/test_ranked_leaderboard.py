@@ -33,7 +33,7 @@ def _callbacks(result):
 def test_leaderboard_menu_offers_moscow_endstep_and_social():
     result = leaderboard_menu()
 
-    assert result.text == ("🏆 Pauper Ranked\n\nВыберите лидерборд:\n\nEndstep RU пока доступен только владельцу бота.")
+    assert result.text == "🏆 Pauper Ranked\n\nВыберите лидерборд:"
     assert _callbacks(result) == [CB_LEADERBOARD_MOSCOW, CB_LEADERBOARD_ENDSTEP, CB_LEADERBOARD_SOCIAL]
 
 
