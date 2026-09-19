@@ -75,6 +75,11 @@ class Settings(BaseSettings):
     # Origin внутренних ranked endpoints Endstep. Клиент создаёт гостевую сессию.
     ENDSTEP_API_URL: str = "https://endstep.cc"
 
+    # Иконка турнира «Концеход» для сообщения о начале записи (send_photo с подписью).
+    # Путь относительно корня репозитория (или абсолютный). Пустая строка или отсутствие
+    # файла — сообщение уходит текстом как раньше.
+    KONETSKHOD_ICON_PATH: str = "assets/tournament-icons/konetskhod.png"
+
     # Структурированные owner-отчёты ачивок для послетурнирного аудита.
     # Пустая строка отключает файловый лог (по умолчанию так только внутри pytest).
     ACHIEVEMENT_LOG_DIR: str = "" if _is_pytest_running() else "logs/achievements"
