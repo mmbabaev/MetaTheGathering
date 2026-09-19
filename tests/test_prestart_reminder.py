@@ -79,6 +79,60 @@ class TestSendRegistrationOpen:
         assert bot.send_message.await_count == 2
         assert all(c.kwargs.get("reply_markup") is None for c in bot.send_message.call_args_list)
 
+    async def test_konetskhod_announcement_sent_as_photo_with_caption(self, db, tmp_path, monkeypatch):
+        """Анонс Концехода с иконкой уходит фото: текст в caption, кнопка при фото."""
+        monkeypatch.setattr("bot.scheduler.settings.OWNER_CHAT_ID", None)
+        icon = tmp_path / "konetskhod.png"
+        icon.write_bytes(b"not-a-real-png")
+        monkeypatch.setattr("bot.registration_messages.settings.KONETSKHOD_ICON_PATH", str(icon))
+        club = Club(name="Endstep-ru", chat_id=-100, schedules=[], title_prefix="⏭️🦶 ", is_online=True)
+        bot = _bot()
+        bot.send_photo.return_value = MagicMock(message_id=555)
+        tournament = TournamentService(db).create_tournament(
+            TournamentCreate(title="⏭️🦶 Концеход Pauper #1", chat_id=-100, club="Endstep-ru")
+        )
+
+        await send_registration_open(bot, db, club, tournament_id=tournament.id, base_text="Регистрация открыта")
+
+        bot.send_photo.assert_awaited_once()
+        kwargs = bot.send_photo.await_args.kwargs
+        assert kwargs["chat_id"] == -100
+        assert kwargs["caption"] == "Регистрация открыта"
+        assert kwargs["reply_markup"] is not None
+        bot.send_message.assert_not_awaited()
+        row = db.query(models.TournamentRegistrationMessage).one()
+        assert row.message_id == 555
+
+    async def test_konetskhod_photo_skipped_when_icon_file_missing(self, db, tmp_path, monkeypatch):
+        monkeypatch.setattr("bot.scheduler.settings.OWNER_CHAT_ID", None)
+        monkeypatch.setattr("bot.registration_messages.settings.KONETSKHOD_ICON_PATH", str(tmp_path / "missing.png"))
+        club = Club(name="Endstep-ru", chat_id=-100, schedules=[], title_prefix="⏭️🦶 ", is_online=True)
+        bot = _bot()
+        tournament = TournamentService(db).create_tournament(
+            TournamentCreate(title="⏭️🦶 Концеход Pauper #1", chat_id=-100, club="Endstep-ru")
+        )
+
+        await send_registration_open(bot, db, club, tournament_id=tournament.id, base_text="Регистрация открыта")
+
+        bot.send_photo.assert_not_awaited()
+        bot.send_message.assert_awaited_once()
+
+    async def test_draft_and_other_clubs_never_send_photo(self, db, tmp_path, monkeypatch):
+        icon = tmp_path / "konetskhod.png"
+        icon.write_bytes(b"not-a-real-png")
+        monkeypatch.setattr("bot.registration_messages.settings.KONETSKHOD_ICON_PATH", str(icon))
+        monkeypatch.setattr("bot.scheduler.settings.OWNER_CHAT_ID", None)
+        club = Club(name="Endstep draft", chat_id=-100, schedules=[], title_prefix="⏭️🦶 ", is_online=True)
+        bot = _bot()
+        tournament = TournamentService(db).create_tournament(
+            TournamentCreate(title="⏭️🦶 Endstep draft 05.09.2026", chat_id=-100, club="Endstep draft", is_draft=True)
+        )
+
+        await send_registration_open(bot, db, club, tournament_id=tournament.id, base_text="Регистрация открыта")
+
+        bot.send_photo.assert_not_awaited()
+        bot.send_message.assert_awaited_once()
+
 
 class TestPreStartReminderJob:
     def _club_schedule(self):
@@ -101,12 +155,14 @@ class TestPreStartReminderJob:
         monkeypatch.setattr("bot.scheduler.settings.OWNER_CHAT_ID", None)
         club = Club(name="Endstep-ru", chat_id=-100, schedules=[], title_prefix="⏭️🦶 ", is_online=True)
         schedule = ClubSchedule(weekday="monday", game_time="20:00", reminder_time="19:25")
-        TournamentService(db).create_tournament(TournamentCreate(title="Pauper", chat_id=-100, club=club.name))
+        TournamentService(db).create_tournament(
+            TournamentCreate(title="⏭️🦶 Концеход Pauper #3", chat_id=-100, club=club.name)
+        )
         bot = _bot()
 
         await PreStartReminderJob(club, schedule).run(bot=bot, now=MONDAY, db=db)
 
-        assert bot.send_message.await_args.kwargs["text"].startswith("⏰ ⏭️🦶 Endstep-ru Pauper")
+        assert bot.send_message.await_args.kwargs["text"].startswith("⏰ ⏭️🦶 Концеход Pauper #3")
 
     async def test_dms_deferred_players_after_group_reminder(self, db, monkeypatch):
         monkeypatch.setattr("bot.scheduler.settings.OWNER_CHAT_ID", None)

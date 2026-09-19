@@ -98,6 +98,29 @@ async def test_refresh_edits_stale_message(db, user_alice):
     assert row.rendered_participant_count == 1
 
 
+async def test_refresh_edits_caption_for_photo_announcement(db, user_alice):
+    """Фото-анонс Концехода: edit_message_text падает без текста — правим caption."""
+    FeatureFlagService(db).toggle(FeatureFlags.LIVE_REGISTRATION_COUNT)
+    tournament = _tournament(db)
+    service = RegistrationMessageService(db)
+    row = service.upsert_last(
+        tournament_id=tournament.id,
+        chat_id=100,
+        message_id=10,
+        base_text="Регистрация",
+        button_url=None,
+        participant_count=0,
+    )
+    TournamentService(db).register_participant(tournament_id=tournament.id, user_id=user_alice.id)
+    bot = AsyncMock()
+    bot.edit_message_text.side_effect = BadRequest("There is no text in the message to edit")
+    await RegistrationMessageRefreshJob().run(bot, db=db)
+    bot.edit_message_caption.assert_awaited_once()
+    assert "Записалось: 1" in bot.edit_message_caption.call_args.kwargs["caption"]
+    db.refresh(row)
+    assert row.rendered_participant_count == 1
+
+
 async def test_permanent_edit_error_disables_row(db, user_alice):
     FeatureFlagService(db).toggle(FeatureFlags.LIVE_REGISTRATION_COUNT)
     tournament = _tournament(db)

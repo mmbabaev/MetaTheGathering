@@ -148,6 +148,49 @@ def test_regular_endstep_manual_tournament_defaults_to_internal_swiss(db, monkey
     assert tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS
 
 
+async def test_konetskhod_numbered_after_existing_tournaments(db, monkeypatch):
+    """Два прошлых турнира (включая старую запись без club) → анонс «Концеход Pauper #3»."""
+    monkeypatch.setattr(models, "utc_now", lambda: datetime(2026, 9, 4, 8, 0))
+    db.add_all(
+        [
+            models.Tournament(
+                title="⏭️🦶 Endstep-ru Pauper 22.08.2026",
+                chat_id=0,
+                slug="endstep-1",
+                club="Endstep-ru",
+                status=models.TournamentStatus.CLOSED,
+            ),
+            models.Tournament(
+                title="⏭️🦶 Endstep-ru Pauper 29.08.2026",
+                chat_id=0,
+                slug="endstep-2",
+                club=None,
+                status=models.TournamentStatus.CLOSED,
+            ),
+        ]
+    )
+    db.commit()
+    service = TournamentCreationPlanService(db)
+    ClubAnnouncementSettingsService(db).set_destination("Endstep-ru", "test")
+    plan = service.create_plan(
+        club_name="Endstep-ru",
+        created_by_tg_id=ADMIN_ID,
+        announce_at=datetime(2026, 9, 4, 9, 0),
+        event_at=datetime(2026, 9, 5, 16, 30),
+    )
+    bot = AsyncMock()
+    bot.get_me.return_value.username = "test_bot"
+    bot.send_message.return_value.message_id = 123
+
+    result = await execute_creation_plan(bot, db, plan.id)
+
+    tournament = db.get(models.Tournament, result.tournament_id)
+    assert tournament.title == "⏭️🦶 Концеход Pauper #3"
+    announcement = bot.send_message.await_args.kwargs["text"]
+    assert announcement.startswith("🎮 ⏭️🦶 Концеход Pauper #3 —")
+    assert "05.09.2026 в 19:30" in announcement
+
+
 async def test_execute_plan_creates_online_tournament_and_announces(db, monkeypatch):
     monkeypatch.setattr(models, "utc_now", lambda: datetime(2026, 9, 4, 8, 0))
     service = TournamentCreationPlanService(db)
@@ -173,7 +216,7 @@ async def test_execute_plan_creates_online_tournament_and_announces(db, monkeypa
     assert tournament.registration_close_at == datetime(2026, 9, 5, 16, 30)
     announcement = bot.send_message.await_args.kwargs["text"]
     assert bot.send_message.await_args.kwargs["chat_id"] == -1003631429183
-    assert announcement.startswith("🎮 ⏭️🦶 Endstep-ru Pauper")
+    assert announcement.startswith("🎮 ⏭️🦶 Концеход Pauper #1")
     assert "05.09.2026 в 19:30" in announcement
     db.refresh(plan)
     assert plan.status == "completed"

@@ -240,6 +240,97 @@ def test_online_round_results_migration_defaults_to_participant_view():
         assert connection.execute(sa.select(matches.c.status, matches.c.revision)).one() == ("unreported", 0)
 
 
+def test_konetskhod_rename_migration_numbers_active_tournament():
+    metadata = sa.MetaData()
+    tournaments = sa.Table(
+        "tournaments",
+        metadata,
+        sa.Column("id", sa.Integer, primary_key=True),
+        sa.Column("title", sa.String(255), nullable=False),
+        sa.Column("chat_id", sa.BigInteger, nullable=False),
+        sa.Column("club", sa.String(64)),
+        sa.Column("status", sa.String(16), nullable=False),
+        sa.Column("created_at", sa.DateTime, nullable=False),
+    )
+    registration_messages = sa.Table(
+        "tournament_registration_messages",
+        metadata,
+        sa.Column("id", sa.Integer, primary_key=True),
+        sa.Column("tournament_id", sa.Integer, nullable=False),
+        sa.Column("base_text", sa.String),
+    )
+    engine = sa.create_engine("sqlite://")
+    metadata.create_all(engine)
+    migration = runpy.run_path(str(VERSIONS_DIR / "b516420f583a_rename_endstep_ru_to_konetskhod.py"))
+
+    now = datetime(2026, 9, 19)
+    base_text = "🎮 ⏭️🦶 Endstep-ru Pauper — 26.09.2026 в 19:00\nТурнир создан. Регистрация открыта."
+    with engine.begin() as connection:
+        connection.execute(
+            tournaments.insert().values(
+                [
+                    {
+                        "id": 1,
+                        "title": "⏭️🦶 Endstep-ru Pauper 22.08.2026",
+                        "chat_id": 0,
+                        "club": "Endstep-ru",
+                        "status": "CLOSED",
+                        "created_at": now,
+                    },
+                    {
+                        "id": 2,
+                        "title": "⏭️🦶 Endstep-ru Pauper 29.08.2026",
+                        "chat_id": 0,
+                        "club": None,
+                        "status": "CLOSED",
+                        "created_at": now,
+                    },
+                    {
+                        "id": 3,
+                        "title": "⏭️🦶 Endstep-ru Pauper 26.09.2026",
+                        "chat_id": -100,
+                        "club": "Endstep-ru",
+                        "status": "REGISTRATION",
+                        "created_at": now,
+                    },
+                    {
+                        "id": 4,
+                        "title": "⏭️🦶 Endstep draft 20.09.2026",
+                        "chat_id": -200,
+                        "club": "Endstep draft",
+                        "status": "REGISTRATION",
+                        "created_at": now,
+                    },
+                ]
+            )
+        )
+        connection.execute(
+            registration_messages.insert().values(
+                [
+                    {"id": 1, "tournament_id": 3, "base_text": base_text},
+                    {"id": 2, "tournament_id": 4, "base_text": base_text},
+                ]
+            )
+        )
+        context = MigrationContext.configure(connection)
+        with Operations.context(context):
+            migration["upgrade"]()
+
+        titles = dict(connection.execute(sa.select(tournaments.c.id, tournaments.c.title)).all())
+        assert titles[1] == "⏭️🦶 Endstep-ru Pauper 22.08.2026"  # закрытые не трогаем
+        assert titles[2] == "⏭️🦶 Endstep-ru Pauper 29.08.2026"
+        assert titles[3] == "⏭️🦶 Концеход Pauper #3"
+        assert titles[4] == "⏭️🦶 Endstep draft 20.09.2026"  # draft не Концеход
+
+        texts = dict(
+            connection.execute(
+                sa.select(registration_messages.c.tournament_id, registration_messages.c.base_text)
+            ).all()
+        )
+        assert "⏭️🦶 Концеход Pauper #3 — 26.09.2026" in texts[3]
+        assert texts[4] == base_text  # чужие сообщения не трогаем
+
+
 def test_endstep_username_and_club_settings_migration_defaults_safe():
     metadata = sa.MetaData()
     users = sa.Table(

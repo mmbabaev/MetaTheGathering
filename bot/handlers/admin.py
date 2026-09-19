@@ -37,6 +37,7 @@ from services import errors
 from services.aetherhub_import_service import MIN_TOURNAMENT_DURATION, AetherhubImportService
 from services.archetype import ArchetypeService
 from services.decklists import DecklistService
+from services.endstep_table_titles import is_konetskhod_club, konetskhod_title
 from services.export import ExportService
 from services.internal_swiss import InternalSwissService
 from services.meta_table_import import MetaTableImportService
@@ -677,9 +678,12 @@ class AdminHandler:
         if not self.user_svc.is_admin(tg_id):
             return HandlerResult(NOT_ADMIN)
         if not title:
-            club_label = f"{club} " if club else ""
-            format_label = "" if is_draft else "Pauper "
-            title = f"{title_prefix}{club_label}{format_label}{datetime.now().strftime('%d.%m.%Y')}"
+            if is_konetskhod_club(club):
+                title = konetskhod_title(self.svc.db, title_prefix)
+            else:
+                club_label = f"{club} " if club else ""
+                format_label = "" if is_draft else "Pauper "
+                title = f"{title_prefix}{club_label}{format_label}{datetime.now().strftime('%d.%m.%Y')}"
         elif title_prefix and not title.startswith(title_prefix):
             title = f"{title_prefix}{title}"
         try:

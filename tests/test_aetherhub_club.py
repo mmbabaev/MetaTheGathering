@@ -1309,7 +1309,8 @@ class TestCreateTournamentJob:
 
         tournament = svc.get_active_tournament_for_chat(42)
         assert tournament.is_online is True
-        assert announce.await_args.args[-1].startswith("🎮 ⏭️🦶 Endstep-ru Pauper")
+        assert tournament.title == "⏭️🦶 Концеход Pauper #1"
+        assert announce.await_args.args[-1].startswith("🎮 ⏭️🦶 Концеход Pauper #1")
 
     def test_previous_day_job_uses_event_date_and_says_tomorrow(self, db, svc):
         club = Club(name="Pair of dice", chat_id=42, schedules=[], title_prefix="🎲🎲 ")

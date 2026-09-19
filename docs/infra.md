@@ -189,6 +189,7 @@ Env files are **never committed** to git (`.gitignored`). They are:
 | `CELLAR_COORDINATOR_USERNAMES` | no | Preferred production-only comma-separated Telegram usernames. They receive immediate booking/cancellation DMs and the one-hour pre-event summary, and can view the `/cellar` booking overview. Debug ignores the list. |
 | `CELLAR_COORDINATOR_TG_IDS` | no | Optional legacy comma-separated IDs with the same production-only notifications and access. |
 | `ENDSTEP_API_URL` | no | Endstep origin for the ranked leaderboard client (default: `https://endstep.cc`). |
+| `KONETSKHOD_ICON_PATH` | no | Иконка «Концехода» для анонса записи: путь относительно корня репо или абсолютный (default: `assets/tournament-icons/konetskhod.png`). Нет файла или пустая строка — анонс текстом. |
 
 `BOT_ENV=debug` is set via the systemd `Environment=` directive (not in the env file).
 
