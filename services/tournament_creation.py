@@ -16,6 +16,7 @@ from core.config import Club
 from core.schemas import TournamentCreate, TournamentRead
 from services.cellar import CELLAR_CLUB_NAME, CellarService
 from services.club_settings import AnnouncementTarget, ClubAnnouncementSettingsService
+from services.endstep_table_titles import is_konetskhod_club, konetskhod_title
 from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.tournament import TournamentService
 from services.utils import get_tournament
@@ -134,11 +135,12 @@ class TournamentCreationPlanService:
             club_slug = "-".join(identity.name.lower().split())
             internal_swiss = identity.is_draft or identity.name == "Endstep-ru"
             slug_suffix = "draft" if identity.is_draft else "pauper"
-            title = (
-                f"{identity.title_prefix}{identity.name} {event_at_local.strftime('%d.%m.%Y')}"
-                if identity.is_draft
-                else f"{identity.title_prefix}{identity.name} Pauper {event_at_local.strftime('%d.%m.%Y')}"
-            )
+            if identity.is_draft:
+                title = f"{identity.title_prefix}{identity.name} {event_at_local.strftime('%d.%m.%Y')}"
+            elif is_konetskhod_club(identity.name):
+                title = konetskhod_title(self.db, identity.title_prefix)
+            else:
+                title = f"{identity.title_prefix}{identity.name} Pauper {event_at_local.strftime('%d.%m.%Y')}"
             tournament = TournamentService(self.db).create_tournament(
                 TournamentCreate(
                     title=title,

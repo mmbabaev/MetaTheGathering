@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import BadRequest, Forbidden, TelegramError
 
 from bot.deeplink import deck_deeplink, registration_deeplink
 from core import models
-from core.config import Club
+from core.config import Club, settings
 from core.database import SessionLocal
+from services.endstep_table_titles import is_konetskhod_club
 from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.registration_message import (
     HIDDEN_PARTICIPANT_COUNT,
@@ -18,11 +20,32 @@ from services.registration_message import (
 
 logger = logging.getLogger(__name__)
 
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+
 
 def _markup(button_url: str | None, button_label: str = "📝 Записать колоду"):
     if not button_url:
         return None
     return InlineKeyboardMarkup([[InlineKeyboardButton(button_label, url=button_url)]])
+
+
+def _konetskhod_icon(tournament: models.Tournament | None) -> Path | None:
+    """Иконка «Концехода» для анонса записи; только для регулярного Endstep-ru."""
+    if tournament is None or tournament.is_draft or not is_konetskhod_club(tournament.club):
+        return None
+    raw = settings.KONETSKHOD_ICON_PATH.strip()
+    if not raw:
+        return None
+    path = Path(raw) if Path(raw).is_absolute() else _REPO_ROOT / raw
+    return path if path.is_file() else None
+
+
+async def _send_registration_message(bot, chat_id: int, text: str, markup, icon: Path | None):
+    """Photo-with-caption для Концехода (если иконка доступна), иначе обычный текст."""
+    if icon is not None:
+        with icon.open("rb") as photo:
+            return await bot.send_photo(chat_id=chat_id, photo=photo, caption=text, reply_markup=markup)
+    return await bot.send_message(chat_id=chat_id, text=text, reply_markup=markup)
 
 
 async def send_registration_open(
@@ -52,13 +75,10 @@ async def send_registration_open(
     participant_count = service.participant_count(tournament_id)
     text = format_registration_message(base_text, participant_count) if live_count_enabled else base_text
     sent = 0
+    icon = _konetskhod_icon(tournament)
     for chat_id in targets:
         try:
-            message = await bot.send_message(
-                chat_id=chat_id,
-                text=text,
-                reply_markup=_markup(button_url, button_label),
-            )
+            message = await _send_registration_message(bot, chat_id, text, _markup(button_url, button_label), icon)
             sent += 1
             if not isinstance(message.message_id, int):
                 continue
@@ -96,12 +116,24 @@ class RegistrationMessageRefreshJob:
                 )
                 try:
                     button_label = "📝 Записаться" if row.tournament.is_draft else "📝 Записать колоду"
-                    await bot.edit_message_text(
-                        chat_id=row.chat_id,
-                        message_id=row.message_id,
-                        text=text,
-                        reply_markup=_markup(row.button_url, button_label),
-                    )
+                    markup = _markup(row.button_url, button_label)
+                    try:
+                        await bot.edit_message_text(
+                            chat_id=row.chat_id,
+                            message_id=row.message_id,
+                            text=text,
+                            reply_markup=markup,
+                        )
+                    except BadRequest as exc:
+                        if "no text in the message" not in str(exc).lower():
+                            raise
+                        # Анонс Концехода отправлен фото: текст живёт в caption.
+                        await bot.edit_message_caption(
+                            chat_id=row.chat_id,
+                            message_id=row.message_id,
+                            caption=text,
+                            reply_markup=markup,
+                        )
                 except BadRequest as exc:
                     message = str(exc).lower()
                     if "message is not modified" in message:

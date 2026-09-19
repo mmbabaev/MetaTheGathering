@@ -10,6 +10,7 @@ from sqlalchemy import select
 from bot.registration_messages import send_registration_open
 from core import models
 from services import errors
+from services.endstep_table_titles import is_konetskhod_club
 from services.tournament_creation import InvalidCreationPlan, TournamentCreationPlanService
 
 logger = logging.getLogger(__name__)
@@ -39,9 +40,14 @@ async def execute_creation_plan(bot, db, plan_id: int) -> CreationExecutionResul
         return CreationExecutionResult(plan_id, None, False, error=str(exc))
 
     event_icon = "🎮" if prepared.club.is_online else "🏆"
-    format_label = "" if prepared.tournament.is_draft else " Pauper"
+    if is_konetskhod_club(prepared.club.name):
+        # У Концехода публичное имя — нумерованный заголовок турнира («⏭️🦶 Концеход Pauper #N»).
+        name = prepared.tournament.title
+    else:
+        format_label = "" if prepared.tournament.is_draft else " Pauper"
+        name = f"{prepared.club.title_prefix}{prepared.club.name}{format_label}"
     base_text = (
-        f"{event_icon} {prepared.club.title_prefix}{prepared.club.name}{format_label} — "
+        f"{event_icon} {name} — "
         f"{prepared.event_at_local.strftime('%d.%m.%Y')} "
         f"в {prepared.event_at_local.strftime('%H:%M')}\n"
         "Турнир создан. Регистрация открыта."

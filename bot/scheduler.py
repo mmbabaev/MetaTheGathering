@@ -50,6 +50,7 @@ from services.datalens import DataLensService
 from services.deck_mapping import refresh_archetype_macro
 from services.deck_reminders import DeckReminderStage
 from services.endstep_ru_leaderboard import EndstepRuLeaderboard
+from services.endstep_table_titles import is_konetskhod_club, konetskhod_title
 from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.magicoculus import (
     MagicOculusClient,
@@ -198,7 +199,6 @@ class CreateTournamentJob:
 
         event_at = _event_datetime(now, self.schedule)
         date_str = event_at.strftime("%Y-%m-%d")
-        title = f"{self.club.title_prefix}{self.club.name} Pauper {event_at.strftime('%d.%m.%Y')}"
         club_slug = "-".join(self.club.name.lower().split())
         slug = f"{date_str}-{club_slug}-pauper"
 
@@ -207,6 +207,11 @@ class CreateTournamentJob:
             db = SessionLocal()
         try:
             svc = TournamentService(db)
+            title = (
+                konetskhod_title(db, self.club.title_prefix)
+                if is_konetskhod_club(self.club.name)
+                else f"{self.club.title_prefix}{self.club.name} Pauper {event_at.strftime('%d.%m.%Y')}"
+            )
             try:
                 active = svc.list_active_tournaments_for_club(self.club.name)
                 if len(active) >= MAX_ACTIVE_TOURNAMENTS_PER_CLUB:
@@ -244,9 +249,14 @@ class CreateTournamentJob:
                         if self.schedule.create_days_before == 1
                         else event_at.strftime("%d.%m.%Y")
                     )
+                    name = (
+                        new_t.title
+                        if is_konetskhod_club(self.club.name)
+                        else f"{self.club.title_prefix}{self.club.name} Pauper"
+                    )
                     text = (
-                        f"{'🎮' if self.club.is_online else '🏆'} {self.club.title_prefix}{self.club.name} "
-                        f"Pauper — {when} в {self.schedule.game_time}\n"
+                        f"{'🎮' if self.club.is_online else '🏆'} {name} "
+                        f"— {when} в {self.schedule.game_time}\n"
                         f"Турнир создан. Регистрация открыта."
                     )
                     await send_registration_open(bot, db, self.club, new_t.id, text)
@@ -275,8 +285,13 @@ class PreStartReminderJob:
             if active is None:
                 logger.info("PreStartReminderJob: no active tournament for '%s'", self.club.name)
                 return
+            name = (
+                active.title
+                if is_konetskhod_club(self.club.name)
+                else f"{self.club.title_prefix}{self.club.name} Pauper"
+            )
             text = (
-                f"⏰ {self.club.title_prefix}{self.club.name} Pauper начинается в {self.schedule.game_time}!\n"
+                f"⏰ {name} начинается в {self.schedule.game_time}!\n"
                 f"Ещё не записали колоду? Успейте — жмите кнопку ниже."
             )
             try:
