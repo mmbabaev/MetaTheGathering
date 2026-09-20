@@ -18,6 +18,7 @@ from services.tournament_creation import TournamentCreationPlanService
 from services.user import UserService
 
 USER_DATA_CREATE_TOURNAMENT = "create_tournament_wizard"
+USER_DATA_PENDING_CREATE_TOURNAMENT_NAME = "pending_create_tournament_name"
 
 
 def _handler(db) -> CreateTournamentWizardHandler:
@@ -57,6 +58,7 @@ async def cmd_create_tournament_wizard(update: Update, context: ContextTypes.DEF
         db.close()
     if result.keyboard is not None:
         _draft(context).clear()
+        context.user_data.pop(USER_DATA_PENDING_CREATE_TOURNAMENT_NAME, None)
     await message.reply_text(result.text, reply_markup=result.keyboard)
 
 
@@ -128,7 +130,45 @@ async def callback_back(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     target = _arg(query, "ctw_b") if query else None
     if target is None:
         return
+    context.user_data.pop(USER_DATA_PENDING_CREATE_TOURNAMENT_NAME, None)
     await _edit(update, context, lambda handler, tg_id, draft: handler.handle_back(tg_id, draft, target))
+
+
+async def callback_name_custom(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user = update.effective_user
+    if not query or not user:
+        return
+    context.user_data[USER_DATA_PENDING_CREATE_TOURNAMENT_NAME] = True
+    await _edit(update, context, lambda handler, tg_id, draft: handler.handle_name_input_start(tg_id, draft))
+
+
+async def callback_name_keep(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    context.user_data.pop(USER_DATA_PENDING_CREATE_TOURNAMENT_NAME, None)
+    await _edit(update, context, lambda handler, tg_id, draft: handler.handle_name_keep(tg_id, draft))
+
+
+async def handle_pending_create_tournament_name(msg, user, text, context) -> bool:
+    if not context.user_data.get(USER_DATA_PENDING_CREATE_TOURNAMENT_NAME):
+        return False
+    draft = context.user_data.get(USER_DATA_CREATE_TOURNAMENT, {})
+    if not isinstance(draft, dict) or draft.get("step") != "name_input":
+        context.user_data.pop(USER_DATA_PENDING_CREATE_TOURNAMENT_NAME, None)
+        return False
+    if not text:
+        await msg.reply_text("Введите непустое название.")
+        return True
+    db = SessionLocal()
+    try:
+        result = _handler(db).handle_name_text(user.id, draft, text)
+        if result.is_alert:
+            await msg.reply_text(result.text)
+            return True
+        context.user_data.pop(USER_DATA_PENDING_CREATE_TOURNAMENT_NAME, None)
+        await msg.reply_text(result.text, reply_markup=result.keyboard)
+    finally:
+        db.close()
+    return True
 
 
 async def callback_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -137,6 +177,7 @@ async def callback_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not query or not user:
         return
     _draft(context).clear()
+    context.user_data.pop(USER_DATA_PENDING_CREATE_TOURNAMENT_NAME, None)
     _log("create_tournament_cancel", user)
     await query.edit_message_text("Создание турнира отменено.")
     await query.answer()

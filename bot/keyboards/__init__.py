@@ -150,6 +150,8 @@ CB_CREATE_WIZARD_ANNOUNCE_DATE = "ctw_ad"
 CB_CREATE_WIZARD_ANNOUNCE_TIME = "ctw_at"
 CB_CREATE_WIZARD_EVENT_DATE = "ctw_ed"
 CB_CREATE_WIZARD_EVENT_TIME = "ctw_et"
+CB_CREATE_WIZARD_CUSTOM_NAME = "ctw_nm"  # Концеход: ввести своё название турнира
+CB_CREATE_WIZARD_NAME_KEEP = "ctw_nk"  # Концеход: оставить авто-название
 CB_CREATE_WIZARD_BACK = "ctw_b"
 CB_CREATE_WIZARD_CONFIRM = "ctw_ok"
 CB_CREATE_WIZARD_CANCEL = "ctw_no"
@@ -1164,14 +1166,29 @@ class Keyboards:
         rows.append([InlineKeyboardButton("❌ Отмена", callback_data=CB_CREATE_WIZARD_CANCEL)])
         return InlineKeyboardMarkup(rows)
 
-    def create_tournament_confirm_keyboard(self) -> InlineKeyboardMarkup:
+    def create_tournament_name_keyboard(self, *, auto_title: str, custom_title: str | None) -> InlineKeyboardMarkup:
+        """Концеход: шаг «Название» — своё название / авто по умолчанию."""
+        keep_label = f"✅ Оставить «{custom_title}»" if custom_title else "✅ Оставить по умолчанию"
         return InlineKeyboardMarkup(
             [
-                [InlineKeyboardButton("✅ Запланировать", callback_data=CB_CREATE_WIZARD_CONFIRM)],
+                [InlineKeyboardButton("✏️ Ввести своё название", callback_data=CB_CREATE_WIZARD_CUSTOM_NAME)],
+                [InlineKeyboardButton(keep_label, callback_data=CB_CREATE_WIZARD_NAME_KEEP)],
+                [InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_CREATE_WIZARD_BACK}:et")],
+                [InlineKeyboardButton("❌ Отмена", callback_data=CB_CREATE_WIZARD_CANCEL)],
+            ]
+        )
+
+    def create_tournament_confirm_keyboard(self, *, title_editable: bool = False) -> InlineKeyboardMarkup:
+        rows = [[InlineKeyboardButton("✅ Запланировать", callback_data=CB_CREATE_WIZARD_CONFIRM)]]
+        if title_editable:
+            rows.append([InlineKeyboardButton("✏️ Изменить название", callback_data=f"{CB_CREATE_WIZARD_BACK}:nm")])
+        rows.extend(
+            [
                 [InlineKeyboardButton("⬅️ Изменить время турнира", callback_data=f"{CB_CREATE_WIZARD_BACK}:et")],
                 [InlineKeyboardButton("❌ Отмена", callback_data=CB_CREATE_WIZARD_CANCEL)],
             ]
         )
+        return InlineKeyboardMarkup(rows)
 
     def schedule_list_keyboard(self, rows: list[tuple[int, str]]) -> InlineKeyboardMarkup:
         """Список строк расписания: одна кнопка на строку. rows: (row_id, label)."""

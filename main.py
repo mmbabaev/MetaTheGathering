@@ -63,8 +63,10 @@ from bot.keyboards import (
     CB_CREATE_WIZARD_CANCEL,
     CB_CREATE_WIZARD_CLUB,
     CB_CREATE_WIZARD_CONFIRM,
+    CB_CREATE_WIZARD_CUSTOM_NAME,
     CB_CREATE_WIZARD_EVENT_DATE,
     CB_CREATE_WIZARD_EVENT_TIME,
+    CB_CREATE_WIZARD_NAME_KEEP,
     CB_CUSTOM_ARCHETYPE,
     CB_DEBUG_FILL_TOURNAMENT,
     CB_DEBUG_META_POLICE,
@@ -481,6 +483,15 @@ def main() -> None:
         )
     )
     app.add_handler(CallbackQueryHandler(create_tournament_handler.callback_back, pattern=f"^{CB_CREATE_WIZARD_BACK}:"))
+    app.add_handler(
+        CallbackQueryHandler(
+            create_tournament_handler.callback_name_custom,
+            pattern=f"^{CB_CREATE_WIZARD_CUSTOM_NAME}$",
+        )
+    )
+    app.add_handler(
+        CallbackQueryHandler(create_tournament_handler.callback_name_keep, pattern=f"^{CB_CREATE_WIZARD_NAME_KEEP}$")
+    )
     app.add_handler(
         CallbackQueryHandler(create_tournament_handler.callback_confirm, pattern=f"^{CB_CREATE_WIZARD_CONFIRM}$")
     )

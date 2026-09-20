@@ -63,6 +63,7 @@ class TournamentCreationPlanService:
         created_by_tg_id: int,
         announce_at: datetime,
         event_at: datetime,
+        custom_title: str | None = None,
     ) -> models.TournamentCreationPlan:
         identity = club_identity(club_name)
         if identity is None:
@@ -87,6 +88,7 @@ class TournamentCreationPlanService:
             target = AnnouncementTarget("real", identity.chat_id, identity.real_chat_label or identity.name)
         row = models.TournamentCreationPlan(
             club_name=club_name,
+            custom_title=(custom_title.strip() if custom_title else None) or None,
             created_by_tg_id=created_by_tg_id,
             announce_at=announce_at,
             event_at=event_at,
@@ -138,7 +140,7 @@ class TournamentCreationPlanService:
             if identity.is_draft:
                 title = f"{identity.title_prefix}{identity.name} {event_at_local.strftime('%d.%m.%Y')}"
             elif is_konetskhod_club(identity.name):
-                title = konetskhod_title(self.db, identity.title_prefix)
+                title = (plan.custom_title or "").strip() or konetskhod_title(self.db, identity.title_prefix)
             else:
                 title = f"{identity.title_prefix}{identity.name} Pauper {event_at_local.strftime('%d.%m.%Y')}"
             tournament = TournamentService(self.db).create_tournament(

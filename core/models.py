@@ -924,6 +924,7 @@ class TournamentCreationPlan(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     club_name = Column(String(64), nullable=False, index=True)
+    custom_title = Column(String(128), nullable=True)
     created_by_tg_id = Column(BigInteger, nullable=False, index=True)
     announce_at = Column(DateTime, nullable=False, index=True)
     event_at = Column(DateTime, nullable=False)
