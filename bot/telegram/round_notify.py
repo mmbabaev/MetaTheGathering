@@ -43,10 +43,12 @@ async def _deliver(bot, messages: list[OutgoingNotification]) -> int:
 async def send_round_notifications(
     bot, db, tournament_id: int, round_numbers: list[int], *, datalens_service: DataLensService | None = None
 ) -> int:
-    """DM each self-registered, opted-in player about their opponent in the new rounds.
+    """DM each self-registered player about their opponent in the new rounds.
 
     Opt-in per user: only players who enabled "Уведомления об оппоненте" in /settings
-    (``notify_opponent_rounds``, OFF by default) receive these notifications.
+    (``notify_opponent_rounds``, OFF by default) receive these notifications. Для
+    Концехода (регулярный онлайн-турнир Endstep-ru) opt-in игнорируется — стол и
+    оппонента получают все самозарегистрированные игроки раунда.
     ``datalens_service`` (optional) enriches the message with opponent stats.
 
     Returns the number of messages successfully sent.

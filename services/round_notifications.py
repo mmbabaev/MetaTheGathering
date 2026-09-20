@@ -16,6 +16,7 @@ from core import models
 from services.aetherhub_import_service import AetherhubImportService
 from services.archetype import ArchetypeService
 from services.datalens import DataLensService, StatRow
+from services.endstep_table_titles import is_konetskhod_club
 from services.feature_flags import FeatureFlags, FeatureFlagService
 from services.ranked_round_info import RankedRoundInfoService
 
@@ -91,6 +92,11 @@ class RoundNotificationService:
             select(models.Tournament.status).where(models.Tournament.id == tournament_id)
         ).scalar_one_or_none()
         return status == models.TournamentStatus.CLOSED
+
+    def is_konetskhod_tournament(self, tournament_id: int) -> bool:
+        """Концеход (регулярный онлайн-турнир Endstep-ru): уведомляем всех, без opt-in."""
+        tournament = self.db.get(models.Tournament, tournament_id)
+        return tournament is not None and is_konetskhod_club(tournament.club)
 
     def build_for_tournament(self, tournament_id: int) -> list[RoundNotification]:
         """Build notifications across all known rounds of the tournament."""

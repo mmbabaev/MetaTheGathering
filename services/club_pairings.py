@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from core import models
 from services.aetherhub_import_service import AetherhubImportService
-from services.endstep_table_titles import ENDSTEP_TABLE_TITLE, is_endstep_swiss
+from services.endstep_table_titles import ENDSTEP_TABLE_TITLE, is_endstep_swiss, is_konetskhod_club
 from services.round_pairings_view import format_round_pairings
 from services.round_results import RoundResultsService
 from services.schedule import ScheduleService
@@ -62,6 +62,12 @@ class ClubPairingsService:
         return ClubPairingsMessage(
             chat_id=tournament.chat_id,
             round_number=round_number,
-            text=format_round_pairings(tournament.title, tournament.status.label_ru, round_number, matches),
+            text=format_round_pairings(
+                tournament.title,
+                tournament.status.label_ru,
+                round_number,
+                matches,
+                use_endstep_username=is_konetskhod_club(tournament.club),
+            ),
             table_copy_text=ENDSTEP_TABLE_TITLE if is_endstep_swiss(tournament) else None,
         )

@@ -13,10 +13,13 @@ from bot.keyboards import Keyboards
 from bot.swiss_completion import publish_swiss_completion
 from bot.telegram.club_pairings import refresh_club_pairings, send_club_pairings
 from bot.telegram.common import parse_callback_ints
+from bot.telegram.round_notify import send_round_notifications
 from core import models
 from core.config import settings
 from core.database import SessionLocal
 from services.aetherhub_import_service import AetherhubImportService
+from services.datalens import DataLensService
+from services.endstep_table_titles import is_konetskhod_club
 from services.user import UserService
 
 logger = logging.getLogger(__name__)
@@ -255,6 +258,17 @@ async def callback_swiss_next_round(update: Update, context: ContextTypes.DEFAUL
             return
         if result.new_round_numbers:
             await send_club_pairings(context.bot, db, tournament_id, result.new_round_numbers)
+            try:
+                if tournament is not None and is_konetskhod_club(tournament.club):
+                    await send_round_notifications(
+                        context.bot,
+                        db,
+                        tournament_id,
+                        result.new_round_numbers,
+                        datalens_service=DataLensService(),
+                    )
+            except Exception:
+                logger.exception("Round notifications failed for tournament %s", tournament_id)
     finally:
         db.close()
 
