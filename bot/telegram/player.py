@@ -746,6 +746,9 @@ async def _handle_pending_decklist(msg, user, text, context) -> bool:
 
 from bot.telegram.aetherhub import handle_pending_aetherhub_url as _handle_pending_aetherhub_url
 from bot.telegram.aetherhub import handle_pending_import_time as _handle_pending_import_time
+from bot.telegram.create_tournament import (
+    handle_pending_create_tournament_name as _handle_pending_create_tournament_name,
+)
 from bot.telegram.poll import handle_pending_link_poll as _handle_pending_link_poll
 from bot.telegram.schedule import handle_pending_schedule_edit as _handle_pending_schedule_edit
 
@@ -774,6 +777,7 @@ _TEXT_INPUT_HANDLERS = [
     _handle_pending_decklist,
     _handle_pending_name,
     _handle_pending_cellar_name,
+    _handle_pending_create_tournament_name,
     _handle_pending_settings_name,
     _handle_pending_settings_endstep_username,
     _handle_pending_settings_city,

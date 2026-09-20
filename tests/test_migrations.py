@@ -387,6 +387,28 @@ def test_user_city_migration_keeps_existing_city_empty_and_accepts_custom_value(
         assert connection.execute(sa.select(migrated_users.c.city)).scalar_one() == "Казань"
 
 
+def test_creation_plan_custom_title_migration_adds_nullable_column():
+    metadata = sa.MetaData()
+    sa.Table("tournaments", metadata, sa.Column("id", sa.Integer, primary_key=True))
+    engine = sa.create_engine("sqlite://")
+    metadata.create_all(engine)
+    plans_migration = runpy.run_path(str(VERSIONS_DIR / "4953faa801dd_add_tournament_creation_plans.py"))
+    custom_migration = runpy.run_path(str(VERSIONS_DIR / "842c718201a6_add_custom_title_to_creation_plans.py"))
+
+    with engine.begin() as connection:
+        context = MigrationContext.configure(connection)
+        with Operations.context(context):
+            plans_migration["upgrade"]()
+            custom_migration["upgrade"]()
+        plans = sa.Table("tournament_creation_plans", sa.MetaData(), autoload_with=connection)
+        assert {"custom_title"} <= set(plans.c.keys())
+
+        with Operations.context(context):
+            custom_migration["downgrade"]()
+        plans = sa.Table("tournament_creation_plans", sa.MetaData(), autoload_with=connection)
+        assert "custom_title" not in plans.c.keys()
+
+
 def test_internal_swiss_migration_keeps_existing_tournaments_on_aetherhub():
     metadata = sa.MetaData()
     tournaments = sa.Table("tournaments", metadata, sa.Column("id", sa.Integer, primary_key=True))

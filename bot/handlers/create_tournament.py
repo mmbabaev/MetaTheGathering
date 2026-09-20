@@ -14,6 +14,7 @@ from bot.keyboards import (
 from bot.messages import NOT_ADMIN
 from core.clubs import ClubIdentity, club_identities
 from services.club_settings import ClubAnnouncementSettingsService
+from services.endstep_table_titles import is_konetskhod_club, konetskhod_title
 from services.tournament_creation import InvalidCreationPlan, TournamentCreationPlanService
 from services.user import UserService
 
@@ -23,6 +24,7 @@ ANNOUNCE_TIMES = [f"{hour:02d}:{minute:02d}" for hour in range(8, 24) for minute
 EVENT_TIMES = [f"{hour:02d}:{minute:02d}" for hour in range(8, 24) for minute in (0, 30)]
 WEEKDAY_SHORT = ("пн", "вт", "ср", "чт", "пт", "сб", "вс")
 WIZARD_EXPIRED = "Сценарий создания устарел. Запустите /create_tournament ещё раз."
+MAX_CUSTOM_TITLE = 64
 
 
 class CreateTournamentWizardHandler:
@@ -125,6 +127,40 @@ class CreateTournamentWizardHandler:
             return HandlerResult(
                 error, keyboard=self._event_time_result(identity, date.fromisoformat(draft["event_date"])).keyboard
             )
+        if is_konetskhod_club(identity.name):
+            draft["step"] = "name"
+            return self._name_result(identity, draft)
+        return self._confirmation_result(identity, draft)
+
+    def handle_name_keep(self, tg_id: int, draft: dict) -> HandlerResult:
+        """Концеход: оставить авто-название «Концеход Pauper #N» и идти к подтверждению."""
+        identity = self._authorized_identity(tg_id, draft, expected_step="name")
+        if isinstance(identity, HandlerResult):
+            return identity
+        draft["step"] = "confirm"
+        return self._confirmation_result(identity, draft)
+
+    def handle_name_input_start(self, tg_id: int, draft: dict) -> HandlerResult:
+        """Концеход: перейти к вводу своего названия."""
+        identity = self._authorized_identity(tg_id, draft, expected_step="name")
+        if isinstance(identity, HandlerResult):
+            return identity
+        draft["step"] = "name_input"
+        if draft.get("custom_title"):
+            return HandlerResult(f"Название уже выбрано: «{draft['custom_title']}»\n\nВведите новое название турнира:")
+        return HandlerResult("Введите название турнира:")
+
+    def handle_name_text(self, tg_id: int, draft: dict, raw_title: str) -> HandlerResult:
+        identity = self._authorized_identity(tg_id, draft, expected_step="name_input")
+        if isinstance(identity, HandlerResult):
+            return identity
+        title = raw_title.strip()
+        if not title:
+            return HandlerResult("Введите непустое название.", is_alert=True)
+        if len(title) > MAX_CUSTOM_TITLE:
+            return HandlerResult(f"Название не длиннее {MAX_CUSTOM_TITLE} символов.", is_alert=True)
+        draft["custom_title"] = title
+        draft["step"] = "confirm"
         return self._confirmation_result(identity, draft)
 
     def handle_back(self, tg_id: int, draft: dict, target: str, now: datetime | None = None) -> HandlerResult:
@@ -146,6 +182,9 @@ class CreateTournamentWizardHandler:
         if target == "et" and draft.get("event_date"):
             draft["step"] = "event_time"
             return self._event_time_result(identity, date.fromisoformat(draft["event_date"]))
+        if target == "nm" and draft.get("event_time"):
+            draft["step"] = "name"
+            return self._name_result(identity, draft)
         return HandlerResult(WIZARD_EXPIRED, is_alert=True)
 
     def handle_confirm(self, tg_id: int, draft: dict, now: datetime | None = None) -> HandlerResult:
@@ -162,6 +201,7 @@ class CreateTournamentWizardHandler:
                 created_by_tg_id=tg_id,
                 announce_at=announce_at,
                 event_at=event_at,
+                custom_title=draft.get("custom_title"),
             )
         except InvalidCreationPlan as exc:
             return HandlerResult(str(exc), is_alert=True)
@@ -232,15 +272,41 @@ class CreateTournamentWizardHandler:
             target_label = identity.real_chat_label or identity.name
         else:
             target_label = target.label
-        text = (
-            "Проверьте создание турнира:\n\n"
-            f"Клуб: {identity.title_prefix}{identity.name}\n"
-            f"Объявление в чат: {publication}\n"
-            f"Чат для объявления: {target_label}\n"
-            f"Турнир: {self._date_label(event_date)} в {draft['event_time']}\n"
-            f"Часовой пояс: {identity.timezone}"
+        text_lines = [
+            "Проверьте создание турнира:",
+            "",
+            f"Клуб: {identity.title_prefix}{identity.name}",
+        ]
+        if is_konetskhod_club(identity.name):
+            chosen = draft.get("custom_title") or konetskhod_title(self.plans.db, identity.title_prefix)
+            text_lines.append(f"Название: «{chosen}»")
+        text_lines.extend(
+            [
+                f"Объявление в чат: {publication}",
+                f"Чат для объявления: {target_label}",
+                f"Турнир: {self._date_label(event_date)} в {draft['event_time']}",
+                f"Часовой пояс: {identity.timezone}",
+            ]
         )
-        return HandlerResult(text, keyboard=self.keyboards.create_tournament_confirm_keyboard())
+        return HandlerResult(
+            "\n".join(text_lines),
+            keyboard=self.keyboards.create_tournament_confirm_keyboard(
+                title_editable=is_konetskhod_club(identity.name)
+            ),
+        )
+
+    def _name_result(self, identity: ClubIdentity, draft: dict) -> HandlerResult:
+        """Концеход: шаг «Название» — своё название или авто «Концеход Pauper #N»."""
+        auto = konetskhod_title(self.plans.db, identity.title_prefix)
+        keyboard = self.keyboards.create_tournament_name_keyboard(
+            auto_title=auto,
+            custom_title=draft.get("custom_title"),
+        )
+        default_label = f"«{draft['custom_title']}»" if draft.get("custom_title") else f"«{auto}»"
+        return HandlerResult(
+            f"{self._creation_icon(identity)} {identity.name}\n\n📝 Как назвать турнир?\nПо умолчанию: {default_label}",
+            keyboard=keyboard,
+        )
 
     def _authorized_identity(
         self, tg_id: int, draft: dict, expected_step: str | None = None

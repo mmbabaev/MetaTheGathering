@@ -33,7 +33,8 @@ def _complete_draft(handler, draft, *, announce_now=True):
         handler.handle_announce_date(ADMIN_ID, draft, "20260904", now=NOW)
         handler.handle_announce_time(ADMIN_ID, draft, "1800", now=NOW)
     handler.handle_event_date(ADMIN_ID, draft, "20260905", now=NOW)
-    return handler.handle_event_time(ADMIN_ID, draft, "1930", now=NOW)
+    handler.handle_event_time(ADMIN_ID, draft, "1930", now=NOW)
+    return handler.handle_name_keep(ADMIN_ID, draft)
 
 
 def test_wizard_starts_with_club_buttons_and_endstep_icon(db):
@@ -55,6 +56,7 @@ def test_wizard_builds_immediate_plan_in_club_timezone(db):
     confirmation = _complete_draft(handler, draft)
     assert "сразу после подтверждения" in confirmation.text
     assert "Чат для объявления: https://t.me/metathegatheringtestgroup" in confirmation.text
+    assert "Название: «⏭️🦶 Концеход Pauper #1»" in confirmation.text
 
     result = handler.handle_confirm(ADMIN_ID, draft, now=NOW)
     plan = TournamentCreationPlanService(db).get(result.creation_plan_id)
@@ -62,6 +64,7 @@ def test_wizard_builds_immediate_plan_in_club_timezone(db):
     assert plan.announce_at == datetime(2026, 9, 4, 9, 0)
     assert plan.event_at == datetime(2026, 9, 5, 16, 30)
     assert plan.status == "pending"
+    assert plan.custom_title is None
 
 
 def test_wizard_builds_future_publication_plan(db):
@@ -86,6 +89,99 @@ def test_wizard_rejects_event_before_publication(db):
     result = handler.handle_event_time(ADMIN_ID, draft, "1930", now=NOW)
     assert "после публикации" in result.text
     assert result.keyboard is not None
+
+
+def _to_konetskhod_name_step(handler, draft):
+    handler.handle_club(ADMIN_ID, draft, 4, now=NOW)  # Endstep-ru
+    handler.handle_announce_now(ADMIN_ID, draft, now=NOW)
+    handler.handle_event_date(ADMIN_ID, draft, "20260905", now=NOW)
+    return handler.handle_event_time(ADMIN_ID, draft, "1930", now=NOW)
+
+
+def test_konetskhod_wizard_asks_custom_name_step_before_confirmation(db):
+    handler = _handler(db)
+    draft = {}
+    name_step = _to_konetskhod_name_step(handler, draft)
+    assert "Как назвать турнир?" in name_step.text
+    assert "По умолчанию: «⏭️🦶 Концеход Pauper #1»" in name_step.text
+    labels = [button.text for row in name_step.keyboard.inline_keyboard for button in row]
+    assert any("Оставить по умолчанию" in label for label in labels)
+    assert any("Ввести своё название" in label for label in labels)
+
+
+async def test_konetskhod_wizard_custom_title_used_in_tournament_and_announcement(db, monkeypatch):
+    monkeypatch.setattr(models, "utc_now", lambda: datetime(2026, 9, 4, 8, 0))
+    handler = _handler(db)
+    draft = {}
+    _to_konetskhod_name_step(handler, draft)
+    prompt = handler.handle_name_input_start(ADMIN_ID, draft)
+    assert "Введите название турнира:" in prompt.text
+
+    confirmation = handler.handle_name_text(ADMIN_ID, draft, "  Стилёк фит Концеход  ")
+    assert "Название: «Стилёк фит Концеход»" in confirmation.text
+    result = handler.handle_confirm(ADMIN_ID, draft, now=NOW)
+    plan = TournamentCreationPlanService(db).get(result.creation_plan_id)
+    assert plan.custom_title == "Стилёк фит Концеход"
+
+    bot = AsyncMock()
+    bot.get_me.return_value.username = "test_bot"
+    bot.send_message.return_value.message_id = 123
+    execution = await execute_creation_plan(bot, db, plan.id)
+    tournament = db.get(models.Tournament, execution.tournament_id)
+    assert tournament.title == "Стилёк фит Концеход"
+    announcement = bot.send_message.await_args.kwargs["text"]
+    assert announcement.startswith("🎮 Стилёк фит Концеход —")
+
+
+def test_konetskhod_wizard_keeps_auto_title_by_default(db):
+    handler = _handler(db)
+    draft = {}
+    _to_konetskhod_name_step(handler, draft)
+    confirmation = handler.handle_name_keep(ADMIN_ID, draft)
+    assert "Название: «⏭️🦶 Концеход Pauper #1»" in confirmation.text
+    result = handler.handle_confirm(ADMIN_ID, draft, now=NOW)
+    plan = TournamentCreationPlanService(db).get(result.creation_plan_id)
+    assert plan.custom_title is None
+
+
+def test_konetskhod_wizard_edits_name_from_confirmation(db):
+    handler = _handler(db)
+    draft = {}
+    _to_konetskhod_name_step(handler, draft)
+    draft["custom_title"] = "Стилёк фит Концеход"
+    name_step = handler.handle_back(ADMIN_ID, draft, "nm")
+    assert "Как назвать турнир?" in name_step.text
+    assert "По умолчанию: «Стилёк фит Концеход»" in name_step.text
+    labels = [button.text for row in name_step.keyboard.inline_keyboard for button in row]
+    assert any("Оставить «Стилёк фит Концеход»" in label for label in labels)
+
+
+def test_konetskhod_wizard_rejects_empty_and_overlong_name(db):
+    handler = _handler(db)
+    draft = {}
+    _to_konetskhod_name_step(handler, draft)
+    handler.handle_name_input_start(ADMIN_ID, draft)
+
+    empty = handler.handle_name_text(ADMIN_ID, draft, "   ")
+    assert empty.is_alert
+    assert "непустое" in empty.text
+
+    long_name = handler.handle_name_text(ADMIN_ID, draft, "К" * 65)
+    assert long_name.is_alert
+    assert "64" in long_name.text
+
+    allowed = handler.handle_name_text(ADMIN_ID, draft, "К" * 64)
+    assert not allowed.is_alert
+
+
+def test_non_konetskhod_wizard_skips_name_step(db):
+    handler = _handler(db)
+    draft = {}
+    handler.handle_club(ADMIN_ID, draft, 0, now=NOW)  # Goldfish
+    handler.handle_announce_now(ADMIN_ID, draft, now=NOW)
+    handler.handle_event_date(ADMIN_ID, draft, "20260905", now=NOW)
+    confirmation = handler.handle_event_time(ADMIN_ID, draft, "1930", now=NOW)
+    assert "Название:" not in confirmation.text
 
 
 def test_non_admin_cannot_start_wizard(db):
@@ -146,6 +242,38 @@ def test_regular_endstep_manual_tournament_defaults_to_internal_swiss(db, monkey
     )
     tournament = db.get(models.Tournament, service.prepare_tournament(plan.id).tournament.id)
     assert tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS
+
+
+def test_plan_custom_title_overrides_numbered_konetskhod_title(db, monkeypatch):
+    monkeypatch.setattr(models, "utc_now", lambda: datetime(2026, 9, 4, 8, 0))
+    service = TournamentCreationPlanService(db)
+    ClubAnnouncementSettingsService(db).set_destination("Endstep-ru", "test")
+    plan = service.create_plan(
+        club_name="Endstep-ru",
+        created_by_tg_id=ADMIN_ID,
+        announce_at=datetime(2026, 9, 4, 9, 0),
+        event_at=datetime(2026, 9, 5, 16, 30),
+        custom_title="  Стилёк фит Концеход ",
+    )
+    assert plan.custom_title == "Стилёк фит Концеход"
+    tournament = db.get(models.Tournament, service.prepare_tournament(plan.id).tournament.id)
+    assert tournament.title == "Стилёк фит Концеход"
+
+
+def test_plan_blank_custom_title_keeps_numbered_title(db, monkeypatch):
+    monkeypatch.setattr(models, "utc_now", lambda: datetime(2026, 9, 4, 8, 0))
+    service = TournamentCreationPlanService(db)
+    ClubAnnouncementSettingsService(db).set_destination("Endstep-ru", "test")
+    plan = service.create_plan(
+        club_name="Endstep-ru",
+        created_by_tg_id=ADMIN_ID,
+        announce_at=datetime(2026, 9, 4, 9, 0),
+        event_at=datetime(2026, 9, 5, 16, 30),
+        custom_title="   ",
+    )
+    assert plan.custom_title is None
+    tournament = db.get(models.Tournament, service.prepare_tournament(plan.id).tournament.id)
+    assert tournament.title == "⏭️🦶 Концеход Pauper #1"
 
 
 async def test_konetskhod_numbered_after_existing_tournaments(db, monkeypatch):
