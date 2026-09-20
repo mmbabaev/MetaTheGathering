@@ -168,10 +168,12 @@ async def test_internal_swiss_toggle_and_first_round_publish_only_to_configured_
     toggle_update, _ = _update(users[0].tg_id, f"sw_mode:{tournament.id}")
     next_update, next_query = _update(users[0].tg_id, f"sw_next:{tournament.id}")
     publication = AsyncMock(return_value=True)
+    notifications = AsyncMock(return_value=0)
     bot = AsyncMock()
     with (
         patch("bot.telegram.round_results.SessionLocal", return_value=db),
         patch("bot.telegram.round_results.send_club_pairings", publication),
+        patch("bot.telegram.round_results.send_round_notifications", notifications),
     ):
         await callback_swiss_mode(toggle_update, SimpleNamespace(bot=bot))
         await callback_swiss_next_round(next_update, SimpleNamespace(bot=bot))
@@ -179,6 +181,9 @@ async def test_internal_swiss_toggle_and_first_round_publish_only_to_configured_
     assert db.get(models.Tournament, tournament.id).engine_mode == models.TournamentEngineMode.INTERNAL_SWISS
     assert db.query(models.RoundPairing).filter_by(tournament_id=tournament.id).count() == 4
     publication.assert_awaited_once_with(bot, db, tournament.id, [1])
+    notifications.assert_awaited_once()
+    assert notifications.await_args.args[:3] == (bot, db, tournament.id)
+    assert notifications.await_args.args[3] == [1]
     next_query.edit_message_text.assert_awaited_once()
 
 

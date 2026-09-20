@@ -9,8 +9,14 @@ from core.models import RoundMatchStatus
 from services.names import format_participant_name
 
 
-def _round_match_names(matches: list) -> tuple[dict[tuple[int, int], str], dict[tuple[int, int], str]]:
-    """Return primary Telegram labels and full ``Фамилия Имя`` labels."""
+def _round_match_names(
+    matches: list, *, use_endstep_username: bool = False
+) -> tuple[dict[tuple[int, int], str], dict[tuple[int, int], str]]:
+    """Return primary Telegram labels and full ``Фамилия Имя`` labels.
+
+    ``use_endstep_username=True`` (Концеход): вместо тг-ника показываем ник Endstep,
+    а если его нет — прочерк. Полные имена не меняются.
+    """
     compact: dict[tuple[int, int], str] = {}
     full: dict[tuple[int, int], str] = {}
     for match in matches:
@@ -22,8 +28,11 @@ def _round_match_names(matches: list) -> tuple[dict[tuple[int, int], str], dict[
             key = (match.id, position)
             if user is not None:
                 full[key] = format_participant_name(user.first_name, user.last_name) or source_name
-                username = (user.username or "").strip().lstrip("@")
-                compact[key] = f"@{username}" if username else user.last_name or user.first_name or source_name
+                if use_endstep_username:
+                    compact[key] = (user.endstep_username or "").strip() or "—"
+                else:
+                    username = (user.username or "").strip().lstrip("@")
+                    compact[key] = f"@{username}" if username else user.last_name or user.first_name or source_name
             else:
                 compact[key] = source_name
                 full[key] = source_name
@@ -32,9 +41,11 @@ def _round_match_names(matches: list) -> tuple[dict[tuple[int, int], str], dict[
     return primary, full
 
 
-def format_round_pairings(title: str, status: str, round_number: int, matches: list) -> str:
-    """Round status with Telegram handles, real names, scores and explicit states."""
-    names, full_names = _round_match_names(matches)
+def format_round_pairings(
+    title: str, status: str, round_number: int, matches: list, *, use_endstep_username: bool = False
+) -> str:
+    """Round status with Telegram/Endstep handles, real names, scores and explicit states."""
+    names, full_names = _round_match_names(matches, use_endstep_username=use_endstep_username)
     playable = [match for match in matches if match.player2_name is not None]
     completed = sum(
         match.status in {RoundMatchStatus.CONFIRMED, RoundMatchStatus.ADMIN, RoundMatchStatus.IMPORTED}

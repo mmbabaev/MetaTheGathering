@@ -6,8 +6,9 @@ Pipeline (shared by production and debug):
 
 Only two things differ between production and debug, and they are NOT part of
 building the message:
-  - WHO receives it (production: opted-in + allow-listed players; debug: only the
-    requester), passed in as a recipient filter / source;
+  - WHO receives it (production: opted-in + allow-listed players; for Концехода —
+    allow-listed players без opt-in; debug: only the requester), passed in as a
+    recipient filter / source;
   - delivery (the Telegram layer sends to real recipients vs. only the admin).
 
 The message itself — data collection + DataLens enrichment + formatting — goes
@@ -46,15 +47,23 @@ class RoundNotifyHandler:
         *,
         is_allowed: Callable[[int], bool] | None = None,
     ) -> list[OutgoingNotification]:
-        """Production: opted-in (and allow-listed) recipients paired in the new rounds.
+        """Production: recipients paired in the new rounds.
 
-        ``is_allowed`` (notify allow-list, from config) is applied with the opt-in
-        gate BEFORE enrichment, so DataLens is never queried for someone who won't
-        receive the message.
+        Opt-in per user: by default only players who enabled "Уведомления об
+        оппоненте" in /settings (``notify_opponent_rounds``) receive them. Для
+        Концехода (регулярный онлайн-турнир Endstep-ru) opt-in отключается —
+        стол и оппонента получают все самозарегистрированные игроки.
+
+        ``is_allowed`` (notify allow-list, from config) is applied BEFORE
+        enrichment, so DataLens is never queried for someone who won't receive
+        the message.
         """
+        force = self.notifications.is_konetskhod_tournament(tournament_id)
 
         def keep(n: RoundNotification) -> bool:
-            return (is_allowed is None or is_allowed(n.tg_id)) and self.users.wants_opponent_notifications(n.tg_id)
+            return (is_allowed is None or is_allowed(n.tg_id)) and (
+                force or self.users.wants_opponent_notifications(n.tg_id)
+            )
 
         return self._build(self.notifications.build_for_rounds(tournament_id, round_numbers), keep)
 

@@ -379,6 +379,40 @@ class TestSendRoundNotificationsOptIn:
         targets = {c.kwargs["chat_id"] for c in bot.send_message.await_args_list}
         assert targets == {alice.tg_id, bob.tg_id}
 
+    async def test_konetskhod_notifies_everyone_even_with_opt_in_off(self, db, svc, user_svc):
+        t = svc.create_tournament(
+            TournamentCreate(title="Концеход Pauper #10", chat_id=100, club="Endstep-ru", is_online=True)
+        )
+        alice = _user(user_svc, 2101, "Alice")
+        bob = _user(user_svc, 2102, "Bob")
+        _participant(db, t.id, alice.id)
+        _participant(db, t.id, bob.id)
+        _pairing(db, t.id, 1, "Alice", "Bob")
+        _pairing(db, t.id, 1, "Bob", "Alice")
+        bot = AsyncMock()
+        sent = await send_round_notifications(bot, db, t.id, [1])
+        assert sent == 2
+        targets = {c.kwargs["chat_id"] for c in bot.send_message.await_args_list}
+        assert targets == {alice.tg_id, bob.tg_id}
+
+    async def test_konetskhod_keeps_allow_list_filter(self, db, svc, user_svc):
+        t = svc.create_tournament(
+            TournamentCreate(title="Концеход Pauper #11", chat_id=100, club="Endstep-ru", is_online=True)
+        )
+        alice = _user(user_svc, 2111, "Alice")
+        bob = _user(user_svc, 2112, "Bob")
+        _participant(db, t.id, alice.id)
+        _participant(db, t.id, bob.id)
+        _pairing(db, t.id, 1, "Alice", "Bob")
+        _pairing(db, t.id, 1, "Bob", "Alice")
+        # Debug allow-list excludes Bob → только Alice получает DM даже у Концехода.
+        with patch("bot.telegram.round_notify._is_notify_allowed", side_effect=lambda tg: tg == alice.tg_id):
+            bot = AsyncMock()
+            sent = await send_round_notifications(bot, db, t.id, [1])
+        assert sent == 1
+        targets = {c.kwargs["chat_id"] for c in bot.send_message.await_args_list}
+        assert targets == {alice.tg_id}
+
     async def test_no_rounds_sends_nothing(self, db, svc, user_svc):
         t, alice, _ = self._setup(db, svc, user_svc)
         _opt_in(db, alice.tg_id)

@@ -36,7 +36,7 @@ def test_pairing_publication_is_off_by_default(db, svc):
     assert ClubPairingsService(db).build_for_new_rounds(tournament.id, [1]) is None
 
 
-def test_online_pairings_use_public_status_format_with_tg_and_real_names(db, svc, user_svc):
+def test_online_pairings_use_public_status_format_with_endstep_and_real_names(db, svc, user_svc):
     tournament = _online_tournament(svc)
     alice = user_svc.get_or_create(tg_id=1, username="alice_tg", first_name="Alice", last_name="One")
     bob = user_svc.get_or_create(tg_id=2, username="bob_tg", first_name="Bob", last_name="Two")
@@ -53,9 +53,43 @@ def test_online_pairings_use_public_status_format_with_tg_and_real_names(db, svc
     assert message.chat_id == -100123
     assert "🎮 Endstep Pauper · Регистрация" in message.text
     assert "Раунд 1 · результаты 0/1" in message.text
-    assert "1. @alice_tg — @bob_tg" in message.text
+    assert "1. AliceEndstep — BobEndstep" in message.text
     assert "One Alice — Two Bob" in message.text
     assert "Счёт: — · Статус: 🎮 играют" in message.text
+
+
+def test_konetskhod_pairing_without_endstep_nick_shows_dash(db, svc, user_svc):
+    tournament = _online_tournament(svc)
+    alice = user_svc.get_or_create(tg_id=1, username="alice_tg", first_name="Alice", last_name="One")
+    _bob = user_svc.get_or_create(tg_id=2, username="bob_tg", first_name="Bob", last_name="Two")
+    alice.endstep_username = "AliceEndstep"
+    _add_pair(db, tournament.id, "AliceEndstep", "Two Bob")
+    _add_pair(db, tournament.id, "Two Bob", "AliceEndstep")
+    db.add(models.ClubSettingsRow(club_name="Endstep-ru", publish_pairings=True))
+    db.commit()
+
+    message = ClubPairingsService(db).build_for_new_rounds(tournament.id, [1])
+
+    assert "1. AliceEndstep — —" in message.text
+    assert "One Alice — Two Bob" in message.text
+
+
+def test_non_konetskhod_pairings_keep_tg_nicknames(db, svc, user_svc):
+    tournament = svc.create_tournament(
+        TournamentCreate(title="Pauper Friday", chat_id=-100789, club="Goldfish", is_online=True)
+    )
+    alice = user_svc.get_or_create(tg_id=1, username="alice_tg", first_name="Alice", last_name="One")
+    bob = user_svc.get_or_create(tg_id=2, username="bob_tg", first_name="Bob", last_name="Two")
+    alice.endstep_username = "AliceEndstep"
+    bob.endstep_username = "BobEndstep"
+    _add_pair(db, tournament.id, "One Alice", "Two Bob")
+    _add_pair(db, tournament.id, "Two Bob", "One Alice")
+    db.add(models.ClubSettingsRow(club_name="Goldfish", publish_pairings=True))
+    db.commit()
+
+    message = ClubPairingsService(db).build_for_new_rounds(tournament.id, [1])
+
+    assert "1. @alice_tg — @bob_tg" in message.text
 
 
 def test_endstep_username_resolves_online_aetherhub_name(db, svc, user_svc):
