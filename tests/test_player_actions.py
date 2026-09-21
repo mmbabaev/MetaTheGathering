@@ -217,6 +217,16 @@ class TestHandleRegister:
         buttons = [button for row in result.keyboard.inline_keyboard for button in row]
         assert any(button.callback_data == f"{CB_DEFER_DECK}:{active_tournament.id}" for button in buttons)
 
+    def test_shows_defer_button_for_internal_swiss(self, db, handler, user_svc, active_tournament):
+        user = user_svc.get_or_create(tg_id=5108, username="u", first_name="Иван", last_name="Иванов")
+        db.get(models.Tournament, active_tournament.id).engine_mode = models.TournamentEngineMode.INTERNAL_SWISS
+        db.commit()
+
+        result = handler.handle_register(active_tournament.id, tg_id=user.tg_id)
+
+        buttons = [button for row in result.keyboard.inline_keyboard for button in row]
+        assert any(button.callback_data == f"{CB_DEFER_DECK}:{active_tournament.id}" for button in buttons)
+
     def test_hides_defer_button_after_seven_hours(self, db, handler, user_svc, active_tournament):
         user = user_svc.get_or_create(tg_id=5103, username="u", first_name="Иван", last_name="Иванов")
         tournament = db.get(models.Tournament, active_tournament.id)
@@ -282,6 +292,24 @@ class TestHandleDeferDeck:
         )
 
         user = user_svc.get_by_tg_id(5201)
+        participant = svc.get_participant(active_tournament.id, user.id)
+        assert result.text == REGISTERED_DECK_LATER
+        assert participant.archetype_id is None
+        assert participant.deck_deferred is True
+
+    def test_works_for_internal_swiss(self, db, handler, svc, user_svc, active_tournament):
+        db.get(models.Tournament, active_tournament.id).engine_mode = models.TournamentEngineMode.INTERNAL_SWISS
+        db.commit()
+
+        result = handler.handle_defer_deck(
+            tg_id=5204,
+            username="later",
+            first_name="Иван",
+            last_name=None,
+            tournament_id=active_tournament.id,
+        )
+
+        user = user_svc.get_by_tg_id(5204)
         participant = svc.get_participant(active_tournament.id, user.id)
         assert result.text == REGISTERED_DECK_LATER
         assert participant.archetype_id is None
