@@ -9,7 +9,7 @@ an AetherHub-backed online tournament.
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import lru_cache
 
 from sqlalchemy import select
@@ -25,12 +25,47 @@ MATCH_DRAW_POINTS = 1
 MIN_PERCENTAGE = 1 / 3
 INTERNAL_SWISS_ROUNDS = 4
 DRAFT_SWISS_ROUNDS = 3
+MIN_SWISS_ROUNDS = 3
+# Single-elimination playoff cut sizes supported after the Swiss rounds.
+PLAYOFF_SIZES = (8, 16)
 
 
 def recommended_swiss_rounds(player_count: int) -> int:
-    """Return the fixed beta round count for every playable internal event."""
+    """Default Swiss round count for a field.
 
-    return INTERNAL_SWISS_ROUNDS if player_count >= 2 else 0
+    ceil(log2(count)) rounds are enough to produce an undefeated champion, so 50
+    players get 6 rounds and 100 get 7. Small fields keep a 3-round floor.
+    The announced value is frozen at round 1 and can be overridden by an admin.
+    """
+    if player_count < 2:
+        return 0
+    return max(MIN_SWISS_ROUNDS, (player_count - 1).bit_length())
+
+
+def playoff_rounds(playoff_size: int) -> int:
+    """Rounds in a single-elimination bracket of ``playoff_size`` teams.
+
+    The last round always carries both the final and the 3rd–4th place match.
+    """
+    return playoff_size.bit_length() - 1 if playoff_size else 0
+
+
+def bracket_seed_pairs(playoff_size: int) -> list[tuple[int, int]]:
+    """Standard single-elimination bracket pairings ordered by bracket slot.
+
+    Top 8:   (1,8) then (4,5), (2,7), (3,6).
+    Top 16:  (1,16), (8,9), (4,13), (5,12), (2,15), (7,10), (3,14), (6,11).
+    Winners of adjacent slots meet in the next round; the first seed of each pair
+    is the better seed and plays first.
+    """
+    if playoff_size == 2:
+        return [(1, 2)]
+    half = playoff_size // 2
+    result: list[tuple[int, int]] = []
+    for low, high in bracket_seed_pairs(half):
+        result.append((low, high + half))
+        result.append((min(low + half, high), max(low + half, high)))
+    return result
 
 
 @dataclass(frozen=True)
@@ -62,6 +97,17 @@ class SwissRoundResult:
     planned_rounds: int
     matches: int
     bye_user_id: int | None
+
+
+@dataclass(frozen=True)
+class SwissSettings:
+    tournament_id: int
+    swiss_rounds: int | None
+    recommended_swiss_rounds: int
+    playoff_size: int | None
+    active_players: int
+    rounds_frozen: bool
+    playoff_frozen: bool
 
 
 @dataclass(frozen=True)
@@ -135,6 +181,7 @@ class InternalSwissService:
             models.TournamentEngineMode.INTERNAL_SWISS if enabled else models.TournamentEngineMode.AETHERHUB
         )
         tournament.swiss_rounds = None
+        tournament.playoff_size = None
         tournament.show_round_pairings = enabled
         self.db.commit()
         self.db.refresh(tournament)
@@ -202,7 +249,7 @@ class InternalSwissService:
                 tournament.swiss_rounds = DRAFT_SWISS_ROUNDS
             else:
                 self._assign_initial_ranks(participants)
-                tournament.swiss_rounds = recommended_swiss_rounds(len(participants))
+                tournament.swiss_rounds = tournament.swiss_rounds or recommended_swiss_rounds(len(participants))
             tournament.status = models.TournamentStatus.ONGOING
             tournament.started_at = tournament.started_at or models.utc_now()
             tournament.show_round_pairings = True
@@ -212,16 +259,17 @@ class InternalSwissService:
                 raise RoundResultError("Следующий раунд можно создать только в идущем турнире.")
             if not self._round_ready(tournament_id, current_round):
                 raise RoundResultError(f"Сначала соберите все результаты раунда {current_round}.")
-            if current_round >= (tournament.swiss_rounds or 0):
-                raise RoundResultError("Все запланированные Swiss-раунды уже сыграны. Завершите турнир.")
+            if current_round >= self.total_planned_rounds(tournament):
+                raise RoundResultError("Все запланированные раунды уже сыграны. Завершите турнир.")
 
         next_round = (current_round or 0) + 1
-        standings = self.standings(tournament_id)
         if tournament.is_draft and next_round == 1:
             pairs, bye_user_id = self._draft_first_round_pairings(participants)
+        elif next_round > (tournament.swiss_rounds or 0):
+            pairs, bye_user_id = self._playoff_pairings(tournament, next_round)
         else:
+            standings = self.standings(tournament_id)
             pairs, bye_user_id = self._build_pairings(tournament_id, standings)
-        by_user_id = {participant.user_id: participant for participant in participants}
         source_names = self._source_names(participants)
 
         for table_number, (left_id, right_id) in enumerate(pairs, start=1):
@@ -270,10 +318,92 @@ class InternalSwissService:
         matches = self.results.sync_round(tournament_id, next_round)
         return SwissRoundResult(
             round_number=next_round,
-            planned_rounds=tournament.swiss_rounds or recommended_swiss_rounds(len(by_user_id)),
+            planned_rounds=self.total_planned_rounds(tournament),
             matches=len(matches),
             bye_user_id=bye_user_id,
         )
+
+    def set_swiss_rounds(self, tournament_id: int, admin_tg_id: int, rounds: int) -> models.Tournament:
+        if not self.users.is_admin(admin_tg_id):
+            raise RoundResultError("Нет прав администратора.")
+        tournament = self._tournament(tournament_id, lock=True)
+        self._ensure_internal(tournament)
+        if tournament.is_draft:
+            raise RoundResultError("Драфт всегда играет фиксированные три раунда.")
+        if self.results.latest_round_number(tournament_id) is not None:
+            raise RoundResultError("Число Swiss-раундов можно изменить только до первого раунда.")
+        if not isinstance(rounds, int) or not MIN_SWISS_ROUNDS <= rounds <= 20:
+            raise RoundResultError("Число Swiss-раундов — целое число от 3 до 20.")
+        tournament.swiss_rounds = rounds
+        self.db.commit()
+        self.db.refresh(tournament)
+        return tournament
+
+    def set_playoff_size(self, tournament_id: int, admin_tg_id: int, size: int) -> models.Tournament:
+        if not self.users.is_admin(admin_tg_id):
+            raise RoundResultError("Нет прав администратора.")
+        tournament = self._tournament(tournament_id, lock=True)
+        self._ensure_internal(tournament)
+        if tournament.is_draft:
+            raise RoundResultError("Драфт не поддерживает плей-офф.")
+        if size not in (0, *PLAYOFF_SIZES):
+            raise RoundResultError("Варианты плей-оффа: без плей-оффа, топ-8 или топ-16.")
+        if self._playoff_played(tournament):
+            raise RoundResultError("Плей-офф уже начался, размер изменить нельзя.")
+        tournament.playoff_size = size or None
+        self.db.commit()
+        self.db.refresh(tournament)
+        return tournament
+
+    def get_swiss_settings(self, tournament_id: int) -> SwissSettings:
+        tournament = self._tournament(tournament_id)
+        self._ensure_internal(tournament)
+        active = len(self._participants(tournament_id))
+        if tournament.is_draft:
+            recommended = DRAFT_SWISS_ROUNDS
+        else:
+            recommended = recommended_swiss_rounds(active)
+        return SwissSettings(
+            tournament_id=tournament_id,
+            swiss_rounds=tournament.swiss_rounds,
+            recommended_swiss_rounds=recommended,
+            playoff_size=tournament.playoff_size,
+            active_players=active,
+            rounds_frozen=self.results.latest_round_number(tournament_id) is not None,
+            playoff_frozen=self._playoff_played(tournament),
+        )
+
+    def total_planned_rounds(self, tournament: models.Tournament) -> int:
+        """Swiss rounds plus playoff rounds still scheduled for this tournament."""
+        return (tournament.swiss_rounds or 0) + playoff_rounds(self.effective_playoff_size(tournament))
+
+    def effective_playoff_size(self, tournament: models.Tournament) -> int:
+        """Cut size that will actually happen: 0 when the field is too small."""
+        size = tournament.playoff_size or 0
+        if size not in PLAYOFF_SIZES:
+            return 0
+        if self._playoff_played(tournament):
+            return size
+        if len(self._participants(tournament.id)) < size:
+            return 0
+        return size
+
+    def playoff_round_label(self, tournament: models.Tournament, round_number: int) -> str | None:
+        """Human label for a playoff round: "1/8 финала", "Финал и матч за 3-е место", ..."""
+        playoff_index = round_number - (tournament.swiss_rounds or 0)
+        if playoff_index <= 0:
+            return None
+        cut = tournament.playoff_size or self.effective_playoff_size(tournament)
+        names = {
+            8: ["Четвертьфинал", "Полуфинал", "Финал"],
+            16: ["1/8 финала", "Четвертьфинал", "Полуфинал", "Финал"],
+        }.get(cut, [])
+        if not names or playoff_index > len(names):
+            return None
+        label = names[playoff_index - 1]
+        if playoff_index == len(names):
+            label = f"{label} и матч за 3-е место"
+        return label
 
     def finish(self, tournament_id: int, admin_tg_id: int) -> list[SwissStanding]:
         tournament = self._tournament(tournament_id, lock=True)
@@ -287,13 +417,14 @@ class InternalSwissService:
         current_round = self.results.latest_round_number(tournament_id)
         if current_round is None:
             raise RoundResultError("В турнире ещё нет раундов.")
-        if current_round < (tournament.swiss_rounds or 0):
-            raise RoundResultError(
-                f"Сыграно раундов: {current_round}/{tournament.swiss_rounds}. Сначала создайте оставшиеся."
-            )
+        planned = self.total_planned_rounds(tournament)
+        if current_round < planned:
+            raise RoundResultError(f"Сыграно раундов: {current_round}/{planned}. Сначала создайте оставшиеся.")
         if not self._round_ready(tournament_id, current_round):
             raise RoundResultError(f"Сначала соберите все результаты раунда {current_round}.")
         standings = self.standings(tournament_id)
+        if self.effective_playoff_size(tournament):
+            standings = self._ranked_final_standings(tournament, standings)
         participants = {row.id: row for row in self._participants(tournament_id, include_dropped=True)}
         for row in standings:
             participants[row.participant_id].final_place = row.place
@@ -329,7 +460,12 @@ class InternalSwissService:
             )
             for participant in participants
         }
+        swiss_rounds = tournament.swiss_rounds or 0
         for match in self._matches(tournament_id):
+            if match.round_number > swiss_rounds:
+                # Single-elimination playoff matches held after the Swiss rounds
+                # must not feed the Swiss standings or their tiebreakers.
+                continue
             self._apply_match(stats, match)
 
         sortable: list[tuple[tuple[float | int, ...], _Stats, float, float, float]] = []
@@ -364,7 +500,149 @@ class InternalSwissService:
                     dropped=item.participant.dropped_at is not None,
                 )
             )
+        if tournament.status == models.TournamentStatus.CLOSED and self._playoff_played(tournament):
+            return self._ranked_final_standings(tournament, result)
         return result
+
+    def _playoff_pairings(self, tournament: models.Tournament, next_round: int) -> tuple[list[tuple[int, int]], None]:
+        """Seed the bracket at round 1, then pair winners of adjacent slots.
+
+        The better seed of each pair plays first. The last playoff round pairs the
+        two semi-final winners in the final and the two losers for the 3rd place.
+        """
+        tournament_id = tournament.id
+        swiss_rounds = tournament.swiss_rounds or 0
+        cut = self.effective_playoff_size(tournament)
+        if cut not in PLAYOFF_SIZES:
+            raise RoundResultError("Плей-офф не настроен для этого турнира.")
+        playoff_index = next_round - swiss_rounds
+        participants = {row.user_id: row for row in self._participants(tournament_id, include_dropped=True)}
+
+        if playoff_index == 1:
+            active = [row for row in self.standings(tournament_id) if not row.dropped]
+            if len(active) < cut:
+                raise RoundResultError("В плей-офф выходят не больше игроков, чем зарегистрировано.")
+            by_seed: dict[int, int] = {}
+            for seed, row in enumerate(active[:cut], start=1):
+                participants[row.user_id].playoff_seed = seed
+                by_seed[seed] = row.user_id
+            pairs = [(by_seed[first], by_seed[second]) for first, second in bracket_seed_pairs(cut)]
+            return pairs, None
+
+        previous_matches = self._matches(tournament_id, round_number=next_round - 1)
+        winners = [self._match_winner(match) for match in previous_matches]
+        if any(winner is None for winner in winners):
+            raise RoundResultError("Результаты предыдущего раунда плей-оффа не готовы.")
+        if playoff_index == playoff_rounds(cut):
+            finalists = (
+                self._match_winner(previous_matches[0]),
+                self._match_winner(previous_matches[1]),
+            )
+            third_contenders = (
+                self._match_loser(previous_matches[0]),
+                self._match_loser(previous_matches[1]),
+            )
+            pairs_raw = [finalists, third_contenders]
+        else:
+            pairs_raw = [(winners[index], winners[index + 1]) for index in range(0, len(winners), 2)]
+        by_seed_map = {row.user_id: row.playoff_seed for row in participants.values()}
+
+        def seed_ordered(left: int, right: int) -> tuple[int, int]:
+            return (left, right) if by_seed_map[left] <= by_seed_map[right] else (right, left)
+
+        return [seed_ordered(left, right) for left, right in pairs_raw], None
+
+    def _playoff_final_places(self, tournament: models.Tournament, standings: list[SwissStanding]) -> dict[int, int]:
+        """Map every registered user to a final placement for a played playoff."""
+        cut = self.effective_playoff_size(tournament)
+        if cut not in PLAYOFF_SIZES:
+            raise RoundResultError("Плей-офф не был сыгран.")
+        swiss_rounds = tournament.swiss_rounds or 0
+        playoff_total = playoff_rounds(cut)
+        active = [row for row in standings if not row.dropped]
+        if len(active) < cut:
+            raise RoundResultError("Плей-офф не был сыгран.")
+        cut_rows = active[:cut]
+        cut_user_ids = {row.user_id for row in cut_rows}
+        seed_map = {row.user_id: order for order, row in enumerate(cut_rows, start=1)}
+
+        matches_by_round: dict[int, list[models.RoundMatch]] = {}
+        for match in self._matches(tournament.id):
+            if match.round_number > swiss_rounds:
+                matches_by_round.setdefault(match.round_number, []).append(match)
+
+        eliminated_in: dict[int, int] = {}
+        for playoff_index in range(1, playoff_total):
+            for match in matches_by_round.get(swiss_rounds + playoff_index, []):
+                loser = self._match_loser(match)
+                if loser is not None:
+                    eliminated_in[loser] = playoff_index
+
+        final_round = matches_by_round.get(swiss_rounds + playoff_total, [])
+        if len(final_round) != 2:
+            raise RoundResultError("Не удалось определить итоги плей-оффа.")
+        finals = [
+            match
+            for match in final_round
+            if match.player1_user_id not in eliminated_in and match.player2_user_id not in eliminated_in
+        ]
+        third_place = [match for match in final_round if match not in finals]
+        if len(finals) != 1 or len(third_place) != 1:
+            raise RoundResultError("Не удалось определить пары финального раунда.")
+        champion = self._match_winner(finals[0])
+        runner_up = self._match_loser(finals[0])
+        third = self._match_winner(third_place[0])
+        fourth = self._match_loser(third_place[0])
+        if None in (champion, runner_up, third, fourth):
+            raise RoundResultError("Не удалось определить победителя плей-оффа.")
+
+        ordered: list[int] = [champion, runner_up, third, fourth]
+        # Players eliminated in the earlier rounds share a tied place cut//2**r+1;
+        # the tie is broken by Swiss standings (seed), so places are distinct.
+        for playoff_index in range(playoff_total - 2, 0, -1):
+            members = [user_id for user_id, index in eliminated_in.items() if index == playoff_index]
+            members.sort(key=lambda user_id: seed_map[user_id])
+            ordered.extend(members)
+
+        places = {user_id: place for place, user_id in enumerate(ordered, start=1)}
+        # Everyone outside the cut keeps their Swiss ranking, placed after the cut.
+        for offset, row in enumerate((row for row in standings if row.user_id not in cut_user_ids), start=cut + 1):
+            places[row.user_id] = offset
+        return places
+
+    def _ranked_final_standings(
+        self, tournament: models.Tournament, standings: list[SwissStanding]
+    ) -> list[SwissStanding]:
+        """Rebuild Swiss standings rows in final placement order."""
+        places = self._playoff_final_places(tournament, standings)
+        by_user = {row.user_id: row for row in standings}
+        ranked: list[SwissStanding] = []
+        for user_id, place in sorted(places.items(), key=lambda item: item[1]):
+            original = by_user.get(user_id)
+            if original is not None:
+                ranked.append(replace(original, place=place))
+        return ranked
+
+    @staticmethod
+    def _match_winner(match: models.RoundMatch) -> int | None:
+        if match.player2_user_id is None:
+            return match.player1_user_id
+        if (match.player1_wins or 0) > (match.player2_wins or 0):
+            return match.player1_user_id
+        if (match.player2_wins or 0) > (match.player1_wins or 0):
+            return match.player2_user_id
+        return None
+
+    @staticmethod
+    def _match_loser(match: models.RoundMatch) -> int | None:
+        winner = InternalSwissService._match_winner(match)
+        if winner is None:
+            return None
+        return match.player2_user_id if winner == match.player1_user_id else match.player1_user_id
+
+    def _playoff_played(self, tournament: models.Tournament) -> bool:
+        swiss_rounds = tournament.swiss_rounds or 0
+        return any(match.round_number > swiss_rounds for match in self._matches(tournament.id))
 
     def _build_pairings(
         self, tournament_id: int, standings: list[SwissStanding]
@@ -602,17 +880,18 @@ class InternalSwissService:
         for rank, participant in enumerate(shuffled, start=1):
             participant.swiss_initial_rank = rank
 
-    def _matches(self, tournament_id: int) -> list[models.RoundMatch]:
-        return list(
-            self.db.execute(
-                select(models.RoundMatch)
-                .where(models.RoundMatch.tournament_id == tournament_id)
-                .order_by(models.RoundMatch.round_number, models.RoundMatch.table_number, models.RoundMatch.id)
-            ).scalars()
+    def _matches(self, tournament_id: int, *, round_number: int | None = None) -> list[models.RoundMatch]:
+        statement = (
+            select(models.RoundMatch)
+            .where(models.RoundMatch.tournament_id == tournament_id)
+            .order_by(models.RoundMatch.round_number, models.RoundMatch.table_number, models.RoundMatch.id)
         )
+        if round_number is not None:
+            statement = statement.where(models.RoundMatch.round_number == round_number)
+        return list(self.db.execute(statement).scalars())
 
     def _round_ready(self, tournament_id: int, round_number: int) -> bool:
-        matches = [match for match in self._matches(tournament_id) if match.round_number == round_number]
+        matches = self._matches(tournament_id, round_number=round_number)
         return bool(matches) and all(
             match.player2_user_id is None or match.status in FINAL_STATUSES for match in matches
         )

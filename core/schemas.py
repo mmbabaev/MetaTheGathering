@@ -82,6 +82,7 @@ class TournamentRead(TournamentBase):
     decks_hidden: bool = True
     show_round_pairings: bool = False
     swiss_rounds: Optional[int] = None
+    playoff_size: Optional[int] = None
     draft_seating_generated_at: Optional[datetime] = None
     aetherhub_url: Optional[str] = None
     aetherhub_import_time: Optional[str] = None
@@ -122,6 +123,7 @@ class ParticipantRead(ParticipantBase):
     ranked_activated_at: Optional[datetime] = None
     ranked_activation_source: Optional[str] = None
     swiss_initial_rank: Optional[int] = None
+    playoff_seed: Optional[int] = None
     upvotes_count: int
     downvotes_count: int
     created_at: datetime

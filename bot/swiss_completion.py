@@ -36,6 +36,9 @@ async def publish_swiss_completion(bot, db, tournament_id: int) -> bool:
         chat_id = tournament.chat_id
         title = tournament.title
         planned_rounds = tournament.swiss_rounds or 0
+        played_playoff = tournament.playoff_size is not None and (
+            InternalSwissService(db).effective_playoff_size(tournament) > 0
+        )
     except Exception:  # noqa: BLE001 — закрытие уже зафиксировано, публикация best-effort
         logger.exception("publish_swiss_completion: data collection failed for #%s", tournament_id)
         db.rollback()
@@ -51,6 +54,7 @@ async def publish_swiss_completion(bot, db, tournament_id: int) -> bool:
                     planned_rounds,
                     standings,
                     provisional=False,
+                    final=played_playoff,
                     page=page,
                     page_size=TEXT_PAGE_SIZE,
                 ),

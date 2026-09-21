@@ -358,6 +358,7 @@ def format_round_pairings(
     matches: list,
     *,
     planned_rounds: int | None = None,
+    playoff_label: str | None = None,
 ) -> str:
     """Latest-round public status with live pending and final scores."""
     names, full_names = _round_match_names(matches)
@@ -366,10 +367,16 @@ def format_round_pairings(
         match.status in {RoundMatchStatus.CONFIRMED, RoundMatchStatus.ADMIN, RoundMatchStatus.IMPORTED}
         for match in playable
     )
+    if playoff_label:
+        headline = f"<b>🏆 {playoff_label} · результаты {completed}/{len(playable)}</b>"
+    else:
+        headline = (
+            f"<b>Раунд {round_number}{f'/{planned_rounds}' if planned_rounds else ''} · "
+            f"результаты {completed}/{len(playable)}</b>"
+        )
     lines = [
         f"🎮 {escape(title)} · {escape(status)}",
-        f"<b>Раунд {round_number}{f'/{planned_rounds}' if planned_rounds else ''} · "
-        f"результаты {completed}/{len(playable)}</b>",
+        headline,
         "",
     ]
     for index, match in enumerate(matches, start=1):
@@ -407,6 +414,8 @@ def format_swiss_standings(
     standings: list,
     *,
     provisional: bool,
+    final: bool = False,
+    after_swiss: bool = False,
     page: int = 0,
     page_size: int = 20,
 ) -> str:
@@ -417,9 +426,15 @@ def format_swiss_standings(
     start = page * page_size
     shown = standings[start : start + page_size]
     qualifier = " · предварительные" if provisional else ""
+    if final:
+        headline = "🏁 Итоговые места"
+    elif after_swiss:
+        headline = "📊 Стендинги после Swiss"
+    else:
+        headline = f"📊 Стендинги · раунд {round_number}/{planned_rounds}{qualifier}"
     lines = [
         f"🎮 {escape(title)}",
-        f"<b>📊 Стендинги · раунд {round_number}/{planned_rounds}{qualifier}</b>",
+        f"<b>{headline}</b>",
         "",
     ]
     for row in shown:
