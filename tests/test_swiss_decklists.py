@@ -61,6 +61,16 @@ def test_internal_swiss_self_registration_requires_archetype(svc, user_svc):
     assert row.archetype_id is None
 
 
+def test_internal_swiss_allows_explicit_defer_without_archetype(svc, user_svc):
+    tournament = _internal_tournament(svc)
+    user = user_svc.get_or_create(tg_id=1002, first_name="Боб")
+
+    row = svc.register_participant(tournament_id=tournament.id, user_id=user.id, deck_deferred=True)
+
+    assert row.archetype_id is None
+    assert row.deck_deferred is True
+
+
 def test_internal_swiss_cannot_be_enabled_without_start_time(svc, user_svc):
     tournament = svc.create_tournament(TournamentCreate(title="No time", chat_id=-101, is_online=True))
     admin = user_svc.get_or_create(tg_id=3001, first_name="Админ")

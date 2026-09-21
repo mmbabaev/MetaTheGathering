@@ -215,7 +215,6 @@ class PlayerHandler:
         show_emoji = not (user and user.hide_deck_emoji)
         can_defer = (
             tournament.status == models.TournamentStatus.REGISTRATION
-            and tournament.engine_mode != models.TournamentEngineMode.INTERNAL_SWISS
             and models.utc_now() < _defer_deck_deadline(tournament)
         )
         return HandlerResult(
@@ -542,8 +541,6 @@ class PlayerHandler:
             return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
         if tournament.status != models.TournamentStatus.REGISTRATION:
             return HandlerResult(REGISTRATION_CLOSED, is_alert=True)
-        if tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS:
-            return HandlerResult("Для записи на Swiss-турнир нужно выбрать архетип.", is_alert=True)
         if models.utc_now() >= _defer_deck_deadline(tournament):
             return HandlerResult(DEFER_DECK_EXPIRED, is_alert=True)
 

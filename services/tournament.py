@@ -330,6 +330,7 @@ class TournamentService:
             and archetype_id is None
             and not added_by_admin
             and not tournament.is_draft
+            and not deck_deferred
         ):
             raise errors.ParticipantError("Для записи на Swiss-турнир нужно выбрать архетип.")
 
