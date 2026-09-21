@@ -145,6 +145,15 @@ class Tournament(Base):
     # Frozen when internal round 1 is generated. Magic tournament rules say the
     # announced number of rounds must not change after the tournament starts.
     swiss_rounds = Column(Integer, nullable=True)
+    # Single-elimination playoff after the Swiss rounds: 8 or 16 (power of two);
+    # NULL/0 = no playoff. Admin configures it before the first round and may
+    # change it while the Swiss rounds are still running.
+    playoff_size = Column(Integer, nullable=True)
+    # Per-tournament format choice for the internal Swiss engine. Classic
+    # (default) = INTERNAL_SWISS_ROUNDS fixed rounds and no playoff; large format
+    # = rounds scaled by the field and an optional top-8/top-16 playoff. Switchable
+    # until the first round is generated.
+    swiss_large_format = Column(Boolean, nullable=False, default=False, server_default="false")
     draft_seating_generated_at = Column(DateTime, nullable=True)
 
     registration_open_at = Column(DateTime, nullable=True)
@@ -426,6 +435,9 @@ class Participant(Base):
     # Stable random order assigned at the start of an internal Swiss event. It
     # resolves otherwise exact standings ties without alphabetical bias.
     swiss_initial_rank = Column(Integer, nullable=True)
+    # Seed in the single-elimination playoff (1 = top of the Swiss standings).
+    # Assigned when the first playoff round is generated.
+    playoff_seed = Column(Integer, nullable=True)
     draft_seat = Column(Integer, nullable=True)
     # Time when the player dropped from an ongoing internal Swiss tournament.
     dropped_at = Column(DateTime, nullable=True, index=True)

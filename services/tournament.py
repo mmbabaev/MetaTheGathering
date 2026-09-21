@@ -528,6 +528,12 @@ class TournamentService:
             raise errors.TournamentInvalidState("Дроп доступен только для внутреннего Swiss.")
         if tournament.status != models.TournamentStatus.ONGOING:
             raise errors.TournamentInvalidState("Дроп доступен только в идущем турнире.")
+        swiss_rounds = tournament.swiss_rounds or 0
+        latest_round = self.db.execute(
+            select(func.max(models.RoundPairing.round_number)).where(models.RoundPairing.tournament_id == tournament_id)
+        ).scalar_one_or_none()
+        if swiss_rounds and latest_round is not None and latest_round > swiss_rounds:
+            raise errors.TournamentInvalidState("После старта плей-офф выйти из турнира нельзя.")
         participant = self.get_participant(tournament_id, user_id)
         if participant is None:
             raise errors.ParticipantNotFound()

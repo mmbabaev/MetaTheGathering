@@ -88,13 +88,20 @@ class RoundResultsHandler:
             if internal_swiss and selected == available[-1]
             else False
         )
+        planned_total = tournament.swiss_rounds
+        playoff_label = None
+        if internal_swiss:
+            engine = InternalSwissService(self.db)
+            playoff_label = engine.playoff_round_label(tournament, selected)
+            planned_total = engine.total_planned_rounds(tournament)
         return HandlerResult(
             format_round_pairings(
                 tournament.title,
                 tournament.status.label_ru,
                 selected,
                 matches,
-                planned_rounds=tournament.swiss_rounds if internal_swiss else None,
+                planned_rounds=tournament.swiss_rounds if internal_swiss and playoff_label is None else None,
+                playoff_label=playoff_label,
             ),
             keyboard=self.keyboards.round_status_keyboard(
                 tournament_id,
@@ -104,7 +111,7 @@ class RoundResultsHandler:
                 is_admin=can_manage,
                 show_debug_next=settings.DEBUG and is_admin,
                 internal_swiss=internal_swiss,
-                planned_rounds=tournament.swiss_rounds,
+                planned_rounds=planned_total,
                 round_ready=round_ready,
                 is_closed=tournament.status == models.TournamentStatus.CLOSED,
                 table_title=ENDSTEP_TABLE_TITLE if own_match is not None else None,
@@ -388,13 +395,17 @@ class RoundResultsHandler:
             ready = bool(round_number and self.results.is_round_ready(tournament_id, round_number))
             page_count = max(1, (len(standings) + 19) // 20)
             page = max(0, min(page, page_count - 1))
+            closed = tournament.status == models.TournamentStatus.CLOSED
+            after_swiss = not closed and bool(planned) and round_number > planned
             return HandlerResult(
                 format_swiss_standings(
                     tournament.title,
-                    round_number,
+                    min(round_number, planned),
                     planned,
                     standings,
                     provisional=not ready,
+                    final=closed,
+                    after_swiss=after_swiss,
                     page=page,
                 ),
                 keyboard=self.keyboards.swiss_standings_keyboard(
@@ -402,7 +413,7 @@ class RoundResultsHandler:
                     round_number,
                     page=page,
                     page_count=page_count,
-                    back_to_tournament=tournament.status == models.TournamentStatus.CLOSED,
+                    back_to_tournament=closed,
                 ),
                 parse_mode="HTML",
             )
@@ -417,9 +428,10 @@ class RoundResultsHandler:
             admin_tg_id, tournament
         ) and not self.users.is_privileged_for_tournament(admin_tg_id, tournament):
             return HandlerResult("Нет прав.", is_alert=True)
+        planned = InternalSwissService(self.db).total_planned_rounds(tournament)
         round_number = self.results.latest_round_number(tournament_id)
-        if round_number is None or round_number < (tournament.swiss_rounds or 0):
-            return HandlerResult(f"Сыграно раундов: {round_number or 0}/{tournament.swiss_rounds or 0}.", is_alert=True)
+        if round_number is None or round_number < planned:
+            return HandlerResult(f"Сыграно раундов: {round_number or 0}/{planned}.", is_alert=True)
         if not self.results.is_round_ready(tournament_id, round_number):
             return HandlerResult(f"Сначала соберите все результаты раунда {round_number}.", is_alert=True)
         return HandlerResult(
@@ -439,6 +451,7 @@ class RoundResultsHandler:
                     tournament.swiss_rounds or 0,
                     standings,
                     provisional=False,
+                    final=True,
                 ),
                 keyboard=self.keyboards.swiss_standings_keyboard(
                     tournament_id, tournament.swiss_rounds, page_count=page_count
@@ -448,6 +461,80 @@ class RoundResultsHandler:
             )
         except RoundResultError as exc:
             return HandlerResult(str(exc), is_alert=True)
+
+    def handle_swiss_settings(self, tournament_id: int, admin_tg_id: int) -> HandlerResult:
+        tournament = self.db.get(models.Tournament, tournament_id)
+        if tournament is None or tournament.engine_mode != models.TournamentEngineMode.INTERNAL_SWISS:
+            return HandlerResult("Внутренний Swiss-турнир не найден.", is_alert=True)
+        if not self.users.can_manage_tournament(admin_tg_id, tournament):
+            return HandlerResult("Нет прав организатора.", is_alert=True)
+        engine = InternalSwissService(self.db)
+        settings = engine.get_swiss_settings(tournament_id)
+        format_large = settings.large_format
+        lines = [
+            "⚙️ Настройки Swiss",
+            f"Турнир: «{tournament.title}»",
+            "Формат: большой (раунды по игрокам + плей-офф)" if format_large else "Формат: классический (4 раунда)",
+            f"Игроков: {settings.active_players}; рекомендуется раундов: {settings.recommended_swiss_rounds}",
+            f"Swiss-раундов: {settings.swiss_rounds or 'авто'}",
+            f"Плей-офф: {self._playoff_label(settings.playoff_size)}",
+        ]
+        if settings.rounds_frozen:
+            lines.append("Формат и число раундов зафиксированы: первый раунд уже создан.")
+        elif tournament.is_draft:
+            lines.append("Драфт всегда играет фиксированные три раунда без плей-оффа.")
+        else:
+            lines.append("Формат можно переключить до создания первого раунда.")
+        if format_large:
+            if settings.playoff_frozen:
+                lines.append("Плей-офф уже начался, размер изменить нельзя.")
+            else:
+                lines.append("Плей-офф включается и настраивается до его старта.")
+        return HandlerResult(
+            "\n".join(lines),
+            keyboard=self.keyboards.swiss_settings_keyboard(
+                tournament_id,
+                settings.swiss_rounds,
+                settings.playoff_size,
+                rounds_frozen=settings.rounds_frozen,
+                playoff_frozen=settings.playoff_frozen,
+                large_format=format_large,
+            ),
+        )
+
+    def handle_swiss_set_large(self, tournament_id: int, admin_tg_id: int, enabled: bool) -> HandlerResult:
+        try:
+            InternalSwissService(self.db).set_swiss_large_format(tournament_id, admin_tg_id, enabled)
+        except RoundResultError as exc:
+            return HandlerResult(str(exc), is_alert=True)
+        result = self.handle_swiss_settings(tournament_id, admin_tg_id)
+        if enabled:
+            result.answer_text = "Большой формат включён: раунды по числу игроков и плей-офф топ-8/топ-16."
+        else:
+            result.answer_text = "Классический формат: 4 раунда без плей-оффа."
+        return result
+
+    def handle_swiss_set_rounds(self, tournament_id: int, admin_tg_id: int, rounds: int) -> HandlerResult:
+        try:
+            InternalSwissService(self.db).set_swiss_rounds(tournament_id, admin_tg_id, rounds)
+        except RoundResultError as exc:
+            return HandlerResult(str(exc), is_alert=True)
+        result = self.handle_swiss_settings(tournament_id, admin_tg_id)
+        result.answer_text = f"Swiss-раундов: {rounds}."
+        return result
+
+    def handle_swiss_set_playoff(self, tournament_id: int, admin_tg_id: int, size: int) -> HandlerResult:
+        try:
+            InternalSwissService(self.db).set_playoff_size(tournament_id, admin_tg_id, size)
+        except RoundResultError as exc:
+            return HandlerResult(str(exc), is_alert=True)
+        result = self.handle_swiss_settings(tournament_id, admin_tg_id)
+        result.answer_text = f"Плей-офф: {self._playoff_label(size)}."
+        return result
+
+    @staticmethod
+    def _playoff_label(size: int | None) -> str:
+        return {8: "топ-8", 16: "топ-16"}.get(size or 0, "нет")
 
     def _round_numbers(self, tournament_id: int) -> list[int]:
         return list(

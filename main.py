@@ -162,6 +162,10 @@ from bot.keyboards import (
     CB_SWISS_FINISH_CONFIRM,
     CB_SWISS_MODE_TOGGLE,
     CB_SWISS_NEXT_ROUND,
+    CB_SWISS_SET_LARGE,
+    CB_SWISS_SET_PLAYOFF,
+    CB_SWISS_SET_ROUNDS,
+    CB_SWISS_SETTINGS,
     CB_SWISS_STANDINGS,
     CB_TOURNAMENT,
     CB_TSTATUS,
@@ -667,6 +671,18 @@ def main() -> None:
             round_results_handler.callback_swiss_finish_confirm,
             pattern=f"^{CB_SWISS_FINISH_CONFIRM}:",
         )
+    )
+    app.add_handler(
+        CallbackQueryHandler(round_results_handler.callback_swiss_settings, pattern=f"^{CB_SWISS_SETTINGS}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(round_results_handler.callback_swiss_set_large, pattern=f"^{CB_SWISS_SET_LARGE}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(round_results_handler.callback_swiss_set_rounds, pattern=f"^{CB_SWISS_SET_ROUNDS}:")
+    )
+    app.add_handler(
+        CallbackQueryHandler(round_results_handler.callback_swiss_set_playoff, pattern=f"^{CB_SWISS_SET_PLAYOFF}:")
     )
     if settings.DEBUG:
         app.add_handler(

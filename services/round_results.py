@@ -269,6 +269,7 @@ class RoundResultsService:
             raise RoundResultError("Результат уже отправлен сопернику на подтверждение.")
         match.player1_wins = p1_wins
         match.player2_wins = p2_wins
+        self._ensure_playoff_result(tournament, match)
         match.status = models.RoundMatchStatus.PENDING
         match.proposed_by_user_id = actor.id
         match.confirmed_by_user_id = None
@@ -329,6 +330,7 @@ class RoundResultsService:
         actor = self.users.get_by_tg_id(admin_tg_id)
         match.player1_wins = player1_wins
         match.player2_wins = player2_wins
+        self._ensure_playoff_result(tournament, match)
         match.status = models.RoundMatchStatus.ADMIN
         match.proposed_by_user_id = None
         match.confirmed_by_user_id = actor.id if actor else None
@@ -354,6 +356,16 @@ class RoundResultsService:
     def is_round_ready(self, tournament_id: int, round_number: int | None = None) -> bool:
         matches = self.list_round(tournament_id, round_number)
         return bool(matches) and all(match.player2_name is None or match.status in FINAL_STATUSES for match in matches)
+
+    @staticmethod
+    def _ensure_playoff_result(tournament: models.Tournament, match: models.RoundMatch) -> None:
+        """Playoff matches are single elimination: a tie can never be reported."""
+        if tournament.engine_mode != models.TournamentEngineMode.INTERNAL_SWISS:
+            return
+        if match.round_number <= (tournament.swiss_rounds or 0):
+            return
+        if (match.player1_wins or 0) == (match.player2_wins or 0):
+            raise RoundResultError("В плей-офф ничьей быть не может: нужен победитель матча.")
 
     def _write_pairing_score(self, match: models.RoundMatch) -> None:
         for pairing in self.db.execute(

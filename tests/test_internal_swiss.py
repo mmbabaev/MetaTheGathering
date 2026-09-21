@@ -52,10 +52,32 @@ def _setup(db, count: int = 8):
 
 @pytest.mark.parametrize(
     "players,rounds",
-    [(0, 0), (1, 0), (2, 4), (3, 4), (4, 4), (8, 4), (15, 4), (32, 4), (129, 4)],
+    [
+        (0, 0),
+        (1, 0),
+        (2, 3),
+        (3, 3),
+        (4, 3),
+        (8, 3),
+        (9, 4),
+        (15, 4),
+        (16, 4),
+        (17, 5),
+        (32, 5),
+        (33, 6),
+        (50, 6),
+        (64, 6),
+        (100, 7),
+        (129, 8),
+    ],
 )
-def test_internal_beta_always_uses_four_rounds(players, rounds):
-    assert recommended_swiss_rounds(players) == rounds
+def test_large_format_recommends_rounds_by_field_size(players, rounds):
+    assert recommended_swiss_rounds(players, large_format=True) == rounds
+
+
+@pytest.mark.parametrize("players", [0, 1, 2, 4, 8, 17])
+def test_classic_format_keeps_fixed_four_rounds(players):
+    assert recommended_swiss_rounds(players) == (4 if players >= 2 else 0)
 
 
 def test_draft_seating_is_separate_stage_and_first_round_uses_opposite_seats(db):
@@ -380,7 +402,7 @@ def test_scorekeeper_cannot_finish_online_internal_event(db):
     scorekeeper.is_scorekeeper = True
     db.commit()
     results = RoundResultsService(db)
-    for expected_round in range(1, 5):
+    for expected_round in range(1, 4):
         engine.generate_next_round(tournament.id, admin.tg_id)
         for match in results.list_round(tournament.id, expected_round):
             if match.player2_user_id is not None:

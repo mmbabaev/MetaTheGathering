@@ -315,6 +315,40 @@ async def callback_swiss_finish(update: Update, context: ContextTypes.DEFAULT_TY
     )
 
 
+async def callback_swiss_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _simple(
+        update,
+        1,
+        lambda handler, tg_id, tournament_id: handler.handle_swiss_settings(tournament_id, tg_id),
+    )
+
+
+async def callback_swiss_set_rounds(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _simple(
+        update,
+        2,
+        lambda handler, tg_id, tournament_id, rounds: handler.handle_swiss_set_rounds(tournament_id, tg_id, rounds),
+    )
+
+
+async def callback_swiss_set_large(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _simple(
+        update,
+        2,
+        lambda handler, tg_id, tournament_id, enabled: handler.handle_swiss_set_large(
+            tournament_id, tg_id, bool(enabled)
+        ),
+    )
+
+
+async def callback_swiss_set_playoff(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _simple(
+        update,
+        2,
+        lambda handler, tg_id, tournament_id, size: handler.handle_swiss_set_playoff(tournament_id, tg_id, size),
+    )
+
+
 async def callback_swiss_finish_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     user = update.effective_user

@@ -131,6 +131,10 @@ CB_SWISS_NEXT_ROUND = "sw_next"  # sw_next:{tournament_id}
 CB_SWISS_STANDINGS = "sw_table"  # sw_table:{tournament_id}
 CB_SWISS_FINISH = "sw_finish"  # sw_finish:{tournament_id}
 CB_SWISS_FINISH_CONFIRM = "sw_finish_yes"  # sw_finish_yes:{tournament_id}
+CB_SWISS_SETTINGS = "sw_settings"  # sw_settings:{tournament_id}
+CB_SWISS_SET_LARGE = "sw_set_l"  # sw_set_l:{tournament_id}:{1/0} — большой формат вкл/выкл
+CB_SWISS_SET_ROUNDS = "sw_set_r"  # sw_set_r:{tournament_id}:{rounds}
+CB_SWISS_SET_PLAYOFF = "sw_set_p"  # sw_set_p:{tournament_id}:{size} — 0 (нет) / 8 / 16
 CB_DECKLIST_EDIT = "dl_edit"  # dl_edit:{tournament_id}
 CB_DECKLIST_OWN = "dl_own"  # dl_own:{tournament_id}
 CB_DECKLIST_LIST = "dl_list"  # dl_list:{tournament_id}:{page}
@@ -698,6 +702,10 @@ class Keyboards:
                     rows.append(
                         [InlineKeyboardButton(next_label, callback_data=f"{CB_SWISS_NEXT_ROUND}:{tournament_id}")]
                     )
+            if internal_swiss and not is_draft and not is_closed:
+                rows.append(
+                    [InlineKeyboardButton("⚙️ Настройки Swiss", callback_data=f"{CB_SWISS_SETTINGS}:{tournament_id}")]
+                )
             if has_pairings and not is_closed:
                 rows.append(
                     [
@@ -949,6 +957,50 @@ class Keyboards:
                 ]
             ]
         )
+
+    def swiss_settings_keyboard(
+        self,
+        tournament_id: int,
+        rounds: int | None,
+        playoff_size: int | None,
+        *,
+        rounds_frozen: bool,
+        playoff_frozen: bool,
+        large_format: bool,
+    ) -> InlineKeyboardMarkup:
+        """Настройки Swiss: формат (до раунда 1), раунды и размер плей-оффа (только большой формат)."""
+        rows: list[list[InlineKeyboardButton]] = []
+        if not rounds_frozen:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        "🔛 Выключить большой формат" if large_format else "🔛 Включить большой формат",
+                        callback_data=f"{CB_SWISS_SET_LARGE}:{tournament_id}:{0 if large_format else 1}",
+                    )
+                ]
+            )
+        if large_format and not rounds_frozen:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        f"Раундов: {value}",
+                        callback_data=f"{CB_SWISS_SET_ROUNDS}:{tournament_id}:{value}",
+                    )
+                    for value in (3, 4, 5, 6, 7, 8)
+                ]
+            )
+        if large_format and not playoff_frozen:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        label,
+                        callback_data=f"{CB_SWISS_SET_PLAYOFF}:{tournament_id}:{value}",
+                    )
+                    for value, label in ((0, "Без плей-оффа"), (8, "Топ-8"), (16, "Топ-16"))
+                ]
+            )
+        rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_ADMIN_MORE}:{tournament_id}")])
+        return InlineKeyboardMarkup(rows)
 
     def delete_tournament_confirm_keyboard(self, tournament_id: int) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(
