@@ -28,7 +28,7 @@ from services.tournament import TournamentService
 from services.user import UserService
 
 
-def _setup(db, count: int = 8):
+def _setup(db, count: int = 8, *, large: bool = True):
     tournament = TournamentService(db).create_tournament(
         TournamentCreate(
             title="Internal",
@@ -56,6 +56,8 @@ def _setup(db, count: int = 8):
     db.commit()
     engine = InternalSwissService(db, rng=random.Random(7))
     engine.set_enabled(tournament.id, admin.tg_id, True)
+    if large:
+        engine.set_swiss_large_format(tournament.id, admin.tg_id, True)
     return tournament, users, admin, engine
 
 
@@ -92,10 +94,10 @@ def test_bracket_seed_pairs_and_playoff_rounds():
     ]
 
 
-def test_recommended_rounds_callback_unknown_sizes():
-    assert recommended_swiss_rounds(50) == 6
-    assert recommended_swiss_rounds(100) == 7
-    assert recommended_swiss_rounds(1) == 0
+def test_recommended_rounds_follow_field_size_in_large_format():
+    assert recommended_swiss_rounds(50, large_format=True) == 6
+    assert recommended_swiss_rounds(100, large_format=True) == 7
+    assert recommended_swiss_rounds(1, large_format=True) == 0
 
 
 def test_set_playoff_size_and_swiss_rounds_guards(db):
@@ -317,9 +319,11 @@ def test_settings_screen_rounds_and_playoff(db):
 
     screen = handler.handle_swiss_settings(tournament.id, admin.tg_id)
     assert "⚙️ Настройки Swiss" in screen.text
+    assert "Формат: большой" in screen.text
     assert "Swiss-раундов: авто" in screen.text
     assert "Плей-офф: нет" in screen.text
     callbacks = {button.callback_data for row in screen.keyboard.inline_keyboard for button in row}
+    assert f"sw_set_l:{tournament.id}:0" in callbacks
     assert f"sw_set_r:{tournament.id}:4" in callbacks
     assert f"sw_set_p:{tournament.id}:8" in callbacks
 
@@ -333,6 +337,81 @@ def test_settings_screen_rounds_and_playoff(db):
 
     forbidden = handler.handle_swiss_settings(tournament.id, 999999)
     assert forbidden.is_alert
+
+
+def test_classic_format_defaults_blocks_tools_and_keeps_four_rounds(db):
+    tournament, _users, admin, engine = _setup(db, 8, large=False)
+
+    settings = engine.get_swiss_settings(tournament.id)
+    assert settings.large_format is False
+    assert settings.recommended_swiss_rounds == 4
+    assert engine.effective_playoff_size(db.get(models.Tournament, tournament.id)) == 0
+
+    with pytest.raises(RoundResultError, match="большом формате"):
+        engine.set_swiss_rounds(tournament.id, admin.tg_id, 5)
+    with pytest.raises(RoundResultError, match="большом формате"):
+        engine.set_playoff_size(tournament.id, admin.tg_id, 8)
+
+    handler = RoundResultsHandler(db)
+    screen = handler.handle_swiss_settings(tournament.id, admin.tg_id)
+    assert "Формат: классический" in screen.text
+    callbacks = {button.callback_data for row in screen.keyboard.inline_keyboard for button in row}
+    assert f"sw_set_l:{tournament.id}:1" in callbacks
+    assert all(not cb.startswith("sw_set_r:") and not cb.startswith("sw_set_p:") for cb in callbacks)
+
+    generated = engine.generate_next_round(tournament.id, admin.tg_id)
+    assert (generated.round_number, generated.planned_rounds) == (1, 4)
+
+
+def test_large_format_toggle_resets_tools_and_is_frozen_after_round_one(db):
+    tournament, _users, admin, engine = _setup(db, 8, large=False)
+
+    with pytest.raises(RoundResultError, match="Нет прав"):
+        engine.set_swiss_large_format(tournament.id, 999999, True)
+    engine.set_swiss_large_format(tournament.id, admin.tg_id, True)
+    engine.set_swiss_rounds(tournament.id, admin.tg_id, 5)
+    engine.set_playoff_size(tournament.id, admin.tg_id, 8)
+
+    engine.set_swiss_large_format(tournament.id, admin.tg_id, False)
+    stored = db.get(models.Tournament, tournament.id)
+    assert stored.swiss_large_format is False
+    assert stored.swiss_rounds is None
+    assert stored.playoff_size is None
+
+    engine.set_swiss_large_format(tournament.id, admin.tg_id, True)
+    engine.generate_next_round(tournament.id, admin.tg_id)
+    with pytest.raises(RoundResultError, match="только до первого раунда"):
+        engine.set_swiss_large_format(tournament.id, admin.tg_id, False)
+
+    handler = RoundResultsHandler(db)
+    back = handler.handle_swiss_set_large(tournament.id, admin.tg_id, False)
+    assert back.is_alert
+    assert "только до первого раунда" in back.text
+
+
+def test_large_format_rejected_for_draft(db):
+    organizer = UserService(db).get_or_create(tg_id=7201, username="draft_owner", first_name="Owner")
+    organizer.is_tournament_organizer = True
+    tournament = TournamentService(db).create_tournament(
+        TournamentCreate(
+            title="Endstep draft",
+            chat_id=-1002,
+            is_online=True,
+            is_draft=True,
+            engine_mode=models.TournamentEngineMode.INTERNAL_SWISS,
+            registration_close_at=datetime(2026, 9, 20, 16, 0),
+            created_by_tg_id=organizer.tg_id,
+        )
+    )
+    user = UserService(db).get_or_create(tg_id=7300, first_name="P0")
+    TournamentService(db).register_participant(tournament_id=tournament.id, user_id=user.id)
+    admin = UserService(db).get_or_create(tg_id=999900, first_name="Admin")
+    admin.is_admin = True
+    db.commit()
+    engine = InternalSwissService(db)
+
+    with pytest.raises(RoundResultError, match="не поддерживает большой формат"):
+        engine.set_swiss_large_format(tournament.id, admin.tg_id, True)
 
 
 def test_finish_prompt_counts_total_planned_with_playoff(db):

@@ -149,6 +149,11 @@ class Tournament(Base):
     # NULL/0 = no playoff. Admin configures it before the first round and may
     # change it while the Swiss rounds are still running.
     playoff_size = Column(Integer, nullable=True)
+    # Per-tournament format choice for the internal Swiss engine. Classic
+    # (default) = INTERNAL_SWISS_ROUNDS fixed rounds and no playoff; large format
+    # = rounds scaled by the field and an optional top-8/top-16 playoff. Switchable
+    # until the first round is generated.
+    swiss_large_format = Column(Boolean, nullable=False, default=False, server_default="false")
     draft_seating_generated_at = Column(DateTime, nullable=True)
 
     registration_open_at = Column(DateTime, nullable=True)

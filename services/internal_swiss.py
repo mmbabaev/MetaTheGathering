@@ -30,16 +30,19 @@ MIN_SWISS_ROUNDS = 3
 PLAYOFF_SIZES = (8, 16)
 
 
-def recommended_swiss_rounds(player_count: int) -> int:
+def recommended_swiss_rounds(player_count: int, *, large_format: bool = False) -> int:
     """Default Swiss round count for a field.
 
-    ceil(log2(count)) rounds are enough to produce an undefeated champion, so 50
-    players get 6 rounds and 100 get 7. Small fields keep a 3-round floor.
+    Classic internal events keep the fixed INTERNAL_SWISS_ROUNDS. In the large
+    format ceil(log2(count)) rounds are enough to produce an undefeated champion,
+    so 50 players get 6 rounds and 100 get 7; small fields keep a 3-round floor.
     The announced value is frozen at round 1 and can be overridden by an admin.
     """
     if player_count < 2:
         return 0
-    return max(MIN_SWISS_ROUNDS, (player_count - 1).bit_length())
+    if large_format:
+        return max(MIN_SWISS_ROUNDS, (player_count - 1).bit_length())
+    return INTERNAL_SWISS_ROUNDS
 
 
 def playoff_rounds(playoff_size: int) -> int:
@@ -108,6 +111,7 @@ class SwissSettings:
     active_players: int
     rounds_frozen: bool
     playoff_frozen: bool
+    large_format: bool
 
 
 @dataclass(frozen=True)
@@ -249,7 +253,9 @@ class InternalSwissService:
                 tournament.swiss_rounds = DRAFT_SWISS_ROUNDS
             else:
                 self._assign_initial_ranks(participants)
-                tournament.swiss_rounds = tournament.swiss_rounds or recommended_swiss_rounds(len(participants))
+                tournament.swiss_rounds = tournament.swiss_rounds or recommended_swiss_rounds(
+                    len(participants), large_format=tournament.swiss_large_format
+                )
             tournament.status = models.TournamentStatus.ONGOING
             tournament.started_at = tournament.started_at or models.utc_now()
             tournament.show_round_pairings = True
@@ -265,7 +271,7 @@ class InternalSwissService:
         next_round = (current_round or 0) + 1
         if tournament.is_draft and next_round == 1:
             pairs, bye_user_id = self._draft_first_round_pairings(participants)
-        elif next_round > (tournament.swiss_rounds or 0):
+        elif tournament.swiss_large_format and next_round > (tournament.swiss_rounds or 0):
             pairs, bye_user_id = self._playoff_pairings(tournament, next_round)
         else:
             standings = self.standings(tournament_id)
@@ -323,11 +329,34 @@ class InternalSwissService:
             bye_user_id=bye_user_id,
         )
 
+    def set_swiss_large_format(self, tournament_id: int, admin_tg_id: int, enabled: bool) -> models.Tournament:
+        """Switch the tournament between classic (4 rounds, no playoff) and large format.
+
+        Only available before round 1 is generated; drafts always play classic.
+        """
+        if not self.users.is_admin(admin_tg_id):
+            raise RoundResultError("Нет прав администратора.")
+        tournament = self._tournament(tournament_id, lock=True)
+        self._ensure_internal(tournament)
+        if tournament.is_draft:
+            raise RoundResultError("Драфт не поддерживает большой формат.")
+        if self.results.latest_round_number(tournament_id) is not None:
+            raise RoundResultError("Формат можно переключить только до первого раунда.")
+        tournament.swiss_large_format = bool(enabled)
+        if not enabled:
+            tournament.swiss_rounds = None
+            tournament.playoff_size = None
+        self.db.commit()
+        self.db.refresh(tournament)
+        return tournament
+
     def set_swiss_rounds(self, tournament_id: int, admin_tg_id: int, rounds: int) -> models.Tournament:
         if not self.users.is_admin(admin_tg_id):
             raise RoundResultError("Нет прав администратора.")
         tournament = self._tournament(tournament_id, lock=True)
         self._ensure_internal(tournament)
+        if not tournament.swiss_large_format:
+            raise RoundResultError("Ручной выбор раундов доступен только в большом формате.")
         if tournament.is_draft:
             raise RoundResultError("Драфт всегда играет фиксированные три раунда.")
         if self.results.latest_round_number(tournament_id) is not None:
@@ -344,6 +373,8 @@ class InternalSwissService:
             raise RoundResultError("Нет прав администратора.")
         tournament = self._tournament(tournament_id, lock=True)
         self._ensure_internal(tournament)
+        if not tournament.swiss_large_format:
+            raise RoundResultError("Плей-офф доступен только в большом формате.")
         if tournament.is_draft:
             raise RoundResultError("Драфт не поддерживает плей-офф.")
         if size not in (0, *PLAYOFF_SIZES):
@@ -362,7 +393,7 @@ class InternalSwissService:
         if tournament.is_draft:
             recommended = DRAFT_SWISS_ROUNDS
         else:
-            recommended = recommended_swiss_rounds(active)
+            recommended = recommended_swiss_rounds(active, large_format=tournament.swiss_large_format)
         return SwissSettings(
             tournament_id=tournament_id,
             swiss_rounds=tournament.swiss_rounds,
@@ -371,6 +402,7 @@ class InternalSwissService:
             active_players=active,
             rounds_frozen=self.results.latest_round_number(tournament_id) is not None,
             playoff_frozen=self._playoff_played(tournament),
+            large_format=tournament.swiss_large_format,
         )
 
     def total_planned_rounds(self, tournament: models.Tournament) -> int:
@@ -378,7 +410,9 @@ class InternalSwissService:
         return (tournament.swiss_rounds or 0) + playoff_rounds(self.effective_playoff_size(tournament))
 
     def effective_playoff_size(self, tournament: models.Tournament) -> int:
-        """Cut size that will actually happen: 0 when the field is too small."""
+        """Cut size that will actually happen: 0 when the field is too small or classic format."""
+        if not tournament.swiss_large_format:
+            return 0
         size = tournament.playoff_size or 0
         if size not in PLAYOFF_SIZES:
             return 0

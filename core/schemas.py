@@ -83,6 +83,7 @@ class TournamentRead(TournamentBase):
     show_round_pairings: bool = False
     swiss_rounds: Optional[int] = None
     playoff_size: Optional[int] = None
+    swiss_large_format: bool = False
     draft_seating_generated_at: Optional[datetime] = None
     aetherhub_url: Optional[str] = None
     aetherhub_import_time: Optional[str] = None

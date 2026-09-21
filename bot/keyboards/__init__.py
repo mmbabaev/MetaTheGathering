@@ -132,6 +132,7 @@ CB_SWISS_STANDINGS = "sw_table"  # sw_table:{tournament_id}
 CB_SWISS_FINISH = "sw_finish"  # sw_finish:{tournament_id}
 CB_SWISS_FINISH_CONFIRM = "sw_finish_yes"  # sw_finish_yes:{tournament_id}
 CB_SWISS_SETTINGS = "sw_settings"  # sw_settings:{tournament_id}
+CB_SWISS_SET_LARGE = "sw_set_l"  # sw_set_l:{tournament_id}:{1/0} — большой формат вкл/выкл
 CB_SWISS_SET_ROUNDS = "sw_set_r"  # sw_set_r:{tournament_id}:{rounds}
 CB_SWISS_SET_PLAYOFF = "sw_set_p"  # sw_set_p:{tournament_id}:{size} — 0 (нет) / 8 / 16
 CB_DECKLIST_EDIT = "dl_edit"  # dl_edit:{tournament_id}
@@ -965,10 +966,20 @@ class Keyboards:
         *,
         rounds_frozen: bool,
         playoff_frozen: bool,
+        large_format: bool,
     ) -> InlineKeyboardMarkup:
-        """Настройки Swiss: число раундов (до раунда 1) и размер плей-оффа (до его старта)."""
+        """Настройки Swiss: формат (до раунда 1), раунды и размер плей-оффа (только большой формат)."""
         rows: list[list[InlineKeyboardButton]] = []
         if not rounds_frozen:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        "🔛 Выключить большой формат" if large_format else "🔛 Включить большой формат",
+                        callback_data=f"{CB_SWISS_SET_LARGE}:{tournament_id}:{0 if large_format else 1}",
+                    )
+                ]
+            )
+        if large_format and not rounds_frozen:
             rows.append(
                 [
                     InlineKeyboardButton(
@@ -978,7 +989,7 @@ class Keyboards:
                     for value in (3, 4, 5, 6, 7, 8)
                 ]
             )
-        if not playoff_frozen:
+        if large_format and not playoff_frozen:
             rows.append(
                 [
                     InlineKeyboardButton(

@@ -71,8 +71,13 @@ def _setup(db, count: int = 8):
         (129, 8),
     ],
 )
-def test_recommended_swiss_rounds_follow_event_size(players, rounds):
-    assert recommended_swiss_rounds(players) == rounds
+def test_large_format_recommends_rounds_by_field_size(players, rounds):
+    assert recommended_swiss_rounds(players, large_format=True) == rounds
+
+
+@pytest.mark.parametrize("players", [0, 1, 2, 4, 8, 17])
+def test_classic_format_keeps_fixed_four_rounds(players):
+    assert recommended_swiss_rounds(players) == (4 if players >= 2 else 0)
 
 
 def test_draft_seating_is_separate_stage_and_first_round_uses_opposite_seats(db):
@@ -191,17 +196,17 @@ def test_first_round_freezes_count_and_uses_exact_registered_identities(db):
 
     generated = engine.generate_next_round(tournament.id, admin.tg_id)
 
-    assert (generated.round_number, generated.planned_rounds, generated.matches) == (1, 3, 4)
+    assert (generated.round_number, generated.planned_rounds, generated.matches) == (1, 4, 4)
     stored = db.get(models.Tournament, tournament.id)
     assert stored.status == models.TournamentStatus.ONGOING
-    assert stored.swiss_rounds == 3
+    assert stored.swiss_rounds == 4
     assert sorted(participant.swiss_initial_rank for participant in stored.participants) == list(range(1, 9))
     matches = RoundResultsService(db).list_round(tournament.id, 1)
     assert {match.player1_user_id for match in matches} | {match.player2_user_id for match in matches} == {
         user.id for user in users
     }
     screen = RoundResultsHandler(db).handle_round_status(tournament.id, admin.tg_id)
-    assert "Раунд 1/3 · результаты 0/4" in screen.text
+    assert "Раунд 1/4 · результаты 0/4" in screen.text
     callbacks = {button.callback_data for row in screen.keyboard.inline_keyboard for button in row}
     assert f"sw_table:{tournament.id}:0" in callbacks
 
@@ -423,7 +428,7 @@ def test_finish_includes_dropped_player_and_persists_final_place(db):
     dropped = next(user for user in users if user.id == first_round[0].player1_user_id)
     TournamentService(db).drop_participant(tournament.id, dropped.id)
 
-    for expected_round in range(2, 4):
+    for expected_round in range(2, 5):
         generated = engine.generate_next_round(tournament.id, admin.tg_id)
         assert generated.round_number == expected_round
         for match in results.list_round(tournament.id, expected_round):

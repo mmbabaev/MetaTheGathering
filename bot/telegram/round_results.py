@@ -331,6 +331,16 @@ async def callback_swiss_set_rounds(update: Update, context: ContextTypes.DEFAUL
     )
 
 
+async def callback_swiss_set_large(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _simple(
+        update,
+        2,
+        lambda handler, tg_id, tournament_id, enabled: handler.handle_swiss_set_large(
+            tournament_id, tg_id, bool(enabled)
+        ),
+    )
+
+
 async def callback_swiss_set_playoff(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await _simple(
         update,

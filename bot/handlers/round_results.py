@@ -470,25 +470,26 @@ class RoundResultsHandler:
             return HandlerResult("Нет прав организатора.", is_alert=True)
         engine = InternalSwissService(self.db)
         settings = engine.get_swiss_settings(tournament_id)
+        format_large = settings.large_format
         lines = [
             "⚙️ Настройки Swiss",
             f"Турнир: «{tournament.title}»",
+            "Формат: большой (раунды по игрокам + плей-офф)" if format_large else "Формат: классический (4 раунда)",
             f"Игроков: {settings.active_players}; рекомендуется раундов: {settings.recommended_swiss_rounds}",
             f"Swiss-раундов: {settings.swiss_rounds or 'авто'}",
             f"Плей-офф: {self._playoff_label(settings.playoff_size)}",
         ]
         if settings.rounds_frozen:
-            lines.append("Число раундов зафиксировано: первый раунд уже создан.")
+            lines.append("Формат и число раундов зафиксированы: первый раунд уже создан.")
         elif tournament.is_draft:
             lines.append("Драфт всегда играет фиксированные три раунда без плей-оффа.")
         else:
-            lines.append("Число раундов можно изменить до создания первого раунда.")
-        if settings.playoff_frozen:
-            lines.append("Плей-офф уже начался, размер изменить нельзя.")
-        elif tournament.is_draft:
-            lines.append("Плей-офф для драфта недоступен.")
-        else:
-            lines.append("Плей-офф включается и настраивается до его старта.")
+            lines.append("Формат можно переключить до создания первого раунда.")
+        if format_large:
+            if settings.playoff_frozen:
+                lines.append("Плей-офф уже начался, размер изменить нельзя.")
+            else:
+                lines.append("Плей-офф включается и настраивается до его старта.")
         return HandlerResult(
             "\n".join(lines),
             keyboard=self.keyboards.swiss_settings_keyboard(
@@ -497,8 +498,21 @@ class RoundResultsHandler:
                 settings.playoff_size,
                 rounds_frozen=settings.rounds_frozen,
                 playoff_frozen=settings.playoff_frozen,
+                large_format=format_large,
             ),
         )
+
+    def handle_swiss_set_large(self, tournament_id: int, admin_tg_id: int, enabled: bool) -> HandlerResult:
+        try:
+            InternalSwissService(self.db).set_swiss_large_format(tournament_id, admin_tg_id, enabled)
+        except RoundResultError as exc:
+            return HandlerResult(str(exc), is_alert=True)
+        result = self.handle_swiss_settings(tournament_id, admin_tg_id)
+        if enabled:
+            result.answer_text = "Большой формат включён: раунды по числу игроков и плей-офф топ-8/топ-16."
+        else:
+            result.answer_text = "Классический формат: 4 раунда без плей-оффа."
+        return result
 
     def handle_swiss_set_rounds(self, tournament_id: int, admin_tg_id: int, rounds: int) -> HandlerResult:
         try:
