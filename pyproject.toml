@@ -12,3 +12,4 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["F401"]
+"pauper_sim/tests/**" = ["F401"]
