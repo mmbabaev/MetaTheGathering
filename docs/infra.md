@@ -11,12 +11,31 @@ GitHub Actions
     ├── Tests (pytest + ruff + alembic heads check)
     │
     ├── deploy_bot_debug.sh  ──────────────► Server: meta-the-gathering[-debug]
-    └── deploy_web_debug.sh  ──────────────► Server: meta-the-gathering[-debug]-web
+    ├── deploy_web_debug.sh  ──────────────► Server: meta-the-gathering[-debug]-web
+    └── deploy_pauper_sim.sh ──────────────► Server: pauper-sim (side web project)
 ```
 
 **Server:** `158.160.9.28` (Yandex Cloud), user `mbabaev`
 
 ---
+
+## Pauper Duel Simulator (side web project)
+
+A standalone project (not part of the Telegram bot ecosystem): simulates Pauper
+tournament matches using matchup winrates parsed from mtgdecks.net. No env file,
+no database, no secrets. Deployed by its own workflow to port `8083` (`0.0.0.0`).
+
+- Directory: `/home/mbabaev/MetaTheGathering/pauper_sim`
+- Service: `pauper-sim` (own venv, own `requirements.txt`)
+- URL: `http://158.160.9.28:8083/`
+- Deploy: `.github/workflows/pauper_deploy.yml` on push to `main` for paths
+  `pauper_sim/**`, `bot/systemd/pauper-sim.service`, `bot/deploy_pauper_sim.sh`
+- Data freshness: live parse is best-effort (mtgdecks.net sends a Cloudflare
+  challenge); the service falls back to a bundled snapshot
+  (`pauper_sim/data/winrates_snapshot.json`) and a runtime cache
+  (`pauper_sim/data/winrates_cache.json`, created on the server, gitignored).
+
+Read `pauper_sim/README.md` for the full description.
 
 ## Environments
 

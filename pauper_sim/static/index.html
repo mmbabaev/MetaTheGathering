@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pauper Duel — симулятор турнира</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚔️</text></svg>">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <div>
+      <h1>Pauper Duel</h1>
+      <p class="subtitle">Симулятор турнирных матчей по винрейтам <a href="https://mtgdecks.net/Pauper/winrates" target="_blank" rel="noopener">mtgdecks.net</a></p>
+    </div>
+    <div class="header-tools">
+      <span id="dataLabel" class="data-label">Загрузка данных…</span>
+      <button id="refreshBtn" type="button" class="btn ghost">Обновить данные</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section id="errorBox" class="error" hidden></section>
+
+  <section class="card">
+    <h2>1. Введите игроков</h2>
+    <p class="muted">Каждая строка: <code>Имя (Архетип колоды)</code>. Архетип выбирается из списка колод ниже.</p>
+    <textarea id="playersText" rows="6" spellcheck="false"
+      placeholder="Вася (Mono Red Madness)&#10;Петя (Grixis Affinity)&#10;Ира (Elves)&#10;"></textarea>
+    <div class="row">
+      <button id="parseBtn" type="button" class="btn">Разобрать список</button>
+      <button id="addBtn" type="button" class="btn ghost">+ Игрок</button>
+      <button id="clearBtn" type="button" class="btn ghost danger">Очистить</button>
+    </div>
+
+    <table id="playersTable" class="players">
+      <thead>
+        <tr><th class="num">#</th><th>Имя</th><th>Колода</th><th class="num"></th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <p id="playersWarn" class="warn" hidden></p>
+
+    <div class="row">
+      <button id="startBtn" type="button" class="btn primary big">🎲 Старт — жеребьёвка пар</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>2. Пары (снизу списка вверх)</h2>
+    <div id="matchesList"></div>
+    <p id="byeLine" class="muted"></p>
+  </section>
+
+  <section class="card">
+    <h2>3. Текущий матч <span id="matchLabel"></span></h2>
+    <div id="matchBox" class="match"></div>
+  </section>
+
+  <section class="card">
+    <h2>4. Итоги</h2>
+    <div id="summaryBox"></div>
+  </section>
+
+  <section class="card pool">
+    <h2>Доступные колоды <span class="muted" id="poolHint"></span></h2>
+    <table id="decksTable" class="decks">
+      <thead><tr><th>Колода</th><th class="num">Винрейт</th><th class="num">Матчей</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

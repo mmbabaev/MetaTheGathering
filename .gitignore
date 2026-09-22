@@ -15,6 +15,9 @@ scripts/telegram_parser/session.session-journal
 # Coverage
 .coverage
 
+# Pauper Duel Simulator — runtime cache of the last successful mtgdecks parse
+pauper_sim/data/winrates_cache.json
+
 # Mac OS
 .DS_Store
 **/.DS_Store
