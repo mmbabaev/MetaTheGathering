@@ -431,7 +431,8 @@ Pull-only UI от delivery не зависит.
   [#334](https://github.com/mmbabaev/MetaTheGathering/pull/334).
 - В текущем review: подробный versioned гайд по Mono Red Rally с актуальным листом,
   правилами секвенсинга, муллиганом, планами сайдборда и acceptance-сценариями для
-  будущего card-level симулятора.
+  будущего card-level симулятора — PR
+  [#335](https://github.com/mmbabaev/MetaTheGathering/pull/335).
 - Следующий этап: отдельный `pauper_sim.cli` с детерминированным состоянием партии,
   зонами, маной, combat, stack/trigger processing и машинными эффектами каждой карты
   Mono Red Rally. Корневой турнирный `cli.py` не расширяется командами игрового rules
