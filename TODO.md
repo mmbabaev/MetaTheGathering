@@ -1,6 +1,6 @@
 # MetaGatherer — живой план проекта
 
-Последнее обновление: **21 сентября 2026**.
+Последнее обновление: **23 сентября 2026**.
 
 Это верхнеуровневый source of truth о том, что уже находится в `main`, что сейчас
 проходит review и что ещё только запланировано. Детали и acceptance criteria живут
@@ -423,3 +423,17 @@ Pull-only UI от delivery не зависит.
 задачи остаются в [GitHub Issues](https://github.com/mmbabaev/MetaTheGathering/issues).
 Когда новая инициатива становится активным фокусом, для неё нужно добавить сюда
 верхнеуровневый status, зависимости, решения и порядок реализации.
+
+## Сторонний проект: Pauper Duel Simulator
+
+- В `main`: отдельный web-сервис симулирует пары и результаты Pauper-матчей по
+  matchup winrate с mtgdecks.net — PR
+  [#334](https://github.com/mmbabaev/MetaTheGathering/pull/334).
+- В текущем review: подробный versioned гайд по Mono Red Rally с актуальным листом,
+  правилами секвенсинга, муллиганом, планами сайдборда и acceptance-сценариями для
+  будущего card-level симулятора — PR
+  [#335](https://github.com/mmbabaev/MetaTheGathering/pull/335).
+- Следующий этап: отдельный `pauper_sim.cli` с детерминированным состоянием партии,
+  зонами, маной, combat, stack/trigger processing и машинными эффектами каждой карты
+  Mono Red Rally. Корневой турнирный `cli.py` не расширяется командами игрового rules
+  engine.
