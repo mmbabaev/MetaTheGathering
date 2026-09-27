@@ -8,7 +8,7 @@ User=mbabaev
 WorkingDirectory=/home/mbabaev/MetaTheGathering/pauper_sim
 Environment="PATH=/home/mbabaev/MetaTheGathering/pauper_sim/venv/bin"
 Environment="PYTHONPATH=/home/mbabaev/MetaTheGathering/pauper_sim"
-ExecStart=/home/mbabaev/MetaTheGathering/pauper_sim/venv/bin/uvicorn pauper_sim.app:app --host 0.0.0.0 --port 8083
+ExecStart=/home/mbabaev/MetaTheGathering/pauper_sim/venv/bin/uvicorn pauper_sim.app:app --host 0.0.0.0 --port 8084
 Restart=always
 RestartSec=10
 StandardOutput=journal

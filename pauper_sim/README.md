@@ -2,7 +2,7 @@
 
 Сторонний небольшой веб-проект (не связан с Telegram-ботом): симулятор турнирных
 матчей в Pauper по винрейтам. Хостится отдельным systemd-сервисом на том же
-сервере, что и бот: `http://158.160.9.28:8083`.
+сервере, что и бот: `http://158.160.9.28:8084`.
 
 ## Как это работает
 
@@ -58,8 +58,8 @@ cloudscraper. Если живой парсинг недоступен, серв�
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r pauper_sim/requirements.txt
-.venv/bin/uvicorn pauper_sim.app:app --host 0.0.0.0 --port 8083
-# http://localhost:8083
+.venv/bin/uvicorn pauper_sim.app:app --host 0.0.0.0 --port 8084
+# http://localhost:8084
 ```
 
 Тесты:
@@ -79,5 +79,5 @@ python3 -m venv .venv
 bash bot/deploy_pauper_sim.sh
 ```
 
-Система: systemd-юнит `pauper-sim.service`, порт `8083` (0.0.0.0), каталог
+Система: systemd-юнит `pauper-sim.service`, порт `8084` (0.0.0.0), каталог
 `/home/mbabaev/MetaTheGathering/pauper_sim`, отдельный venv, своих секретов нет.
