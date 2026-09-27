@@ -23,11 +23,11 @@ GitHub Actions
 
 A standalone project (not part of the Telegram bot ecosystem): simulates Pauper
 tournament matches using matchup winrates parsed from mtgdecks.net. No env file,
-no database, no secrets. Deployed by its own workflow to port `8083` (`0.0.0.0`).
+no database, no secrets. Deployed by its own workflow to port `8084` (`0.0.0.0`).
 
 - Directory: `/home/mbabaev/MetaTheGathering/pauper_sim`
 - Service: `pauper-sim` (own venv, own `requirements.txt`)
-- URL: `http://158.160.9.28:8083/`
+- URL: `http://158.160.9.28:8084/`
 - Deploy: `.github/workflows/pauper_deploy.yml` on push to `main` for paths
   `pauper_sim/**`, `bot/systemd/pauper-sim.service`, `bot/deploy_pauper_sim.sh`
 - Data freshness: live parse is best-effort (mtgdecks.net sends a Cloudflare

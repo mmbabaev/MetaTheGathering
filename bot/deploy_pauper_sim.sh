@@ -1,7 +1,7 @@
 #!/bin/bash
 # deploy_pauper_sim.sh — Deploy the Pauper Duel Simulator side project to the
 # server (158.160.9.28). Runs as a standalone systemd service `pauper-sim` on
-# port 8083 with its own venv. No env files or secrets needed.
+# port 8084 with its own venv. No env files or secrets needed.
 #
 # Usage:
 #   bash bot/deploy_pauper_sim.sh
@@ -110,4 +110,4 @@ info "Статус сервиса:"
 ssh -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no "$SSH_TARGET" \
     "sudo systemctl status $SERVICE_NAME --no-pager -l | head -20"
 
-info "Деплой завершён: http://${SERVER_IP}:8083/"
+info "Деплой завершён: http://${SERVER_IP}:8084/"
