@@ -23,7 +23,39 @@ python3 cli.py tournament delete-last    # удалить последний п�
 python3 cli.py tournament import <url>   # импорт с AetherHub
 python3 cli.py tournament export-excel   # выгрузить Excel в текущую папку
 python3 cli.py endstep find <nick>       # точный поиск в Endstep Pauper Ranked
+python3 cli.py swiss setup               # debug-турнир + 110 фейковых игроков
+python3 cli.py swiss run --id 42         # прогнать все Swiss-раунды с рандомными результатами
+python3 cli.py swiss finish --id 42      # закрыть турнир и расставить места
 ```
+
+### Симулятор внутреннего Swiss
+
+Только при `BOT_ENV=debug` и только для `app_cfg.endstep_ru_chat_id`. Гоняет настоящий
+движок `InternalSwissService` — свои правила Swiss не дублируются.
+
+Фейковые игроки получают отрицательный `tg_id`, `added_by_admin=True`, архетип и заполненный
+деклист, поэтому уведомления и напоминания о деклистах им уйти не могут.
+
+```bash
+python3 cli.py swiss setup --players 110 --rounds 7
+python3 cli.py swiss fill --id 42 --players 64   # долить игроков до первого раунда
+python3 cli.py swiss step --id 42                # один раунд: заполнить результаты + создать следующий
+python3 cli.py swiss run --id 42                 # все запланированные раунды, включая плей-офф
+python3 cli.py swiss finish --id 42              # места и статус CLOSED
+python3 cli.py swiss status --id 42
+python3 cli.py swiss standings --id 42
+python3 cli.py swiss close-active                # закрыть активные турниры клуба (нужно > 2)
+```
+
+`close-active` закрывает турниры независимо от числа сыгранных раундов и не расставляет места —
+это эквивалент кнопок «🧹 Закрыть турнир» / «🧹 Освободить слоты» в debug-боте. Обычное
+`swiss finish` требует сыграть и засчитать все запланированные раунды.
+
+По умолчанию: `--players 110`, `--rounds 7` (7 Swiss-раундов + плей-офф Top-8 из 3 раундов,
+всего 10 запланированных раундов), `--playoff 8`.
+`run` играет и засчитывает все раунды, но **не** завершает турнир — `finish` вызывается отдельно.
+Актор (`--admin-id`, по умолчанию `OWNER_CHAT_ID`) должен иметь права организатора.
+`setup` не удаляет существующие турниры: если активных уже два, сначала нужен `close-active`.
 
 ### Поиск игроков Endstep
 
@@ -61,6 +93,11 @@ python3 cli.py achievements season-stats --as-of 2026-09-01 --format json -o /tm
 | `import` | `--id INT` | ID турнира (по умолчанию — активный) |
 | `export-excel` | `--id INT` | ID турнира (по умолчанию — последний) |
 | `export-excel` | `-o PATH` | Путь для сохранения файла |
+| `swiss setup` | `--players INT` | Число фейковых игроков (2–512, по умолчанию 110) |
+| `swiss setup` | `--rounds INT` | Swiss-раундов (3–20, по умолчанию 7) |
+| `swiss setup` | `--playoff INT` | Размер плей-оффа: 8 или 16; 0 — без плей-оффа |
+| `swiss *` | `--id INT` | ID турнира (по умолчанию — последний активный Endstep) |
+| `swiss *` | `--admin-id INT` | Актор (по умолчанию `OWNER_CHAT_ID`) |
 
 ## Типичный флоу
 

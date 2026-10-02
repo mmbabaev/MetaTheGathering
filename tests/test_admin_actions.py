@@ -24,6 +24,7 @@ from bot.keyboards import (
     CB_ADMIN_TOGGLE_POLL_ORGANIZER,
     CB_ADMIN_TOGGLE_SCOREKEEPER,
     CB_CLOSE_TOURNAMENT_CONFIRM,
+    CB_DEBUG_SWISS_CLOSE_CONFIRM,
     CB_TSTATUS,
 )
 from bot.messages import (
@@ -43,6 +44,7 @@ from bot.messages import (
     TOURNAMENT_NOT_FOUND,
 )
 from core import models as m
+from core.config import settings
 from core.models import TournamentStatus
 from core.schemas import TournamentCreate
 from services import errors
@@ -2162,3 +2164,56 @@ class TestReopenTournament:
     def test_not_found_returns_alert(self, handler, admin_user):
         result = handler.handle_reopen_tournament(tg_id=ADMIN_TG_ID, tournament_id=99999)
         assert result.is_alert
+
+
+class TestCloseUnfinishedInternalSwiss:
+    """Обычное закрытие Swiss требует все раунды; в debug-боте предлагаем принудительное."""
+
+    @pytest.fixture
+    def swiss_tournament(self, svc):
+        return svc.create_tournament(
+            TournamentCreate(
+                title="Internal Swiss",
+                chat_id=CHAT_ID,
+                is_online=True,
+                engine_mode=m.TournamentEngineMode.INTERNAL_SWISS,
+                registration_close_at=m.utc_now(),
+            )
+        )
+
+    def test_prod_keeps_the_error_without_a_keyboard(self, handler, svc, admin_user, swiss_tournament, monkeypatch):
+        monkeypatch.setattr("bot.handlers.admin.settings.DEBUG", False)
+
+        result = handler.handle_close_tournament_by_id(
+            tg_id=ADMIN_TG_ID, tournament_id=swiss_tournament.id, confirmed=True
+        )
+
+        assert result.is_alert is True
+        assert result.keyboard is None
+        assert svc.db.get(m.Tournament, swiss_tournament.id).status != TournamentStatus.CLOSED
+
+    def test_debug_offers_force_close_for_a_debug_chat(self, handler, svc, admin_user, swiss_tournament, monkeypatch):
+        monkeypatch.setattr("bot.handlers.admin.settings.DEBUG", True)
+        monkeypatch.setattr(type(settings), "chat_ids", property(lambda self: [CHAT_ID]))
+
+        result = handler.handle_close_tournament_by_id(
+            tg_id=ADMIN_TG_ID, tournament_id=swiss_tournament.id, confirmed=True
+        )
+
+        assert result.is_alert is False
+        assert "принудительно" in result.text
+        callbacks = [button.callback_data for row in result.keyboard.inline_keyboard for button in row]
+        assert f"{CB_DEBUG_SWISS_CLOSE_CONFIRM}:{swiss_tournament.id}" in callbacks
+        # Still open: the debug button has not been pressed yet.
+        assert svc.db.get(m.Tournament, swiss_tournament.id).status != TournamentStatus.CLOSED
+
+    def test_debug_stays_silent_for_a_foreign_chat(self, handler, svc, admin_user, swiss_tournament, monkeypatch):
+        monkeypatch.setattr("bot.handlers.admin.settings.DEBUG", True)
+        monkeypatch.setattr(type(settings), "chat_ids", property(lambda self: [-100777]))
+
+        result = handler.handle_close_tournament_by_id(
+            tg_id=ADMIN_TG_ID, tournament_id=swiss_tournament.id, confirmed=True
+        )
+
+        assert result.is_alert is True
+        assert result.keyboard is None

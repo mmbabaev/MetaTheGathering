@@ -32,6 +32,7 @@ from bot.messages import (
     sort_participants,
 )
 from core import models
+from core.config import settings
 from core.schemas import TournamentCreate
 from services import errors
 from services.aetherhub_import_service import MIN_TOURNAMENT_DURATION, AetherhubImportService
@@ -626,6 +627,13 @@ class AdminHandler:
             try:
                 InternalSwissService(self.svc.db).finish(tournament_id, tg_id)
             except (ValueError, RoundResultError) as exc:
+                if settings.DEBUG and tournament.chat_id in settings.chat_ids:
+                    # Debug escape hatch: an unfinished Swiss cannot be closed normally,
+                    # which blocks resetting a simulator tournament. Prod keeps the error.
+                    return HandlerResult(
+                        f"{exc}\n\n🧹 Debug-бот может закрыть турнир принудительно — места не расставляются.",
+                        keyboard=self.keyboards.debug_swiss_force_close_keyboard(tournament_id),
+                    )
                 return HandlerResult(str(exc), is_alert=True)
             return HandlerResult(TOURNAMENT_CLOSED_MSG, tournament_id=tournament_id)
 

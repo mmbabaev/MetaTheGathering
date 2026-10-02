@@ -9,6 +9,7 @@ from cli.achievements import app as achievements_app
 from cli.endstep import app as endstep_app
 from cli.magicoculus import app as magicoculus_app
 from cli.migration import app as migration_app
+from cli.swiss import app as swiss_app
 from cli.tournament import app as tournament_app
 from cli.user import app as user_app
 
@@ -19,6 +20,7 @@ app.add_typer(achievements_app, name="achievements", help="Ачивки: пер�
 app.add_typer(endstep_app, name="endstep", help="Read-only инструменты Endstep")
 app.add_typer(magicoculus_app, name="magicoculus", help="Подготовка импорта турниров в Magic Oculus")
 app.add_typer(migration_app, name="migration", help="Сбор исторических турниров для Magic Oculus")
+app.add_typer(swiss_app, name="swiss", help="Отладка внутреннего Swiss-движка на фейковых игроках")
 
 if __name__ == "__main__":
     app()

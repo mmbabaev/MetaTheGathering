@@ -72,6 +72,14 @@ from bot.keyboards import (
     CB_DEBUG_META_POLICE,
     CB_DEBUG_NEXT_ROUND,
     CB_DEBUG_ROUND_NOTIFY,
+    CB_DEBUG_SWISS_AUTOPLAY,
+    CB_DEBUG_SWISS_CLOSE,
+    CB_DEBUG_SWISS_CLOSE_ALL,
+    CB_DEBUG_SWISS_CLOSE_ALL_CONFIRM,
+    CB_DEBUG_SWISS_CLOSE_CONFIRM,
+    CB_DEBUG_SWISS_FILL,
+    CB_DEBUG_SWISS_PANEL,
+    CB_DEBUG_SWISS_RUN_ALL,
     CB_DECKLIST_EDIT,
     CB_DECKLIST_LIST,
     CB_DECKLIST_OWN,
@@ -696,6 +704,35 @@ def main() -> None:
         )
         app.add_handler(
             CallbackQueryHandler(debug_handler.callback_debug_next_round, pattern=f"^{CB_DEBUG_NEXT_ROUND}:")
+        )
+        app.add_handler(
+            CallbackQueryHandler(debug_handler.callback_debug_swiss_panel, pattern=f"^{CB_DEBUG_SWISS_PANEL}:")
+        )
+        app.add_handler(
+            CallbackQueryHandler(debug_handler.callback_debug_swiss_fill, pattern=f"^{CB_DEBUG_SWISS_FILL}:")
+        )
+        app.add_handler(
+            CallbackQueryHandler(debug_handler.callback_debug_swiss_autoplay, pattern=f"^{CB_DEBUG_SWISS_AUTOPLAY}:")
+        )
+        app.add_handler(
+            CallbackQueryHandler(debug_handler.callback_debug_swiss_run_all, pattern=f"^{CB_DEBUG_SWISS_RUN_ALL}:")
+        )
+        app.add_handler(
+            CallbackQueryHandler(debug_handler.callback_debug_swiss_close, pattern=f"^{CB_DEBUG_SWISS_CLOSE}:")
+        )
+        app.add_handler(
+            CallbackQueryHandler(
+                debug_handler.callback_debug_swiss_close_confirm, pattern=f"^{CB_DEBUG_SWISS_CLOSE_CONFIRM}:"
+            )
+        )
+        app.add_handler(
+            CallbackQueryHandler(debug_handler.callback_debug_swiss_close_all, pattern=f"^{CB_DEBUG_SWISS_CLOSE_ALL}:")
+        )
+        app.add_handler(
+            CallbackQueryHandler(
+                debug_handler.callback_debug_swiss_close_all_confirm,
+                pattern=f"^{CB_DEBUG_SWISS_CLOSE_ALL_CONFIRM}:",
+            )
         )
     app.add_handler(CallbackQueryHandler(admin.callback_close_tournament, pattern=f"^{CB_CLOSE_TOURNAMENT}:"))
     app.add_handler(

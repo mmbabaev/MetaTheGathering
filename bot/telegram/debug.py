@@ -5,6 +5,7 @@ import logging
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
+from bot.handlers.debug_swiss import DebugSwissHandler
 from bot.handlers.round_results import RoundResultsHandler
 from bot.keyboards import CB_DEBUG_NEXT_ROUND, CB_SWISS_NEXT_ROUND
 from bot.meta_police_message import send_debug_meta_police_preview
@@ -114,3 +115,90 @@ async def callback_debug_next_round(update: Update, context: ContextTypes.DEFAUL
         await query.answer(str(exc), show_alert=True)
     finally:
         db.close()
+
+
+async def _render_swiss(query, result) -> None:
+    if result.is_alert:
+        await query.answer(result.text, show_alert=True)
+        return
+    await query.edit_message_text(result.text, reply_markup=result.keyboard, parse_mode=result.parse_mode)
+    await query.answer(result.answer_text or "")
+
+
+async def _debug_swiss(update: Update, count: int, action) -> None:
+    query = update.callback_query
+    user = update.effective_user
+    if query is None or user is None:
+        return
+    values = await parse_callback_ints(query, count)
+    if values is None:
+        return
+    db = SessionLocal()
+    try:
+        if not settings.DEBUG or not UserService(db).is_admin(user.id):
+            await query.answer("Кнопка доступна только администраторам debug-бота.", show_alert=True)
+            return
+        await _render_swiss(query, action(DebugSwissHandler(db), user.id, *values))
+    except RoundResultError as exc:
+        await query.answer(str(exc), show_alert=True)
+    except Exception:  # a failed debug action must not kill the update loop
+        logger.exception("debug swiss simulator failed")
+        await query.answer("Не удалось выполнить debug-действие.", show_alert=True)
+    finally:
+        db.close()
+
+
+async def callback_debug_swiss_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """🐞 Debug: открыть панель симулятора внутреннего Swiss."""
+    await _debug_swiss(update, 1, lambda handler, tg_id, tournament_id: handler.handle_panel(tournament_id, tg_id))
+
+
+async def callback_debug_swiss_fill(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """🐞 Debug: довести поле до заданного числа фейковых игроков с архетипом и деклистом."""
+    await _debug_swiss(
+        update, 2, lambda handler, tg_id, tournament_id, players: handler.handle_fill(tournament_id, tg_id, players)
+    )
+
+
+async def callback_debug_swiss_autoplay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """🐞 Debug: закрыть текущий раунд и создать следующий настоящим движком."""
+    await _debug_swiss(update, 1, lambda handler, tg_id, tournament_id: handler.handle_autoplay(tournament_id, tg_id))
+
+
+async def callback_debug_swiss_run_all(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """🐞 Debug: сыграть все запланированные раунды подряд."""
+    await _debug_swiss(update, 1, lambda handler, tg_id, tournament_id: handler.handle_run_all(tournament_id, tg_id))
+
+
+async def callback_debug_swiss_close(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """🐞 Debug: спросить, закрывать ли турнир без всех сыгранных раундов."""
+    await _debug_swiss(
+        update, 1, lambda handler, tg_id, tournament_id: handler.handle_close_prompt(tournament_id, tg_id)
+    )
+
+
+async def callback_debug_swiss_close_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """🐞 Debug: закрыть турнир, даже если запланированные раунды не сыграны."""
+    await _debug_swiss(
+        update,
+        1,
+        lambda handler, tg_id, tournament_id: handler.handle_force_close(tournament_id, tg_id),
+    )
+
+
+async def callback_debug_swiss_close_all(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """🐞 Debug: спросить, закрывать ли все активные турниры клуба."""
+    await _debug_swiss(
+        update,
+        1,
+        lambda handler, tg_id, tournament_id: handler.handle_close_all_prompt(tournament_id, tg_id),
+    )
+
+
+async def callback_debug_swiss_close_all_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """🐞 Debug: закрыть все активные турниры Endstep, чтобы освободить слоты."""
+    await _debug_swiss(
+        update,
+        1,
+        lambda handler, tg_id, tournament_id: handler.handle_force_close_all(tournament_id, tg_id),
+    )
