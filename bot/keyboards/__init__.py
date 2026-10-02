@@ -112,6 +112,9 @@ CB_ENDSTEP_RU_ME = "endru_me"
 CB_PAY = "pay"  # pay:{tournament_id}
 CB_PAY_STATUS = "pay_status"  # pay_status:{tournament_id} — no-op, показывает статус оплаты
 CB_ADMIN_IMPORT_META = "adm_meta"  # adm_meta:{tournament_id}
+CB_ADMIN_BROADCAST = "adm_msg"  # adm_msg:{tournament_id} — owner-only: написать участникам
+CB_ADMIN_BROADCAST_SEND = "adm_msg_go"  # adm_msg_go:{tournament_id} — подтверждение отправки
+CB_ADMIN_BROADCAST_CANCEL = "adm_msg_no"  # adm_msg_no:{tournament_id} — отмена
 CB_DEBUG_ROUND_NOTIFY = "dbg_rnotify"  # dbg_rnotify:{tournament_id} — debug: DM all round notifications to presser
 CB_DEBUG_META_POLICE = "dbg_mpol"  # dbg_mpol:{tournament_id} — debug: owner-only live preview
 CB_DEBUG_FILL_TOURNAMENT = "dbg_fill_t"  # debug only: fill tournament to 7 fake players
@@ -687,11 +690,16 @@ class Keyboards:
         internal_swiss: bool = False,
         is_draft: bool = False,
         draft_seating_ready: bool = False,
+        show_owner_broadcast: bool = False,
     ) -> InlineKeyboardMarkup:
         rows = [
             [InlineKeyboardButton("➕ Добавить участников", callback_data=f"{CB_BULK_ADD}:{tournament_id}")],
             [InlineKeyboardButton("📋 Импорт по таблице", callback_data=f"{CB_ADMIN_IMPORT_META}:{tournament_id}")],
         ]
+        if show_owner_broadcast:
+            rows.append(
+                [InlineKeyboardButton("📩 Написать участникам", callback_data=f"{CB_ADMIN_BROADCAST}:{tournament_id}")]
+            )
         if is_online:
             view_label = "🤝 Статус: паринги" if show_round_pairings else "📋 Статус: игроки"
             rows.append([InlineKeyboardButton(view_label, callback_data=f"{CB_ROUND_VIEW_TOGGLE}:{tournament_id}")])
@@ -781,6 +789,31 @@ class Keyboards:
             )
         rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_TOURNAMENT}:{tournament_id}")])
         return InlineKeyboardMarkup(rows)
+
+    def broadcast_input_keyboard(self, tournament_id: int) -> InlineKeyboardMarkup:
+        """Клавиатура под запросом текста рассылки: отмена и назад к турниру."""
+        return InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("❌ Отмена", callback_data=f"{CB_ADMIN_BROADCAST_CANCEL}:{tournament_id}")],
+                [InlineKeyboardButton("⬅️ К турниру", callback_data=f"{CB_TOURNAMENT}:{tournament_id}")],
+            ]
+        )
+
+    def broadcast_back_keyboard(self, tournament_id: int) -> InlineKeyboardMarkup:
+        """После отмены/отправки — только назад к турниру."""
+        return InlineKeyboardMarkup(
+            [[InlineKeyboardButton("⬅️ К турниру", callback_data=f"{CB_TOURNAMENT}:{tournament_id}")]]
+        )
+
+    def broadcast_confirm_keyboard(self, tournament_id: int) -> InlineKeyboardMarkup:
+        """Подтверждение отправки: отправить, отмена, назад к турниру."""
+        return InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("✅ Отправить", callback_data=f"{CB_ADMIN_BROADCAST_SEND}:{tournament_id}")],
+                [InlineKeyboardButton("❌ Отмена", callback_data=f"{CB_ADMIN_BROADCAST_CANCEL}:{tournament_id}")],
+                [InlineKeyboardButton("⬅️ К турниру", callback_data=f"{CB_TOURNAMENT}:{tournament_id}")],
+            ]
+        )
 
     def round_score_values_keyboard(
         self,
@@ -1737,6 +1770,7 @@ def admin_more_keyboard(
     internal_swiss: bool = False,
     is_draft: bool = False,
     draft_seating_ready: bool = False,
+    show_owner_broadcast: bool = False,
 ) -> InlineKeyboardMarkup:
     return _default.admin_more_keyboard(
         tournament_id,
@@ -1751,11 +1785,24 @@ def admin_more_keyboard(
         internal_swiss=internal_swiss,
         is_draft=is_draft,
         draft_seating_ready=draft_seating_ready,
+        show_owner_broadcast=show_owner_broadcast,
     )
 
 
 def reveal_decks_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
     return _default.reveal_decks_confirm_keyboard(tournament_id)
+
+
+def broadcast_input_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
+    return _default.broadcast_input_keyboard(tournament_id)
+
+
+def broadcast_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
+    return _default.broadcast_confirm_keyboard(tournament_id)
+
+
+def broadcast_back_keyboard(tournament_id: int) -> InlineKeyboardMarkup:
+    return _default.broadcast_back_keyboard(tournament_id)
 
 
 def close_tournament_confirm_keyboard(tournament_id: int) -> InlineKeyboardMarkup:

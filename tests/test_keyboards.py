@@ -4,6 +4,9 @@ from bot.deck_emoji import deck_emoji
 from bot.features import FeatureService
 from bot.keyboards import (
     CB_ADMIN_ARCH_MORE,
+    CB_ADMIN_BROADCAST,
+    CB_ADMIN_BROADCAST_CANCEL,
+    CB_ADMIN_BROADCAST_SEND,
     CB_ADMIN_CUSTOM_ARCH,
     CB_ADMIN_MORE,
     CB_ADMIN_SET_ARCH,
@@ -475,3 +478,36 @@ class TestDebugSwissSimulatorPanel:
         assert f"{CB_DEBUG_SWISS_FILL}:42:110" not in {
             button.callback_data for row in keyboard.inline_keyboard for button in row
         }
+
+
+# ── admin_more_keyboard: owner-only «Написать участникам» ───────────────────────
+
+
+class TestOwnerBroadcastButton:
+    def _flat(self, kb):
+        return [b for row in kb.inline_keyboard for b in row]
+
+    def test_hidden_by_default(self):
+        kb = Keyboards().admin_more_keyboard(7)
+        assert not any("Написать участникам" in b.text for b in self._flat(kb))
+
+    def test_shown_for_owner_flag(self):
+        kb = Keyboards().admin_more_keyboard(7, show_owner_broadcast=True)
+        button = next(b for b in self._flat(kb) if "Написать участникам" in b.text)
+        assert button.callback_data == f"{CB_ADMIN_BROADCAST}:7"
+
+    def test_input_keyboard_has_cancel_and_back(self):
+        kb = Keyboards().broadcast_input_keyboard(7)
+        assert [b.callback_data for b in self._flat(kb)] == [f"{CB_ADMIN_BROADCAST_CANCEL}:7", f"{CB_TOURNAMENT}:7"]
+
+    def test_confirm_keyboard_has_send_cancel_and_back(self):
+        kb = Keyboards().broadcast_confirm_keyboard(7)
+        assert [b.callback_data for b in self._flat(kb)] == [
+            f"{CB_ADMIN_BROADCAST_SEND}:7",
+            f"{CB_ADMIN_BROADCAST_CANCEL}:7",
+            f"{CB_TOURNAMENT}:7",
+        ]
+
+    def test_back_keyboard_returns_to_tournament(self):
+        kb = Keyboards().broadcast_back_keyboard(7)
+        assert [b.callback_data for b in self._flat(kb)] == [f"{CB_TOURNAMENT}:7"]

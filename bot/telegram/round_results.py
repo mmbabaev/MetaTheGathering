@@ -392,6 +392,7 @@ def _admin_more_keyboard(db, tournament_id: int, tg_id: int):
         internal_swiss=tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS,
         is_draft=tournament.is_draft,
         draft_seating_ready=tournament.draft_seating_generated_at is not None,
+        show_owner_broadcast=tg_id == settings.OWNER_CHAT_ID,
     )
 
 

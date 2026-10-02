@@ -18,6 +18,9 @@ from telegram.ext import (
 
 from bot.keyboards import (
     CB_ADMIN_ARCH_MORE,
+    CB_ADMIN_BROADCAST,
+    CB_ADMIN_BROADCAST_CANCEL,
+    CB_ADMIN_BROADCAST_SEND,
     CB_ADMIN_CUSTOM_ARCH,
     CB_ADMIN_IMPORT_META,
     CB_ADMIN_MORE,
@@ -580,6 +583,9 @@ def main() -> None:
         )
     )
     app.add_handler(CallbackQueryHandler(admin.callback_bulk_add_start, pattern=f"^{CB_BULK_ADD}:"))
+    app.add_handler(CallbackQueryHandler(admin.callback_broadcast_start, pattern=f"^{CB_ADMIN_BROADCAST}:"))
+    app.add_handler(CallbackQueryHandler(admin.callback_broadcast_confirm, pattern=f"^{CB_ADMIN_BROADCAST_SEND}:"))
+    app.add_handler(CallbackQueryHandler(admin.callback_broadcast_cancel, pattern=f"^{CB_ADMIN_BROADCAST_CANCEL}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_meta_import_start, pattern=f"^{CB_ADMIN_IMPORT_META}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_pick_participant_arch, pattern=f"^{CB_ADMIN_PICK_ARCH}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_set_participant_arch, pattern=f"^{CB_ADMIN_SET_ARCH}:"))

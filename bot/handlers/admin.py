@@ -2,15 +2,20 @@
 
 import re
 from datetime import datetime
+from typing import Optional
 
 from bot.features import FeatureService
 from bot.handlers.base import HandlerResult
 from bot.handlers.player import build_archetype_menu
 from bot.handlers.round_results import RoundResultsHandler
 from bot.handlers.tournament_status import pairing_rows
-from bot.keyboards import Keyboards
+from bot.keyboards import Keyboards, broadcast_confirm_keyboard, broadcast_input_keyboard
 from bot.messages import (
     ADMIN_ARCH_SAVED,
+    BROADCAST_NO_RECIPIENTS,
+    BROADCAST_OWNER_ONLY,
+    BROADCAST_PROMPT,
+    BROADCAST_TOO_LONG,
     BULK_ADD_EMPTY,
     CHOOSE_ARCHETYPE,
     DECKS_REVEALED,
@@ -27,6 +32,7 @@ from bot.messages import (
     TOURNAMENT_ALREADY_EXISTS_MSG,
     TOURNAMENT_CLOSED_MSG,
     TOURNAMENT_NOT_FOUND,
+    format_broadcast_preview,
     format_participant_name,
     format_tournament_status,
     sort_participants,
@@ -67,6 +73,10 @@ def _player_display_label(username: str | None, first_name: str | None, tg_id: i
     if first_name:
         return first_name
     return f"игрок {tg_id}"
+
+
+# Telegram не примет сообщение длиннее 4096 символов; берём запас под оформление отчёта.
+BROADCAST_MAX_LENGTH = 4000
 
 
 class AdminHandler:
@@ -840,6 +850,63 @@ class AdminHandler:
         title = t.title
         self.svc.delete_tournament(tournament_id)
         return HandlerResult(f"🗑 Турнир «{title}» удалён.")
+
+    # ── Личная рассылка владельца участникам турнира ────────────────────────────
+
+    def _broadcast_guard(self, tg_id: int, tournament_id: int) -> Optional[HandlerResult]:
+        """Только владелец бота и только для существующего турнира."""
+        if settings.OWNER_CHAT_ID is None or tg_id != settings.OWNER_CHAT_ID:
+            return HandlerResult(BROADCAST_OWNER_ONLY, is_alert=True)
+        try:
+            get_tournament(self.svc.db, tournament_id)
+        except errors.TournamentNotFound:
+            return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
+        return None
+
+    def handle_broadcast_start(self, tg_id: int, tournament_id: int) -> HandlerResult:
+        """Кнопка «📩 Написать участникам» — бот ждёт текст сообщения."""
+        guard = self._broadcast_guard(tg_id, tournament_id)
+        if guard is not None:
+            return guard
+        return HandlerResult(
+            BROADCAST_PROMPT.format(limit=BROADCAST_MAX_LENGTH),
+            keyboard=broadcast_input_keyboard(tournament_id),
+            tournament_id=tournament_id,
+        )
+
+    def handle_broadcast_preview(self, tg_id: int, tournament_id: int, text: str) -> HandlerResult:
+        """Введённый текст — показываем ещё раз и спрашиваем подтверждение, с кем отправка."""
+        guard = self._broadcast_guard(tg_id, tournament_id)
+        if guard is not None:
+            return guard
+        text = text.strip()
+        if len(text) > BROADCAST_MAX_LENGTH:
+            return HandlerResult(
+                BROADCAST_TOO_LONG.format(length=len(text), limit=BROADCAST_MAX_LENGTH),
+                is_alert=True,
+            )
+        recipients = self.svc.list_broadcast_recipients(tournament_id)
+        if not recipients:
+            return HandlerResult(BROADCAST_NO_RECIPIENTS, is_alert=True)
+        return HandlerResult(
+            format_broadcast_preview(text, recipients),
+            keyboard=broadcast_confirm_keyboard(tournament_id),
+            tournament_id=tournament_id,
+        )
+
+    def handle_broadcast_send(self, tg_id: int, tournament_id: int) -> HandlerResult:
+        """Подтверждение — отдать обёртке список тех, кому реально отправлять."""
+        guard = self._broadcast_guard(tg_id, tournament_id)
+        if guard is not None:
+            return guard
+        recipients = self.svc.list_broadcast_recipients(tournament_id)
+        if not recipients:
+            return HandlerResult(BROADCAST_NO_RECIPIENTS, is_alert=True)
+        return HandlerResult(
+            f"Отправляю {len(recipients)} участникам…",
+            tournament_id=tournament_id,
+            broadcast_recipients=recipients,
+        )
 
     def handle_meta_import_start(self, tg_id: int, tournament_id: int) -> HandlerResult:
         """Показывает инструкцию — бот ждёт текст таблицы."""
