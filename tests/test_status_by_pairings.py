@@ -122,7 +122,7 @@ class TestPairingButtonModel:
         # заполненный стол 1 скрыт; показан только стол 2 + «показать все» + назад
         assert [b.callback_data for b in rows[0]] == ["adm_pick:3", "adm_pick:4"]
         assert rows[0][0].label.startswith("№2 · ")
-        assert rows[1] == [StatusButton("Показать все столы (1)", "adm_show_filled:10")]
+        assert rows[1] == [StatusButton("Показать все столы (1)", "adm_show_filled:10:0")]
         assert rows[-1] == [StatusButton("⬅️ Назад", "t:10")]
 
     def test_show_filled_reveals_all_tables(self):
@@ -145,7 +145,7 @@ class TestPairingButtonModel:
     def test_bye_table_with_deck_is_hidden(self):
         a = _participant("Иванов", "Иван", "Burn", pid=1, uid=1)  # бай, с колодой → стол заполнен
         rows = participant_button_rows([a], tournament_id=10, pairs=[(1, a, "A", None, None)], unpaired=[])
-        assert rows[0] == [StatusButton("Показать все столы (1)", "adm_show_filled:10")]
+        assert rows[0] == [StatusButton("Показать все столы (1)", "adm_show_filled:10:0")]
         assert rows[-1] == [StatusButton("⬅️ Назад", "t:10")]
 
 
@@ -161,6 +161,15 @@ class TestKeyboardAdapter:
         kb = admin_participants_keyboard([a, b], tournament_id=10, pairs=pairs, unpaired=[])
         assert [[btn.text for btn in row] for row in kb.inline_keyboard] == [[b.label for b in r] for r in model]
         assert kb.inline_keyboard[0][0].callback_data == model[0][0].callback_data
+
+    def test_pagination_is_one_keyboard_row(self):
+        participants = [_participant(f"Ф{i}", f"И{i}", None, pid=i, uid=i) for i in range(51)]
+        rows = participant_button_rows(participants[0:50], tournament_id=10, total=128)
+
+        assert rows[-2][0] == StatusButton("1/3", "tstatus:10:0")
+        assert rows[-2][-1] == StatusButton("→", "tstatus:10:1")
+        assert rows[-1] == [StatusButton("⬅️ Назад", "t:10")]
+        assert all(isinstance(row, list) for row in rows)
 
 
 # ── DB resolver ────────────────────────────────────────────────────────────────

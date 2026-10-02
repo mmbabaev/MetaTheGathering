@@ -24,14 +24,16 @@ from bot.messages import (
     BULK_ADD_PROMPT,
     TOURNAMENT_CLOSED_MSG,
     format_broadcast_report,
+    split_message,
 )
 from bot.meta_police_message import refresh_meta_police_message
 from bot.scheduler import format_schedule_text
-from bot.telegram.common import announce_completion_if_ready, parse_callback_ints
+from bot.telegram.common import announce_completion_if_ready, parse_callback_ints, parse_callback_page
 from bot.telegram.common import log_event as _log
 from bot.telegram.player import (
     USER_DATA_OPPONENTS_MODE,
     USER_DATA_PENDING_ADMIN_CUSTOM_ARCH,
+    USER_DATA_PENDING_ADMIN_CUSTOM_ARCH_PAGE,
     USER_DATA_PENDING_BROADCAST,
     USER_DATA_PENDING_BULK_ADD,
     USER_DATA_PENDING_META_IMPORT,
@@ -104,9 +106,12 @@ async def callback_pick_participant_arch(update: Update, context: ContextTypes.D
     if ids is None:
         return
     (participant_id,) = ids
+    page = await parse_callback_page(query)
+    if page is None:
+        return
     db = SessionLocal()
     try:
-        result = _admin_handler(db).handle_pick_participant_arch(user.id, participant_id)
+        result = _admin_handler(db).handle_pick_participant_arch(user.id, participant_id, page=page)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
@@ -126,9 +131,12 @@ async def callback_set_participant_arch(update: Update, context: ContextTypes.DE
     if ids is None:
         return
     participant_id, archetype_id = ids
+    page = await parse_callback_page(query, numeric_count=2)
+    if page is None:
+        return
     db = SessionLocal()
     try:
-        result = _admin_handler(db).handle_set_participant_arch(user.id, participant_id, archetype_id)
+        result = _admin_handler(db).handle_set_participant_arch(user.id, participant_id, archetype_id, page=page)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
@@ -165,9 +173,12 @@ async def callback_pick_participant_arch_more(update: Update, context: ContextTy
     if ids is None:
         return
     (participant_id,) = ids
+    page = await parse_callback_page(query)
+    if page is None:
+        return
     db = SessionLocal()
     try:
-        result = _admin_handler(db).handle_pick_participant_arch_more(user.id, participant_id)
+        result = _admin_handler(db).handle_pick_participant_arch_more(user.id, participant_id, page=page)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
@@ -184,9 +195,13 @@ async def callback_participant_custom_arch(update: Update, context: ContextTypes
     if ids is None:
         return
     (participant_id,) = ids
+    page = await parse_callback_page(query)
+    if page is None:
+        return
     if context.user_data is None:
         context.user_data = {}
     context.user_data[USER_DATA_PENDING_ADMIN_CUSTOM_ARCH] = participant_id
+    context.user_data[USER_DATA_PENDING_ADMIN_CUSTOM_ARCH_PAGE] = page
     await query.edit_message_text("Напишите название архетипа:")
     await query.answer()
 
@@ -201,9 +216,12 @@ async def callback_admin_show_filled(update: Update, context: ContextTypes.DEFAU
     if ids is None:
         return
     (tournament_id,) = ids
+    page = await parse_callback_page(query)
+    if page is None:
+        return
     db = SessionLocal()
     try:
-        result = _admin_handler(db).handle_admin_show_filled(user.id, tournament_id)
+        result = _admin_handler(db).handle_admin_show_filled(user.id, tournament_id, page=page)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
@@ -279,7 +297,10 @@ async def cmd_tournament_status(update: Update, context: ContextTypes.DEFAULT_TY
     db = SessionLocal()
     try:
         result = _admin_handler(db).handle_tournament_status(user.id)
-        await msg.reply_text(result.text)
+        # Активных турниров до двух, и в каждом — своя страница участников: склейка
+        # легко переваливает за лимит Telegram, поэтому режем по строкам.
+        for part in split_message(result.text):
+            await msg.reply_text(part)
     finally:
         db.close()
 
@@ -1089,9 +1110,12 @@ async def callback_admin_player_actions(update: Update, context: ContextTypes.DE
     if ids is None:
         return
     participant_id, tournament_id = ids
+    page = await parse_callback_page(query, numeric_count=2)
+    if page is None:
+        return
     db = SessionLocal()
     try:
-        result = _admin_handler(db).handle_player_actions(user.id, participant_id, tournament_id)
+        result = _admin_handler(db).handle_player_actions(user.id, participant_id, tournament_id, page=page)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
@@ -1111,9 +1135,12 @@ async def callback_admin_show_opponents(update: Update, context: ContextTypes.DE
     if ids is None:
         return
     participant_id, tournament_id = ids
+    page = await parse_callback_page(query, numeric_count=2)
+    if page is None:
+        return
     db = SessionLocal()
     try:
-        result = _admin_handler(db).handle_player_opponents(user.id, participant_id, tournament_id)
+        result = _admin_handler(db).handle_player_opponents(user.id, participant_id, tournament_id, page=page)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
@@ -1133,9 +1160,12 @@ async def callback_admin_remove_confirm(update: Update, context: ContextTypes.DE
     if ids is None:
         return
     participant_id, tournament_id = ids
+    page = await parse_callback_page(query, numeric_count=2)
+    if page is None:
+        return
     db = SessionLocal()
     try:
-        result = _admin_handler(db).handle_remove_participant_confirm(user.id, participant_id, tournament_id)
+        result = _admin_handler(db).handle_remove_participant_confirm(user.id, participant_id, tournament_id, page=page)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
@@ -1155,9 +1185,12 @@ async def callback_admin_toggle_scorekeeper(update: Update, context: ContextType
     if ids is None:
         return
     participant_id, tournament_id = ids
+    page = await parse_callback_page(query, numeric_count=2)
+    if page is None:
+        return
     db = SessionLocal()
     try:
-        result = _admin_handler(db).handle_toggle_scorekeeper(user.id, participant_id, tournament_id)
+        result = _admin_handler(db).handle_toggle_scorekeeper(user.id, participant_id, tournament_id, page=page)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
@@ -1178,9 +1211,12 @@ async def callback_admin_toggle_poll_organizer(update: Update, context: ContextT
     if ids is None:
         return
     participant_id, tournament_id = ids
+    page = await parse_callback_page(query, numeric_count=2)
+    if page is None:
+        return
     db = SessionLocal()
     try:
-        result = _admin_handler(db).handle_toggle_poll_organizer(user.id, participant_id, tournament_id)
+        result = _admin_handler(db).handle_toggle_poll_organizer(user.id, participant_id, tournament_id, page=page)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
@@ -1201,9 +1237,12 @@ async def callback_admin_remove_do(update: Update, context: ContextTypes.DEFAULT
     if ids is None:
         return
     participant_id, tournament_id = ids
+    page = await parse_callback_page(query, numeric_count=2)
+    if page is None:
+        return
     db = SessionLocal()
     try:
-        result = _admin_handler(db).handle_remove_participant(user.id, participant_id, tournament_id)
+        result = _admin_handler(db).handle_remove_participant(user.id, participant_id, tournament_id, page=page)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return

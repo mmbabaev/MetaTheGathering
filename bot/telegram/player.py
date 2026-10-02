@@ -12,7 +12,7 @@ from bot.handlers.settings import SettingsHandler
 from bot.keyboards import Keyboards, broadcast_input_keyboard
 from bot.messages import CUSTOM_ARCHETYPE_PROMPT
 from bot.meta_police_message import refresh_meta_police_message
-from bot.telegram.common import announce_completion_if_ready, parse_callback_ints
+from bot.telegram.common import announce_completion_if_ready, parse_callback_ints, parse_callback_page
 from bot.telegram.common import log_event as _log
 from core import models
 from core.database import SessionLocal
@@ -31,6 +31,7 @@ USER_DATA_PENDING_SETTINGS_CITY = "pending_settings_city"
 USER_DATA_PENDING_CELLAR_NAME = "pending_cellar_name"
 USER_DATA_PENDING_BULK_ADD = "pending_bulk_add_tournament_id"
 USER_DATA_PENDING_ADMIN_CUSTOM_ARCH = "pending_admin_custom_arch_participant_id"
+USER_DATA_PENDING_ADMIN_CUSTOM_ARCH_PAGE = "pending_admin_custom_arch_page"
 USER_DATA_OPPONENTS_MODE = "opponents_tournament_id"
 USER_DATA_PENDING_META_IMPORT = "pending_meta_import_tournament_id"
 USER_DATA_PENDING_MISSING_CUSTOM_ARCH = "pending_missing_custom_arch_participant_id"
@@ -344,7 +345,10 @@ async def callback_tournament_status(update: Update, context: ContextTypes.DEFAU
     if ids is None:
         return
     (tournament_id,) = ids
-    _log("view_status", user, tournament_id=tournament_id)
+    page = await parse_callback_page(query)
+    if page is None:
+        return
+    _log("view_status", user, tournament_id=tournament_id, page=page)
     db = SessionLocal()
     try:
         admin_h = _admin_handler(db)
@@ -354,11 +358,15 @@ async def callback_tournament_status(update: Update, context: ContextTypes.DEFAU
             and tournament.status == models.TournamentStatus.CLOSED
             and tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS
         ):
-            result = _player_handler(db).handle_tournament_public_status(tournament_id, tg_id=user.id if user else None)
+            result = _player_handler(db).handle_tournament_public_status(
+                tournament_id, tg_id=user.id if user else None, page=page
+            )
         elif user and tournament is not None and admin_h.user_svc.is_privileged_for_tournament(user.id, tournament):
-            result = admin_h.handle_admin_status(user.id, tournament_id)
+            result = admin_h.handle_admin_status(user.id, tournament_id, page=page)
         else:
-            result = _player_handler(db).handle_tournament_public_status(tournament_id, tg_id=user.id if user else None)
+            result = _player_handler(db).handle_tournament_public_status(
+                tournament_id, tg_id=user.id if user else None, page=page
+            )
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
@@ -624,9 +632,13 @@ async def _handle_pending_admin_custom_arch(msg, user, text, context) -> bool:
         await msg.reply_text("Введите непустое название архетипа.")
         return True
     context.user_data.pop(USER_DATA_PENDING_ADMIN_CUSTOM_ARCH)
+    page = context.user_data.pop(USER_DATA_PENDING_ADMIN_CUSTOM_ARCH_PAGE, None)
     db = SessionLocal()
     try:
-        result = _admin_handler(db).handle_set_participant_custom_arch(user.id, participant_id, text)
+        if page is None:
+            result = _admin_handler(db).handle_set_participant_custom_arch(user.id, participant_id, text)
+        else:
+            result = _admin_handler(db).handle_set_participant_custom_arch(user.id, participant_id, text, page=page)
         if not result.is_alert:
             _log("admin_custom_arch", user, participant_id=participant_id, arch_name=text)
         await msg.reply_text(result.text, reply_markup=result.keyboard)

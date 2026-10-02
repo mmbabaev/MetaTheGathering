@@ -43,9 +43,34 @@ async def parse_callback_ints(query, count: int) -> tuple[int, ...] | None:
     if not query or not query.data:
         return None
     try:
-        parts = query.data.split(":", count)
+        # Не используем maxsplit: у некоторых callback после основных id есть
+        # необязательное состояние навигации (например, ``tstatus:id:page``).
+        # Первые ``count`` сегментов всё равно являются запрошенными числами.
+        parts = query.data.split(":")
+        if len(parts) < count + 1:
+            raise ValueError
         return tuple(int(p) for p in parts[1 : count + 1])
     except (ValueError, IndexError):
+        await query.answer("Ошибка данных.")
+        return None
+
+
+async def parse_callback_page(query, numeric_count: int = 1) -> int | None:
+    """Достаёт страницу после ``numeric_count`` основных числовых сегментов.
+
+    Например, ``tstatus:id[:page]`` использует ``numeric_count=1``, а
+    ``adm_set:participant_id:archetype_id[:page]`` — ``numeric_count=2``.
+    Страница всегда необязательна: старые callback без неё читаются как нулевая.
+    """
+    if not query or not query.data:
+        return None
+    parts = query.data.split(":")
+    page_index = numeric_count + 1
+    if len(parts) <= page_index:
+        return 0
+    try:
+        return max(0, int(parts[page_index]))
+    except ValueError:
         await query.answer("Ошибка данных.")
         return None
 

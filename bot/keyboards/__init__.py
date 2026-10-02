@@ -6,7 +6,7 @@ from datetime import date
 from telegram import CopyTextButton, InlineKeyboardButton, InlineKeyboardMarkup
 
 from bot.deck_emoji import deck_emoji
-from bot.messages import format_participant_name
+from bot.messages import STATUS_PAGE_SIZE, format_participant_name, page_count
 from services.schedule import WEEKDAY_RU, WEEKDAYS
 
 # Field sizes offered by the debug-only Swiss simulator buttons.
@@ -35,15 +35,15 @@ CB_SETTINGS_TOGGLE_ACHIEVEMENTS_NOTIFY = "settings_toggle_achievements_notify"
 CB_SETTINGS_TOGGLE_POLL_NOTIFY = "settings_toggle_poll_notify"
 CB_SETTINGS_TOGGLE_CELLAR_NOTIFY = "settings_toggle_cellar_notify"
 CB_SETTINGS_TOGGLE_STATUS_PAIRINGS = "settings_toggle_status_pairings"
-CB_TSTATUS = "tstatus"
+CB_TSTATUS = "tstatus"  # tstatus:{tournament_id}[:{page}]
 CB_LEAVE = "leave"
 CB_LEAVE_CONFIRM = "leave_confirm"
 CB_LEAVE_CANCEL = "leave_cancel"
 CB_BULK_ADD = "bulk_add"
-CB_ADMIN_PICK_ARCH = "adm_pick"  # adm_pick:{participant_id}
-CB_ADMIN_SET_ARCH = "adm_set"  # adm_set:{participant_id}:{archetype_id}
-CB_ADMIN_CUSTOM_ARCH = "adm_custom"  # adm_custom:{participant_id}
-CB_ADMIN_ARCH_MORE = "adm_arch_more"  # adm_arch_more:{participant_id}
+CB_ADMIN_PICK_ARCH = "adm_pick"  # adm_pick:{participant_id}[:{page}]
+CB_ADMIN_SET_ARCH = "adm_set"  # adm_set:{participant_id}:{archetype_id}[:{page}]
+CB_ADMIN_CUSTOM_ARCH = "adm_custom"  # adm_custom:{participant_id}[:{page}]
+CB_ADMIN_ARCH_MORE = "adm_arch_more"  # adm_arch_more:{participant_id}[:{page}]
 CB_EXPORT_EXCEL = "export_excel"  # export_excel:{tournament_id}
 CB_META_CHART = "meta_chart"  # meta_chart:{tournament_id}
 CB_STANDINGS = "standings"  # standings:{tournament_id}
@@ -53,7 +53,7 @@ CB_EXPORT_SWISS_PLAYERS = "export_swiss_players"  # export_swiss_players:{tourna
 CB_DELETE_TOURNAMENT = "del_t"  # del_t:{tournament_id}
 CB_DELETE_TOURNAMENT_CONFIRM = "del_t_yes"  # del_t_yes:{tournament_id}
 CB_DELETE_TOURNAMENT_CANCEL = "del_t_no"  # del_t_no:{tournament_id}
-CB_ADMIN_SHOW_FILLED = "adm_show_filled"  # adm_show_filled:{tournament_id}
+CB_ADMIN_SHOW_FILLED = "adm_show_filled"  # adm_show_filled:{tournament_id}[:{page}]
 CB_REVEAL_DECKS = "reveal_decks"  # reveal_decks:{tournament_id}
 CB_REVEAL_DECKS_CONFIRM = "reveal_decks_yes"  # reveal_decks_yes:{tournament_id}
 CB_REVEAL_DECKS_CANCEL = "reveal_decks_no"  # reveal_decks_no:{tournament_id}
@@ -77,12 +77,12 @@ CB_AETHERHUB_CANCEL = "ah_cancel"  # ah_cancel:{tournament_id}
 CB_SET_IMPORT_TIME = "set_import_time"  # set_import_time:{tournament_id}
 CB_ADMIN_MORE = "adm_more"  # adm_more:{tournament_id}
 CB_DRAFT_SEATING = "draft_seat"  # draft_seat:{tournament_id}
-CB_ADMIN_PLAYER_ACTIONS = "adm_act"  # adm_act:{participant_id}:{tournament_id}
-CB_ADMIN_REMOVE_CONFIRM = "adm_rm"  # adm_rm:{participant_id}:{tournament_id}
-CB_ADMIN_REMOVE_DO = "adm_rm_do"  # adm_rm_do:{participant_id}:{tournament_id}
-CB_ADMIN_SHOW_OPPONENTS = "adm_opps_p"  # adm_opps_p:{participant_id}:{tournament_id}
-CB_ADMIN_TOGGLE_SCOREKEEPER = "adm_sk"  # adm_sk:{participant_id}:{tournament_id}
-CB_ADMIN_TOGGLE_POLL_ORGANIZER = "adm_po"  # adm_po:{participant_id}:{tournament_id}
+CB_ADMIN_PLAYER_ACTIONS = "adm_act"  # adm_act:{participant_id}:{tournament_id}[:{page}]
+CB_ADMIN_REMOVE_CONFIRM = "adm_rm"  # adm_rm:{participant_id}:{tournament_id}[:{page}]
+CB_ADMIN_REMOVE_DO = "adm_rm_do"  # adm_rm_do:{participant_id}:{tournament_id}[:{page}]
+CB_ADMIN_SHOW_OPPONENTS = "adm_opps_p"  # adm_opps_p:{participant_id}:{tournament_id}[:{page}]
+CB_ADMIN_TOGGLE_SCOREKEEPER = "adm_sk"  # adm_sk:{participant_id}:{tournament_id}[:{page}]
+CB_ADMIN_TOGGLE_POLL_ORGANIZER = "adm_po"  # adm_po:{participant_id}:{tournament_id}[:{page}]
 CB_CLOSE_TOURNAMENT = "close_t"  # close_t:{tournament_id}
 CB_CLOSE_TOURNAMENT_CONFIRM = "close_t_yes"  # close_t_yes:{tournament_id}
 CB_CLOSE_TOURNAMENT_CANCEL = "close_t_no"  # close_t_no:{tournament_id}
@@ -386,13 +386,38 @@ class StatusButton:
     callback_data: str
 
 
-def _status_participant_button(p) -> StatusButton:
+def _append_page(callback: str, page: int | None) -> str:
+    return f"{callback}:{page}" if page is not None else callback
+
+
+def _status_participant_button(p, page: int | None = None) -> StatusButton:
     if p.user:
         name = format_participant_name(p.user.first_name, p.user.last_name) or f"id{p.user.tg_id}"
     else:
         name = f"id{p.id}"
     prefix = "📝 " if p.archetype is None else "✏️ "
-    return StatusButton(f"{prefix}{name}", f"{CB_ADMIN_PICK_ARCH}:{p.id}")
+    return StatusButton(f"{prefix}{name}", _append_page(f"{CB_ADMIN_PICK_ARCH}:{p.id}", page))
+
+
+def status_pager_row(tournament_id: int, page: int, pages: int, *, prefix: str = CB_TSTATUS) -> list[StatusButton]:
+    """Ряд постраничной навигации «← 1/3 →» для экрана «Статус».
+
+    ``prefix`` — колбэк, который перерисовывает экран: ``CB_TSTATUS`` для обычного
+    вида и ``CB_ADMIN_SHOW_FILLED``, чтобы листать, не теряя раскрытые колоды.
+    На единственной странице ряд пустой — лишних кнопок не добавляем.
+    """
+    if pages <= 1:
+        return []
+    page = max(0, min(page, pages - 1))
+
+    def target(index: int) -> str:
+        return f"{prefix}:{tournament_id}:{index}"
+
+    nav = [StatusButton("←", target(page - 1))] if page > 0 else []
+    nav.append(StatusButton(f"{page + 1}/{pages}", target(page)))
+    if page + 1 < pages:
+        nav.append(StatusButton("→", target(page + 1)))
+    return nav
 
 
 def participant_button_rows(
@@ -401,6 +426,9 @@ def participant_button_rows(
     show_filled: bool = False,
     pairs: list | None = None,
     unpaired: list | None = None,
+    *,
+    page: int | None = None,
+    total: int | None = None,
 ) -> list[list[StatusButton]]:
     """Чистая модель клавиатуры участников статуса — ряды кнопок, без Telegram.
 
@@ -410,8 +438,16 @@ def participant_button_rows(
     идут по двое в ряд. Порядок строго совпадает с ``pairs``. Без ``pairs`` — прежний
     плоский режим: только незаполненные, по одной кнопке в ряд, + «Показать
     заполненных». Telegram-слой лишь маппит модель в InlineKeyboardMarkup.
+
+    ``participants`` — участники текущей страницы (тот же срез, что и в тексте
+    статуса); ``total`` — их количество по всему турниру, из него считается число
+    страниц. В режиме по столам на страницу попадают столы, у которых хотя бы один
+    игрок есть на этой странице, поэтому один стол может встретиться на двух
+    соседних страницах.
     """
     back = [StatusButton("⬅️ Назад", f"{CB_TOURNAMENT}:{tournament_id}")] if tournament_id is not None else None
+    on_page = {p.id for p in participants}
+    trailing: list[list[StatusButton]] = []
 
     if pairs is not None:
         rows: list[list[StatusButton]] = []
@@ -420,6 +456,8 @@ def participant_button_rows(
             present = [p for p in (p1, p2) if p is not None]
             if not present:
                 continue
+            if not any(p.id in on_page for p in present):
+                continue
             # Стол «заполнен», если у всех присутствующих участников проставлена колода.
             # По умолчанию такие столы скрываем (их незачем дозаполнять) — показать все по кнопке.
             if not show_filled and all(p.archetype is not None for p in present):
@@ -427,29 +465,54 @@ def participant_button_rows(
                 continue
             # Один ряд на стол; номер стола — префиксом на кнопке первого игрока (компактно, без
             # отдельного ряда-метки), чтобы номера читались сверху вниз по левому краю.
-            buttons = [_status_participant_button(p) for p in present]
+            buttons = [_status_participant_button(p, page=page) for p in present]
             if table is not None:
                 buttons[0] = StatusButton(f"№{table} · {buttons[0].label}", buttons[0].callback_data)
             rows.append(buttons)
         for i in range(0, len(unpaired or []), 2):
-            rows.append([_status_participant_button(p) for p in (unpaired or [])[i : i + 2]])
+            chunk = [p for p in (unpaired or [])[i : i + 2] if p.id in on_page]
+            if chunk:
+                rows.append([_status_participant_button(p, page=page) for p in chunk])
         if hidden_tables and tournament_id is not None:
-            rows.append(
-                [StatusButton(f"Показать все столы ({hidden_tables})", f"{CB_ADMIN_SHOW_FILLED}:{tournament_id}")]
+            show_filled_callback = f"{CB_ADMIN_SHOW_FILLED}:{tournament_id}:{page if page is not None else 0}"
+            trailing.append(
+                [
+                    StatusButton(
+                        f"Показать все столы ({hidden_tables})",
+                        show_filled_callback,
+                    )
+                ]
             )
-        if back:
-            rows.append(back)
-        return rows
+    else:
+        unfilled = [p for p in participants if p.archetype is None]
+        filled = [p for p in participants if p.archetype is not None]
+        to_show = participants if show_filled else unfilled
+        rows = [[_status_participant_button(p, page=page)] for p in to_show]
+        if not show_filled and filled and tournament_id is not None:
+            show_filled_callback = f"{CB_ADMIN_SHOW_FILLED}:{tournament_id}:{page if page is not None else 0}"
+            trailing.append(
+                [
+                    StatusButton(
+                        f"Показать заполненных ({len(filled)})",
+                        show_filled_callback,
+                    )
+                ]
+            )
 
-    unfilled = [p for p in participants if p.archetype is None]
-    filled = [p for p in participants if p.archetype is not None]
-    to_show = participants if show_filled else unfilled
-    rows = [[_status_participant_button(p)] for p in to_show]
-    if not show_filled and filled and tournament_id is not None:
-        rows.append([StatusButton(f"Показать заполненных ({len(filled)})", f"{CB_ADMIN_SHOW_FILLED}:{tournament_id}")])
     if back:
-        rows.append(back)
-    return rows
+        trailing.append(back)
+    prefix = CB_ADMIN_SHOW_FILLED if show_filled else CB_TSTATUS
+    pager = (
+        status_pager_row(
+            tournament_id,
+            page or 0,
+            page_count(total if total is not None else len(participants), STATUS_PAGE_SIZE),
+            prefix=prefix,
+        )
+        if tournament_id is not None
+        else []
+    )
+    return rows + ([pager] if pager else []) + trailing
 
 
 def opponent_button_rows(opponents: list) -> list[list[StatusButton]]:
@@ -1532,11 +1595,23 @@ class Keyboards:
         show_filled: bool = False,
         pairs: list | None = None,
         unpaired: list | None = None,
+        *,
+        page: int | None = None,
+        total: int | None = None,
     ) -> InlineKeyboardMarkup:
         """Тонкий адаптер: строит чистую модель и маппит её в Telegram-разметку."""
         return _status_rows_to_markup(
-            participant_button_rows(participants, tournament_id, show_filled, pairs, unpaired)
+            participant_button_rows(participants, tournament_id, show_filled, pairs, unpaired, page=page, total=total)
         )
+
+    def status_pager_keyboard(self, tournament_id: int, *, page: int = 0, pages: int = 1) -> InlineKeyboardMarkup:
+        """Клавиатура публичного «Статуса»: только навигация по страницам и возврат к турниру."""
+        rows = []
+        pager = status_pager_row(tournament_id, page, pages)
+        if pager:
+            rows.append(pager)
+        rows.append([StatusButton("⬅️ К турниру", f"{CB_TOURNAMENT}:{tournament_id}")])
+        return _status_rows_to_markup(rows)
 
     def opponents_keyboard(self, opponents: list) -> InlineKeyboardMarkup:
         """Клавиатура «Записать оппонентов»: кнопки с номером раунда, по порядку раундов."""
@@ -1552,6 +1627,7 @@ class Keyboards:
         is_target_poll_organizer: bool = False,
         is_privileged: bool = True,
         swiss_ongoing: bool = False,
+        page: int | None = None,
     ) -> InlineKeyboardMarkup:
         buttons = []
         if is_privileged:
@@ -1559,7 +1635,7 @@ class Keyboards:
                 [
                     InlineKeyboardButton(
                         "📝 Изменить колоду",
-                        callback_data=f"{CB_ADMIN_PICK_ARCH}:{participant_id}",
+                        callback_data=_append_page(f"{CB_ADMIN_PICK_ARCH}:{participant_id}", page),
                     )
                 ]
             )
@@ -1568,13 +1644,13 @@ class Keyboards:
                 [
                     InlineKeyboardButton(
                         "👥 Показать оппонентов",
-                        callback_data=f"{CB_ADMIN_SHOW_OPPONENTS}:{participant_id}:{tournament_id}",
+                        callback_data=_append_page(f"{CB_ADMIN_SHOW_OPPONENTS}:{participant_id}:{tournament_id}", page),
                     )
                 ]
             )
         delete_button = InlineKeyboardButton(
             "🗑 Дропнуть" if swiss_ongoing else "🗑 Удалить",
-            callback_data=f"{CB_ADMIN_REMOVE_CONFIRM}:{participant_id}:{tournament_id}",
+            callback_data=_append_page(f"{CB_ADMIN_REMOVE_CONFIRM}:{participant_id}:{tournament_id}", page),
         )
         if is_admin:
             sk_label = "🧙 Снять метаписца" if is_target_scorekeeper else "🧙 Метаписец"
@@ -1582,7 +1658,9 @@ class Keyboards:
                 [
                     InlineKeyboardButton(
                         sk_label,
-                        callback_data=f"{CB_ADMIN_TOGGLE_SCOREKEEPER}:{participant_id}:{tournament_id}",
+                        callback_data=_append_page(
+                            f"{CB_ADMIN_TOGGLE_SCOREKEEPER}:{participant_id}:{tournament_id}", page
+                        ),
                     ),
                     delete_button,
                 ]
@@ -1592,27 +1670,48 @@ class Keyboards:
                 [
                     InlineKeyboardButton(
                         po_label,
-                        callback_data=f"{CB_ADMIN_TOGGLE_POLL_ORGANIZER}:{participant_id}:{tournament_id}",
+                        callback_data=_append_page(
+                            f"{CB_ADMIN_TOGGLE_POLL_ORGANIZER}:{participant_id}:{tournament_id}", page
+                        ),
                     )
                 ]
             )
         elif is_privileged:
             buttons.append([delete_button])
-        buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_ADMIN_PICK_ARCH}:{participant_id}")])
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    "⬅️ Назад", callback_data=_append_page(f"{CB_ADMIN_PICK_ARCH}:{participant_id}", page)
+                )
+            ]
+        )
         return InlineKeyboardMarkup(buttons)
 
-    def admin_opponents_keyboard(self, participant_id: int, tournament_id: int) -> InlineKeyboardMarkup:
-        return InlineKeyboardMarkup(
-            [[InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_ADMIN_PICK_ARCH}:{participant_id}")]]
-        )
-
-    def admin_remove_confirm_keyboard(self, participant_id: int, tournament_id: int) -> InlineKeyboardMarkup:
+    def admin_opponents_keyboard(
+        self, participant_id: int, tournament_id: int, page: int | None = None
+    ) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(
             [
                 [
-                    InlineKeyboardButton("❌ Отмена", callback_data=f"{CB_ADMIN_PICK_ARCH}:{participant_id}"),
                     InlineKeyboardButton(
-                        "✅ Подтвердить", callback_data=f"{CB_ADMIN_REMOVE_DO}:{participant_id}:{tournament_id}"
+                        "⬅️ Назад", callback_data=_append_page(f"{CB_ADMIN_PICK_ARCH}:{participant_id}", page)
+                    )
+                ]
+            ]
+        )
+
+    def admin_remove_confirm_keyboard(
+        self, participant_id: int, tournament_id: int, page: int | None = None
+    ) -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        "❌ Отмена", callback_data=_append_page(f"{CB_ADMIN_PICK_ARCH}:{participant_id}", page)
+                    ),
+                    InlineKeyboardButton(
+                        "✅ Подтвердить",
+                        callback_data=_append_page(f"{CB_ADMIN_REMOVE_DO}:{participant_id}:{tournament_id}", page),
                     ),
                 ]
             ]
@@ -1626,32 +1725,45 @@ class Keyboards:
         show_emoji: bool = True,
         tournament_id: int | None = None,
         show_actions: bool = False,
+        page: int | None = None,
     ) -> InlineKeyboardMarkup:
         buttons = [
             [
                 InlineKeyboardButton(
                     deck_emoji.format(name) if show_emoji else name,
-                    callback_data=f"{CB_ADMIN_SET_ARCH}:{participant_id}:{aid}",
+                    callback_data=_append_page(f"{CB_ADMIN_SET_ARCH}:{participant_id}:{aid}", page),
                 )
             ]
             for aid, name in archetypes
         ]
         if has_more:
             buttons.append(
-                [InlineKeyboardButton("... ещё колоды", callback_data=f"{CB_ADMIN_ARCH_MORE}:{participant_id}")]
+                [
+                    InlineKeyboardButton(
+                        "... ещё колоды", callback_data=_append_page(f"{CB_ADMIN_ARCH_MORE}:{participant_id}", page)
+                    )
+                ]
             )
-        buttons.append([InlineKeyboardButton("Свой вариант", callback_data=f"{CB_ADMIN_CUSTOM_ARCH}:{participant_id}")])
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    "Свой вариант", callback_data=_append_page(f"{CB_ADMIN_CUSTOM_ARCH}:{participant_id}", page)
+                )
+            ]
+        )
         if show_actions and tournament_id is not None:
             buttons.append(
                 [
                     InlineKeyboardButton(
                         "☰ Меню",
-                        callback_data=f"{CB_ADMIN_PLAYER_ACTIONS}:{participant_id}:{tournament_id}",
+                        callback_data=_append_page(f"{CB_ADMIN_PLAYER_ACTIONS}:{participant_id}:{tournament_id}", page),
                     )
                 ]
             )
         if tournament_id is not None:
-            buttons.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_TSTATUS}:{tournament_id}")])
+            buttons.append(
+                [InlineKeyboardButton("⬅️ Назад", callback_data=_append_page(f"{CB_TSTATUS}:{tournament_id}", page))]
+            )
         return InlineKeyboardMarkup(buttons)
 
     def missing_deck_archetype_keyboard(
@@ -1933,10 +2045,23 @@ def admin_participants_keyboard(
     show_filled: bool = False,
     pairs: list | None = None,
     unpaired: list | None = None,
+    *,
+    page: int | None = None,
+    total: int | None = None,
 ) -> InlineKeyboardMarkup:
     return _default.admin_participants_keyboard(
-        participants, tournament_id=tournament_id, show_filled=show_filled, pairs=pairs, unpaired=unpaired
+        participants,
+        tournament_id=tournament_id,
+        show_filled=show_filled,
+        pairs=pairs,
+        unpaired=unpaired,
+        page=page,
+        total=total,
     )
+
+
+def status_pager_keyboard(tournament_id: int, *, page: int = 0, pages: int = 1) -> InlineKeyboardMarkup:
+    return _default.status_pager_keyboard(tournament_id, page=page, pages=pages)
 
 
 def admin_player_actions_keyboard(
@@ -1947,6 +2072,7 @@ def admin_player_actions_keyboard(
     is_target_scorekeeper: bool = False,
     is_target_poll_organizer: bool = False,
     is_privileged: bool = True,
+    page: int | None = None,
 ) -> InlineKeyboardMarkup:
     return _default.admin_player_actions_keyboard(
         participant_id,
@@ -1956,15 +2082,18 @@ def admin_player_actions_keyboard(
         is_target_scorekeeper=is_target_scorekeeper,
         is_target_poll_organizer=is_target_poll_organizer,
         is_privileged=is_privileged,
+        page=page,
     )
 
 
-def admin_opponents_keyboard(participant_id: int, tournament_id: int) -> InlineKeyboardMarkup:
-    return _default.admin_opponents_keyboard(participant_id, tournament_id)
+def admin_opponents_keyboard(participant_id: int, tournament_id: int, page: int | None = None) -> InlineKeyboardMarkup:
+    return _default.admin_opponents_keyboard(participant_id, tournament_id, page=page)
 
 
-def admin_remove_confirm_keyboard(participant_id: int, tournament_id: int) -> InlineKeyboardMarkup:
-    return _default.admin_remove_confirm_keyboard(participant_id, tournament_id)
+def admin_remove_confirm_keyboard(
+    participant_id: int, tournament_id: int, page: int | None = None
+) -> InlineKeyboardMarkup:
+    return _default.admin_remove_confirm_keyboard(participant_id, tournament_id, page=page)
 
 
 def admin_archetype_select_keyboard(
@@ -1973,6 +2102,7 @@ def admin_archetype_select_keyboard(
     has_more: bool = False,
     tournament_id: int | None = None,
     show_actions: bool = False,
+    page: int | None = None,
 ) -> InlineKeyboardMarkup:
     return _default.admin_archetype_select_keyboard(
         participant_id,
@@ -1980,6 +2110,7 @@ def admin_archetype_select_keyboard(
         has_more=has_more,
         tournament_id=tournament_id,
         show_actions=show_actions,
+        page=page,
     )
 
 

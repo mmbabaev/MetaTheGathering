@@ -100,6 +100,20 @@ class TestFormatTournamentStatus:
             participant.aetherhub_seen_at = object()
         assert "❓" not in format_tournament_status("Cup", "Reg", participants)
 
+    def test_large_status_is_paginated_and_keeps_global_counts(self):
+        participants = [self._p(f"Игрок{i}") for i in range(128)]
+
+        first_page = format_tournament_status("Cup", "Регистрация", participants[:50], total=128, with_deck=0, page=0)
+        last_page = format_tournament_status("Cup", "Регистрация", participants[100:], total=128, with_deck=0, page=2)
+
+        assert len(first_page) <= msg.TG_MESSAGE_LIMIT
+        assert "128 чел." in first_page
+        assert "Показано 1–50 из 128 · стр. 1/3" in first_page
+        assert "Игрок0" in first_page and "Игрок49" in first_page
+        assert "Игрок50" not in first_page
+        assert "Показано 101–128 из 128 · стр. 3/3" in last_page
+        assert "Игрок127" in last_page
+
 
 class TestMessageTemplates:
     def test_telegram_user_lookup_failed_template(self):

@@ -27,10 +27,13 @@ from bot.messages import (
     SWISS_DROP_CONFIRM_PROMPT,
     SWISS_DROPPED,
     TOURNAMENT_NOT_FOUND,
+    clamp_page,
     format_participant_name,
     format_tournament_card,
     format_tournament_status,
     format_unfilled_opponents_note,
+    page_bounds,
+    page_count,
     sort_participants,
 )
 from core import models
@@ -602,8 +605,15 @@ class PlayerHandler:
         except errors.TournamentInvalidState:
             return HandlerResult(REGISTRATION_CLOSED)
 
-    def handle_tournament_public_status(self, tournament_id: int, tg_id: int | None = None) -> HandlerResult:
-        """Показывает список участников турнира (доступно всем игрокам)."""
+    def handle_tournament_public_status(
+        self, tournament_id: int, tg_id: int | None = None, page: int = 0
+    ) -> HandlerResult:
+        """Показывает список участников турнира (доступно всем игрокам).
+
+        ``page`` — номер страницы: список разбит по ``STATUS_PAGE_SIZE`` участников,
+        потому что весь список одним сообщением не проходит лимит Telegram в 4096
+        символов (на 128 участниках текст был вдвое длиннее лимита).
+        """
         try:
             t = get_tournament(self.svc.db, tournament_id)
         except errors.TournamentNotFound:
@@ -613,14 +623,23 @@ class PlayerHandler:
         if t.show_round_pairings and self._has_pairings(t):
             return RoundResultsHandler(self.svc.db, self.keyboards).handle_round_status(tournament_id, tg_id)
         participants = sort_participants(self.svc.list_participants_for_tournament(tournament_id))
+        total = len(participants)
+        page = clamp_page(page, total)
+        start, end = page_bounds(page, total)
         text = format_tournament_status(
             t.title,
             t.status.label_ru,
-            participants,
+            participants[start:end],
             decks_hidden=t.decks_hidden,
             show_deck_counts=not t.is_draft,
+            total=total,
+            with_deck=sum(1 for p in participants if p.archetype),
+            page=page,
         )
-        return HandlerResult(text)
+        return HandlerResult(
+            text,
+            keyboard=self.keyboards.status_pager_keyboard(tournament_id, page=page, pages=page_count(total)),
+        )
 
     def handle_decklist_start(self, tg_id: int, tournament_id: int) -> HandlerResult:
         try:

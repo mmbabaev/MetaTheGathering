@@ -9,7 +9,13 @@ from bot.keyboards import (
     CB_ADMIN_BROADCAST_SEND,
     CB_ADMIN_CUSTOM_ARCH,
     CB_ADMIN_MORE,
+    CB_ADMIN_PLAYER_ACTIONS,
+    CB_ADMIN_REMOVE_CONFIRM,
+    CB_ADMIN_REMOVE_DO,
     CB_ADMIN_SET_ARCH,
+    CB_ADMIN_SHOW_OPPONENTS,
+    CB_ADMIN_TOGGLE_POLL_ORGANIZER,
+    CB_ADMIN_TOGGLE_SCOREKEEPER,
     CB_ARCHETYPE,
     CB_ARCHETYPE_MORE,
     CB_BULK_ADD,
@@ -41,6 +47,7 @@ from bot.keyboards import (
     CB_TOURNAMENT,
     Keyboards,
     admin_archetype_select_keyboard,
+    admin_remove_confirm_keyboard,
     archetype_keyboard,
     close_tournament_confirm_keyboard,
     endstep_ru_leaderboard_keyboard,
@@ -202,6 +209,40 @@ class TestAdminArchetypeSelectKeyboard:
         for row in markup.inline_keyboard:
             for btn in row:
                 assert len(btn.callback_data.encode()) <= 64
+
+    def test_page_is_preserved_by_admin_edit_subtree(self):
+        markup = admin_archetype_select_keyboard(
+            5,
+            [(7, "Burn")],
+            has_more=True,
+            tournament_id=10,
+            show_actions=True,
+            page=2,
+        )
+        callbacks = [button.callback_data for row in markup.inline_keyboard for button in row]
+
+        assert f"{CB_ADMIN_SET_ARCH}:5:7:2" in callbacks
+        assert f"{CB_ADMIN_ARCH_MORE}:5:2" in callbacks
+        assert f"{CB_ADMIN_CUSTOM_ARCH}:5:2" in callbacks
+        assert f"{CB_ADMIN_PLAYER_ACTIONS}:5:10:2" in callbacks
+        assert "tstatus:10:2" in callbacks
+
+    def test_page_is_preserved_by_player_actions(self):
+        markup = Keyboards().admin_player_actions_keyboard(5, 10, page=2)
+        callbacks = [button.callback_data for row in markup.inline_keyboard for button in row]
+
+        assert "adm_pick:5:2" in callbacks
+        assert f"{CB_ADMIN_SHOW_OPPONENTS}:5:10:2" in callbacks
+        assert f"{CB_ADMIN_REMOVE_CONFIRM}:5:10:2" in callbacks
+        assert f"{CB_ADMIN_TOGGLE_SCOREKEEPER}:5:10:2" in callbacks
+        assert f"{CB_ADMIN_TOGGLE_POLL_ORGANIZER}:5:10:2" in callbacks
+
+        remove_callbacks = [
+            button.callback_data
+            for row in admin_remove_confirm_keyboard(5, 10, page=2).inline_keyboard
+            for button in row
+        ]
+        assert f"{CB_ADMIN_REMOVE_DO}:5:10:2" in remove_callbacks
 
 
 class TestTournamentCardKeyboard:
