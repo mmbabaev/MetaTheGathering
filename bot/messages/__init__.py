@@ -8,6 +8,7 @@ from core.models import RoundMatchStatus
 # Форматирование ФИО живёт в services/names.py, чтобы одинаково работало и в картинках
 # (services-слой).
 from services.names import family_name_sort_key, format_participant_name
+from services.tournament import MAX_ACTIVE_TOURNAMENTS_PER_CLUB
 
 NO_ACTIVE_TOURNAMENTS = "Нет активных турниров."
 CHOOSE_ARCHETYPE = "Выберите архетип колоды:"
@@ -56,7 +57,9 @@ NO_ACTIVE_TOURNAMENT = "Нет активного турнира в этом ч�
 PLAYER_ADDED = "✅ {user} добавлен как {archetype_name}."
 TELEGRAM_USER_LOOKUP_FAILED = "Не удалось найти @{username} в Telegram. Проверьте @username."
 TOURNAMENT_CLOSED_MSG = "Турнир закрыт."
-TOURNAMENT_ALREADY_EXISTS_MSG = "В этом чате уже открыты два турнира — сначала закройте один."
+TOURNAMENT_ALREADY_EXISTS_MSG = (
+    f"Исчерпан лимит активных турниров для клуба ({MAX_ACTIVE_TOURNAMENTS_PER_CLUB}) — сначала закройте лишние."
+)
 MULTIPLE_TOURNAMENTS_MSG = "Активных турниров несколько. Используйте /tournament_status чтобы увидеть их ID."
 ADD_PLAYERS_USAGE = "Формат:\n/add_players\n@username1 Название колоды\n@username2 Другая колода"
 BULK_ADD_PROMPT = (

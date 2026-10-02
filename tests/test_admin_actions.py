@@ -53,6 +53,7 @@ from services.aetherhub_models import AetherhubPairing, AetherhubRound, Aetherhu
 from services.deck_colors import DeckColorResolver
 from services.feature_flags import FeatureFlags
 from services.meta_chart import MetaChartService, render_sectors
+from services.tournament import MAX_ACTIVE_TOURNAMENTS_PER_CLUB
 
 ADMIN_TG_ID = 9999
 CHAT_ID = 100
@@ -1668,11 +1669,12 @@ class TestHandleCreateTournament:
         assert not result.is_alert
         assert result.tournament_id is not None
 
-    def test_third_active_tournament_returns_alert(self, handler, admin_user, active_tournament):
-        second = handler.handle_create_tournament(tg_id=ADMIN_TG_ID, chat_id=CHAT_ID, title="Second")
-        assert not second.is_alert
+    def test_tournament_over_active_limit_returns_alert(self, handler, admin_user, active_tournament):
+        for i in range(2, MAX_ACTIVE_TOURNAMENTS_PER_CLUB + 1):
+            filler = handler.handle_create_tournament(tg_id=ADMIN_TG_ID, chat_id=CHAT_ID, title=f"Filler {i}")
+            assert not filler.is_alert
 
-        result = handler.handle_create_tournament(tg_id=ADMIN_TG_ID, chat_id=CHAT_ID, title="Third")
+        result = handler.handle_create_tournament(tg_id=ADMIN_TG_ID, chat_id=CHAT_ID, title="One too many")
         assert result.is_alert
         assert result.text == TOURNAMENT_ALREADY_EXISTS_MSG
 
@@ -2153,13 +2155,13 @@ class TestReopenTournament:
         assert not result.is_alert
         assert "снова активен" in result.text
 
-    def test_blocked_when_chat_already_has_two_active(self, handler, svc, admin_user, active_tournament):
+    def test_blocked_when_chat_already_at_limit(self, handler, svc, admin_user, active_tournament):
         svc.close_tournament(active_tournament.id)
-        svc.create_tournament(TournamentCreate(title="Новый 1", chat_id=CHAT_ID, slug="new-one"))
-        svc.create_tournament(TournamentCreate(title="Новый 2", chat_id=CHAT_ID, slug="new-two"))
+        for i in range(MAX_ACTIVE_TOURNAMENTS_PER_CLUB):
+            svc.create_tournament(TournamentCreate(title=f"Новый {i}", chat_id=CHAT_ID, slug=f"new-{i}"))
         result = handler.handle_reopen_tournament(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
         assert result.is_alert
-        assert "уже открыты два турнира" in result.text
+        assert result.text == f"⚠️ {TOURNAMENT_ALREADY_EXISTS_MSG}"
 
     def test_not_found_returns_alert(self, handler, admin_user):
         result = handler.handle_reopen_tournament(tg_id=ADMIN_TG_ID, tournament_id=99999)

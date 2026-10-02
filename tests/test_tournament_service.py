@@ -23,7 +23,7 @@ from services.errors import (
 )
 from services.feature_flags import FeatureFlagService
 from services.stats import StatsService
-from services.tournament import CONFIRM_THRESHOLD, REJECT_THRESHOLD
+from services.tournament import CONFIRM_THRESHOLD, MAX_ACTIVE_TOURNAMENTS_PER_CLUB, REJECT_THRESHOLD
 from services.utils import get_tournament
 
 # ===== Tournament lifecycle =====
@@ -42,10 +42,11 @@ class TestCreateTournament:
         assert second.id != tournament.id
         assert [t.id for t in svc.list_active_tournaments_for_chat(100)] == [second.id, tournament.id]
 
-    def test_raises_if_two_active_tournaments_exist(self, svc, tournament):
-        svc.create_tournament(TournamentCreate(title="Second", chat_id=100))
-        with pytest.raises(TournamentAlreadyExists):
-            svc.create_tournament(TournamentCreate(title="Third", chat_id=100))
+    def test_raises_when_active_tournament_limit_is_reached(self, svc, tournament):
+        for i in range(2, MAX_ACTIVE_TOURNAMENTS_PER_CLUB + 1):
+            svc.create_tournament(TournamentCreate(title=f"Filler {i}", chat_id=100))
+        with pytest.raises(TournamentAlreadyExists, match=str(MAX_ACTIVE_TOURNAMENTS_PER_CLUB)):
+            svc.create_tournament(TournamentCreate(title="One too many", chat_id=100))
 
     def test_clubs_with_no_announcement_chat_have_independent_limits(self, svc):
         svc.create_tournament(TournamentCreate(title="Pair 1", chat_id=0, club="Pair of dice"))
@@ -55,12 +56,20 @@ class TestCreateTournament:
 
         assert endstep.club == "Endstep-ru"
 
-    def test_two_active_tournaments_block_third_for_same_club_across_chats(self, svc):
-        svc.create_tournament(TournamentCreate(title="First", chat_id=100, club="Goldfish"))
-        svc.create_tournament(TournamentCreate(title="Second", chat_id=200, club="Goldfish"))
+    def test_limit_is_counted_per_club_across_chats(self, svc):
+        for i in range(MAX_ACTIVE_TOURNAMENTS_PER_CLUB):
+            svc.create_tournament(TournamentCreate(title=f"Goldfish {i}", chat_id=100 + i, club="Goldfish"))
 
         with pytest.raises(TournamentAlreadyExists, match="Club Goldfish"):
-            svc.create_tournament(TournamentCreate(title="Third", chat_id=300, club="Goldfish"))
+            svc.create_tournament(TournamentCreate(title="Extra", chat_id=999, club="Goldfish"))
+
+    def test_other_club_is_not_blocked_by_a_full_club(self, svc):
+        for i in range(MAX_ACTIVE_TOURNAMENTS_PER_CLUB):
+            svc.create_tournament(TournamentCreate(title=f"Goldfish {i}", chat_id=100, club="Goldfish"))
+
+        other = svc.create_tournament(TournamentCreate(title="Edinorog", chat_id=100, club="Edinorog"))
+
+        assert other.club == "Edinorog"
 
     def test_current_active_tournament_is_newest(self, svc, tournament):
         second = svc.create_tournament(TournamentCreate(title="Second", chat_id=100))
@@ -584,11 +593,11 @@ class TestReopenTournament:
         reopened = svc.reopen_tournament(old.id)
         assert [t.id for t in svc.list_active_tournaments_for_chat(333)] == [new.id, reopened.id]
 
-    def test_rejects_reopen_when_chat_already_has_two_active(self, svc):
+    def test_rejects_reopen_when_chat_already_at_limit(self, svc):
         old = svc.create_tournament(TournamentCreate(title="Old", chat_id=336, slug="o336"))
         svc.close_tournament(old.id)
-        svc.create_tournament(TournamentCreate(title="New 1", chat_id=336, slug="n336-1"))
-        svc.create_tournament(TournamentCreate(title="New 2", chat_id=336, slug="n336-2"))
+        for i in range(MAX_ACTIVE_TOURNAMENTS_PER_CLUB):
+            svc.create_tournament(TournamentCreate(title=f"New {i}", chat_id=336, slug=f"n336-{i}"))
         with pytest.raises(TournamentAlreadyExists):
             svc.reopen_tournament(old.id)
 

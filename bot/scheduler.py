@@ -7,6 +7,7 @@
 import asyncio
 import io
 import logging
+import traceback
 from collections import Counter, defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -52,6 +53,7 @@ from services.deck_reminders import DeckReminderStage
 from services.endstep_ru_leaderboard import EndstepRuLeaderboard
 from services.endstep_table_titles import is_konetskhod_club, konetskhod_title
 from services.feature_flags import FeatureFlags, FeatureFlagService
+from services.job_alerts import JobAlert, JobAlerts, get_job_alerts
 from services.magicoculus import (
     MagicOculusClient,
     MagicOculusImporter,
@@ -86,6 +88,17 @@ DAYS = {
     "friday": 4,
     "saturday": 5,
     "sunday": 6,
+}
+
+# 0=понедельник → название, для текстов алертов (DAYS_INV нельзя: дырка с "saturday").
+DAYS_INV = {
+    0: "понедельник",
+    1: "вторник",
+    2: "среда",
+    3: "четверг",
+    4: "пятница",
+    5: "суббота",
+    6: "воскресенье",
 }
 
 
@@ -179,11 +192,29 @@ def get_clubs() -> list[Club]:
 
 
 class CreateTournamentJob:
-    """Creates the club's tournament on its configured registration-opening day."""
+    """Creates the club's tournament on its configured registration-opening day.
 
-    def __init__(self, club: Club, schedule: ClubSchedule) -> None:
+    Every way this job can fail to do its job — wrong weekday, exhausted club slot,
+    unexpected exception — reports to the owner through the alert channel
+    (``services.job_alerts.py``). A silent skip is how a club lost its tournament on
+    2026-10-02: the limit was reached and only a WARNING reached the log.
+    """
+
+    def __init__(self, club: Club, schedule: ClubSchedule, alerts: JobAlerts | None = None) -> None:
         self.club = club
         self.schedule = schedule
+        self._alerts = alerts
+
+    @property
+    def job_name(self) -> str:
+        return f"create_tournament[{self.club.name}/{self.schedule.weekday}]"
+
+    async def _alert(self, bot, reason: str, summary: str, detail: str | None = None) -> None:
+        alerts = self._alerts if self._alerts is not None else get_job_alerts(bot)
+        try:
+            await alerts.send(JobAlert(job=self.job_name, reason=reason, summary=summary, detail=detail))
+        except Exception:
+            logger.exception("CreateTournamentJob: alert delivery failed for '%s'", self.club.name)
 
     async def run(self, bot, now: datetime, db=None) -> None:
         logger.info(f"CreateTournamentJob: running for '{self.club.name}', now={now.strftime('%A %H:%M')}")
@@ -194,6 +225,12 @@ class CreateTournamentJob:
                 self.club.name,
                 run_weekday,
                 now.strftime("%A"),
+            )
+            await self._alert(
+                bot,
+                "wrong_weekday",
+                f"{self.club.name}: сработала не в тот день (ждали {DAYS_INV[run_weekday]}, "
+                f"а пришло {DAYS_INV[now.weekday()]}). Проверь расписание в /schedule.",
             )
             return
 
@@ -220,6 +257,13 @@ class CreateTournamentJob:
                         self.club.name,
                         len(active),
                         ", ".join(f"#{t.id}" for t in active),
+                    )
+                    await self._alert(
+                        bot,
+                        "limit_reached",
+                        f"{self.club.name}: не создал турнир на {date_str} — исчерпан лимит "
+                        f"{MAX_ACTIVE_TOURNAMENTS_PER_CLUB} активных турниров "
+                        f"({', '.join(f'#{t.id}' for t in active)}). Закройте зависшие.",
                     )
                     return
 
@@ -262,6 +306,12 @@ class CreateTournamentJob:
                     await send_registration_open(bot, db, self.club, new_t.id, text)
             except Exception as e:
                 logger.error(f"CreateTournamentJob error for '{self.club.name}': {e}", exc_info=True)
+                await self._alert(
+                    bot,
+                    "error",
+                    f"{self.club.name}: не создал турнир на {date_str} — {type(e).__name__}: {e}",
+                    detail=traceback.format_exc(),
+                )
         finally:
             if close_db:
                 db.close()

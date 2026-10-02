@@ -665,10 +665,7 @@ class AdminHandler:
         except errors.TournamentInvalidState:
             return HandlerResult("⚠️ Турнир и так активен.", is_alert=True)
         except errors.TournamentAlreadyExists:
-            return HandlerResult(
-                "⚠️ В этом чате уже открыты два турнира — сначала закройте один.",
-                is_alert=True,
-            )
+            return HandlerResult(f"⚠️ {TOURNAMENT_ALREADY_EXISTS_MSG}", is_alert=True)
         return HandlerResult(f"🔓 Турнир «{t.title}» снова активен (регистрация открыта).")
 
     def handle_create_tournament(
