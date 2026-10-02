@@ -27,7 +27,11 @@ from services.utils import ensure_tournament_status, get_tournament
 CONFIRM_THRESHOLD = 3  # up - down >= 3 → confirmed = True
 REJECT_THRESHOLD = 3  # down - up >= 3 → confirmed = False
 CHANGE_VOTE_COOLDOWN = timedelta(seconds=30)
-MAX_ACTIVE_TOURNAMENTS_PER_CLUB = 2
+# Лимит активных турниров на клуб. Раньше было 2, и это молча ломало расписание: пара
+# «зависших» турниров (AetherHub не отдал счёт → авто-закрытие не сработало) навсегда
+# блокировала создание следующих. Теперь запас большой, а о пропуске создания джоба
+# сообщает алерт владельцу (см. services/job_alerts.py).
+MAX_ACTIVE_TOURNAMENTS_PER_CLUB = 10
 
 
 @dataclass

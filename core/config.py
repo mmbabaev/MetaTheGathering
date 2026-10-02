@@ -113,6 +113,10 @@ class Settings(BaseSettings):
     # Личка владельца для служебных анонсов (создан турнир, колоды раскрыты). Несекретно — в коде, не в .env.
     OWNER_CHAT_ID: Optional[int] = _app_cfg.owner_chat_id
 
+    # Реализация доставки алертов планировщика: "owner_dm" (личка владельца) или "null".
+    # Другие реализации добавляются в services/job_alerts.py: _BACKENDS.
+    JOB_ALERTS_BACKEND: str = "owner_dm"
+
     model_config = SettingsConfigDict(env_file=_env_file, env_file_encoding="utf-8", extra="ignore")
 
     @property
