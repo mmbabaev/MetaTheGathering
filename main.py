@@ -180,6 +180,7 @@ from bot.keyboards import (
     CB_SWISS_STANDINGS,
     CB_TOURNAMENT,
     CB_TSTATUS,
+    CB_TSTATUS_ME,
 )
 from bot.scheduler import setup_scheduler
 from bot.telegram import achievements as achievements_handler
@@ -525,6 +526,7 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(player.callback_missing_deck_more, pattern=f"^{CB_FILL_MISSING_MORE}:"))
     app.add_handler(CallbackQueryHandler(player.callback_missing_custom_deck, pattern=f"^{CB_FILL_MISSING_CUSTOM}:"))
     app.add_handler(CallbackQueryHandler(player.callback_tournament_status, pattern=f"^{CB_TSTATUS}:"))
+    app.add_handler(CallbackQueryHandler(player.callback_tournament_status_me, pattern=f"^{CB_TSTATUS_ME}:"))
     app.add_handler(CallbackQueryHandler(player.callback_decklist_edit, pattern=f"^{CB_DECKLIST_EDIT}:"))
     app.add_handler(CallbackQueryHandler(player.callback_own_decklist, pattern=f"^{CB_DECKLIST_OWN}:"))
     app.add_handler(CallbackQueryHandler(player.callback_decklist_list, pattern=f"^{CB_DECKLIST_LIST}:"))

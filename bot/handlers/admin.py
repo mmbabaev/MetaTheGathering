@@ -23,6 +23,7 @@ from bot.messages import (
     MULTIPLE_TOURNAMENTS_MSG,
     NO_ACTIVE_TOURNAMENT,
     NOT_ADMIN,
+    NOT_REGISTERED_IN_TOURNAMENT,
     PARTICIPANT_NOT_FOUND,
     POLL_ORGANIZER_GRANTED,
     POLL_ORGANIZER_REVOKED,
@@ -38,6 +39,7 @@ from bot.messages import (
     format_tournament_status,
     page_bounds,
     page_count,
+    participant_page_for_tg_id,
     prepend_note,
     sort_participants,
 )
@@ -213,6 +215,7 @@ class AdminHandler:
         show_filled: bool = False,
         tg_id: int = 0,
         page: int = 0,
+        highlight_tg_id: int | None = None,
     ) -> HandlerResult:
         """Строит HandlerResult со статусом турнира и клавиатурой участников.
 
@@ -255,6 +258,7 @@ class AdminHandler:
             total=total,
             with_deck=sum(1 for p in participants if p.archetype),
             page=page,
+            highlight_tg_id=highlight_tg_id,
         )
         text = prepend_note(body, prefix) if prefix else body
 
@@ -273,6 +277,7 @@ class AdminHandler:
                 unpaired=unpaired,
                 page=page,
                 total=total,
+                show_me=tg_id > 0 and participant_page_for_tg_id(participants, tg_id) is not None,
             ),
         )
 
@@ -284,6 +289,24 @@ class AdminHandler:
         if not self.user_svc.is_privileged_for_tournament(tg_id, tournament):
             return HandlerResult(NOT_ADMIN)
         return self._tournament_status_result(tournament_id, tg_id=tg_id, page=page)
+
+    def handle_admin_status_me(self, tg_id: int, tournament_id: int) -> HandlerResult:
+        """Показывает администратору страницу со своей строкой в статусе турнира."""
+        tournament = self.svc.db.get(models.Tournament, tournament_id)
+        if tournament is None:
+            return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
+        if not self.user_svc.is_privileged_for_tournament(tg_id, tournament):
+            return HandlerResult(NOT_ADMIN)
+        participants = sort_participants(self.svc.list_participants_for_tournament(tournament_id))
+        page = participant_page_for_tg_id(participants, tg_id)
+        if page is None:
+            return HandlerResult(NOT_REGISTERED_IN_TOURNAMENT, is_alert=True)
+        return self._tournament_status_result(
+            tournament_id,
+            tg_id=tg_id,
+            page=page,
+            highlight_tg_id=tg_id,
+        )
 
     def handle_admin_show_filled(self, tg_id: int, tournament_id: int, page: int = 0) -> HandlerResult:
         """Разворачивает скрытых заполненных участников или столы."""

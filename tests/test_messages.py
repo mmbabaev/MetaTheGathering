@@ -114,6 +114,15 @@ class TestFormatTournamentStatus:
         assert "Показано 101–128 из 128 · стр. 3/3" in last_page
         assert "Игрок127" in last_page
 
+    def test_highlights_current_player(self):
+        participants = [self._p("Алиса"), self._p("Боб")]
+        participants[1].user.tg_id = 42
+
+        result = format_tournament_status("Cup", "Reg", participants, highlight_tg_id=42)
+
+        assert "👉" in result
+        assert "👉" + " ⬜ Боб" in result
+
 
 class TestMessageTemplates:
     def test_telegram_user_lookup_failed_template(self):
