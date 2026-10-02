@@ -11,6 +11,7 @@ from core import models
 from core.config import settings
 from services.debug_swiss import DebugSwissService
 from services.round_results import RoundResultError
+from services.tournament import MAX_ACTIVE_TOURNAMENTS_PER_CLUB
 
 PANEL_TITLE = "🐞 Debug-симулятор Swiss"
 
@@ -162,8 +163,9 @@ class DebugSwissHandler:
             "🧹 Закрыть все активные турниры Endstep?",
             f"Открытых турниров клуба: {len(active)}.",
             "",
-            "Нужно, когда клуб упёрся в лимит в два активных турнира и `swiss setup` "
-            "отказывается создавать новый. Места по всем закрытым турнирам не расставляются.",
+            f"Нужно, когда клуб упёрся в лимит в {MAX_ACTIVE_TOURNAMENTS_PER_CLUB} "
+            "активных турниров и `swiss setup` отказывается создавать новый. "
+            "Места по всем закрытым турнирам не расставляются.",
         ]
         for tournament in active:
             lines.append(f"• #{tournament.id} {tournament.title} [{tournament.status.value}]")

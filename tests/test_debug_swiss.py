@@ -24,7 +24,7 @@ from services.internal_swiss import InternalSwissService
 from services.round_notifications import RoundNotificationService
 from services.round_results import FINAL_STATUSES, RoundResultError, RoundResultsService
 from services.swiss_requirements_reminders import SwissRequirementsReminderService
-from services.tournament import TournamentService
+from services.tournament import MAX_ACTIVE_TOURNAMENTS_PER_CLUB, TournamentService
 from services.user import UserService
 
 NOW = datetime(2026, 9, 18, 15, 45)
@@ -113,17 +113,18 @@ def test_setup_refuses_foreign_chat_target(service, db):
 
 
 def test_close_active_frees_the_club_slot(service, admin):
-    first = service.create_tournament(players=8, rounds=3, playoff_size=8)
-    second = service.create_tournament(players=8, rounds=3, playoff_size=8)
+    created = [
+        service.create_tournament(players=8, rounds=3, playoff_size=8) for _ in range(MAX_ACTIVE_TOURNAMENTS_PER_CLUB)
+    ]
 
     with pytest.raises(RoundResultError, match="close-active"):
         service.create_tournament(players=8, rounds=3, playoff_size=8)
 
     closed = service.close_active_debug_tournaments()
 
-    assert {tournament.id for tournament in closed} == {first.id, second.id}
-    third = service.create_tournament(players=8, rounds=3, playoff_size=8)
-    assert third.status == models.TournamentStatus.REGISTRATION
+    assert {tournament.id for tournament in closed} == {t.id for t in created}
+    next_one = service.create_tournament(players=8, rounds=3, playoff_size=8)
+    assert next_one.status == models.TournamentStatus.REGISTRATION
 
 
 # -------------------------------------------------------------------- поле
@@ -514,16 +515,16 @@ def test_force_close_twice_is_a_no_op_error(service):
         service.force_close(tournament.id, ADMIN_TG_ID)
 
 
-def test_force_close_active_frees_both_club_slots(service, db):
-    service.create_tournament(players=8, rounds=3, playoff_size=8)
-    service.create_tournament(players=8, rounds=3, playoff_size=8)
+def test_force_close_active_frees_all_club_slots(service, db):
+    for _ in range(MAX_ACTIVE_TOURNAMENTS_PER_CLUB):
+        service.create_tournament(players=8, rounds=3, playoff_size=8)
 
-    with pytest.raises(RoundResultError, match="2 активных"):
+    with pytest.raises(RoundResultError, match=f"{MAX_ACTIVE_TOURNAMENTS_PER_CLUB} активных"):
         service.create_tournament(players=8, rounds=3, playoff_size=8)
 
     closed = service.force_close_active(ADMIN_TG_ID)
 
-    assert len(closed) == 2
+    assert len(closed) == MAX_ACTIVE_TOURNAMENTS_PER_CLUB
     assert all(row.status == models.TournamentStatus.CLOSED for row in closed)
     assert service.active_club_tournaments() == []
     # A fresh setup fits again.

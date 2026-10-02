@@ -2230,8 +2230,7 @@ class TestReopenTournament:
             svc.create_tournament(TournamentCreate(title=f"Новый {i}", chat_id=CHAT_ID, slug=f"new-{i}"))
         result = handler.handle_reopen_tournament(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
         assert result.is_alert
-        limit_text = f"исчерпан лимит активных турниров для клуба ({MAX_ACTIVE_TOURNAMENTS_PER_CLUB})"
-        assert limit_text in result.text.lower()
+        assert result.text == f"⚠️ {TOURNAMENT_ALREADY_EXISTS_MSG}"
 
     def test_not_found_returns_alert(self, handler, admin_user):
         result = handler.handle_reopen_tournament(tg_id=ADMIN_TG_ID, tournament_id=99999)
