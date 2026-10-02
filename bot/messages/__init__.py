@@ -324,9 +324,67 @@ def format_tournament_card(
     return header
 
 
-def _status_header(title: str, status: str, participants: list, *, show_deck_counts: bool = True) -> str:
-    total = len(participants)
-    with_deck = sum(1 for p in participants if p.archetype)
+# Telegram отклоняет сообщение длиннее 4096 символов; держим запас на заголовок.
+TG_MESSAGE_LIMIT = 4096
+_STATUS_SAFE_LIMIT = 3900
+
+# Сколько участников помещается на одну страницу экрана «Статус».
+STATUS_PAGE_SIZE = 50
+
+
+def page_count(total: int, page_size: int = STATUS_PAGE_SIZE) -> int:
+    """Число страниц по ``total`` элементам; минимум одна (пустой список — одна пустая)."""
+    if page_size <= 0:
+        return 1
+    return max(1, -(-total // page_size))
+
+
+def clamp_page(page: int, total: int, page_size: int = STATUS_PAGE_SIZE) -> int:
+    """Прижимает номер страницы к диапазону ``[0, page_count - 1]``."""
+    return max(0, min(page, page_count(total, page_size) - 1))
+
+
+def page_bounds(page: int, total: int, page_size: int = STATUS_PAGE_SIZE) -> tuple[int, int]:
+    """Границы среза ``[start, end)`` для страницы ``page``."""
+    start = clamp_page(page, total, page_size) * page_size
+    return start, min(start + page_size, total)
+
+
+def split_message(text: str, limit: int = TG_MESSAGE_LIMIT) -> list[str]:
+    """Разбивает текст на части не длиннее ``limit``, не разрывая строки.
+
+    Нужна там, где в одно сообщение склеивается заранее неизвестный объём данных
+    (например, ``/tournament_status`` по всем активным турнирам сразу).
+    """
+    if not text:
+        return []
+    parts: list[str] = []
+    current: list[str] = []
+    size = 0
+    for line in text.split("\n"):
+        addition = len(line) + 1
+        if size + addition > limit and current:
+            parts.append("\n".join(current))
+            current, size = [], 0
+        while len(line) > limit:
+            # Единственная строка длиннее лимита (не имя, а URL) — режем принудительно.
+            parts.append(line[:limit])
+            line = line[limit:]
+        current.append(line)
+        size += addition
+    if current:
+        parts.append("\n".join(current))
+    return [p for p in parts if p]
+
+
+def _status_header(
+    title: str,
+    status: str,
+    total: int,
+    with_deck: int,
+    *,
+    show_deck_counts: bool = True,
+) -> str:
     header = f"🏆 {title} · {status} · {total} чел."
     if total and show_deck_counts:
         header += f"\n✅ {with_deck} с колодой  ⬜ {total - with_deck} без"
@@ -350,6 +408,42 @@ def format_participant_line(p, decks_hidden: bool = False, *, aetherhub_imported
     return f"{icon} {display} — {archetype}"
 
 
+def _page_range_line(shown_from: int, shown_to: int, total: int, page: int, pages: int) -> str:
+    """Строка «показано 1–50 из 128 · стр. 1/3». На одной странице диапазон не нужен."""
+    if pages <= 1:
+        return ""
+    return f"👥 Показано {shown_from + 1}–{shown_to} из {total} · стр. {page + 1}/{pages}"
+
+
+def _fit_lines(header: str, body: list[str], footer: list[str]) -> str:
+    """Склеивает заголовок/тело/подвал так, чтобы результат влез в лимит Telegram.
+
+    ``body`` обрезается с конца, пока текст не станет короче безопасного предела;
+    обрезанные строки компенсируются счётчиком. Это страховка на случай неприлично
+    длинных имён/колод: пагинация по 50 участников укладывается в лимит с большим
+    запасом, но жёсткой гарантии «не превысим 4096» без неё нет.
+    """
+    dropped = 0
+    while True:
+        text = "\n".join([header, *body, *footer])
+        if len(text) <= _STATUS_SAFE_LIMIT or not body:
+            break
+        dropped += 1
+        body = body[:-1]
+        footer = [f"…ещё {dropped} не поместилось"] if dropped else []
+    return "\n".join([header, *body, *footer])
+
+
+def prepend_note(text: str, note: str) -> str:
+    """Ставит короткую заметку перед статусом, не выпирая за лимит Telegram."""
+    if not note:
+        return text
+    if len(note) + 2 + len(text) <= TG_MESSAGE_LIMIT:
+        return f"{note}\n\n{text}"
+    head = split_message(text, TG_MESSAGE_LIMIT - len(note) - 2)
+    return f"{note}\n\n{head[0]}" if head else note
+
+
 def format_tournament_status(
     title: str,
     status: str,
@@ -357,14 +451,37 @@ def format_tournament_status(
     decks_hidden: bool = False,
     *,
     show_deck_counts: bool = True,
+    total: int | None = None,
+    with_deck: int | None = None,
+    page: int = 0,
+    page_size: int = STATUS_PAGE_SIZE,
 ) -> str:
-    """Структурированный список участников турнира (плоский)."""
+    """Список участников турнира (плоский), постранично.
+
+    ``participants`` — участники этой страницы (уже отсортированные). ``total`` и
+    ``with_deck`` — счётчики по всему турниру: в заголовке всегда показываются
+    глобальные числа, иначе пагинация выглядит как «в турнире всего 50 человек».
+    ``page``/``page_size`` нужны только для подписи страницы.
+    """
+    if total is None:
+        total = len(participants)
+    if with_deck is None:
+        with_deck = sum(1 for p in participants if p.archetype)
+    pages = page_count(total, page_size)
+    page = clamp_page(page, total, page_size)
+    start, end = page_bounds(page, total, page_size)
+
     aetherhub_imported = any(getattr(p, "aetherhub_seen_at", None) is not None for p in participants)
-    lines = [_status_header(title, status, participants, show_deck_counts=show_deck_counts), ""]
+    header = _status_header(title, status, total, with_deck, show_deck_counts=show_deck_counts)
+
+    lines = [_page_range_line(start, end, total, page, pages), ""] if pages > 1 else [""]
     lines.extend(format_participant_line(p, decks_hidden, aetherhub_imported=aetherhub_imported) for p in participants)
-    if aetherhub_imported and any(getattr(p, "aetherhub_seen_at", None) is None for p in participants):
-        lines.extend(["", "❓ — пока не найден в AetherHub"])
-    return "\n".join(lines)
+    footer = (
+        ["", "❓ — пока не найден в AetherHub"]
+        if (aetherhub_imported and any(getattr(p, "aetherhub_seen_at", None) is None for p in participants))
+        else []
+    )
+    return _fit_lines(header, lines, footer)
 
 
 def _round_match_names(matches: list) -> tuple[dict[tuple[int, int], str], dict[tuple[int, int], str]]:

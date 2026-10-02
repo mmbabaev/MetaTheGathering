@@ -191,6 +191,24 @@ class TestHandleTournamentStatus:
         assert "Weekly" in result.text
         assert "Second Cup" in result.text
 
+    def test_large_tournament_status_contains_all_pages(self, handler, svc, user_svc, admin_user, active_tournament):
+        entries = []
+        for i in range(51):
+            user = user_svc.get_or_create(tg_id=20_000 + i, first_name=f"Игрок{i}")
+            entries.append((user.id, f"Игрок{i}"))
+        svc.bulk_add_participants(active_tournament.id, entries)
+
+        result = handler.handle_tournament_status(tg_id=ADMIN_TG_ID)
+
+        assert "стр. 1/2" in result.text
+        assert "стр. 2/2" in result.text
+        assert "Игрок50" in result.text
+
+        page_result = handler.handle_admin_status(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, page=1)
+        page_buttons = [button for row in page_result.keyboard.inline_keyboard for button in row]
+        assert "стр. 2/2" in page_result.text
+        assert any(button.callback_data == f"{CB_TSTATUS}:{active_tournament.id}:0" for button in page_buttons)
+
 
 # --- handle_close_tournament ---
 

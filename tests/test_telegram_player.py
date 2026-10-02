@@ -189,11 +189,35 @@ async def test_online_scorekeeper_tournament_status_uses_player_view():
         await callback_tournament_status(update, _make_context())
 
     admin_handler.handle_admin_status.assert_not_called()
-    player_handler.handle_tournament_public_status.assert_called_once_with(5, tg_id=update.effective_user.id)
+    player_handler.handle_tournament_public_status.assert_called_once_with(5, tg_id=update.effective_user.id, page=0)
     update.callback_query.edit_message_text.assert_awaited_once_with(
         result.text,
         reply_markup=None,
         parse_mode=None,
+    )
+
+
+async def test_tournament_status_passes_page_from_callback():
+    result = HandlerResult("Страница 3")
+    update = _make_callback_update("tstatus:5:2")
+    tournament = MagicMock()
+    tournament.status = MagicMock()
+    tournament.is_online = True
+
+    with (
+        patch("bot.telegram.player.SessionLocal") as mock_sl,
+        patch("bot.telegram.player._admin_handler") as mock_admin_handler,
+        patch("bot.telegram.player._player_handler") as mock_player_handler,
+    ):
+        db = mock_sl.return_value
+        db.get.return_value = tournament
+        mock_admin_handler.return_value.user_svc.is_privileged_for_tournament.return_value = False
+        mock_player_handler.return_value.handle_tournament_public_status.return_value = result
+
+        await callback_tournament_status(update, _make_context())
+
+    mock_player_handler.return_value.handle_tournament_public_status.assert_called_once_with(
+        5, tg_id=update.effective_user.id, page=2
     )
 
 
