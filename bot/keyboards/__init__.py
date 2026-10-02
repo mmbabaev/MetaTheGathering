@@ -9,6 +9,9 @@ from bot.deck_emoji import deck_emoji
 from bot.messages import format_participant_name
 from services.schedule import WEEKDAY_RU, WEEKDAYS
 
+# Field sizes offered by the debug-only Swiss simulator buttons.
+DEBUG_SWISS_PLAYER_PRESETS = (7, 16, 32, 64, 110, 128)
+
 # Callback data prefixes (max 64 bytes in Telegram)
 CB_REGISTER = "reg"
 CB_ARCHETYPE = "arch"
@@ -113,6 +116,14 @@ CB_DEBUG_ROUND_NOTIFY = "dbg_rnotify"  # dbg_rnotify:{tournament_id} — debug: 
 CB_DEBUG_META_POLICE = "dbg_mpol"  # dbg_mpol:{tournament_id} — debug: owner-only live preview
 CB_DEBUG_FILL_TOURNAMENT = "dbg_fill_t"  # debug only: fill tournament to 7 fake players
 CB_DEBUG_NEXT_ROUND = "dbg_next_r"  # debug only: complete scores and generate Swiss-like round
+CB_DEBUG_SWISS_PANEL = "dbg_sw_p"  # debug only: dbg_sw_p:{tournament_id} — debug-симулятор Swiss
+CB_DEBUG_SWISS_FILL = "dbg_sw_f"  # debug only: dbg_sw_f:{tournament_id}:{players}
+CB_DEBUG_SWISS_AUTOPLAY = "dbg_sw_a"  # debug only: dbg_sw_a:{tournament_id} — один раунд
+CB_DEBUG_SWISS_RUN_ALL = "dbg_sw_r"  # debug only: dbg_sw_r:{tournament_id} — все раунды подряд
+CB_DEBUG_SWISS_CLOSE = "dbg_sw_c"  # debug only: dbg_sw_c:{tournament_id} — экран подтверждения
+CB_DEBUG_SWISS_CLOSE_CONFIRM = "dbg_sw_cc"  # debug only: dbg_sw_cc:{tournament_id} — закрыть без всех раундов
+CB_DEBUG_SWISS_CLOSE_ALL = "dbg_sw_ca"  # debug only: dbg_sw_ca — экран подтверждения для всех турниров
+CB_DEBUG_SWISS_CLOSE_ALL_CONFIRM = "dbg_sw_cca"  # debug only: dbg_sw_cca — закрыть все активные турниры клуба
 CB_ROUND_RESULT_OPEN = "rr_open"  # rr_open:{tournament_id}
 CB_ROUND_RESULT_OWN = "rr_own"  # rr_own:{match_id}:{wins}
 CB_ROUND_RESULT_OPPONENT = "rr_opp"  # rr_opp:{match_id}:{own_wins}:{opponent_wins}
@@ -736,14 +747,22 @@ class Keyboards:
         if debug_buttons:
             rows.append(debug_buttons)
         if show_debug:
-            simulator_buttons = [
-                InlineKeyboardButton("🐞 Игроки ×7", callback_data=f"{CB_DEBUG_FILL_TOURNAMENT}:{tournament_id}")
-            ]
-            if not internal_swiss:
+            if internal_swiss:
+                rows.append(
+                    [
+                        InlineKeyboardButton(
+                            "🐞 Симулятор Swiss", callback_data=f"{CB_DEBUG_SWISS_PANEL}:{tournament_id}"
+                        )
+                    ]
+                )
+            else:
+                simulator_buttons = [
+                    InlineKeyboardButton("🐞 Игроки ×7", callback_data=f"{CB_DEBUG_FILL_TOURNAMENT}:{tournament_id}")
+                ]
                 simulator_buttons.append(
                     InlineKeyboardButton("🐞 Следующий раунд", callback_data=f"{CB_DEBUG_NEXT_ROUND}:{tournament_id}")
                 )
-            rows.append(simulator_buttons)
+                rows.append(simulator_buttons)
         if decks_hidden:
             rows.append([InlineKeyboardButton("👁 Показать колоды", callback_data=f"{CB_REVEAL_DECKS}:{tournament_id}")])
         else:
@@ -1001,6 +1020,84 @@ class Keyboards:
             )
         rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_ADMIN_MORE}:{tournament_id}")])
         return InlineKeyboardMarkup(rows)
+
+    def debug_swiss_panel_keyboard(
+        self,
+        tournament_id: int,
+        *,
+        active_players: int,
+        round_number: int,
+        planned_rounds: int,
+        is_ready: bool,
+        is_closed: bool,
+    ) -> InlineKeyboardMarkup:
+        """🐞 Debug-симулятор внутреннего Swiss: поле, один раунд, автопрогон."""
+        rows: list[list[InlineKeyboardButton]] = []
+        if not is_closed:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        f"👥 {active_players} · 🎲 {round_number}/{planned_rounds}",
+                        callback_data=f"{CB_DEBUG_SWISS_PANEL}:{tournament_id}",
+                    )
+                ]
+            )
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        f"👥 Игроки ×{preset}",
+                        callback_data=f"{CB_DEBUG_SWISS_FILL}:{tournament_id}:{preset}",
+                    )
+                    for preset in DEBUG_SWISS_PLAYER_PRESETS
+                    if preset > active_players
+                ]
+            )
+        rows = [row for row in rows if row]
+        if not is_closed and is_ready:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        "▶️ Раунд +1",
+                        callback_data=f"{CB_DEBUG_SWISS_AUTOPLAY}:{tournament_id}",
+                    )
+                ]
+            )
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        "⏩ До конца",
+                        callback_data=f"{CB_DEBUG_SWISS_RUN_ALL}:{tournament_id}",
+                    )
+                ]
+            )
+        # The regular close path refuses an unfinished Swiss; in debug we need a way out.
+        rows.append(
+            [
+                InlineKeyboardButton("🧹 Закрыть турнир", callback_data=f"{CB_DEBUG_SWISS_CLOSE}:{tournament_id}"),
+                InlineKeyboardButton(
+                    "🧹 Освободить слоты", callback_data=f"{CB_DEBUG_SWISS_CLOSE_ALL}:{tournament_id}"
+                ),
+            ]
+        )
+        rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_ADMIN_MORE}:{tournament_id}")])
+        return InlineKeyboardMarkup(rows)
+
+    @staticmethod
+    def debug_swiss_force_close_keyboard(tournament_id: int, *, scope: str = "tournament") -> InlineKeyboardMarkup:
+        """Подтверждение принудительного закрытия debug-турнира (места не расставляются)."""
+        confirm = (
+            f"{CB_DEBUG_SWISS_CLOSE_ALL_CONFIRM}:{tournament_id}"
+            if scope == "club"
+            else f"{CB_DEBUG_SWISS_CLOSE_CONFIRM}:{tournament_id}"
+        )
+        return InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton("❌ Отмена", callback_data=f"{CB_DEBUG_SWISS_PANEL}:{tournament_id}"),
+                    InlineKeyboardButton("✅ Закрыть", callback_data=confirm),
+                ]
+            ]
+        )
 
     def delete_tournament_confirm_keyboard(self, tournament_id: int) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(

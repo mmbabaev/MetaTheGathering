@@ -5,6 +5,7 @@ from bot.features import FeatureService
 from bot.keyboards import (
     CB_ADMIN_ARCH_MORE,
     CB_ADMIN_CUSTOM_ARCH,
+    CB_ADMIN_MORE,
     CB_ADMIN_SET_ARCH,
     CB_ARCHETYPE,
     CB_ARCHETYPE_MORE,
@@ -16,6 +17,14 @@ from bot.keyboards import (
     CB_DEBUG_FILL_TOURNAMENT,
     CB_DEBUG_META_POLICE,
     CB_DEBUG_NEXT_ROUND,
+    CB_DEBUG_SWISS_AUTOPLAY,
+    CB_DEBUG_SWISS_CLOSE,
+    CB_DEBUG_SWISS_CLOSE_ALL,
+    CB_DEBUG_SWISS_CLOSE_ALL_CONFIRM,
+    CB_DEBUG_SWISS_CLOSE_CONFIRM,
+    CB_DEBUG_SWISS_FILL,
+    CB_DEBUG_SWISS_PANEL,
+    CB_DEBUG_SWISS_RUN_ALL,
     CB_ENDSTEP_RU_ME,
     CB_ENDSTEP_RU_PAGE,
     CB_EXPORT_SWISS_PLAYERS,
@@ -405,3 +414,64 @@ def test_closed_swiss_standings_return_to_tournament():
 
     assert keyboard.inline_keyboard[-1][0].text == "⬅️ К турниру"
     assert keyboard.inline_keyboard[-1][0].callback_data == f"{CB_TOURNAMENT}:42"
+
+
+class TestDebugSwissSimulatorPanel:
+    def _callbacks(self, *, is_ready: bool = True, is_closed: bool = False):
+        keyboard = Keyboards().debug_swiss_panel_keyboard(
+            42,
+            active_players=8,
+            round_number=0,
+            planned_rounds=6,
+            is_ready=is_ready,
+            is_closed=is_closed,
+        )
+        return {button.callback_data for row in keyboard.inline_keyboard for button in row}
+
+    def test_panel_offers_fill_steps_and_run_all(self):
+        callbacks = self._callbacks()
+
+        assert f"{CB_DEBUG_SWISS_PANEL}:42" in callbacks
+        assert f"{CB_DEBUG_SWISS_FILL}:42:16" in callbacks
+        assert f"{CB_DEBUG_SWISS_AUTOPLAY}:42" in callbacks
+        assert f"{CB_DEBUG_SWISS_RUN_ALL}:42" in callbacks
+        assert f"{CB_DEBUG_SWISS_CLOSE}:42" in callbacks
+        assert f"{CB_DEBUG_SWISS_CLOSE_ALL}:42" in callbacks
+        assert f"{CB_ADMIN_MORE}:42" in callbacks
+
+    def test_panel_hides_play_buttons_when_nothing_to_play_or_closed(self):
+        assert f"{CB_DEBUG_SWISS_AUTOPLAY}:42" not in self._callbacks(is_ready=False)
+        closed = self._callbacks(is_closed=True)
+        assert f"{CB_DEBUG_SWISS_AUTOPLAY}:42" not in closed
+        assert f"{CB_DEBUG_SWISS_RUN_ALL}:42" not in closed
+
+    def test_closed_panel_keeps_only_cleanup_actions(self):
+        callbacks = self._callbacks(is_closed=True)
+
+        assert f"{CB_DEBUG_SWISS_CLOSE}:42" in callbacks
+        assert f"{CB_ADMIN_MORE}:42" in callbacks
+        assert not any(callback.startswith(CB_DEBUG_SWISS_FILL) for callback in callbacks)
+        assert f"{CB_DEBUG_SWISS_PANEL}:42" not in callbacks
+
+    def test_force_close_confirmations_are_scoped(self):
+        tournament = Keyboards().debug_swiss_force_close_keyboard(42)
+        club = Keyboards().debug_swiss_force_close_keyboard(42, scope="club")
+
+        assert {button.callback_data for row in tournament.inline_keyboard for button in row} == {
+            f"{CB_DEBUG_SWISS_PANEL}:42",
+            f"{CB_DEBUG_SWISS_CLOSE_CONFIRM}:42",
+        }
+        assert {button.callback_data for row in club.inline_keyboard for button in row} == {
+            f"{CB_DEBUG_SWISS_PANEL}:42",
+            f"{CB_DEBUG_SWISS_CLOSE_ALL_CONFIRM}:42",
+        }
+
+    def test_panel_never_renders_an_empty_row(self):
+        keyboard = Keyboards().debug_swiss_panel_keyboard(
+            42, active_players=128, round_number=6, planned_rounds=6, is_ready=False, is_closed=False
+        )
+
+        assert all(row for row in keyboard.inline_keyboard)
+        assert f"{CB_DEBUG_SWISS_FILL}:42:110" not in {
+            button.callback_data for row in keyboard.inline_keyboard for button in row
+        }
