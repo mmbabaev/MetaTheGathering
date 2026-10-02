@@ -23,6 +23,8 @@ from services.aetherhub_import_service import AetherhubImportService
 from services.aetherhub_models import AetherhubTournamentData, ClubTournamentLink
 from services.aetherhub_service import PAUPER_RE, AetherhubService
 from services.deck_reminders import DeckReminderStage
+from services.job_alerts import JobAlerts, NullJobAlerts
+from services.tournament import MAX_ACTIVE_TOURNAMENTS_PER_CLUB
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -1359,16 +1361,18 @@ class TestCreateTournamentJob:
         assert newest.title == "Goldfish Pauper 24.04.2026"
         announce.assert_awaited_once()
 
-    def test_does_not_create_third_active_tournament(self, db, svc):
+    def test_does_not_create_over_active_tournament_limit(self, db, svc):
         job = _make_create_job(weekday="friday", chat_id=0)
-        first = svc.create_tournament(TournamentCreate(title="First", chat_id=0, slug="first", club="Goldfish"))
-        second = svc.create_tournament(TournamentCreate(title="Second", chat_id=0, slug="second", club="Goldfish"))
+        existing = [
+            svc.create_tournament(TournamentCreate(title=f"Filler {i}", chat_id=0, slug=f"filler-{i}", club="Goldfish"))
+            for i in range(MAX_ACTIVE_TOURNAMENTS_PER_CLUB)
+        ]
 
         with patch("bot.scheduler.send_registration_open", new_callable=AsyncMock) as announce:
             asyncio.run(job.run(bot=AsyncMock(), now=FRIDAY_NOW, db=db))
 
-        assert [t.id for t in svc.list_active_tournaments_for_chat(0)] == [second.id, first.id]
-        assert db.query(cm.Tournament).count() == 2
+        assert [t.id for t in svc.list_active_tournaments_for_chat(0)] == [t.id for t in reversed(existing)]
+        assert db.query(cm.Tournament).count() == MAX_ACTIVE_TOURNAMENTS_PER_CLUB
         announce.assert_not_awaited()
 
     def test_registration_open_goes_to_club_chat_and_owner_with_deeplink(self, db):
@@ -1484,3 +1488,71 @@ class TestFormatScheduleText:
         )
         text = _format_club_schedule(club)
         assert "импорт" not in text
+
+
+class TestCreateTournamentJobAlerts:
+    """Джоба обязана сообщать, если не выполнила задачу — раньше это уходило только в лог."""
+
+    @staticmethod
+    def _job(weekday="friday", chat_id=0, alerts=None) -> CreateTournamentJob:
+        club = Club(name="Goldfish", chat_id=chat_id, aetherhub_url=None, schedules=[], title_prefix="🐠 ")
+        return CreateTournamentJob(club, ClubSchedule(weekday=weekday, game_time="19:45"), alerts=alerts)
+
+    def test_success_sends_no_alert(self, db, svc):
+        alerts = NullJobAlerts()
+
+        asyncio.run(self._job(alerts=alerts).run(bot=AsyncMock(), now=FRIDAY_NOW, db=db))
+
+        assert alerts.sent == []
+
+    def test_wrong_weekday_alerts(self, db, svc):
+        alerts = NullJobAlerts()
+        thursday = datetime(2026, 4, 23, 12, 0, tzinfo=FRIDAY_NOW.tzinfo)
+
+        asyncio.run(self._job(alerts=alerts).run(bot=AsyncMock(), now=thursday, db=db))
+
+        assert len(alerts.sent) == 1
+        assert alerts.sent[0].reason == "wrong_weekday"
+        assert "пятница" in alerts.sent[0].summary
+        assert db.query(cm.Tournament).count() == 0
+
+    def test_limit_reached_alerts_with_open_tournament_ids(self, db, svc):
+        alerts = NullJobAlerts()
+        existing = [
+            svc.create_tournament(TournamentCreate(title=f"Filler {i}", chat_id=0, slug=f"f{i}", club="Goldfish"))
+            for i in range(MAX_ACTIVE_TOURNAMENTS_PER_CLUB)
+        ]
+
+        asyncio.run(self._job(alerts=alerts).run(bot=AsyncMock(), now=FRIDAY_NOW, db=db))
+
+        assert len(alerts.sent) == 1
+        alert = alerts.sent[0]
+        assert alert.reason == "limit_reached"
+        assert f"#{existing[-1].id}" in alert.summary
+        assert str(MAX_ACTIVE_TOURNAMENTS_PER_CLUB) in alert.summary
+        assert db.query(cm.Tournament).count() == MAX_ACTIVE_TOURNAMENTS_PER_CLUB
+
+    def test_unexpected_error_alerts(self, db, svc):
+        alerts = NullJobAlerts()
+
+        with patch("bot.scheduler.TournamentService.create_tournament", side_effect=RuntimeError("db is on fire")):
+            asyncio.run(self._job(alerts=alerts).run(bot=AsyncMock(), now=FRIDAY_NOW, db=db))
+
+        assert len(alerts.sent) == 1
+        alert = alerts.sent[0]
+        assert alert.reason == "error"
+        assert "db is on fire" in alert.summary
+        assert "db is on fire" in (alert.detail or "")
+
+    def test_alert_delivery_failure_does_not_break_the_job(self, db, svc):
+        class BrokenAlerts(JobAlerts):
+            async def send(self, alert):
+                raise RuntimeError("канал доставки упал")
+
+        asyncio.run(self._job(alerts=BrokenAlerts()).run(bot=AsyncMock(), now=FRIDAY_NOW, db=db))
+
+        # Джоба всё равно создала турнир, ошибка доставки — не повод ронять задачу.
+        assert db.query(cm.Tournament).count() == 1
+
+    def test_job_name_identifies_schedule(self):
+        assert self._job(weekday="friday").job_name == "create_tournament[Goldfish/friday]"
