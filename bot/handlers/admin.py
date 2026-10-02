@@ -45,7 +45,7 @@ from services.meta_table_import import MetaTableImportService
 from services.poll import PollService
 from services.ranked_activation import RANKED_ACTIVATION_SELF_BOT
 from services.round_results import RoundResultError
-from services.tournament import MAX_ACTIVE_TOURNAMENTS_PER_CLUB, TournamentService
+from services.tournament import TournamentService
 from services.user import UserService
 from services.utils import get_tournament
 
@@ -665,11 +665,7 @@ class AdminHandler:
         except errors.TournamentInvalidState:
             return HandlerResult("⚠️ Турнир и так активен.", is_alert=True)
         except errors.TournamentAlreadyExists:
-            return HandlerResult(
-                f"⚠️ Исчерпан лимит активных турниров для клуба "
-                f"({MAX_ACTIVE_TOURNAMENTS_PER_CLUB}) — сначала закройте лишние.",
-                is_alert=True,
-            )
+            return HandlerResult(f"⚠️ {TOURNAMENT_ALREADY_EXISTS_MSG}", is_alert=True)
         return HandlerResult(f"🔓 Турнир «{t.title}» снова активен (регистрация открыта).")
 
     def handle_create_tournament(
