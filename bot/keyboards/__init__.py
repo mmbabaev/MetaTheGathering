@@ -36,6 +36,7 @@ CB_SETTINGS_TOGGLE_POLL_NOTIFY = "settings_toggle_poll_notify"
 CB_SETTINGS_TOGGLE_CELLAR_NOTIFY = "settings_toggle_cellar_notify"
 CB_SETTINGS_TOGGLE_STATUS_PAIRINGS = "settings_toggle_status_pairings"
 CB_TSTATUS = "tstatus"  # tstatus:{tournament_id}[:{page}]
+CB_TSTATUS_ME = "tstatus_me"  # tstatus_me:{tournament_id}
 CB_LEAVE = "leave"
 CB_LEAVE_CONFIRM = "leave_confirm"
 CB_LEAVE_CANCEL = "leave_cancel"
@@ -194,22 +195,40 @@ def leaderboard_menu_back_keyboard() -> list[InlineKeyboardButton]:
     return [InlineKeyboardButton("← К выбору рейтинга", callback_data=CB_LEADERBOARD_MENU)]
 
 
+def list_navigation_row(
+    page: int,
+    total_pages: int,
+    callback_prefix: str,
+    *,
+    previous_label: str = "← Назад",
+    next_label: str = "Вперёд →",
+) -> list[InlineKeyboardButton]:
+    """Общий ряд навигации для постраничных списков."""
+    navigation = []
+    if page > 0:
+        navigation.append(InlineKeyboardButton(previous_label, callback_data=f"{callback_prefix}:{page - 1}"))
+    if page + 1 < total_pages:
+        navigation.append(InlineKeyboardButton(next_label, callback_data=f"{callback_prefix}:{page + 1}"))
+    return navigation
+
+
+def list_where_me_button(callback_data: str) -> InlineKeyboardButton:
+    """Единый UI-элемент для перехода к строке текущего пользователя."""
+    return InlineKeyboardButton("📍 Где я?", callback_data=callback_data)
+
+
 def social_rating_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([leaderboard_menu_back_keyboard()])
 
 
 def ranked_leaderboard_keyboard(page: int, total_pages: int, *, show_me: bool = True) -> InlineKeyboardMarkup:
     rows = []
-    navigation = []
-    if page > 0:
-        navigation.append(InlineKeyboardButton("← Назад", callback_data=f"{CB_RANKED_PAGE}:{page - 1}"))
-    if page + 1 < total_pages:
-        navigation.append(InlineKeyboardButton("Вперёд →", callback_data=f"{CB_RANKED_PAGE}:{page + 1}"))
+    navigation = list_navigation_row(page, total_pages, CB_RANKED_PAGE)
     if navigation:
         rows.append(navigation)
     actions = []
     if show_me:
-        actions.append(InlineKeyboardButton("📍 Где я?", callback_data=CB_RANKED_ME))
+        actions.append(list_where_me_button(CB_RANKED_ME))
     actions.append(InlineKeyboardButton("📖 Правила", callback_data=f"{CB_RANKED_RULES}:{page}"))
     rows.append(actions)
     rows.append(leaderboard_menu_back_keyboard())
@@ -227,15 +246,11 @@ def endstep_ru_leaderboard_keyboard(
     show_me: bool = True,
 ) -> InlineKeyboardMarkup:
     rows = []
-    navigation = []
-    if page > 0:
-        navigation.append(InlineKeyboardButton("← Назад", callback_data=f"{CB_ENDSTEP_RU_PAGE}:{page - 1}"))
-    if page + 1 < total_pages:
-        navigation.append(InlineKeyboardButton("Вперёд →", callback_data=f"{CB_ENDSTEP_RU_PAGE}:{page + 1}"))
+    navigation = list_navigation_row(page, total_pages, CB_ENDSTEP_RU_PAGE)
     if navigation:
         rows.append(navigation)
     if show_me:
-        rows.append([InlineKeyboardButton("📍 Где я?", callback_data=CB_ENDSTEP_RU_ME)])
+        rows.append([list_where_me_button(CB_ENDSTEP_RU_ME)])
     rows.append(leaderboard_menu_back_keyboard())
     return InlineKeyboardMarkup(rows)
 
@@ -429,6 +444,7 @@ def participant_button_rows(
     *,
     page: int | None = None,
     total: int | None = None,
+    show_me: bool = False,
 ) -> list[list[StatusButton]]:
     """Чистая модель клавиатуры участников статуса — ряды кнопок, без Telegram.
 
@@ -500,6 +516,8 @@ def participant_button_rows(
             )
 
     if back:
+        if show_me:
+            trailing.append([StatusButton("📍 Где я?", f"{CB_TSTATUS_ME}:{tournament_id}")])
         trailing.append(back)
     prefix = CB_ADMIN_SHOW_FILLED if show_filled else CB_TSTATUS
     pager = (
@@ -1598,18 +1616,32 @@ class Keyboards:
         *,
         page: int | None = None,
         total: int | None = None,
+        show_me: bool = False,
     ) -> InlineKeyboardMarkup:
         """Тонкий адаптер: строит чистую модель и маппит её в Telegram-разметку."""
         return _status_rows_to_markup(
-            participant_button_rows(participants, tournament_id, show_filled, pairs, unpaired, page=page, total=total)
+            participant_button_rows(
+                participants,
+                tournament_id,
+                show_filled,
+                pairs,
+                unpaired,
+                page=page,
+                total=total,
+                show_me=show_me,
+            )
         )
 
-    def status_pager_keyboard(self, tournament_id: int, *, page: int = 0, pages: int = 1) -> InlineKeyboardMarkup:
+    def status_pager_keyboard(
+        self, tournament_id: int, *, page: int = 0, pages: int = 1, show_me: bool = False
+    ) -> InlineKeyboardMarkup:
         """Клавиатура публичного «Статуса»: только навигация по страницам и возврат к турниру."""
         rows = []
         pager = status_pager_row(tournament_id, page, pages)
         if pager:
             rows.append(pager)
+        if show_me:
+            rows.append([StatusButton("📍 Где я?", f"{CB_TSTATUS_ME}:{tournament_id}")])
         rows.append([StatusButton("⬅️ К турниру", f"{CB_TOURNAMENT}:{tournament_id}")])
         return _status_rows_to_markup(rows)
 
@@ -2048,6 +2080,7 @@ def admin_participants_keyboard(
     *,
     page: int | None = None,
     total: int | None = None,
+    show_me: bool = False,
 ) -> InlineKeyboardMarkup:
     return _default.admin_participants_keyboard(
         participants,
@@ -2057,11 +2090,14 @@ def admin_participants_keyboard(
         unpaired=unpaired,
         page=page,
         total=total,
+        show_me=show_me,
     )
 
 
-def status_pager_keyboard(tournament_id: int, *, page: int = 0, pages: int = 1) -> InlineKeyboardMarkup:
-    return _default.status_pager_keyboard(tournament_id, page=page, pages=pages)
+def status_pager_keyboard(
+    tournament_id: int, *, page: int = 0, pages: int = 1, show_me: bool = False
+) -> InlineKeyboardMarkup:
+    return _default.status_pager_keyboard(tournament_id, page=page, pages=pages, show_me=show_me)
 
 
 def admin_player_actions_keyboard(

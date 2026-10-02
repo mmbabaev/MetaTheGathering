@@ -34,6 +34,7 @@ from bot.messages import (
     format_unfilled_opponents_note,
     page_bounds,
     page_count,
+    participant_page_for_tg_id,
     sort_participants,
 )
 from core import models
@@ -606,7 +607,11 @@ class PlayerHandler:
             return HandlerResult(REGISTRATION_CLOSED)
 
     def handle_tournament_public_status(
-        self, tournament_id: int, tg_id: int | None = None, page: int = 0
+        self,
+        tournament_id: int,
+        tg_id: int | None = None,
+        page: int = 0,
+        highlight_tg_id: int | None = None,
     ) -> HandlerResult:
         """Показывает список участников турнира (доступно всем игрокам).
 
@@ -635,10 +640,39 @@ class PlayerHandler:
             total=total,
             with_deck=sum(1 for p in participants if p.archetype),
             page=page,
+            highlight_tg_id=highlight_tg_id,
         )
         return HandlerResult(
             text,
-            keyboard=self.keyboards.status_pager_keyboard(tournament_id, page=page, pages=page_count(total)),
+            keyboard=self.keyboards.status_pager_keyboard(
+                tournament_id,
+                page=page,
+                pages=page_count(total),
+                show_me=tg_id is not None and participant_page_for_tg_id(participants, tg_id) is not None,
+            ),
+        )
+
+    def handle_tournament_public_status_me(self, tournament_id: int, tg_id: int | None = None) -> HandlerResult:
+        """Показывает игроку страницу статуса со своей строкой."""
+        if tg_id is None:
+            return HandlerResult(NOT_REGISTERED_IN_TOURNAMENT, is_alert=True)
+        try:
+            t = get_tournament(self.svc.db, tournament_id)
+        except errors.TournamentNotFound:
+            return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
+        if t.status == models.TournamentStatus.CLOSED and t.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS:
+            return self.handle_tournament_public_status(tournament_id, tg_id=tg_id)
+        if t.show_round_pairings and self._has_pairings(t):
+            return RoundResultsHandler(self.svc.db, self.keyboards).handle_round_status(tournament_id, tg_id)
+        participants = sort_participants(self.svc.list_participants_for_tournament(tournament_id))
+        page = participant_page_for_tg_id(participants, tg_id)
+        if page is None:
+            return HandlerResult(NOT_REGISTERED_IN_TOURNAMENT, is_alert=True)
+        return self.handle_tournament_public_status(
+            tournament_id,
+            tg_id=tg_id,
+            page=page,
+            highlight_tg_id=tg_id,
         )
 
     def handle_decklist_start(self, tg_id: int, tournament_id: int) -> HandlerResult:

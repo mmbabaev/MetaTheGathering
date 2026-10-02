@@ -376,6 +376,33 @@ async def callback_tournament_status(update: Update, context: ContextTypes.DEFAU
         db.close()
 
 
+async def callback_tournament_status_me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+    _log("view_status_me", user, tournament_id=tournament_id)
+    db = SessionLocal()
+    try:
+        admin_h = _admin_handler(db)
+        tournament = db.get(models.Tournament, tournament_id)
+        if tournament is not None and admin_h.user_svc.is_privileged_for_tournament(user.id, tournament):
+            result = admin_h.handle_admin_status_me(user.id, tournament_id)
+        else:
+            result = _player_handler(db).handle_tournament_public_status_me(tournament_id, tg_id=user.id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        await query.edit_message_text(result.text, reply_markup=result.keyboard, parse_mode=result.parse_mode)
+        await query.answer()
+    finally:
+        db.close()
+
+
 async def callback_decklist_edit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     user = update.effective_user

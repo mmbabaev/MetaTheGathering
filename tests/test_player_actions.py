@@ -613,6 +613,27 @@ class TestHandleTournamentPublicStatus:
         assert result.keyboard.inline_keyboard[-1][0].callback_data == f"t:{active_tournament.id}"
         assert result.keyboard.inline_keyboard[-1][0].text == "⬅️ К турниру"
 
+    def test_status_me_jumps_to_current_player_page(self, handler, svc, user_svc, active_tournament):
+        entries = []
+        for i in range(50):
+            user = user_svc.get_or_create(tg_id=7_000 + i, first_name=f"Игрок {i:02d}")
+            entries.append((user.id, user.first_name))
+        current = user_svc.get_or_create(tg_id=8_000, first_name="Игрок Z")
+        entries.append((current.id, current.first_name))
+        svc.bulk_add_participants(active_tournament.id, entries)
+
+        result = handler.handle_tournament_public_status_me(active_tournament.id, tg_id=current.tg_id)
+
+        assert "Показано 51–51 из 51 · стр. 2/2" in result.text
+        assert "👉" in result.text
+        assert "Игрок Z" in result.text
+
+    def test_status_me_rejects_non_participant(self, handler, active_tournament):
+        result = handler.handle_tournament_public_status_me(active_tournament.id, tg_id=98_765)
+
+        assert result.is_alert
+        assert result.text == NOT_REGISTERED_IN_TOURNAMENT
+
 
 # --- handle_leave_tournament / handle_leave_confirm ---
 

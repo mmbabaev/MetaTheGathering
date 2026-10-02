@@ -350,6 +350,15 @@ def page_bounds(page: int, total: int, page_size: int = STATUS_PAGE_SIZE) -> tup
     return start, min(start + page_size, total)
 
 
+def participant_page_for_tg_id(participants: list, tg_id: int, page_size: int = STATUS_PAGE_SIZE) -> int | None:
+    """Возвращает страницу участника с Telegram ID или ``None``, если его нет в списке."""
+    for index, participant in enumerate(participants):
+        user = getattr(participant, "user", None)
+        if user is not None and getattr(user, "tg_id", None) == tg_id:
+            return index // page_size if page_size > 0 else 0
+    return None
+
+
 def split_message(text: str, limit: int = TG_MESSAGE_LIMIT) -> list[str]:
     """Разбивает текст на части не длиннее ``limit``, не разрывая строки.
 
@@ -391,7 +400,13 @@ def _status_header(
     return header
 
 
-def format_participant_line(p, decks_hidden: bool = False, *, aetherhub_imported: bool = False) -> str:
+def format_participant_line(
+    p,
+    decks_hidden: bool = False,
+    *,
+    aetherhub_imported: bool = False,
+    highlight_tg_id: int | None = None,
+) -> str:
     """Одна строка участника: «<иконка> Фамилия Имя (@ник) 🧙 — Колода». Общий для обоих режимов."""
     icon = _participant_icon(p, aetherhub_imported=aetherhub_imported)
     if p.user:
@@ -405,7 +420,8 @@ def format_participant_line(p, decks_hidden: bool = False, *, aetherhub_imported
         archetype = "▓▓▓" if decks_hidden else p.archetype.name
     else:
         archetype = "не указана"
-    return f"{icon} {display} — {archetype}"
+    marker = "👉 " if highlight_tg_id is not None and p.user and p.user.tg_id == highlight_tg_id else ""
+    return f"{marker}{icon} {display} — {archetype}"
 
 
 def _page_range_line(shown_from: int, shown_to: int, total: int, page: int, pages: int) -> str:
@@ -455,6 +471,7 @@ def format_tournament_status(
     with_deck: int | None = None,
     page: int = 0,
     page_size: int = STATUS_PAGE_SIZE,
+    highlight_tg_id: int | None = None,
 ) -> str:
     """Список участников турнира (плоский), постранично.
 
@@ -475,7 +492,15 @@ def format_tournament_status(
     header = _status_header(title, status, total, with_deck, show_deck_counts=show_deck_counts)
 
     lines = [_page_range_line(start, end, total, page, pages), ""] if pages > 1 else [""]
-    lines.extend(format_participant_line(p, decks_hidden, aetherhub_imported=aetherhub_imported) for p in participants)
+    lines.extend(
+        format_participant_line(
+            p,
+            decks_hidden,
+            aetherhub_imported=aetherhub_imported,
+            highlight_tg_id=highlight_tg_id,
+        )
+        for p in participants
+    )
     footer = (
         ["", "❓ — пока не найден в AetherHub"]
         if (aetherhub_imported and any(getattr(p, "aetherhub_seen_at", None) is None for p in participants))

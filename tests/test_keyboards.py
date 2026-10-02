@@ -45,6 +45,7 @@ from bot.keyboards import (
     CB_REOPEN_TOURNAMENT,
     CB_ROUND_SUMMARY,
     CB_TOURNAMENT,
+    CB_TSTATUS_ME,
     Keyboards,
     admin_archetype_select_keyboard,
     admin_remove_confirm_keyboard,
@@ -78,6 +79,13 @@ def test_leaderboard_menu_has_three_ratings():
         ("Endstep ru Pauper Ranked", CB_LEADERBOARD_ENDSTEP),
         ("Социальный рейтинг", CB_LEADERBOARD_SOCIAL),
     ]
+
+
+def test_status_pager_has_where_me_button():
+    markup = Keyboards().status_pager_keyboard(10, page=1, pages=3, show_me=True)
+    callbacks = [button.callback_data for row in markup.inline_keyboard for button in row]
+
+    assert f"{CB_TSTATUS_ME}:10" in callbacks
 
 
 class TestTournamentListKeyboard:

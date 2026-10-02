@@ -414,6 +414,22 @@ class TestHandleAdminStatus:
         assert result.text == TOURNAMENT_NOT_FOUND
         assert result.is_alert
 
+    def test_status_me_jumps_to_admin_participant_page(self, handler, svc, user_svc, admin_user, active_tournament):
+        admin_user.first_name = "Яя Admin"
+        svc.db.commit()
+        entries = []
+        for i in range(50):
+            user = user_svc.get_or_create(tg_id=9_000 + i, first_name=f"Игрок {i:02d}")
+            entries.append((user.id, user.first_name))
+        entries.append((admin_user.id, admin_user.first_name))
+        svc.bulk_add_participants(active_tournament.id, entries)
+
+        result = handler.handle_admin_status_me(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+
+        assert "Показано 51–51 из 51 · стр. 2/2" in result.text
+        assert "👉" in result.text
+        assert "Яя Admin" in result.text
+
     def test_closed_internal_swiss_status_shows_decklist_players(self, handler, svc, admin_user, active_tournament):
         tournament = svc.db.get(m.Tournament, active_tournament.id)
         tournament.status = TournamentStatus.CLOSED
