@@ -74,6 +74,7 @@ State lives in `context.user_data` with named keys (defined as constants):
 | `USER_DATA_PENDING_MISSING_CUSTOM_ARCH` | `callback_missing_custom_deck` | `message_text_input` |
 | `USER_DATA_PENDING_MISSING_CUSTOM_ARCH` | `callback_missing_custom_deck` | `message_text_input` |
 | `USER_DATA_PENDING_SETTINGS_NAME` | `callback_settings_name` | `message_text_input` |
+| `USER_DATA_PENDING_BROADCAST` | `callback_broadcast_start` | `message_text_input` (owner-only рассылка участникам турнира) |
 
 All text input is routed through a single `message_text_input` handler that checks these keys in priority order.
 

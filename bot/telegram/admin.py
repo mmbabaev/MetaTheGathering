@@ -1,22 +1,30 @@
 # Telegram-обёртки для admin-хендлеров
 
+import asyncio
 import html
 import io
 import logging
 
 from telegram import Update
 from telegram.constants import ChatType
-from telegram.error import TelegramError
+from telegram.error import Forbidden, RetryAfter, TelegramError, TimedOut
 from telegram.ext import ContextTypes
 
 from bot.chart import build_chart, build_standings
 from bot.handlers.admin import parse_bulk_player_line
 from bot.keyboards import (
     admin_more_keyboard,
+    broadcast_back_keyboard,
     export_menu_keyboard,
     reveal_decks_confirm_keyboard,
 )
-from bot.messages import ADD_PLAYERS_USAGE, BULK_ADD_PROMPT, TOURNAMENT_CLOSED_MSG
+from bot.messages import (
+    ADD_PLAYERS_USAGE,
+    BROADCAST_CANCELLED,
+    BULK_ADD_PROMPT,
+    TOURNAMENT_CLOSED_MSG,
+    format_broadcast_report,
+)
 from bot.meta_police_message import refresh_meta_police_message
 from bot.scheduler import format_schedule_text
 from bot.telegram.common import announce_completion_if_ready, parse_callback_ints
@@ -24,6 +32,7 @@ from bot.telegram.common import log_event as _log
 from bot.telegram.player import (
     USER_DATA_OPPONENTS_MODE,
     USER_DATA_PENDING_ADMIN_CUSTOM_ARCH,
+    USER_DATA_PENDING_BROADCAST,
     USER_DATA_PENDING_BULK_ADD,
     USER_DATA_PENDING_META_IMPORT,
     _admin_handler,
@@ -732,6 +741,135 @@ async def callback_reopen_tournament(update: Update, context: ContextTypes.DEFAU
         db.close()
 
 
+# Личная рассылка владельца участникам турнира. Единственный массовый путь без индивидуальной
+# подписки, поэтому он жёстко ограничен владельцем бота и всегда показывает список получателей
+# до отправки. Пауза между пачками держит нас в лимите Telegram (~30 сообщений в секунду).
+BROADCAST_BATCH_SIZE = 20
+BROADCAST_BATCH_PAUSE = 1.0
+
+
+def _is_notify_allowed(tg_user_id: int) -> bool:
+    """Гейт доставки. В проде список пуст (`None`) — разрешены все; в debug остаются
+    только явно перечисленные ID, чтобы отладочная рассылка не ушла реальным игрокам."""
+    allowed = settings.notify_allowed_ids
+    return allowed is None or tg_user_id in allowed
+
+
+def _broadcast_failure_reason(error: TelegramError) -> str:
+    if isinstance(error, Forbidden):
+        return "бот не может писать (игрок не начинал диалог)"
+    if isinstance(error, TimedOut):
+        return "таймаут Telegram"
+    return type(error).__name__
+
+
+async def callback_broadcast_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Кнопка «📩 Написать участникам» — бот просит текст сообщения."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_broadcast_start(user.id, tournament_id)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        if context.user_data is None:
+            context.user_data = {}
+        context.user_data[USER_DATA_PENDING_BROADCAST] = {"tournament_id": tournament_id}
+        _log("broadcast_start", user, tournament_id=tournament_id)
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+        await query.answer()
+    finally:
+        db.close()
+
+
+async def callback_broadcast_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«✅ Отправить» — личная рассылка владельца участникам турнира."""
+    query = update.callback_query
+    user = update.effective_user
+    bot = context.bot
+    if not user or bot is None:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+    draft = (context.user_data or {}).get(USER_DATA_PENDING_BROADCAST)
+    if not draft or draft.get("tournament_id") != tournament_id:
+        await query.answer("Черновик рассылки не найден — пришлите текст ещё раз.", show_alert=True)
+        return
+    text = draft["text"]
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_broadcast_send(user.id, tournament_id)
+        if result.is_alert:
+            context.user_data.pop(USER_DATA_PENDING_BROADCAST, None)
+            await query.answer(result.text, show_alert=True)
+            return
+        recipients = list(result.broadcast_recipients or [])
+    finally:
+        db.close()
+    context.user_data.pop(USER_DATA_PENDING_BROADCAST, None)
+    _log("broadcast_send", user, tournament_id=tournament_id, recipients=len(recipients))
+    await query.edit_message_text(f"⏳ Отправляю {len(recipients)} участникам…")
+    await query.answer()
+
+    sent = 0
+    failed: list[tuple[str, str]] = []
+    for index, recipient in enumerate(recipients, start=1):
+        if not _is_notify_allowed(recipient.tg_id):
+            failed.append((str(recipient.tg_id), "уведомления выключены"))
+        else:
+            sent += await _broadcast_send_one(bot, recipient.tg_id, text, failed)
+        if index % BROADCAST_BATCH_SIZE == 0:
+            await asyncio.sleep(BROADCAST_BATCH_PAUSE)
+
+    await query.edit_message_text(
+        format_broadcast_report(len(recipients), sent, failed),
+        reply_markup=broadcast_back_keyboard(tournament_id),
+    )
+
+
+async def _broadcast_send_one(bot, tg_id: int, text: str, failed: list[tuple[str, str]]) -> int:
+    """Одна доставка с учётом флуд-лимита; `1` — доставлено, `0` — записано в `failed`."""
+    try:
+        await bot.send_message(chat_id=tg_id, text=text)
+        return 1
+    except RetryAfter as e:
+        await asyncio.sleep(min(e.retry_after + 1, 60))
+        try:
+            await bot.send_message(chat_id=tg_id, text=text)
+            return 1
+        except TelegramError as retry_error:
+            failed.append((str(tg_id), _broadcast_failure_reason(retry_error)))
+            return 0
+    except TelegramError as e:
+        failed.append((str(tg_id), _broadcast_failure_reason(e)))
+        return 0
+
+
+async def callback_broadcast_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """«❌ Отмена» — черновик выбрасывается, никому ничего не уходит."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+    context.user_data.pop(USER_DATA_PENDING_BROADCAST, None)
+    _log("broadcast_cancel", user, tournament_id=tournament_id)
+    await query.edit_message_text(BROADCAST_CANCELLED, reply_markup=broadcast_back_keyboard(tournament_id))
+    await query.answer()
+
+
 async def callback_admin_more(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Кнопка «• • •» — показывает скрытые admin-действия."""
     query = update.callback_query
@@ -783,6 +921,7 @@ async def callback_admin_more(update: Update, context: ContextTypes.DEFAULT_TYPE
             internal_swiss=internal_swiss,
             is_draft=is_draft,
             draft_seating_ready=draft_seating_ready,
+            show_owner_broadcast=user.id == settings.OWNER_CHAT_ID,
         ),
     )
     await query.answer()
@@ -894,6 +1033,7 @@ async def callback_reveal_decks_cancel(update: Update, context: ContextTypes.DEF
                 internal_swiss=t.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS,
                 is_draft=t.is_draft,
                 draft_seating_ready=t.draft_seating_generated_at is not None,
+                show_owner_broadcast=user.id == settings.OWNER_CHAT_ID,
             ),
         )
     except svc_errors.TournamentNotFound:

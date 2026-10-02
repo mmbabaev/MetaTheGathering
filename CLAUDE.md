@@ -20,6 +20,22 @@ or product decision changes.
 > - **Debug / test tooling must message ONLY the user who triggered it** — filter to `tg_id == requester` and send exclusively to that chat_id. Never deliver other players' notifications to the requester, and never DM other players from a debug action.
 > - Any new code path that calls `bot.send_message` in a loop over multiple users requires explicit confirmation from the user before it ships.
 > - Production notifications must respect the `notify_allowed_ids` gate and only target their genuine intended recipient.
+>
+> **Approved exception — owner broadcast to one tournament** (`bot/telegram/admin.py`,
+> `AdminHandler.handle_broadcast_*`): the owner writes a text, sees the exact recipient list and
+> confirms; delivery is limited to participants of that single tournament with a real
+> (`tg_id > 0`), non-dropped Telegram. In production `notify_allowed_ids` is `None` (everyone
+> allowed) so no per-player gate filters it; in debug the same allow-list applies, so a test
+> broadcast can never reach real players. Do not widen it: no tournament chat fan-out, no
+> cross-tournament sends, no reuse for automated notifications.
+>
+> **Approved exception — owner broadcast to one tournament** (`bot/telegram/admin.py`,
+> `AdminHandler.handle_broadcast_*`): the owner writes a text, sees the exact recipient list and
+> confirms; delivery is limited to participants of that single tournament with a real
+> (`tg_id > 0`), non-dropped Telegram. In production `notify_allowed_ids` is `None` (everyone
+> allowed) so no per-player gate filters it; in debug the same allow-list applies, so a test
+> broadcast can never reach real players. Do not widen it: no tournament chat fan-out, no
+> cross-tournament sends, no reuse for automated notifications.
 
 ## ⚠️ Secrets (hard rules)
 
@@ -140,6 +156,15 @@ Defined in `services/tournament.py`:
 - `CHANGE_VOTE_COOLDOWN = 30s` between vote changes per voter
 - Self-votes raise `SelfVoteNotAllowed`
 - Editing a participant's archetype resets all votes (`set_participant_archetype(reset_votes=True)`)
+
+### Owner broadcast to tournament participants
+
+`📩 Написать участникам` в «Действия с турниром» (`• • •`) доступно **только владельцу**
+(`OWNER_CHAT_ID`). Flow: callback → `context.user_data["pending_broadcast_draft"]` = `{"tournament_id": …}` →
+следующее текстовое сообщение владельца обрабатывает `_handle_pending_broadcast_text`
+(`bot/telegram/player.py`) → предпросмотр (текст + список получателей) → `adm_msg_go` — отправка,
+`adm_msg_no` — отмена, `t` — назад к турниру. Получатели: `TournamentService.list_broadcast_recipients`
+(участники с `tg_id > 0`, без `dropped_at`).
 
 ### Custom archetype flow
 

@@ -83,6 +83,48 @@ META_IMPORT_PROMPT = (
 )
 
 
+# Личная рассылка владельца участникам турнира (owner-only, ручной запуск)
+BROADCAST_PROMPT = (
+    "📩 Напишите сообщение — я отправлю его лично всем участникам этого турнира.\n\n"
+    "Пришлите текст одним сообщением (до {limit} символов). Перед отправкой покажу текст "
+    "и список тех, кому он уйдёт."
+)
+BROADCAST_TOO_LONG = "⚠️ Сообщение слишком длинное: {length} символов, максимум {limit}."
+BROADCAST_NO_RECIPIENTS = "⚠️ У турнира нет участников, которым можно написать."
+BROADCAST_OWNER_ONLY = "⚠️ Эта рассылка доступна только владельцу бота."
+BROADCAST_CANCELLED = "Отменено — никому ничего не отправлено."
+
+
+def format_broadcast_recipient_line(user) -> str:
+    """Строка получателя в предпросмотре: «Фамилия Имя (@ник)» или «id123»."""
+    name = format_participant_name(user.first_name, user.last_name)
+    username = f" (@{user.username})" if user.username else ""
+    return f"{name}{username}" if name else f"id{user.tg_id}"
+
+
+def format_broadcast_preview(text: str, recipients: list, *, shown_limit: int = 30) -> str:
+    """Предпросмотр перед отправкой: сам текст, сколько и кому именно он уйдёт."""
+    lines = ["✉️ Проверьте сообщение перед отправкой.", "", text, "", f"Получат ({len(recipients)}):"]
+    for user in recipients[:shown_limit]:
+        lines.append(f"• {format_broadcast_recipient_line(user)}")
+    if len(recipients) > shown_limit:
+        lines.append(f"• …и ещё {len(recipients) - shown_limit}")
+    return "\n".join(lines)
+
+
+def format_broadcast_report(total: int, sent: int, failed: list[tuple[str, str]]) -> str:
+    """Отчёт после рассылки: сколько доставлено и кому не удалось."""
+    lines = [f"✅ Отправлено {sent} из {total}."]
+    if failed:
+        lines.append("")
+        lines.append("Не получили:")
+        for tg_id, reason in failed[:30]:
+            lines.append(f"• id{tg_id} — {reason}")
+        if len(failed) > 30:
+            lines.append(f"• …и ещё {len(failed) - 30}")
+    return "\n".join(lines)
+
+
 # Achievements (пока теневой режим — видят только владелец и админы)
 ACHIEVEMENTS_HEADER = "🏅 {title} — {unlocked} из {total}"
 ACHIEVEMENTS_UNLOCKED_TITLE = "Открыто"

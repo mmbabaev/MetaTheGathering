@@ -9,7 +9,7 @@ from bot.handlers.base import HandlerResult
 from bot.handlers.cellar import CellarHandler
 from bot.handlers.player import PlayerHandler
 from bot.handlers.settings import SettingsHandler
-from bot.keyboards import Keyboards
+from bot.keyboards import Keyboards, broadcast_input_keyboard
 from bot.messages import CUSTOM_ARCHETYPE_PROMPT
 from bot.meta_police_message import refresh_meta_police_message
 from bot.telegram.common import announce_completion_if_ready, parse_callback_ints
@@ -35,6 +35,7 @@ USER_DATA_OPPONENTS_MODE = "opponents_tournament_id"
 USER_DATA_PENDING_META_IMPORT = "pending_meta_import_tournament_id"
 USER_DATA_PENDING_MISSING_CUSTOM_ARCH = "pending_missing_custom_arch_participant_id"
 USER_DATA_PENDING_DECKLIST = "pending_decklist_tournament_id"
+USER_DATA_PENDING_BROADCAST = "pending_broadcast_draft"  # {"tournament_id": int, "text": str}
 
 
 def _make_features(db) -> FeatureService:
@@ -773,6 +774,30 @@ async def _handle_pending_meta_import(msg, user, text, context) -> bool:
     return True
 
 
+async def _handle_pending_broadcast_text(msg, user, text, context) -> bool:
+    """Owner-only: текст рассылки → предпросмотр «вот текст, вот кому» + подтверждение."""
+    draft = context.user_data.get(USER_DATA_PENDING_BROADCAST)
+    if not draft:
+        return False
+    tournament_id = draft["tournament_id"]
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_broadcast_preview(user.id, tournament_id, text)
+        if result.is_alert:
+            context.user_data.pop(USER_DATA_PENDING_BROADCAST, None)
+            await msg.reply_text(result.text, reply_markup=broadcast_input_keyboard(tournament_id))
+            return True
+        context.user_data[USER_DATA_PENDING_BROADCAST] = {
+            "tournament_id": tournament_id,
+            "text": text.strip(),
+        }
+        _log("broadcast_preview", user, tournament_id=tournament_id)
+        await msg.reply_text(result.text, reply_markup=result.keyboard)
+    finally:
+        db.close()
+    return True
+
+
 _TEXT_INPUT_HANDLERS = [
     _handle_pending_decklist,
     _handle_pending_name,
@@ -789,6 +814,7 @@ _TEXT_INPUT_HANDLERS = [
     _handle_pending_aetherhub_url,
     _handle_pending_import_time,
     _handle_pending_meta_import,
+    _handle_pending_broadcast_text,
     _handle_pending_schedule_edit,
 ]
 

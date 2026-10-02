@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from bot.features import FeatureService
 from bot.handlers.admin import (
+    BROADCAST_MAX_LENGTH,
     AdminHandler,
     _player_display_label,
     parse_bulk_player_line,
@@ -2217,3 +2218,139 @@ class TestCloseUnfinishedInternalSwiss:
 
         assert result.is_alert is True
         assert result.keyboard is None
+
+
+# --- handle_broadcast_* (личная рассылка владельца участникам турнира) ---
+
+
+@pytest.fixture
+def owner_user(user_svc, svc):
+    owner_tg_id = settings.OWNER_CHAT_ID
+    user_svc.get_or_create(tg_id=owner_tg_id, username="mbabaev", first_name="Max")
+    stmt = select(m.User).where(m.User.tg_id == owner_tg_id)
+    return svc.db.execute(stmt).scalar_one()
+
+
+class TestHandleBroadcastStart:
+    def test_owner_gets_prompt_with_cancel_and_back(self, handler, owner_user, active_tournament):
+        result = handler.handle_broadcast_start(tg_id=owner_user.tg_id, tournament_id=active_tournament.id)
+
+        assert not result.is_alert
+        assert "Напишите сообщение" in result.text
+        assert result.tournament_id == active_tournament.id
+        callbacks = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
+        assert f"adm_msg_no:{active_tournament.id}" in callbacks
+        assert f"t:{active_tournament.id}" in callbacks
+
+    def test_admin_who_is_not_owner_is_refused(self, handler, admin_user, active_tournament):
+        result = handler.handle_broadcast_start(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+
+        assert result.is_alert
+        assert "только владельцу" in result.text
+
+    def test_unknown_tournament(self, handler, owner_user):
+        result = handler.handle_broadcast_start(tg_id=owner_user.tg_id, tournament_id=4242)
+
+        assert result.is_alert
+        assert result.text == TOURNAMENT_NOT_FOUND
+
+
+class TestHandleBroadcastPreview:
+    def _register(self, svc, tournament_id, user):
+        svc.register_participant(tournament_id=tournament_id, user_id=user.id)
+
+    def test_shows_text_and_recipient_list_before_sending(
+        self, handler, svc, owner_user, active_tournament, user_alice, user_bob
+    ):
+        self._register(svc, active_tournament.id, user_alice)
+        self._register(svc, active_tournament.id, user_bob)
+
+        result = handler.handle_broadcast_preview(
+            tg_id=owner_user.tg_id, tournament_id=active_tournament.id, text="Всем привет"
+        )
+
+        assert not result.is_alert
+        assert "Всем привет" in result.text
+        assert "Получат (2)" in result.text
+        assert "@alice" in result.text and "@bob" in result.text
+        callbacks = [b.callback_data for row in result.keyboard.inline_keyboard for b in row]
+        assert f"adm_msg_go:{active_tournament.id}" in callbacks
+
+    def test_non_owner_cannot_preview(self, handler, svc, admin_user, active_tournament):
+        result = handler.handle_broadcast_preview(
+            tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id, text="Всем привет"
+        )
+
+        assert result.is_alert
+
+    def test_too_long_text_is_rejected(self, handler, owner_user, active_tournament):
+        result = handler.handle_broadcast_preview(
+            tg_id=owner_user.tg_id,
+            tournament_id=active_tournament.id,
+            text="я" * (BROADCAST_MAX_LENGTH + 1),
+        )
+
+        assert result.is_alert
+        assert "слишком длинное" in result.text
+        assert str(BROADCAST_MAX_LENGTH) in result.text
+
+    def test_without_participants(self, handler, owner_user, active_tournament):
+        result = handler.handle_broadcast_preview(
+            tg_id=owner_user.tg_id, tournament_id=active_tournament.id, text="Всем привет"
+        )
+
+        assert result.is_alert
+        assert "нет участников" in result.text
+
+
+class TestHandleBroadcastSend:
+    def test_returns_all_participants_with_real_telegram(self, handler, svc, owner_user, active_tournament, user_alice):
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+
+        result = handler.handle_broadcast_send(tg_id=owner_user.tg_id, tournament_id=active_tournament.id)
+
+        assert not result.is_alert
+        assert [u.tg_id for u in result.broadcast_recipients] == [user_alice.tg_id]
+
+    def test_skips_service_records_with_negative_tg_id(
+        self, handler, svc, user_svc, owner_user, active_tournament, user_alice
+    ):
+        """Служебные игроки симулятора/CLI (отрицательный tg_id) сообщение не получают."""
+        service_user = user_svc.get_or_create(tg_id=-777, username="sim", first_name="Sim")
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id)
+        svc.register_participant(tournament_id=active_tournament.id, user_id=service_user.id)
+
+        result = handler.handle_broadcast_send(tg_id=owner_user.tg_id, tournament_id=active_tournament.id)
+
+        assert [u.tg_id for u in result.broadcast_recipients] == [user_alice.tg_id]
+
+    def test_skips_dropped_players(self, handler, svc, owner_user, user_alice, archetype_burn):
+        tournament = svc.create_tournament(
+            TournamentCreate(title="Swiss", chat_id=555, slug="sw", engine_mode=m.TournamentEngineMode.INTERNAL_SWISS)
+        )
+        svc.register_participant(tournament_id=tournament.id, user_id=user_alice.id, archetype_id=archetype_burn.id)
+        svc.start_tournament(tournament.id)
+        svc.drop_participant(tournament.id, user_alice.id)
+
+        result = handler.handle_broadcast_send(tg_id=owner_user.tg_id, tournament_id=tournament.id)
+
+        assert result.is_alert
+        assert result.broadcast_recipients is None
+
+    def test_includes_players_who_deferred_their_deck(self, handler, svc, owner_user, active_tournament, user_alice):
+        """«Укажу позже» — тоже участник, сообщение он должен получить."""
+        svc.register_participant(tournament_id=active_tournament.id, user_id=user_alice.id, archetype_id=None)
+        svc.db.execute(
+            select(m.Participant).where(m.Participant.user_id == user_alice.id)
+        ).scalar_one().deck_deferred = True
+        svc.db.commit()
+
+        result = handler.handle_broadcast_send(tg_id=owner_user.tg_id, tournament_id=active_tournament.id)
+
+        assert [u.tg_id for u in result.broadcast_recipients] == [user_alice.tg_id]
+
+    def test_non_owner_is_refused(self, handler, admin_user, active_tournament, user_alice):
+        result = handler.handle_broadcast_send(tg_id=ADMIN_TG_ID, tournament_id=active_tournament.id)
+
+        assert result.is_alert
+        assert result.broadcast_recipients is None

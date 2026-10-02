@@ -19,3 +19,4 @@ class HandlerResult:
     answer_text: Optional[str] = None  # short popup shown via query.answer(show_alert=True)
     silent: bool = False  # обёртка не отправляет ничего: команда «как будто не существует»
     new_round_numbers: Optional[list[int]] = None  # rounds first seen in this import (opponent DMs)
+    broadcast_recipients: Optional[list] = None  # tg_id получателей личной рассылки владельца

@@ -16,6 +16,7 @@ from core.schemas import (
     ParticipantWithUserAndArchetype,
     TournamentCreate,
     TournamentRead,
+    UserRead,
     VoteRead,
 )
 from services import errors
@@ -471,6 +472,27 @@ class TournamentService:
         )
         participants = self.db.execute(stmt).scalars().all()
         return [ParticipantWithUserAndArchetype.model_validate(p) for p in participants]
+
+    def list_broadcast_recipients(self, tournament_id: int) -> List[UserRead]:
+        """Кому владелец может написать лично по этому турниру.
+
+        Берём всех участников, у которых есть настоящий Telegram: служебные записи с
+        отрицательным `tg_id` (симулятор, CLI) не получают сообщения, и дропнувшие игроки
+        исключены — сообщение о турнире имеет смысл только живым участникам. Кто именно
+        получит сообщение, показывается владельцу до отправки (см. `format_broadcast_preview`).
+        """
+        stmt = (
+            select(models.User)
+            .join(models.Participant, models.Participant.user_id == models.User.id)
+            .where(
+                models.Participant.tournament_id == tournament_id,
+                models.Participant.dropped_at.is_(None),
+                models.User.tg_id > 0,
+            )
+            .order_by(models.User.id)
+        )
+        users = self.db.execute(stmt).scalars().all()
+        return [UserRead.model_validate(user) for user in users]
 
     def get_deck_recorders(self, tournament_id: int, min_count: int = 2) -> List[DeckRecorder]:
         """Метаписцы: кто записал ≥ ``min_count`` колод в турнире, по убыванию количества.
