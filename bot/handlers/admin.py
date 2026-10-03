@@ -851,13 +851,18 @@ class AdminHandler:
 
     def handle_export_swiss_players(self, tg_id: int, tournament_id: int) -> str | None:
         """Возвращает Swiss-список с Telegram-никами, очками и городами."""
+        result = self.handle_export_swiss_players_page(tg_id, tournament_id)
+        return result[0] if result is not None else None
+
+    def handle_export_swiss_players_page(self, tg_id: int, tournament_id: int, page: int = 0) -> tuple[str, int] | None:
+        """Возвращает одну страницу Swiss-списка и общее число страниц."""
         try:
             tournament = self.svc.db.get(models.Tournament, tournament_id)
             if not self.user_svc.is_admin(tg_id) and (
                 tournament is None or not self.user_svc.is_privileged_for_tournament(tg_id, tournament)
             ):
                 return None
-            return ExportService(self.svc.db).export_swiss_players_with_points(tournament_id)
+            return ExportService(self.svc.db).export_swiss_players_with_points_page(tournament_id, page=page)
         except errors.TournamentNotFound:
             return None
 

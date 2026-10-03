@@ -280,6 +280,18 @@ def test_text_export_contains_player_username_points_and_city(db):
         assert f"{row.display_name} — {username} — {row.match_points} — {city}" in exported
 
 
+def test_text_export_paginates_players_points_and_cities(db):
+    tournament, _users, _admin, _engine = _setup(db, 51)
+
+    text, total_pages = ExportService(db).export_swiss_players_with_points_page(tournament.id, page=1)
+
+    assert total_pages == 2
+    assert "Игрок — ТГ-ник — Очки — Город" in text
+    assert "👥 Показано 51–51 из 51 · стр. 2/2" in text
+    assert "Фамилия50 Имя50" in text
+    assert "Фамилия0 Имя0" not in text
+
+
 def test_next_round_requires_every_result_and_never_repeats_when_avoidable(db):
     tournament, _users, admin, engine = _setup(db, 8)
     engine.generate_next_round(tournament.id, admin.tg_id)

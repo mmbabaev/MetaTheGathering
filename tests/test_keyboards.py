@@ -36,7 +36,9 @@ from bot.keyboards import (
     CB_DEBUG_SWISS_RUN_ALL,
     CB_ENDSTEP_RU_ME,
     CB_ENDSTEP_RU_PAGE,
+    CB_EXPORT_MENU,
     CB_EXPORT_SWISS_PLAYERS,
+    CB_EXPORT_SWISS_PLAYERS_FILE,
     CB_LEADERBOARD_ENDSTEP,
     CB_LEADERBOARD_MENU,
     CB_LEADERBOARD_MOSCOW,
@@ -52,6 +54,7 @@ from bot.keyboards import (
     archetype_keyboard,
     close_tournament_confirm_keyboard,
     endstep_ru_leaderboard_keyboard,
+    export_swiss_players_keyboard,
     leaderboard_menu_keyboard,
     register_button,
     tournament_card_keyboard,
@@ -333,6 +336,16 @@ def test_swiss_contact_export_button_is_only_shown_when_requested():
 
     assert f"{CB_EXPORT_SWISS_PLAYERS}:42" not in hidden_callbacks
     assert f"{CB_EXPORT_SWISS_PLAYERS}:42" in shown_callbacks
+
+
+def test_swiss_contact_export_keyboard_has_pagination_and_back():
+    markup = export_swiss_players_keyboard(42, page=1, total_pages=3)
+    callbacks = [button.callback_data for row in markup.inline_keyboard for button in row]
+
+    assert f"{CB_EXPORT_SWISS_PLAYERS}:42:0" in callbacks
+    assert f"{CB_EXPORT_SWISS_PLAYERS}:42:2" in callbacks
+    assert f"{CB_EXPORT_SWISS_PLAYERS_FILE}:42" in callbacks
+    assert f"{CB_EXPORT_MENU}:42" in callbacks
 
 
 # ── admin_more_keyboard: кнопка «Сделать активным» ───────────────────────────
