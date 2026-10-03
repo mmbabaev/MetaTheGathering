@@ -217,6 +217,16 @@ def list_where_me_button(callback_data: str) -> InlineKeyboardButton:
     return InlineKeyboardButton("📍 Где я?", callback_data=callback_data)
 
 
+def export_swiss_players_keyboard(tournament_id: int, page: int, total_pages: int) -> InlineKeyboardMarkup:
+    """Постраничная навигация для выгрузки «Игроки · очки · города»."""
+    rows = []
+    navigation = list_navigation_row(page, total_pages, f"{CB_EXPORT_SWISS_PLAYERS}:{tournament_id}")
+    if navigation:
+        rows.append(navigation)
+    rows.append([InlineKeyboardButton("⬅️ К выгрузке", callback_data=f"{CB_EXPORT_MENU}:{tournament_id}")])
+    return InlineKeyboardMarkup(rows)
+
+
 def social_rating_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([leaderboard_menu_back_keyboard()])
 

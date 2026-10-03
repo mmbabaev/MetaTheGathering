@@ -16,6 +16,7 @@ from bot.keyboards import (
     admin_more_keyboard,
     broadcast_back_keyboard,
     export_menu_keyboard,
+    export_swiss_players_keyboard,
     reveal_decks_confirm_keyboard,
 )
 from bot.messages import (
@@ -472,15 +473,24 @@ async def callback_export_swiss_players(update: Update, context: ContextTypes.DE
     if ids is None:
         return
     (tournament_id,) = ids
+    page = await parse_callback_page(query)
+    if page is None:
+        return
+    has_explicit_page = len(query.data.split(":")) > 2
     db = SessionLocal()
     try:
-        result = _admin_handler(db).handle_export_swiss_players(user.id, tournament_id)
-        if not result:
+        result = _admin_handler(db).handle_export_swiss_players_page(user.id, tournament_id, page=page)
+        if result is None or not result[0]:
             await query.answer("Нет прав, турнир не найден или это не внутренний Swiss.", show_alert=True)
             return
+        text, total_pages = result
+        keyboard = export_swiss_players_keyboard(tournament_id, page, total_pages)
         await query.answer()
-        await query.message.reply_text(f"<pre>{html.escape(result)}</pre>", parse_mode="HTML")
-        _log("export_swiss_players", user, tournament_id=tournament_id)
+        if has_explicit_page:
+            await query.edit_message_text(f"<pre>{html.escape(text)}</pre>", parse_mode="HTML", reply_markup=keyboard)
+        else:
+            await query.message.reply_text(f"<pre>{html.escape(text)}</pre>", parse_mode="HTML", reply_markup=keyboard)
+        _log("export_swiss_players", user, tournament_id=tournament_id, page=page)
     finally:
         db.close()
 

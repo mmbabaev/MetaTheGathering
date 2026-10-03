@@ -11,7 +11,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from sqlalchemy import nulls_last, select
 from sqlalchemy.orm import Session
 
-from bot.messages import format_participant_name
+from bot.messages import STATUS_PAGE_SIZE, clamp_page, format_participant_name, page_count
 from core import models
 from services.deck_mapping import general_archetype
 from services.internal_swiss import InternalSwissService
@@ -136,12 +136,11 @@ class ExportService:
         ]
         return "\n".join(names)
 
-    def export_swiss_players_with_points(self, tournament_id: int) -> str:
-        """Return copyable Swiss rows: player, Telegram username, points and city."""
-
+    def _swiss_players_with_points_rows(self, tournament_id: int) -> list[str] | None:
+        """Возвращает строки Swiss-выгрузки или ``None`` для другого движка."""
         tournament = get_tournament(self.db, tournament_id)
         if tournament.engine_mode != models.TournamentEngineMode.INTERNAL_SWISS:
-            return ""
+            return None
 
         standings = InternalSwissService(self.db).standings(tournament_id)
         users = {
@@ -150,13 +149,36 @@ class ExportService:
                 select(models.User).where(models.User.id.in_([row.user_id for row in standings]))
             ).scalars()
         }
-        lines = ["Игрок — ТГ-ник — Очки — Город"]
+        lines = []
         for row in standings:
             user = users[row.user_id]
             username = f"@{user.username.lstrip('@')}" if user.username else "—"
             city = user.city.strip() if user.city and user.city.strip() else "—"
             lines.append(f"{row.display_name} — {username} — {row.match_points} — {city}")
-        return "\n".join(lines)
+        return lines
+
+    def export_swiss_players_with_points_page(
+        self, tournament_id: int, page: int = 0, page_size: int = STATUS_PAGE_SIZE
+    ) -> tuple[str, int]:
+        """Return one copyable Swiss page and the total number of pages."""
+        rows = self._swiss_players_with_points_rows(tournament_id)
+        if rows is None:
+            return "", 1
+        total = len(rows)
+        pages = page_count(total, page_size)
+        page = clamp_page(page, total, page_size)
+        start = page * page_size
+        end = min(start + page_size, total)
+        lines = ["Игрок — ТГ-ник — Очки — Город"]
+        if pages > 1:
+            lines.append(f"👥 Показано {start + 1}–{end} из {total} · стр. {page + 1}/{pages}")
+        lines.extend(rows[start:end])
+        return "\n".join(lines), pages
+
+    def export_swiss_players_with_points(self, tournament_id: int) -> str:
+        """Return the first copyable Swiss page: player, Telegram username, points and city."""
+        text, _pages = self.export_swiss_players_with_points_page(tournament_id)
+        return text
 
     def export_participants_excel(self, tournament_id: int) -> tuple[bytes, str]:
         """Возвращает (bytes, filename) для Excel-файла списка участников."""
