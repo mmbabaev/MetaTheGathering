@@ -51,6 +51,7 @@ CB_STANDINGS = "standings"  # standings:{tournament_id}
 CB_EXPORT_MENU = "export_menu"  # export_menu:{tournament_id}
 CB_EXPORT_PLAYERS = "export_players"  # export_players:{tournament_id}
 CB_EXPORT_SWISS_PLAYERS = "export_swiss_players"  # export_swiss_players:{tournament_id}
+CB_EXPORT_SWISS_PLAYERS_FILE = "export_swiss_players_file"  # export_swiss_players_file:{tournament_id}
 CB_DELETE_TOURNAMENT = "del_t"  # del_t:{tournament_id}
 CB_DELETE_TOURNAMENT_CONFIRM = "del_t_yes"  # del_t_yes:{tournament_id}
 CB_DELETE_TOURNAMENT_CANCEL = "del_t_no"  # del_t_no:{tournament_id}
@@ -223,6 +224,9 @@ def export_swiss_players_keyboard(tournament_id: int, page: int, total_pages: in
     navigation = list_navigation_row(page, total_pages, f"{CB_EXPORT_SWISS_PLAYERS}:{tournament_id}")
     if navigation:
         rows.append(navigation)
+    rows.append(
+        [InlineKeyboardButton("📥 Скачать файлом", callback_data=f"{CB_EXPORT_SWISS_PLAYERS_FILE}:{tournament_id}")]
+    )
     rows.append([InlineKeyboardButton("⬅️ К выгрузке", callback_data=f"{CB_EXPORT_MENU}:{tournament_id}")])
     return InlineKeyboardMarkup(rows)
 

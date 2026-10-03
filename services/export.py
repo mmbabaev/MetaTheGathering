@@ -176,9 +176,11 @@ class ExportService:
         return "\n".join(lines), pages
 
     def export_swiss_players_with_points(self, tournament_id: int) -> str:
-        """Return the first copyable Swiss page: player, Telegram username, points and city."""
-        text, _pages = self.export_swiss_players_with_points_page(tournament_id)
-        return text
+        """Return the complete copyable Swiss list: player, Telegram username, points and city."""
+        rows = self._swiss_players_with_points_rows(tournament_id)
+        if rows is None:
+            return ""
+        return "\n".join(["Игрок — ТГ-ник — Очки — Город", *rows])
 
     def export_participants_excel(self, tournament_id: int) -> tuple[bytes, str]:
         """Возвращает (bytes, filename) для Excel-файла списка участников."""

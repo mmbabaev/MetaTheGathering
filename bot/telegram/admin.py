@@ -495,6 +495,33 @@ async def callback_export_swiss_players(update: Update, context: ContextTypes.DE
         db.close()
 
 
+async def callback_export_swiss_players_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Отправляет полный Swiss-список «игрок — очки — город» отдельным TXT-файлом."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 1)
+    if ids is None:
+        return
+    (tournament_id,) = ids
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_export_swiss_players(user.id, tournament_id)
+        if not result:
+            await query.answer("Нет прав, турнир не найден или это не внутренний Swiss.", show_alert=True)
+            return
+        await query.answer()
+        await context.bot.send_document(
+            chat_id=query.message.chat_id,
+            document=io.BytesIO(result.encode("utf-8")),
+            filename=f"players_points_cities_{tournament_id}.txt",
+        )
+        _log("export_swiss_players_file", user, tournament_id=tournament_id)
+    finally:
+        db.close()
+
+
 async def callback_export_excel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Кнопка «📊 Выгрузка Excel» — отправляет файл участников (+ паринги, если есть)."""
     query = update.callback_query

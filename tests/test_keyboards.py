@@ -38,6 +38,7 @@ from bot.keyboards import (
     CB_ENDSTEP_RU_PAGE,
     CB_EXPORT_MENU,
     CB_EXPORT_SWISS_PLAYERS,
+    CB_EXPORT_SWISS_PLAYERS_FILE,
     CB_LEADERBOARD_ENDSTEP,
     CB_LEADERBOARD_MENU,
     CB_LEADERBOARD_MOSCOW,
@@ -343,6 +344,7 @@ def test_swiss_contact_export_keyboard_has_pagination_and_back():
 
     assert f"{CB_EXPORT_SWISS_PLAYERS}:42:0" in callbacks
     assert f"{CB_EXPORT_SWISS_PLAYERS}:42:2" in callbacks
+    assert f"{CB_EXPORT_SWISS_PLAYERS_FILE}:42" in callbacks
     assert f"{CB_EXPORT_MENU}:42" in callbacks
 
 
