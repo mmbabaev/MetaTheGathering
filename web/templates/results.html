@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Результаты турниров — MetaGatherer{% endblock %}
+{% block content %}
+<div class="flex items-center justify-between mb-4">
+  <h1 class="text-xl font-bold text-gray-900">Результаты турниров</h1>
+  <a href="/" class="text-blue-600 text-sm">В бот</a>
+</div>
+
+{% if not tournaments %}
+<div class="card text-center text-gray-400 py-8">Результатов пока нет</div>
+{% endif %}
+
+{% for tournament in tournaments %}
+<a href="/results/{{ tournament.slug }}" class="card mb-3 block active:bg-gray-50">
+  <p class="font-semibold text-gray-900">{{ tournament.title }}</p>
+  <p class="text-sm text-gray-500 mt-1">{{ tournament.format_name }} · открыть результаты →</p>
+</a>
+{% endfor %}
+{% endblock %}

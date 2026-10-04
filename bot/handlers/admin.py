@@ -61,6 +61,8 @@ from services.tournament import TournamentService
 from services.user import UserService
 from services.utils import get_tournament
 
+ENDSTEP_IDENTITY_PAGE_SIZE = 50
+
 
 def parse_bulk_player_line(line: str) -> tuple[str, str] | None:
     """Строка «@user Колода» → (username_без_собаки, колода). Неверная строка → None."""
@@ -306,6 +308,48 @@ class AdminHandler:
             tg_id=tg_id,
             page=page,
             highlight_tg_id=tg_id,
+        )
+
+    def handle_endstep_identity_map(self, tg_id: int, tournament_id: int, page: int = 0) -> HandlerResult:
+        """Show Endstep nick → Telegram nick for one Endstep tournament."""
+        tournament = self.svc.db.get(models.Tournament, tournament_id)
+        if tournament is None:
+            return HandlerResult(TOURNAMENT_NOT_FOUND, is_alert=True)
+        if not self.user_svc.is_privileged_for_tournament(tg_id, tournament):
+            return HandlerResult(NOT_ADMIN)
+        if not is_konetskhod_club(tournament.club):
+            return HandlerResult("Эта выгрузка доступна только для турниров Концехода.", is_alert=True)
+
+        participants = self.svc.list_participants_for_tournament(tournament_id)
+        participants.sort(
+            key=lambda participant: (
+                not bool((participant.user.endstep_username or "").strip()),
+                (participant.user.endstep_username or "").strip().casefold(),
+                participant.user.id,
+            )
+        )
+        total = len(participants)
+        pages = max(1, (total + ENDSTEP_IDENTITY_PAGE_SIZE - 1) // ENDSTEP_IDENTITY_PAGE_SIZE)
+        page = min(max(page, 0), pages - 1)
+        start = page * ENDSTEP_IDENTITY_PAGE_SIZE
+        visible = participants[start : start + ENDSTEP_IDENTITY_PAGE_SIZE]
+
+        lines = [
+            "👤 Endstep — Telegram",
+            f"Игроков: {total} · страница {page + 1}/{pages}",
+            "",
+        ]
+        for participant in visible:
+            user = participant.user
+            endstep_name = (user.endstep_username or "").strip() or "—"
+            telegram_name = f"@{user.username}" if user.username else "—"
+            lines.append(f"{endstep_name} — {telegram_name}")
+        if not visible:
+            lines.append("В турнире пока нет игроков.")
+
+        return HandlerResult(
+            "\n".join(lines),
+            keyboard=self.keyboards.endstep_identity_keyboard(tournament_id, page, pages),
         )
 
     def handle_admin_show_filled(self, tg_id: int, tournament_id: int, page: int = 0) -> HandlerResult:

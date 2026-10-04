@@ -70,6 +70,31 @@ class TestParseBulkPlayerLine:
         assert parse_bulk_player_line("@bob") is None
 
 
+def test_endstep_identity_map_is_sorted_and_uses_dash_for_missing_endstep_username(
+    handler, admin_user, svc, user_svc, arch_svc
+):
+    tournament = svc.create_tournament(
+        TournamentCreate(title="Концеход Pauper #1", chat_id=CHAT_ID, club="Endstep-ru", is_online=True)
+    )
+    players = [
+        ("zebra", "Zed", "@zebra"),
+        ("alpha", "Alice", "@alice"),
+        (None, "No Endstep", "@missing"),
+    ]
+    archetype = arch_svc.get_or_create_by_name("Burn")
+    for index, (endstep_name, first_name, username) in enumerate(players, start=1):
+        user = user_svc.get_or_create(tg_id=10000 + index, username=username[1:], first_name=first_name)
+        user.endstep_username = endstep_name
+        svc.register_participant(tournament_id=tournament.id, user_id=user.id, archetype_id=archetype.id)
+    svc.db.commit()
+
+    result = handler.handle_endstep_identity_map(admin_user.tg_id, tournament.id)
+
+    assert result.is_alert is False
+    assert result.text.index("alpha — @alice") < result.text.index("zebra — @zebra")
+    assert result.text.index("zebra — @zebra") < result.text.index("— — @missing")
+
+
 @pytest.fixture
 def admin_user(user_svc, svc):
     u = user_svc.get_or_create(tg_id=ADMIN_TG_ID, username="admin", first_name="Admin")

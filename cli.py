@@ -7,6 +7,7 @@ import typer
 
 from cli.achievements import app as achievements_app
 from cli.endstep import app as endstep_app
+from cli.endstep import import_app as endstep_import_app
 from cli.magicoculus import app as magicoculus_app
 from cli.migration import app as migration_app
 from cli.swiss import app as swiss_app
@@ -18,6 +19,7 @@ app.add_typer(tournament_app, name="tournament", help="Управление ту
 app.add_typer(user_app, name="user", help="Управление пользователями")
 app.add_typer(achievements_app, name="achievements", help="Ачивки: пересчёт и просмотр")
 app.add_typer(endstep_app, name="endstep", help="Read-only инструменты Endstep")
+app.add_typer(endstep_import_app, name="endstep-import", help="Импорт Endstep-турниров и Scryfall metadata")
 app.add_typer(magicoculus_app, name="magicoculus", help="Подготовка импорта турниров в Magic Oculus")
 app.add_typer(migration_app, name="migration", help="Сбор исторических турниров для Magic Oculus")
 app.add_typer(swiss_app, name="swiss", help="Отладка внутреннего Swiss-движка на фейковых игроках")
