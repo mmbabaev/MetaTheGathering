@@ -1,9 +1,47 @@
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 from core import models
 from services.endstep_tournament_import import EndstepTournamentImporter
 from services.scryfall_cards import ScryfallCardResolver
+from web.routes.results import decklist_copy_text
+from web.templating import templates
+
+
+def test_decklist_copy_text_uses_main_then_sideboard():
+    main = [SimpleNamespace(quantity=1, card_name="Zeta"), SimpleNamespace(quantity=4, card_name="Alpha")]
+    sideboard = [SimpleNamespace(quantity=2, card_name="Hydroblast")]
+
+    assert decklist_copy_text(main, sideboard) == "4 Alpha\n1 Zeta\n\nSideboard:\n2 Hydroblast"
+
+
+def test_result_detail_shows_telegram_username_and_copy_action():
+    html = templates.get_template("result_detail.html").render(
+        tournament=SimpleNamespace(title="Test", format_name="Pauper"),
+        players=[
+            SimpleNamespace(
+                standing=SimpleNamespace(
+                    place=1,
+                    player_name="Alice",
+                    match_points=9,
+                    wins=3,
+                    losses=0,
+                    draws=0,
+                    omw_percent=66.67,
+                    user=SimpleNamespace(username="alice"),
+                ),
+                main=[SimpleNamespace(quantity=4, card_name="Lightning Bolt", image_uri="", image_uri_back="")],
+                sideboard=[],
+                decklist_text="4 Lightning Bolt",
+            )
+        ],
+        pairings_by_round={},
+    )
+
+    assert "@alice" in html
+    assert "📋 Скопировать деклист" in html
+    assert "4 Lightning Bolt" in html
 
 
 def _write_exports(tmp_path: Path, *, player: str = "Alice") -> dict[str, str]:

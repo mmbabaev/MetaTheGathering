@@ -23,6 +23,11 @@
           <td class="font-semibold">{{ player.standing.place }}</td>
           <td>
             <a class="player-link" href="#deck-{{ loop.index }}">{{ player.standing.player_name }}</a>
+            {% if player.standing.user and player.standing.user.username %}
+            <span class="muted-block">@{{ player.standing.user.username }}</span>
+            {% else %}
+            <span class="muted-block">TG ник не указан</span>
+            {% endif %}
           </td>
           <td>{{ player.standing.match_points }}</td>
           <td>{{ player.standing.wins }}-{{ player.standing.losses }}-{{ player.standing.draws }}</td>
@@ -42,10 +47,17 @@
       <span>
         <span class="font-semibold text-gray-900">#{{ player.standing.place }} {{ player.standing.player_name }}</span>
         <span class="muted-block">{{ player.standing.match_points }} очков · {{ player.standing.wins }}-{{ player.standing.losses }}-{{ player.standing.draws }}</span>
+        {% if player.standing.user and player.standing.user.username %}
+        <span class="muted-block">@{{ player.standing.user.username }}</span>
+        {% endif %}
       </span>
       <span class="text-gray-400">⌄</span>
     </summary>
     <div class="deck-sections mt-4">
+      <div class="deck-actions">
+        <button type="button" class="copy-decklist">📋 Скопировать деклист</button>
+        <textarea class="decklist-copy-source" hidden aria-label="Текст деклиста">{{ player.decklist_text }}</textarea>
+      </div>
       <div>
         <h3 class="section-title">Main ({{ player.main|sum(attribute="quantity") }})</h3>
         {% if player.main %}
@@ -103,6 +115,9 @@
   .player-link { color: #1d4ed8; }
   .muted-block { display: block; color: #94a3b8; font-size: .75rem; }
   .deck-sections { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; }
+  .deck-actions { grid-column: 1 / -1; }
+  .copy-decklist { border: 1px solid #cbd5e1; border-radius: .45rem; color: #1d4ed8; font-size: .875rem; padding: .35rem .65rem; }
+  .copy-decklist:hover, .copy-decklist:focus-visible { background: #eff6ff; }
   .section-title { color: #475569; font-size: .875rem; margin-bottom: .35rem; }
   .deck-list { color: #334155; font-size: .875rem; line-height: 1.7; }
   .card-name { color: inherit; text-align: left; cursor: help; }
@@ -167,6 +182,23 @@
     target.addEventListener('focus', () => { if (hoverCapable) show(target); });
     target.addEventListener('blur', () => { if (hoverCapable) hide(); });
     target.addEventListener('click', () => { if (!hoverCapable) active === target ? hide() : show(target); });
+  });
+
+  document.querySelectorAll('.copy-decklist').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const source = button.closest('details').querySelector('.decklist-copy-source');
+      const originalText = button.textContent;
+      try {
+        await navigator.clipboard.writeText(source.value);
+      } catch (_error) {
+        source.hidden = false;
+        source.select();
+        document.execCommand('copy');
+        source.hidden = true;
+      }
+      button.textContent = '✅ Скопировано';
+      window.setTimeout(() => { button.textContent = originalText; }, 1500);
+    });
   });
   preview.addEventListener('mouseenter', () => { if (timer) clearTimeout(timer); });
   preview.addEventListener('mouseleave', () => { if (hoverCapable) timer = setTimeout(hide, 180); });
