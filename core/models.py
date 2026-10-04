@@ -9,6 +9,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     Enum,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -205,6 +206,115 @@ class Tournament(Base):
     )
     cellar_reservations = relationship("CellarDeckReservation", back_populates="tournament")
     round_matches = relationship("RoundMatch", back_populates="tournament", cascade="all, delete-orphan")
+
+
+class EndstepTournament(Base):
+    """Immutable-ish local snapshot of a tournament exported from Endstep."""
+
+    __tablename__ = "endstep_tournaments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    external_key = Column(String(255), nullable=False, unique=True, index=True)
+    slug = Column(String(128), nullable=False, unique=True, index=True)
+    title = Column(String(255), nullable=False)
+    format_name = Column(String(64), nullable=False, default="Pauper")
+    imported_at = Column(DateTime, default=utc_now, nullable=False)
+
+    standings = relationship(
+        "EndstepStanding", back_populates="tournament", cascade="all, delete-orphan", order_by="EndstepStanding.place"
+    )
+    pairings = relationship(
+        "EndstepPairing", back_populates="tournament", cascade="all, delete-orphan", order_by="EndstepPairing.id"
+    )
+    deck_cards = relationship("EndstepDeckCard", back_populates="tournament", cascade="all, delete-orphan")
+
+
+class EndstepStanding(Base):
+    """One row from the Endstep standings export."""
+
+    __tablename__ = "endstep_standings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tournament_id = Column(Integer, ForeignKey("endstep_tournaments.id", ondelete="CASCADE"), nullable=False)
+    place = Column(Integer, nullable=False)
+    player_name = Column(String(255), nullable=False)
+    status = Column(String(32), nullable=True)
+    match_points = Column(Integer, nullable=False, default=0)
+    wins = Column(Integer, nullable=False, default=0)
+    losses = Column(Integer, nullable=False, default=0)
+    draws = Column(Integer, nullable=False, default=0)
+    omw_percent = Column(Float, nullable=True)
+    gw_percent = Column(Float, nullable=True)
+    ogw_percent = Column(Float, nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    tournament = relationship("EndstepTournament", back_populates="standings")
+    user = relationship("User")
+
+    __table_args__ = (UniqueConstraint("tournament_id", "player_name", name="uq_endstep_standing_player"),)
+
+
+class EndstepPairing(Base):
+    """One row from the Endstep pairings export, including playoff stages."""
+
+    __tablename__ = "endstep_pairings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tournament_id = Column(Integer, ForeignKey("endstep_tournaments.id", ondelete="CASCADE"), nullable=False)
+    round_number = Column(Integer, nullable=False)
+    stage = Column(String(64), nullable=False)
+    table_number = Column(Integer, nullable=True)
+    player1 = Column(String(255), nullable=True)
+    player2 = Column(String(255), nullable=True)
+    games = Column(String(32), nullable=True)
+    result = Column(String(64), nullable=True)
+    winner = Column(String(255), nullable=True)
+
+    tournament = relationship("EndstepTournament", back_populates="pairings")
+
+
+class EndstepDeckCard(Base):
+    """One card row from an Endstep decklist export.
+
+    Scryfall fields are deliberately nullable: importing results must not depend
+    on an external card API being available.  The resolver fills them later.
+    """
+
+    __tablename__ = "endstep_deck_cards"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tournament_id = Column(Integer, ForeignKey("endstep_tournaments.id", ondelete="CASCADE"), nullable=False)
+    place = Column(Integer, nullable=True)
+    player_name = Column(String(255), nullable=False)
+    section = Column(String(32), nullable=False)
+    quantity = Column(Integer, nullable=False)
+    card_name = Column(String(255), nullable=False)
+    normalized_name = Column(String(255), nullable=False, index=True)
+    scryfall_card_id = Column(Integer, ForeignKey("scryfall_cards.id", ondelete="SET NULL"), nullable=True, index=True)
+    scryfall_id = Column(String(64), nullable=True)
+    image_uri = Column(String(1024), nullable=True)
+    image_uri_back = Column(String(1024), nullable=True)
+
+    tournament = relationship("EndstepTournament", back_populates="deck_cards")
+    scryfall_card = relationship("ScryfallCard")
+
+    __table_args__ = (Index("ix_endstep_deck_player_section", "tournament_id", "player_name", "section"),)
+
+
+class ScryfallCard(Base):
+    """Cached card metadata shared by all imported external decklists."""
+
+    __tablename__ = "scryfall_cards"
+
+    id = Column(Integer, primary_key=True, index=True)
+    normalized_name = Column(String(255), nullable=False, unique=True, index=True)
+    canonical_name = Column(String(255), nullable=True)
+    scryfall_id = Column(String(64), nullable=True, unique=True)
+    image_uri = Column(String(1024), nullable=True)
+    image_uri_back = Column(String(1024), nullable=True)
+    status = Column(String(32), nullable=False, default="pending")
+    resolved_at = Column(DateTime, nullable=True)
+    error_message = Column(String(255), nullable=True)
 
 
 class TournamentRegistrationMessage(Base):

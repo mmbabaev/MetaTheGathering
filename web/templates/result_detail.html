@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}{{ tournament.title }} — результаты{% endblock %}
+{% block content %}
+<div class="flex items-center gap-2 mb-4">
+  <a href="/results" class="text-blue-600 text-sm">← Все турниры</a>
+</div>
+
+<h1 class="text-2xl font-bold text-gray-900">{{ tournament.title }}</h1>
+<p class="text-sm text-gray-500 mt-1 mb-5">{{ tournament.format_name }} · {{ players|length }} игроков</p>
+
+<section class="card mb-4">
+  <h2 class="font-semibold text-gray-900 mb-3">Стендинги</h2>
+  <div class="overflow-x-auto -mx-4 px-4">
+    <table class="results-table">
+      <thead>
+        <tr>
+          <th>Место</th><th>Игрок</th><th>Очки</th><th>W-L-D</th><th>OMW</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for player in players %}
+        <tr>
+          <td class="font-semibold">{{ player.standing.place }}</td>
+          <td>
+            <a class="player-link" href="#deck-{{ loop.index }}">{{ player.standing.player_name }}</a>
+          </td>
+          <td>{{ player.standing.match_points }}</td>
+          <td>{{ player.standing.wins }}-{{ player.standing.losses }}-{{ player.standing.draws }}</td>
+          <td>{{ "%.2f"|format(player.standing.omw_percent) if player.standing.omw_percent is not none else "—" }}%</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="space-y-3">
+  <h2 class="text-xl font-bold text-gray-900">Деклисты</h2>
+  {% for player in players %}
+  <details class="card" id="deck-{{ loop.index }}">
+    <summary class="cursor-pointer list-none flex items-center justify-between gap-3">
+      <span>
+        <span class="font-semibold text-gray-900">#{{ player.standing.place }} {{ player.standing.player_name }}</span>
+        <span class="muted-block">{{ player.standing.match_points }} очков · {{ player.standing.wins }}-{{ player.standing.losses }}-{{ player.standing.draws }}</span>
+      </span>
+      <span class="text-gray-400">⌄</span>
+    </summary>
+    <div class="deck-sections mt-4">
+      <div>
+        <h3 class="section-title">Main ({{ player.main|sum(attribute="quantity") }})</h3>
+        {% if player.main %}
+        <ul class="deck-list">
+          {% for card in player.main|sort(attribute="card_name") %}
+          <li>
+            <button type="button" class="card-name" data-card-image="{{ card.image_uri or '' }}" data-card-back="{{ card.image_uri_back or '' }}">{{ card.quantity }} {{ card.card_name }}</button>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}<p class="muted-block">Нет данных</p>{% endif %}
+      </div>
+      <div>
+        <h3 class="section-title">Sideboard ({{ player.sideboard|sum(attribute="quantity") }})</h3>
+        {% if player.sideboard %}
+        <ul class="deck-list">
+          {% for card in player.sideboard|sort(attribute="card_name") %}
+          <li>
+            <button type="button" class="card-name" data-card-image="{{ card.image_uri or '' }}" data-card-back="{{ card.image_uri_back or '' }}">{{ card.quantity }} {{ card.card_name }}</button>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}<p class="muted-block">Нет данных</p>{% endif %}
+      </div>
+    </div>
+  </details>
+  {% endfor %}
+</section>
+
+{% if pairings_by_round %}
+<section class="card mt-4">
+  <h2 class="font-semibold text-gray-900 mb-3">Паринги</h2>
+  {% for round_number, pairings in pairings_by_round.items() %}
+  <details class="pairing-round">
+    <summary>Раунд {{ round_number }}{% if pairings[0].stage != 'Swiss' %} · {{ pairings[0].stage }}{% endif %}</summary>
+    <div class="pairings-list">
+      {% for pairing in pairings %}
+      <div><span>{{ pairing.player1 or '—' }}</span> <b>vs</b> <span>{{ pairing.player2 or '—' }}</span><span class="muted-block">{{ pairing.result or pairing.games or '—' }}</span></div>
+      {% endfor %}
+    </div>
+  </details>
+  {% endfor %}
+</section>
+{% endif %}
+
+<div id="card-preview" class="card-preview" hidden aria-hidden="true">
+  <button type="button" class="preview-close" aria-label="Закрыть">×</button>
+  <img alt="" loading="lazy">
+</div>
+
+<style>
+  .results-table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+  .results-table th, .results-table td { padding: .55rem .5rem; border-bottom: 1px solid #f1f5f9; text-align: left; white-space: nowrap; }
+  .results-table th { color: #64748b; font-weight: 500; }
+  .player-link { color: #1d4ed8; }
+  .muted-block { display: block; color: #94a3b8; font-size: .75rem; }
+  .deck-sections { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; }
+  .section-title { color: #475569; font-size: .875rem; margin-bottom: .35rem; }
+  .deck-list { color: #334155; font-size: .875rem; line-height: 1.7; }
+  .card-name { color: inherit; text-align: left; cursor: help; }
+  .card-name:hover, .card-name:focus-visible { color: #1d4ed8; text-decoration: underline; }
+  .card-preview { position: fixed; z-index: 50; width: min(240px, 46vw); padding: .35rem; border-radius: .75rem; background: white; box-shadow: 0 15px 45px rgba(15,23,42,.3); pointer-events: auto; }
+  .card-preview img { display: block; width: 100%; border-radius: .55rem; }
+  .preview-close { display: none; position: absolute; right: .25rem; top: .25rem; z-index: 1; width: 1.75rem; height: 1.75rem; border-radius: 999px; background: rgba(15,23,42,.7); color: white; }
+  .pairing-round { border-top: 1px solid #f1f5f9; padding: .7rem 0; }
+  .pairing-round summary { cursor: pointer; font-weight: 500; }
+  .pairings-list { margin-top: .6rem; display: grid; gap: .35rem; font-size: .875rem; }
+  .pairings-list b { color: #94a3b8; padding: 0 .25rem; }
+  @media (max-width: 640px) { .deck-sections { grid-template-columns: 1fr; } }
+  @media (hover: none), (pointer: coarse) { .preview-close { display: block; } .card-preview { width: min(280px, 72vw); } }
+</style>
+
+<script>
+(() => {
+  const preview = document.getElementById('card-preview');
+  const image = preview.querySelector('img');
+  const close = preview.querySelector('.preview-close');
+  const hoverCapable = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+  let timer = null;
+  let active = null;
+
+  function hide() {
+    if (timer) clearTimeout(timer);
+    preview.hidden = true;
+    preview.setAttribute('aria-hidden', 'true');
+    image.removeAttribute('src');
+    active = null;
+  }
+
+  function place(target) {
+    const rect = target.getBoundingClientRect();
+    const width = Math.min(240, window.innerWidth * (hoverCapable ? .46 : .72));
+    const gap = 12;
+    let left = rect.right + gap;
+    if (left + width > window.innerWidth - 8) left = rect.left - width - gap;
+    left = Math.max(8, left);
+    const height = Math.min(window.innerHeight * .82, width * 1.4);
+    let top = rect.top;
+    if (top + height > window.innerHeight - 8) top = window.innerHeight - height - 8;
+    preview.style.left = `${left}px`;
+    preview.style.top = `${Math.max(8, top)}px`;
+  }
+
+  function show(target) {
+    const uri = target.dataset.cardImage;
+    if (!uri) return;
+    if (timer) clearTimeout(timer);
+    active = target;
+    place(target);
+    image.src = uri;
+    image.alt = target.textContent.trim();
+    preview.hidden = false;
+    preview.setAttribute('aria-hidden', 'false');
+  }
+
+  document.querySelectorAll('.card-name').forEach((target) => {
+    target.addEventListener('mouseenter', () => { if (hoverCapable) timer = setTimeout(() => show(target), 120); });
+    target.addEventListener('mouseleave', () => { if (hoverCapable) timer = setTimeout(hide, 180); });
+    target.addEventListener('focus', () => { if (hoverCapable) show(target); });
+    target.addEventListener('blur', () => { if (hoverCapable) hide(); });
+    target.addEventListener('click', () => { if (!hoverCapable) active === target ? hide() : show(target); });
+  });
+  preview.addEventListener('mouseenter', () => { if (timer) clearTimeout(timer); });
+  preview.addEventListener('mouseleave', () => { if (hoverCapable) timer = setTimeout(hide, 180); });
+  close.addEventListener('click', hide);
+  window.addEventListener('resize', () => { if (active && !preview.hidden) place(active); });
+})();
+</script>
+{% endblock %}

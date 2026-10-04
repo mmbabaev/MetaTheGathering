@@ -50,6 +50,7 @@ from core.models import TournamentStatus
 from services import errors as svc_errors
 from services.aetherhub_import_service import AetherhubImportService
 from services.datalens import DataLensService
+from services.endstep_table_titles import is_konetskhod_club
 from services.tournament import TournamentService
 from services.user import UserService
 from services.utils import get_tournament
@@ -427,13 +428,40 @@ async def callback_export_menu(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         tournament = db.get(models.Tournament, tournament_id)
         show_swiss_players = bool(tournament and tournament.engine_mode == models.TournamentEngineMode.INTERNAL_SWISS)
+        show_endstep_identity = bool(tournament and is_konetskhod_club(tournament.club))
     finally:
         db.close()
     await query.answer()
     await query.edit_message_text(
         "Выберите формат выгрузки:",
-        reply_markup=export_menu_keyboard(tournament_id, show_swiss_players=show_swiss_players),
+        reply_markup=export_menu_keyboard(
+            tournament_id,
+            show_swiss_players=show_swiss_players,
+            show_endstep_identity=show_endstep_identity,
+        ),
     )
+
+
+async def callback_export_endstep_identity(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Постраничная выгрузка связки Endstep-ник — Telegram-ник."""
+    query = update.callback_query
+    user = update.effective_user
+    if not user:
+        return
+    ids = await parse_callback_ints(query, 2)
+    if ids is None:
+        return
+    tournament_id, page = ids
+    db = SessionLocal()
+    try:
+        result = _admin_handler(db).handle_endstep_identity_map(user.id, tournament_id, page=page)
+        if result.is_alert:
+            await query.answer(result.text, show_alert=True)
+            return
+        await query.edit_message_text(result.text, reply_markup=result.keyboard)
+        await query.answer()
+    finally:
+        db.close()
 
 
 async def callback_export_players(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

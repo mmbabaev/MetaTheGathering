@@ -52,6 +52,7 @@ CB_EXPORT_MENU = "export_menu"  # export_menu:{tournament_id}
 CB_EXPORT_PLAYERS = "export_players"  # export_players:{tournament_id}
 CB_EXPORT_SWISS_PLAYERS = "export_swiss_players"  # export_swiss_players:{tournament_id}
 CB_EXPORT_SWISS_PLAYERS_FILE = "export_swiss_players_file"  # export_swiss_players_file:{tournament_id}
+CB_EXPORT_ENDSTEP_IDENTITY = "export_endstep_identity"  # export_endstep_identity:{tournament_id}:{page}
 CB_DELETE_TOURNAMENT = "del_t"  # del_t:{tournament_id}
 CB_DELETE_TOURNAMENT_CONFIRM = "del_t_yes"  # del_t_yes:{tournament_id}
 CB_DELETE_TOURNAMENT_CANCEL = "del_t_no"  # del_t_no:{tournament_id}
@@ -729,7 +730,13 @@ class Keyboards:
         callback = f"{CB_DECKLIST_LIST}:{tournament_id}:{page}" if back_to_list else f"{CB_TOURNAMENT}:{tournament_id}"
         return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data=callback)]])
 
-    def export_menu_keyboard(self, tournament_id: int, *, show_swiss_players: bool = False) -> InlineKeyboardMarkup:
+    def export_menu_keyboard(
+        self,
+        tournament_id: int,
+        *,
+        show_swiss_players: bool = False,
+        show_endstep_identity: bool = False,
+    ) -> InlineKeyboardMarkup:
         rows = [
             [InlineKeyboardButton("📊 Meta (Excel)", callback_data=f"{CB_EXPORT_EXCEL}:{tournament_id}")],
             [InlineKeyboardButton("🍩 График метагейма", callback_data=f"{CB_META_CHART}:{tournament_id}")],
@@ -745,7 +752,41 @@ class Keyboards:
                     )
                 ]
             )
+        if show_endstep_identity:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        "👤 Endstep — Telegram",
+                        callback_data=f"{CB_EXPORT_ENDSTEP_IDENTITY}:{tournament_id}:0",
+                    )
+                ]
+            )
         rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=f"{CB_TOURNAMENT}:{tournament_id}")])
+        return InlineKeyboardMarkup(rows)
+
+    def endstep_identity_keyboard(self, tournament_id: int, page: int, pages: int) -> InlineKeyboardMarkup:
+        page = min(max(page, 0), max(0, pages - 1))
+        rows = []
+        navigation = []
+        if page > 0:
+            navigation.append(
+                InlineKeyboardButton("←", callback_data=f"{CB_EXPORT_ENDSTEP_IDENTITY}:{tournament_id}:{page - 1}")
+            )
+        if page + 1 < pages:
+            navigation.append(
+                InlineKeyboardButton("→", callback_data=f"{CB_EXPORT_ENDSTEP_IDENTITY}:{tournament_id}:{page + 1}")
+            )
+        if navigation:
+            rows.append(navigation)
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    f"Страница {page + 1}/{max(1, pages)}",
+                    callback_data=f"{CB_EXPORT_ENDSTEP_IDENTITY}:{tournament_id}:{page}",
+                )
+            ]
+        )
+        rows.append([InlineKeyboardButton("⬅️ К выгрузке", callback_data=f"{CB_EXPORT_MENU}:{tournament_id}")])
         return InlineKeyboardMarkup(rows)
 
     def reveal_decks_confirm_keyboard(self, tournament_id: int) -> InlineKeyboardMarkup:
@@ -1911,8 +1952,21 @@ def tournament_card_keyboard(
     )
 
 
-def export_menu_keyboard(tournament_id: int, *, show_swiss_players: bool = False) -> InlineKeyboardMarkup:
-    return _default.export_menu_keyboard(tournament_id, show_swiss_players=show_swiss_players)
+def export_menu_keyboard(
+    tournament_id: int,
+    *,
+    show_swiss_players: bool = False,
+    show_endstep_identity: bool = False,
+) -> InlineKeyboardMarkup:
+    return _default.export_menu_keyboard(
+        tournament_id,
+        show_swiss_players=show_swiss_players,
+        show_endstep_identity=show_endstep_identity,
+    )
+
+
+def endstep_identity_keyboard(tournament_id: int, page: int, pages: int) -> InlineKeyboardMarkup:
+    return _default.endstep_identity_keyboard(tournament_id, page, pages)
 
 
 def admin_more_keyboard(

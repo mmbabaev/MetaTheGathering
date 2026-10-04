@@ -36,6 +36,7 @@ from bot.keyboards import (
     CB_DEBUG_SWISS_RUN_ALL,
     CB_ENDSTEP_RU_ME,
     CB_ENDSTEP_RU_PAGE,
+    CB_EXPORT_ENDSTEP_IDENTITY,
     CB_EXPORT_MENU,
     CB_EXPORT_SWISS_PLAYERS,
     CB_EXPORT_SWISS_PLAYERS_FILE,
@@ -336,6 +337,16 @@ def test_swiss_contact_export_button_is_only_shown_when_requested():
 
     assert f"{CB_EXPORT_SWISS_PLAYERS}:42" not in hidden_callbacks
     assert f"{CB_EXPORT_SWISS_PLAYERS}:42" in shown_callbacks
+
+
+def test_endstep_identity_export_button_is_only_shown_for_requested_tournament():
+    hidden = Keyboards().export_menu_keyboard(42)
+    shown = Keyboards().export_menu_keyboard(42, show_endstep_identity=True)
+    hidden_callbacks = {button.callback_data for row in hidden.inline_keyboard for button in row}
+    shown_callbacks = {button.callback_data for row in shown.inline_keyboard for button in row}
+
+    assert not any(callback.startswith(CB_EXPORT_ENDSTEP_IDENTITY) for callback in hidden_callbacks)
+    assert f"{CB_EXPORT_ENDSTEP_IDENTITY}:42:0" in shown_callbacks
 
 
 def test_swiss_contact_export_keyboard_has_pagination_and_back():

@@ -94,6 +94,7 @@ from bot.keyboards import (
     CB_DRAFT_SEATING,
     CB_ENDSTEP_RU_ME,
     CB_ENDSTEP_RU_PAGE,
+    CB_EXPORT_ENDSTEP_IDENTITY,
     CB_EXPORT_EXCEL,
     CB_EXPORT_MENU,
     CB_EXPORT_PLAYERS,
@@ -595,6 +596,9 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(admin.callback_pick_participant_arch_more, pattern=f"^{CB_ADMIN_ARCH_MORE}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_participant_custom_arch, pattern=f"^{CB_ADMIN_CUSTOM_ARCH}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_export_menu, pattern=f"^{CB_EXPORT_MENU}:"))
+    app.add_handler(
+        CallbackQueryHandler(admin.callback_export_endstep_identity, pattern=f"^{CB_EXPORT_ENDSTEP_IDENTITY}:")
+    )
     app.add_handler(CallbackQueryHandler(admin.callback_export_players, pattern=f"^{CB_EXPORT_PLAYERS}:"))
     app.add_handler(CallbackQueryHandler(admin.callback_export_swiss_players, pattern=f"^{CB_EXPORT_SWISS_PLAYERS}:"))
     app.add_handler(

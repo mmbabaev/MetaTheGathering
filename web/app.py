@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from web.routes import auth, cellar, me, settings, tournaments
+from web.routes import auth, cellar, me, results, settings, tournaments
 
 app = FastAPI(title="MetaGatherer Web", docs_url=None, redoc_url=None)
 
@@ -9,3 +9,4 @@ app.include_router(tournaments.router)
 app.include_router(me.router)
 app.include_router(settings.router)
 app.include_router(cellar.router)
+app.include_router(results.router)
