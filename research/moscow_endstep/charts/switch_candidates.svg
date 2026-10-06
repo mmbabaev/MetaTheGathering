@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1350" height="790" viewBox="0 0 1350 790">
+<style>text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#243447}.title{font-size:25px;font-weight:700}.subtitle{font-size:14px;fill:#52616b}.label{font-size:14px;font-weight:600}.small{font-size:12px}.axis{stroke:#8b99a5;stroke-width:1}.grid{stroke:#e4e9ee;stroke-width:1}</style>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="48" y="38" class="title">11 кандидатов на переход из «Единорога» в Endstep</text>
+<text x="48" y="63" class="subtitle">Слева — понедельники «Единорога» до первого Endstep; справа — дата первого Endstep и число Endstep-турниров.</text>
+<line x1="330.0" y1="108" x2="330.0" y2="650" class="grid"/>
+<text x="330.0" y="672" text-anchor="middle" class="small">0</text>
+<line x1="516.7" y1="108" x2="516.7" y2="650" class="grid"/>
+<text x="516.7" y="672" text-anchor="middle" class="small">5</text>
+<line x1="703.3" y1="108" x2="703.3" y2="650" class="grid"/>
+<text x="703.3" y="672" text-anchor="middle" class="small">10</text>
+<line x1="890.0" y1="108" x2="890.0" y2="650" class="grid"/>
+<text x="890.0" y="672" text-anchor="middle" class="small">15</text>
+<line x1="330" y1="650" x2="890" y2="650" class="axis"/>
+<text x="330" y="698" class="subtitle">Число понедельников до первого Endstep</text>
+<text x="314" y="125" text-anchor="end" class="label">C07</text>
+<rect x="330" y="106" width="522.7" height="25" rx="4" fill="#2563eb"/>
+<text x="861.7" y="125" class="label">14</text>
+<text x="925" y="125" class="small">первый Endstep: 09.19 · турниров: 1</text>
+<text x="314" y="167" text-anchor="end" class="label">C09</text>
+<rect x="330" y="148" width="485.3" height="25" rx="4" fill="#2563eb"/>
+<text x="824.3" y="167" class="label">13</text>
+<text x="925" y="167" class="small">первый Endstep: 09.19 · турниров: 2</text>
+<text x="314" y="209" text-anchor="end" class="label">C08</text>
+<rect x="330" y="190" width="410.7" height="25" rx="4" fill="#2563eb"/>
+<text x="749.7" y="209" class="label">11</text>
+<text x="925" y="209" class="small">первый Endstep: 09.19 · турниров: 1</text>
+<text x="314" y="251" text-anchor="end" class="label">C06</text>
+<rect x="330" y="232" width="224.0" height="25" rx="4" fill="#2563eb"/>
+<text x="563.0" y="251" class="label">6</text>
+<text x="925" y="251" class="small">первый Endstep: 09.19 · турниров: 1</text>
+<text x="314" y="293" text-anchor="end" class="label">C05</text>
+<rect x="330" y="274" width="186.7" height="25" rx="4" fill="#2563eb"/>
+<text x="525.7" y="293" class="label">5</text>
+<text x="925" y="293" class="small">первый Endstep: 09.12 · турниров: 1</text>
+<text x="314" y="335" text-anchor="end" class="label">C02</text>
+<rect x="330" y="316" width="112.0" height="25" rx="4" fill="#2563eb"/>
+<text x="451.0" y="335" class="label">3</text>
+<text x="925" y="335" class="small">первый Endstep: 09.05 · турниров: 1</text>
+<text x="314" y="377" text-anchor="end" class="label">C04</text>
+<rect x="330" y="358" width="112.0" height="25" rx="4" fill="#2563eb"/>
+<text x="451.0" y="377" class="label">3</text>
+<text x="925" y="377" class="small">первый Endstep: 09.12 · турниров: 3</text>
+<text x="314" y="419" text-anchor="end" class="label">C01</text>
+<rect x="330" y="400" width="74.7" height="25" rx="4" fill="#2563eb"/>
+<text x="413.7" y="419" class="label">2</text>
+<text x="925" y="419" class="small">первый Endstep: 09.05 · турниров: 1</text>
+<text x="314" y="461" text-anchor="end" class="label">C03</text>
+<rect x="330" y="442" width="37.3" height="25" rx="4" fill="#2563eb"/>
+<text x="376.3" y="461" class="label">1</text>
+<text x="925" y="461" class="small">первый Endstep: 09.05 · турниров: 2</text>
+<text x="314" y="503" text-anchor="end" class="label">C10</text>
+<rect x="330" y="484" width="37.3" height="25" rx="4" fill="#2563eb"/>
+<text x="376.3" y="503" class="label">1</text>
+<text x="925" y="503" class="small">первый Endstep: 09.19 · турниров: 1</text>
+<text x="314" y="545" text-anchor="end" class="label">C11</text>
+<rect x="330" y="526" width="37.3" height="25" rx="4" fill="#2563eb"/>
+<text x="376.3" y="545" class="label">1</text>
+<text x="925" y="545" class="small">первый Endstep: 09.26 · турниров: 1</text>
+<rect x="70" y="700" width="1210" height="55" rx="8" fill="#f8fafc" stroke="#dbe3ea"/>
+<text x="95" y="733" class="subtitle">Медиана: 3 понедельника · среднее: 5,5 · 6 из 11 играли не более 3 раз · 8 из 11 были только на одном Endstep.</text>
+</svg>

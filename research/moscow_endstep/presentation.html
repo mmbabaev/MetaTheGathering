@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Куда ушла аудитория Единорога?</title>
+  <style>
+    @page { size: 13.333in 7.5in; margin: 0; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #dfe5eb; color: #243447; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .slide { width: 13.333in; height: 7.5in; padding: 0.52in 0.7in; background: white; page-break-after: always; position: relative; overflow: hidden; }
+    .slide:last-child { page-break-after: auto; }
+    h1 { font-size: 42px; line-height: 1.08; margin: 0 0 18px; color: #12324a; }
+    h2 { font-size: 30px; margin: 0 0 22px; color: #12324a; }
+    h3 { font-size: 21px; margin: 16px 0 8px; color: #2563eb; }
+    p, li { font-size: 19px; line-height: 1.35; }
+    ul, ol { margin: 10px 0; padding-left: 28px; }
+    .muted { color: #52616b; }
+    .accent { color: #c2410c; }
+    .red { color: #b91c1c; }
+    .green { color: #047857; }
+    .sub { font-size: 22px; color: #52616b; }
+    .footer { position: absolute; bottom: 20px; left: 0.7in; right: 0.7in; display: flex; justify-content: space-between; color: #8b99a5; font-size: 12px; }
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 34px; }
+    .metric { border: 1px solid #dbe3ea; border-radius: 12px; padding: 18px; background: #f8fafc; min-height: 130px; }
+    .metric b { display: block; font-size: 39px; color: #2563eb; line-height: 1; margin-bottom: 12px; }
+    .metric span { font-size: 16px; line-height: 1.2; display: block; }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+    .callout { background: #fff7ed; border-left: 6px solid #ea580c; padding: 16px 20px; border-radius: 8px; margin-top: 20px; }
+    .callout p { margin: 0; }
+    .chart { width: 100%; height: 5.75in; object-fit: contain; object-position: center top; }
+    .chart.tall { height: 6.25in; }
+    .small-chart { width: 61%; height: 5.25in; object-fit: contain; float: left; margin-right: 28px; }
+    .big-number { font-size: 74px; font-weight: 750; color: #2563eb; }
+    .arrow { color: #059669; font-weight: 700; }
+    .note { font-size: 14px; color: #64748b; }
+  </style>
+</head>
+<body>
+  <section class="slide">
+    <h1>Куда ушла аудитория<br>«Единорога»?</h1>
+    <p class="sub">Понедельники в «Роге», Endstep и Goldfish</p>
+    <div style="margin-top: 80px;" class="callout"><p><b>Срез:</b> 20.04–05.10.2026<br><b>События:</b> повышение цены 01.09 · первый Endstep 05.09</p></div>
+    <div class="footer"><span>MetaGatherer · исследование аудитории</span><span>1 / 9</span></div>
+  </section>
+
+  <section class="slide">
+    <h2>Итог в одном экране</h2>
+    <div class="grid">
+      <div class="metric"><b>28 / 76</b><span>игроков Endstep когда-либо были в понедельниках «Единорога»</span></div>
+      <div class="metric"><b>11</b><span>кандидатов на переход в Endstep; у 8 был только один Endstep</span></div>
+      <div class="metric"><b>19 / 209</b><span>потенциальных переходов «Рог → Рыба» после 01.09</span></div>
+      <div class="metric"><b>8,0 → 19,4</b><span>средняя посещаемость Goldfish до и после повышения цены</span></div>
+    </div>
+    <div class="callout"><p><b>Главный вывод:</b> массового ухода в Endstep не видно. Есть небольшой, но заметный потенциальный переток из «Рога» в «Рыбу».</p></div>
+    <div class="footer"><span>Краткий результат</span><span>2 / 9</span></div>
+  </section>
+
+  <section class="slide">
+    <h2>Как считали</h2>
+    <div class="two">
+      <div>
+        <h3>Единица анализа</h3>
+        <ul><li>Игрок = стабильный <code>user_id</code>.</li><li>Сравнивались записи участников турниров.</li><li>«Москва» — прокси через участие в «Единороге»: поле города заполнено неполно.</li></ul>
+      </div>
+      <div>
+        <h3>Контрольные точки</h3>
+        <ul><li><span class="accent">01.09</span> — повышение цены в «Единороге».</li><li><span class="red">05.09</span> — первый обычный Endstep.</li><li>Goldfish — контрольный московский клуб.</li><li>«Стилёк» — отдельный незавершённый срез.</li></ul>
+      </div>
+    </div>
+    <div class="callout"><p>Исторические данные отражают регистрацию/участие в базе, а не всегда подтверждённый факт фактической игры.</p></div>
+    <div class="footer"><span>Методика</span><span>3 / 9</span></div>
+  </section>
+
+  <section class="slide">
+    <h2>Посещаемость «Единорога»</h2>
+    <img class="chart" src="charts/attendance_timeline.svg" alt="Динамика посещаемости Единорога">
+    <div class="footer"><span>44,1 до повышения → 25,2 после (−43%)</span><span>4 / 9</span></div>
+  </section>
+
+  <section class="slide">
+    <h2>Цена или Endstep?</h2>
+    <div class="two">
+      <div><div class="big-number">41 → 40</div><p>31.08 — последний понедельник до повышения.<br>07.09 — первый после него.</p><p>Немедленного обвала нет.</p></div>
+      <div><h3>Дальше</h3><ul><li>14.09: 21</li><li>21.09: 23</li><li>28.09: 28</li><li>05.10: 14</li></ul><p class="red"><b>Цена и Endstep разделены четырьмя днями.</b></p></div>
+    </div>
+    <div class="callout"><p>Возможен отложенный эффект цены, но причинно разделить цену и Endstep по этому окну нельзя.</p></div>
+    <div class="footer"><span>Интерпретация временной динамики</span><span>5 / 9</span></div>
+  </section>
+
+  <section class="slide">
+    <h2>Контроль: Goldfish</h2>
+    <img class="chart" src="charts/club_attendance_comparison.svg" alt="Сравнение посещаемости клубов">
+    <div class="footer"><span>В Goldfish после 01.09 падения не видно</span><span>6 / 9</span></div>
+  </section>
+
+  <section class="slide">
+    <h2>11 кандидатов на переход в Endstep</h2>
+    <img class="small-chart" src="charts/switch_candidates.svg" alt="Кандидаты на переход в Endstep">
+    <div style="padding-top: 45px;"><div class="big-number">3</div><p>медиана понедельников в «Роге» до первого Endstep</p><div class="big-number">8 / 11</div><p>были только на одном Endstep</p><p class="muted">Это кандидаты для проверки, а не доказанные мигранты.</p></div>
+    <div class="footer"><span>Профиль 11 кандидатов</span><span>7 / 9</span></div>
+  </section>
+
+  <section class="slide">
+    <h2>Отдельно: «Рог → Рыба»</h2>
+    <img class="small-chart" src="charts/edinorog_goldfish_flow.svg" alt="Потенциальный переток из Единорога в Goldfish">
+    <div style="padding-top: 38px;"><div class="big-number">19 / 209</div><p>потенциальных случаев после 01.09</p><p>37 игроков из прежней аудитории «Рога» появились в Goldfish.</p><p><span class="arrow">18</span> продолжили ходить в оба клуба;<br><span class="arrow">19</span> больше не наблюдались в «Роге».</p><p class="muted">Переток небольшой и сконцентрирован в нескольких игроках.</p></div>
+    <div class="footer"><span>Потенциальный, не доказанный переток</span><span>8 / 9</span></div>
+  </section>
+
+  <section class="slide">
+    <h2>Финальный вывод</h2>
+    <ol><li>Endstep не забрал массово понедельничную аудиторию «Единорога».</li><li>«Единорог» просел после 01.09, но цена и запуск Endstep почти совпали.</li><li>Goldfish в тот же период не просел — падение не выглядит общим для всех московских дейликов.</li><li>Потенциальный маршрут «Рог → Рыба» есть, но его масштаб — около 9% прежней аудитории.</li></ol>
+    <div class="callout"><p><b>Следующий шаг:</b> ещё 2–3 месяца наблюдений, фактическая посещаемость вместо регистрации и единая недельная панель по клубам.</p></div>
+    <div class="footer"><span>Финальная версия исследования</span><span>9 / 9</span></div>
+  </section>
+</body>
+</html>

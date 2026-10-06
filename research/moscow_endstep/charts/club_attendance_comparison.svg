@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="880" viewBox="0 0 1400 880">
+<style>text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#243447}.title{font-size:25px;font-weight:700}.subtitle{font-size:14px;fill:#52616b}.label{font-size:14px;font-weight:600}.small{font-size:12px}.axis{stroke:#8b99a5;stroke-width:1}.grid{stroke:#e4e9ee;stroke-width:1}</style>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="48" y="38" class="title">Посещаемость «Единорога» и «Рыбы»</text>
+<text x="48" y="63" class="subtitle">Оранжевая линия — повышение цены 01.09; красная — первый Endstep 05.09. Серые точки «Рыбы» — записи с 0–1 участником.</text>
+<rect x="1092.0" y="125" width="253.0" height="625" fill="#fff7ed"/>
+<line x1="1092.0" y1="105" x2="1092.0" y2="765" stroke="#ea580c" stroke-width="2" stroke-dasharray="5 5"/>
+<text x="1084.0" y="98" text-anchor="end" class="label" fill="#c2410c">Цена: 01.09</text>
+<line x1="1121.8" y1="105" x2="1121.8" y2="765" stroke="#dc2626" stroke-width="2" stroke-dasharray="7 5"/>
+<text x="1129.8" y="122" class="label" fill="#b91c1c">Endstep: 05.09</text>
+<text x="95" y="126" class="label">Единорог · понедельники · 25 турниров</text>
+<line x1="95" y1="400.0" x2="1345" y2="400.0" class="grid"/>
+<text x="83" y="404.0" text-anchor="end" class="small">0</text>
+<line x1="95" y1="368.8" x2="1345" y2="368.8" class="grid"/>
+<text x="83" y="372.8" text-anchor="end" class="small">10</text>
+<line x1="95" y1="337.5" x2="1345" y2="337.5" class="grid"/>
+<text x="83" y="341.5" text-anchor="end" class="small">20</text>
+<line x1="95" y1="306.2" x2="1345" y2="306.2" class="grid"/>
+<text x="83" y="310.2" text-anchor="end" class="small">30</text>
+<line x1="95" y1="275.0" x2="1345" y2="275.0" class="grid"/>
+<text x="83" y="279.0" text-anchor="end" class="small">40</text>
+<line x1="95" y1="243.8" x2="1345" y2="243.8" class="grid"/>
+<text x="83" y="247.8" text-anchor="end" class="small">50</text>
+<line x1="95" y1="212.5" x2="1345" y2="212.5" class="grid"/>
+<text x="83" y="216.5" text-anchor="end" class="small">60</text>
+<line x1="95" y1="181.2" x2="1345" y2="181.2" class="grid"/>
+<text x="83" y="185.2" text-anchor="end" class="small">70</text>
+<line x1="95" y1="150.0" x2="1345" y2="150.0" class="grid"/>
+<text x="83" y="154.0" text-anchor="end" class="small">80</text>
+<line x1="95" y1="400" x2="1345" y2="400" class="axis"/>
+<polyline points="95.0,306.2 147.1,271.9 199.2,278.1 251.2,178.1 303.3,296.9 355.4,296.9 407.5,256.2 459.6,246.9 511.7,290.6 563.8,275.0 615.8,262.5 667.9,262.5 720.0,259.4 772.1,221.9 824.2,268.8 876.2,262.5 928.3,287.5 980.4,240.6 1032.5,206.2 1084.6,271.9 1136.7,275.0 1188.8,334.4 1240.8,328.1 1292.9,312.5 1345.0,356.2" fill="none" stroke="#2563eb" stroke-width="2" stroke-opacity="0.7"/>
+<circle cx="95.0" cy="306.2" r="5" fill="#2563eb" stroke="#2563eb" stroke-width="2"/>
+<circle cx="147.1" cy="271.9" r="5" fill="#2563eb" stroke="#2563eb" stroke-width="2"/>
+<circle cx="199.2" cy="278.1" r="5" fill="#2563eb" stroke="#2563eb" stroke-width="2"/>
+<circle cx="251.2" cy="178.1" r="5" fill="#2563eb" stroke="#2563eb" stroke-width="2"/>
+<circle cx="303.3" cy="296.9" r="5" fill="#2563eb" stroke="#2563eb" stroke-width="2"/>
+<circle cx="355.4" cy="296.9" r="5" fill="#2563eb" stroke="#2563eb" stroke-width="2"/>
+<circle cx="407.5" cy="256.2" r="5" fill="#2563eb" stroke="#2563eb" stroke-width="2"/>
+<circle cx="459.6" cy="246.9" r="5" fill="#2563eb" stroke="#2563eb" stroke-width="2"/>
+<circle cx="511.7" cy="290.6" r="5" fill="#2563eb" stroke="#2563eb" stroke-width="2"/>
+<circle cx="563.8" cy="275.0" r="5" fill="#2563eb" stroke="#2563eb" stroke-width="2"/>
+<circle cx="615.8" cy="262.5" r="5" fill="#2563eb" stroke="#2563eb" stroke-width="2"/>
+<circle cx="667.9" cy="262.5" r="5" fill="#2563eb" stroke="#2563eb" stroke-width="2"/>
+<circle cx="720.0" cy="259.4" r="5" fill="#2563eb" stroke="#2563eb" stroke-width="2"/>
+<circle cx="772.1" cy="221.9" r="5" fill="#2563eb" stroke="#2563eb" stroke-width="2"/>
+<circle cx="824.2" cy="268.8" r="5" fill="#2563eb" stroke="#2563eb" stroke-width="2"/>
+<circle cx="876.2" cy="262.5" r="5" fill="#2563eb" stroke="#2563eb" stroke-width="2"/>
+<circle cx="928.3" cy="287.5" r="5" fill="#2563eb" stroke="#2563eb" stroke-width="2"/>
+<circle cx="980.4" cy="240.6" r="5" fill="#2563eb" stroke="#2563eb" stroke-width="2"/>
+<circle cx="1032.5" cy="206.2" r="5" fill="#2563eb" stroke="#2563eb" stroke-width="2"/>
+<circle cx="1084.6" cy="271.9" r="5" fill="#2563eb" stroke="#2563eb" stroke-width="2"/>
+<circle cx="1136.7" cy="275.0" r="5" fill="#2563eb" stroke="#2563eb" stroke-width="2"/>
+<circle cx="1188.8" cy="334.4" r="5" fill="#2563eb" stroke="#2563eb" stroke-width="2"/>
+<circle cx="1240.8" cy="328.1" r="5" fill="#2563eb" stroke="#2563eb" stroke-width="2"/>
+<circle cx="1292.9" cy="312.5" r="5" fill="#2563eb" stroke="#2563eb" stroke-width="2"/>
+<circle cx="1345.0" cy="356.2" r="5" fill="#2563eb" stroke="#2563eb" stroke-width="2"/>
+<text x="95" y="476" class="label">Рыба · все записи Goldfish · 38 событий</text>
+<line x1="95" y1="750.0" x2="1345" y2="750.0" class="grid"/>
+<text x="83" y="754.0" text-anchor="end" class="small">0</text>
+<line x1="95" y1="666.7" x2="1345" y2="666.7" class="grid"/>
+<text x="83" y="670.7" text-anchor="end" class="small">10</text>
+<line x1="95" y1="583.3" x2="1345" y2="583.3" class="grid"/>
+<text x="83" y="587.3" text-anchor="end" class="small">20</text>
+<line x1="95" y1="500.0" x2="1345" y2="500.0" class="grid"/>
+<text x="83" y="504.0" text-anchor="end" class="small">30</text>
+<line x1="95" y1="750" x2="1345" y2="750" class="axis"/>
+<polyline points="109.9,541.7 124.8,650.0 169.4,591.7 176.8,708.3 221.5,650.0 228.9,650.0 273.6,691.7 281.0,625.0 325.7,741.7 333.1,741.7 377.7,741.7 385.2,741.7 429.8,750.0 437.3,741.7 481.9,741.7 489.3,741.7 534.0,700.0 541.4,641.7 586.1,741.7 593.5,575.0 638.2,608.3 645.6,716.7 690.2,608.3 697.7,741.7 742.3,750.0 749.8,633.3 794.4,750.0 801.8,666.7 853.9,658.3 906.0,708.3 958.1,683.3 1010.2,675.0 1062.3,633.3 1114.3,658.3 1166.4,533.3 1218.5,525.0 1270.6,600.0 1322.7,625.0" fill="none" stroke="#059669" stroke-width="2" stroke-opacity="0.7"/>
+<circle cx="109.9" cy="541.7" r="5" fill="#059669" stroke="#059669" stroke-width="2"/>
+<circle cx="124.8" cy="650.0" r="5" fill="#059669" stroke="#059669" stroke-width="2"/>
+<circle cx="169.4" cy="591.7" r="5" fill="#059669" stroke="#059669" stroke-width="2"/>
+<circle cx="176.8" cy="708.3" r="5" fill="#059669" stroke="#059669" stroke-width="2"/>
+<circle cx="221.5" cy="650.0" r="5" fill="#059669" stroke="#059669" stroke-width="2"/>
+<circle cx="228.9" cy="650.0" r="5" fill="#059669" stroke="#059669" stroke-width="2"/>
+<circle cx="273.6" cy="691.7" r="5" fill="#059669" stroke="#059669" stroke-width="2"/>
+<circle cx="281.0" cy="625.0" r="5" fill="#059669" stroke="#059669" stroke-width="2"/>
+<circle cx="325.7" cy="741.7" r="5" fill="#ffffff" stroke="#94a3b8" stroke-width="2"/>
+<circle cx="333.1" cy="741.7" r="5" fill="#ffffff" stroke="#94a3b8" stroke-width="2"/>
+<circle cx="377.7" cy="741.7" r="5" fill="#ffffff" stroke="#94a3b8" stroke-width="2"/>
+<circle cx="385.2" cy="741.7" r="5" fill="#ffffff" stroke="#94a3b8" stroke-width="2"/>
+<circle cx="429.8" cy="750.0" r="5" fill="#ffffff" stroke="#94a3b8" stroke-width="2"/>
+<circle cx="437.3" cy="741.7" r="5" fill="#ffffff" stroke="#94a3b8" stroke-width="2"/>
+<circle cx="481.9" cy="741.7" r="5" fill="#ffffff" stroke="#94a3b8" stroke-width="2"/>
+<circle cx="489.3" cy="741.7" r="5" fill="#ffffff" stroke="#94a3b8" stroke-width="2"/>
+<circle cx="534.0" cy="700.0" r="5" fill="#059669" stroke="#059669" stroke-width="2"/>
+<circle cx="541.4" cy="641.7" r="5" fill="#059669" stroke="#059669" stroke-width="2"/>
+<circle cx="586.1" cy="741.7" r="5" fill="#ffffff" stroke="#94a3b8" stroke-width="2"/>
+<circle cx="593.5" cy="575.0" r="5" fill="#059669" stroke="#059669" stroke-width="2"/>
+<circle cx="638.2" cy="608.3" r="5" fill="#059669" stroke="#059669" stroke-width="2"/>
+<circle cx="645.6" cy="716.7" r="5" fill="#059669" stroke="#059669" stroke-width="2"/>
+<circle cx="690.2" cy="608.3" r="5" fill="#059669" stroke="#059669" stroke-width="2"/>
+<circle cx="697.7" cy="741.7" r="5" fill="#ffffff" stroke="#94a3b8" stroke-width="2"/>
+<circle cx="742.3" cy="750.0" r="5" fill="#ffffff" stroke="#94a3b8" stroke-width="2"/>
+<circle cx="749.8" cy="633.3" r="5" fill="#059669" stroke="#059669" stroke-width="2"/>
+<circle cx="794.4" cy="750.0" r="5" fill="#ffffff" stroke="#94a3b8" stroke-width="2"/>
+<circle cx="801.8" cy="666.7" r="5" fill="#059669" stroke="#059669" stroke-width="2"/>
+<circle cx="853.9" cy="658.3" r="5" fill="#059669" stroke="#059669" stroke-width="2"/>
+<circle cx="906.0" cy="708.3" r="5" fill="#059669" stroke="#059669" stroke-width="2"/>
+<circle cx="958.1" cy="683.3" r="5" fill="#059669" stroke="#059669" stroke-width="2"/>
+<circle cx="1010.2" cy="675.0" r="5" fill="#059669" stroke="#059669" stroke-width="2"/>
+<circle cx="1062.3" cy="633.3" r="5" fill="#059669" stroke="#059669" stroke-width="2"/>
+<circle cx="1114.3" cy="658.3" r="5" fill="#059669" stroke="#059669" stroke-width="2"/>
+<circle cx="1166.4" cy="533.3" r="5" fill="#059669" stroke="#059669" stroke-width="2"/>
+<circle cx="1218.5" cy="525.0" r="5" fill="#059669" stroke="#059669" stroke-width="2"/>
+<circle cx="1270.6" cy="600.0" r="5" fill="#059669" stroke="#059669" stroke-width="2"/>
+<circle cx="1322.7" cy="625.0" r="5" fill="#059669" stroke="#059669" stroke-width="2"/>
+<text x="95.0" y="785" text-anchor="middle" class="small">20.04</text>
+<text x="176.8" y="785" text-anchor="middle" class="small">01.05</text>
+<text x="407.5" y="785" text-anchor="middle" class="small">01.06</text>
+<text x="630.7" y="785" text-anchor="middle" class="small">01.07</text>
+<text x="861.4" y="785" text-anchor="middle" class="small">01.08</text>
+<text x="1092.0" y="785" text-anchor="middle" class="small">01.09</text>
+<text x="1315.2" y="785" text-anchor="middle" class="small">01.10</text>
+<rect x="95" y="815" width="1250" height="40" rx="7" fill="#f8fafc" stroke="#dbe3ea"/>
+<text x="115" y="841" class="subtitle">Единорог: 44,1 до цены → 25,2 после · Рыба: 8,0 до цены* → 19,4 после · *до цены 12 из 33 записей имели 0–1 участника.</text>
+</svg>
