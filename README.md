@@ -31,7 +31,7 @@ pip install -r requirements.txt
 
 ### 2. Конфигурация
 
-Создайте `.env` в корне проекта:
+Создайте `bot/.env` в корне проекта (путь к env-файлу задан в `core/config.py`):
 
 ```env
 TELEGRAM_BOT_TOKEN=<токен бота>
@@ -99,7 +99,7 @@ main.py  →  bot/telegram/  →  bot/handlers/  →  services/  →  core/model
 
 ### Состояния турнира
 
-`REGISTRATION → ONGOING → VOTING → CLOSED`
+`REGISTRATION → ONGOING → CLOSED`
 
 ### Правила голосования
 
