@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from services.achievements import AppliedResult
@@ -19,10 +19,10 @@ def write_achievement_report_log(
     created_at: datetime | None = None,
 ) -> Path:
     """Атомарно записать один JSON-файл отчёта и вернуть его путь."""
-    timestamp = created_at or datetime.now(timezone.utc)
+    timestamp = created_at or datetime.now(UTC)
     if timestamp.tzinfo is None:
-        timestamp = timestamp.replace(tzinfo=timezone.utc)
-    timestamp = timestamp.astimezone(timezone.utc)
+        timestamp = timestamp.replace(tzinfo=UTC)
+    timestamp = timestamp.astimezone(UTC)
     log_dir = Path(directory)
     log_dir.mkdir(parents=True, exist_ok=True)
     stamp = timestamp.strftime("%Y%m%dT%H%M%S.%fZ")

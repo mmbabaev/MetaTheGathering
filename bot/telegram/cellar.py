@@ -29,7 +29,7 @@ async def _announce(bot, db, reservation, *, cancelled: bool = False) -> bool:
         try:
             await bot.send_message(chat_id=recipient_tg_id, text=text)
             delivered = True
-        except Exception:  # noqa: BLE001 — one recipient must not break the player's action
+        except Exception:
             logger.exception("Cellar Telegram notification failed for %s", recipient_tg_id)
     return delivered
 

@@ -115,11 +115,7 @@ def test_non_pair_rows_keep_same_schedule_with_zero_offset(monkeypatch):
         migration.upgrade()
 
         upgraded = sa.Table("club_schedules", sa.MetaData(), autoload_with=connection)
-        row = (
-            connection.execute(sa.select(upgraded).where(upgraded.c.club_name == "Goldfish"))
-            .mappings()
-            .one()
-        )
+        row = connection.execute(sa.select(upgraded).where(upgraded.c.club_name == "Goldfish")).mappings().one()
 
     assert row["club_name"] == "Goldfish"
     assert row["weekday"] == "friday"

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -130,7 +130,7 @@ class TournamentCreationPlanService:
             raise InvalidCreationPlan("Время турнира уже прошло.")
         club = identity_to_club(identity, plan.announcement_chat_id)
         local_tz = ZoneInfo(identity.timezone)
-        event_at_local = plan.event_at.replace(tzinfo=timezone.utc).astimezone(local_tz)
+        event_at_local = plan.event_at.replace(tzinfo=UTC).astimezone(local_tz)
 
         if plan.tournament_id is None:
             date_str = event_at_local.strftime("%Y-%m-%d")

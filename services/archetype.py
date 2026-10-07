@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import List
 
 from sqlalchemy import func, nulls_last, select
 from sqlalchemy.orm import Session
@@ -23,12 +22,12 @@ class ArchetypeService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def list_archetypes(self) -> List[ArchetypeItem]:
+    def list_archetypes(self) -> list[ArchetypeItem]:
         stmt = select(models.Archetype).order_by(models.Archetype.name.asc())
         rows = self.db.execute(stmt).scalars().all()
         return [ArchetypeItem(id=a.id, name=a.name) for a in rows]
 
-    def list_top_archetypes(self, n: int = 10) -> List[ArchetypeItem]:
+    def list_top_archetypes(self, n: int = 10) -> list[ArchetypeItem]:
         """Топ-N архетипов по числу использований в турнирах прошедших фазу регистрации.
 
         Участники турниров в статусе REGISTRATION не учитываются — иначе только что
@@ -61,7 +60,7 @@ class ArchetypeService:
         rows = self.db.execute(stmt).all()
         return [ArchetypeItem(id=row.id, name=row.name) for row in rows]
 
-    def list_user_recent_archetypes(self, tg_id: int) -> List[ArchetypeItem]:
+    def list_user_recent_archetypes(self, tg_id: int) -> list[ArchetypeItem]:
         """История архетипов пользователя: самые свежие первыми, без дублей.
 
         Источники (в порядке приоритета):
@@ -120,7 +119,7 @@ class ArchetypeService:
 
     def list_user_tournament_archetypes(
         self, user_id: int, exclude_tournament_id: int | None = None, limit: int = 3
-    ) -> List[ArchetypeItem]:
+    ) -> list[ArchetypeItem]:
         """Колоды, которыми пользователь играл в ТУРНИРАХ (самые свежие первыми, без дублей).
 
         Только реальное участие в турнирах — без UserDeckHistory. Опционально исключает
@@ -139,7 +138,7 @@ class ArchetypeService:
             stmt = stmt.where(models.Participant.tournament_id != exclude_tournament_id)
 
         seen: set[int] = set()
-        items: List[ArchetypeItem] = []
+        items: list[ArchetypeItem] = []
         for aid, name in self.db.execute(stmt).all():
             if aid in seen:
                 continue
@@ -149,7 +148,7 @@ class ArchetypeService:
                 break
         return items
 
-    def list_archetypes_for_user(self, tg_id: int, total: int = 10) -> List[ArchetypeItem]:
+    def list_archetypes_for_user(self, tg_id: int, total: int = 10) -> list[ArchetypeItem]:
         """Устаревший метод для обратной совместимости тестов."""
         recent = self.list_user_recent_archetypes(tg_id)
         recent_set = {a.id for a in recent}

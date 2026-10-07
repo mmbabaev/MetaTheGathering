@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 import unicodedata
 from collections import Counter
-from typing import Optional
 
 _FAMILY_SUFFIXES = (
     "ов",
@@ -118,7 +117,7 @@ def is_single_word_name_typo(imported_name: str, candidate_name: str) -> bool:
     return min(len(imported_diff), len(candidate_diff)) >= 5 and _is_one_edit_apart(imported_diff, candidate_diff)
 
 
-def format_participant_name(first_name: Optional[str], last_name: Optional[str]) -> str:
+def format_participant_name(first_name: str | None, last_name: str | None) -> str:
     """«Фамилия Имя».
 
     Оба поля есть — просто last_name + first_name. Только first_name (Telegram-юзер с именем
@@ -137,7 +136,7 @@ def format_participant_name(first_name: Optional[str], last_name: Optional[str])
     return first_name
 
 
-def family_name_sort_key(first_name: Optional[str], last_name: Optional[str]) -> str:
+def family_name_sort_key(first_name: str | None, last_name: str | None) -> str:
     """Фамилия в нижнем регистре — для сортировки по фамилии."""
     if last_name:
         return last_name.lower()

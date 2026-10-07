@@ -1,7 +1,6 @@
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 from dotenv import load_dotenv
 from pydantic import AnyUrl
@@ -30,22 +29,22 @@ else:
 class ClubSchedule:
     weekday: str  # "friday"
     game_time: str  # "19:30"
-    create_time: Optional[str] = None  # overrides TOURNAMENT_CREATE_TIME if set
+    create_time: str | None = None  # overrides TOURNAMENT_CREATE_TIME if set
     create_days_before: int = 0  # 0 = в день игры, 1 = накануне
-    aetherhub_fetch_times: List[str] = field(default_factory=list)  # ["20:15", "21:00"]
+    aetherhub_fetch_times: list[str] = field(default_factory=list)  # ["20:15", "21:00"]
     find_latest: bool = False  # if True: import latest pauper, ignore date (debug only)
-    reminder_time: Optional[str] = None  # "HH:MM" — напоминание «запишите колоду» перед стартом; None = нет
+    reminder_time: str | None = None  # "HH:MM" — напоминание «запишите колоду» перед стартом; None = нет
 
 
 @dataclass
 class Club:
     name: str
     chat_id: int
-    schedules: List[ClubSchedule]
+    schedules: list[ClubSchedule]
     is_online: bool = False
-    aetherhub_url: Optional[str] = None  # https://aetherhub.com/User/GoldFish
+    aetherhub_url: str | None = None  # https://aetherhub.com/User/GoldFish
     title_prefix: str = ""
-    timezone: Optional[str] = None  # None = settings.TOURNAMENT_TIMEZONE
+    timezone: str | None = None  # None = settings.TOURNAMENT_TIMEZONE
 
 
 class Settings(BaseSettings):
@@ -111,25 +110,25 @@ class Settings(BaseSettings):
     TOURNAMENT_CREATE_TIME: str = _app_cfg.tournament_create_time
     VERSION: str = _app_cfg.version
     # Личка владельца для служебных анонсов (создан турнир, колоды раскрыты). Несекретно — в коде, не в .env.
-    OWNER_CHAT_ID: Optional[int] = _app_cfg.owner_chat_id
+    OWNER_CHAT_ID: int | None = _app_cfg.owner_chat_id
 
     model_config = SettingsConfigDict(env_file=_env_file, env_file_encoding="utf-8", extra="ignore")
 
     @property
-    def admin_ids(self) -> List[int]:
+    def admin_ids(self) -> list[int]:
         return [int(x.strip()) for x in self.ADMIN_IDS.split(",") if x.strip()]
 
     @property
-    def notify_allowed_ids(self) -> Optional[List[int]]:
+    def notify_allowed_ids(self) -> list[int] | None:
         """None = все разрешены (прод). Список = только указанные (дебаг)."""
         return _app_cfg.notify_allowed_ids
 
     @property
-    def cellar_coordinator_tg_ids(self) -> List[int]:
+    def cellar_coordinator_tg_ids(self) -> list[int]:
         return [int(value.strip()) for value in self.CELLAR_COORDINATOR_TG_IDS.split(",") if value.strip()]
 
     @property
-    def cellar_coordinator_usernames(self) -> List[str]:
+    def cellar_coordinator_usernames(self) -> list[str]:
         return list(
             dict.fromkeys(
                 value.strip().lstrip("@").casefold()
@@ -139,7 +138,7 @@ class Settings(BaseSettings):
         )
 
     @property
-    def chat_ids(self) -> List[int]:
+    def chat_ids(self) -> list[int]:
         """Все известные chat_id клубов."""
         ids = []
         if _app_cfg.goldfish_chat_id:

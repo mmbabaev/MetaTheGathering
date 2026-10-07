@@ -19,8 +19,8 @@
 ### Изменения в `User` (только additive)
 
 ```python
-email        = Column(String(255), unique=True, nullable=True, index=True)  # новое
-display_name = Column(String(255), nullable=True)                           # новое
+email = Column(String(255), unique=True, nullable=True, index=True)  # новое
+display_name = Column(String(255), nullable=True)  # новое
 ```
 
 `tg_id` остаётся `NOT NULL`. Веб-пользователь создаётся с отрицательным `tg_id` (то же что плейсхолдеры для оппонентов). Email отличает веб-юзеров от плейсхолдеров по имени.
@@ -31,11 +31,11 @@ display_name = Column(String(255), nullable=True)                           # н
 class WebAuthToken(Base):
     __tablename__ = "web_auth_tokens"
 
-    id         = Column(Integer, primary_key=True)
-    user_id    = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     token_hash = Column(String(64), nullable=False, unique=True)  # SHA-256 hex
     expires_at = Column(DateTime, nullable=False)
-    used_at    = Column(DateTime, nullable=True)  # NULL = не использован
+    used_at = Column(DateTime, nullable=True)  # NULL = не использован
 ```
 
 Сессия — `user_id` в подписанном httponly cookie через `itsdangerous.TimestampSigner`, TTL 90 дней.

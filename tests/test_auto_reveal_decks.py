@@ -1,6 +1,6 @@
 """Tests for AutoRevealDecksJob — reveal decks of today's active tournaments at 22:00 (#112)."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -11,7 +11,7 @@ from core.config import settings
 from core.schemas import TournamentCreate
 from services.tournament import TournamentService
 
-NOW = datetime(2026, 6, 17, 22, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 6, 17, 22, 0, tzinfo=UTC)
 
 
 def _tournament(db, chat_id, *, hidden=True, status=models.TournamentStatus.REGISTRATION, created_days_ago=0):

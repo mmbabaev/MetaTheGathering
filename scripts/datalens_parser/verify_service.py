@@ -18,7 +18,7 @@ from pathlib import Path
 _ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_ROOT))
 
-from services.datalens import (  # noqa: E402
+from services.datalens import (
     CHART_IDS,
     Chart,
     DataLensClient,

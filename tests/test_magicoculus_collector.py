@@ -168,9 +168,7 @@ def test_aetherhub_validation_accepts_unique_single_letter_name_typo(db, svc, us
         standings=["Бурбаев Констанин"],
     )
 
-    result = MagicOculusTournamentCollector(db, aetherhub).collect(
-        tournament.id, validate_aetherhub=True
-    )
+    result = MagicOculusTournamentCollector(db, aetherhub).collect(tournament.id, validate_aetherhub=True)
 
     assert result.player_decks == [
         MagicOculusPlayerDeck(player="Бурбаев Константин", deck="Jeskai Ephemerate", final_place=1)

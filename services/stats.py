@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -21,7 +20,7 @@ class MetaRow:
 @dataclass
 class PlayerStatsRow:
     user_id: int
-    username: Optional[str]
+    username: str | None
     tournaments_played: int
     total_upvotes: int
     total_downvotes: int
@@ -31,7 +30,7 @@ class StatsService:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_tournament_meta(self, tournament_id: int) -> List[MetaRow]:
+    def get_tournament_meta(self, tournament_id: int) -> list[MetaRow]:
         stmt = (
             select(
                 models.Archetype.id.label("archetype_id"),

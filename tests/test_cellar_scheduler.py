@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 
 import pytest
@@ -118,7 +118,7 @@ async def test_coordinator_summary_is_targeted_and_idempotent(db, user_svc, monk
     _enable_cellar(db)
     event_date = date(2026, 8, 24)
     _reserve(db, user_svc, event_date)
-    now = datetime(2026, 8, 24, 16, 16, tzinfo=timezone.utc)
+    now = datetime(2026, 8, 24, 16, 16, tzinfo=UTC)
     TournamentService(db).create_tournament(
         TournamentCreate(
             title="Edinorog",
@@ -148,7 +148,7 @@ async def test_failed_coordinator_delivery_retries_without_resending_success(db,
     _enable_cellar(db)
     event_date = date(2026, 8, 24)
     _reserve(db, user_svc, event_date)
-    now = datetime(2026, 8, 24, 16, 16, tzinfo=timezone.utc)
+    now = datetime(2026, 8, 24, 16, 16, tzinfo=UTC)
     TournamentService(db).create_tournament(
         TournamentCreate(
             title="Edinorog",
@@ -189,7 +189,7 @@ async def test_failed_coordinator_delivery_retries_without_resending_success(db,
 async def test_coordinator_summary_is_not_sent_more_than_one_hour_early(db, user_svc, monkeypatch):
     _enable_cellar(db)
     _reserve(db, user_svc)
-    now = datetime(2026, 8, 24, 16, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 8, 24, 16, 0, tzinfo=UTC)
     TournamentService(db).create_tournament(
         TournamentCreate(
             title="Edinorog",
@@ -210,7 +210,7 @@ async def test_coordinator_summary_is_not_sent_more_than_one_hour_early(db, user
 async def test_debug_summary_is_sent_only_to_owner(db, user_svc, monkeypatch):
     _enable_cellar(db)
     _reserve(db, user_svc)
-    now = datetime(2026, 8, 24, 16, 16, tzinfo=timezone.utc)
+    now = datetime(2026, 8, 24, 16, 16, tzinfo=UTC)
     TournamentService(db).create_tournament(
         TournamentCreate(
             title="Edinorog",
@@ -238,6 +238,6 @@ async def test_cellar_jobs_do_nothing_while_feature_is_disabled(db):
     bot = AsyncMock()
 
     assert await CellarCatalogSyncJob(source).run(db=db) is None
-    await CellarCoordinatorReminderJob().run(bot, now=datetime.now(timezone.utc), db=db)
+    await CellarCoordinatorReminderJob().run(bot, now=datetime.now(UTC), db=db)
 
     bot.send_message.assert_not_awaited()

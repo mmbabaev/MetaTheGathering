@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from bot.handlers.base import HandlerResult
@@ -206,8 +206,8 @@ class CreateTournamentWizardHandler:
         except InvalidCreationPlan as exc:
             return HandlerResult(str(exc), is_alert=True)
         draft.clear()
-        local_announce = announce_at.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(identity.timezone))
-        local_event = event_at.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(identity.timezone))
+        local_announce = announce_at.replace(tzinfo=UTC).astimezone(ZoneInfo(identity.timezone))
+        local_event = event_at.replace(tzinfo=UTC).astimezone(ZoneInfo(identity.timezone))
         when = (
             "сейчас"
             if announce_at <= self._now_utc_naive(now) + timedelta(minutes=1)
@@ -299,7 +299,6 @@ class CreateTournamentWizardHandler:
         """Концеход: шаг «Название» — своё название или авто «Концеход Pauper #N»."""
         auto = konetskhod_title(self.plans.db, identity.title_prefix)
         keyboard = self.keyboards.create_tournament_name_keyboard(
-            auto_title=auto,
             custom_title=draft.get("custom_title"),
         )
         default_label = f"«{draft['custom_title']}»" if draft.get("custom_title") else f"«{auto}»"
@@ -345,11 +344,11 @@ class CreateTournamentWizardHandler:
             announce_local = datetime.combine(
                 date.fromisoformat(draft["announce_date"]), time.fromisoformat(draft["announce_time"]), tz
             )
-            announce_at = announce_local.astimezone(timezone.utc).replace(tzinfo=None)
+            announce_at = announce_local.astimezone(UTC).replace(tzinfo=None)
         event_local = datetime.combine(
             date.fromisoformat(draft["event_date"]), time.fromisoformat(draft["event_time"]), tz
         )
-        event_at = event_local.astimezone(timezone.utc).replace(tzinfo=None)
+        event_at = event_local.astimezone(UTC).replace(tzinfo=None)
         return announce_at, event_at
 
     def _validate_datetimes(self, identity: ClubIdentity, draft: dict, now: datetime | None) -> str | None:
@@ -382,13 +381,13 @@ class CreateTournamentWizardHandler:
 
     @staticmethod
     def _now_utc_naive(now: datetime | None) -> datetime:
-        current = now or datetime.now(timezone.utc)
+        current = now or datetime.now(UTC)
         if current.tzinfo is None:
             return current
-        return current.astimezone(timezone.utc).replace(tzinfo=None)
+        return current.astimezone(UTC).replace(tzinfo=None)
 
     def _now_local(self, identity: ClubIdentity, now: datetime | None) -> datetime:
-        current = now or datetime.now(timezone.utc)
+        current = now or datetime.now(UTC)
         if current.tzinfo is None:
-            current = current.replace(tzinfo=timezone.utc)
+            current = current.replace(tzinfo=UTC)
         return current.astimezone(ZoneInfo(identity.timezone))

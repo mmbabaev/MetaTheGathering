@@ -14,7 +14,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -30,10 +29,10 @@ class Participation:
     """Участие игрока в турнире, засчитанное для ачивок (колоду записал он сам)."""
 
     tournament_id: int
-    club: Optional[str]
+    club: str | None
     played_at: datetime
-    archetype_name: Optional[str]
-    deck_key: Optional[str]  # general_name или name — «одна и та же дека»
+    archetype_name: str | None
+    deck_key: str | None  # general_name или name — «одна и та же дека»
 
 
 @dataclass(frozen=True)
@@ -59,10 +58,10 @@ class AchievementMatch:
     tournament_id: int
     round_number: int
     player_name: str
-    player_user_id: Optional[int]
-    opponent_name: Optional[str]
-    player_wins: Optional[int]
-    opponent_wins: Optional[int]
+    player_user_id: int | None
+    opponent_name: str | None
+    player_wins: int | None
+    opponent_wins: int | None
 
     @property
     def is_bye(self) -> bool:
@@ -94,18 +93,18 @@ def tournament_date(tournament: models.Tournament) -> datetime:
 class AchievementHistory:
     """Исторические данные игроков с кэшированием на прогон."""
 
-    def __init__(self, db: Session, users: Optional[UserService] = None) -> None:
+    def __init__(self, db: Session, users: UserService | None = None) -> None:
         self.db = db
         self._users = users if users is not None else UserService(db)
-        self._user_by_name: dict[str, Optional[models.User]] = {}
+        self._user_by_name: dict[str, models.User | None] = {}
         self._pairings: dict[int, list[models.RoundPairing]] = {}
         self._matches: dict[int, list[AchievementMatch]] = {}
         self._participations: dict[int, list[Participation]] = {}
-        self._first_recorder: dict[int, Optional[int]] = {}
+        self._first_recorder: dict[int, int | None] = {}
 
     # ------------------------------------------------------------------ имена
 
-    def user_by_name(self, name: str) -> Optional[models.User]:
+    def user_by_name(self, name: str) -> models.User | None:
         """Имя из парингов → аккаунт без merge/create и любых других writes."""
         if name not in self._user_by_name:
             normalized = re.sub(r"\(\s*\d+\s*points?\s*\)", "", name or "", flags=re.IGNORECASE)
@@ -169,7 +168,7 @@ class AchievementHistory:
     def tournament_is_eligible(self, tournament_id: int) -> bool:
         return self.is_closed(tournament_id) and self.is_complete(tournament_id)
 
-    def record_for(self, tournament_id: int, user_id: int) -> Optional[PlayerRecord]:
+    def record_for(self, tournament_id: int, user_id: int) -> PlayerRecord | None:
         """Результат игрока в турнире. None — игрока нет в парингах."""
         matches = [match for match in self.matches(tournament_id) if match.player_user_id == user_id]
         if not matches:
@@ -203,7 +202,7 @@ class AchievementHistory:
 
     # ------------------------------------------------------------- участия
 
-    def participations(self, user_id: int, *, until: Optional[datetime] = None) -> list[Participation]:
+    def participations(self, user_id: int, *, until: datetime | None = None) -> list[Participation]:
         """Засчитанные участия игрока по возрастанию даты (гейт §2.5 уже применён).
 
         ``until`` отсекает турниры позже указанной даты. Это важно для бэкафилла: оценивая
@@ -247,7 +246,7 @@ class AchievementHistory:
         self._participations[user_id] = items
         return items
 
-    def undefeated_participations(self, user_id: int, *, until: Optional[datetime] = None) -> list[Participation]:
+    def undefeated_participations(self, user_id: int, *, until: datetime | None = None) -> list[Participation]:
         """Участия, где игрок прошёл турнир X-0 (только завершённые турниры)."""
         return [
             p
@@ -313,7 +312,7 @@ class AchievementHistory:
 
     # ------------------------------------------------------------ первый ход
 
-    def first_recorder(self, tournament_id: int) -> Optional[int]:
+    def first_recorder(self, tournament_id: int) -> int | None:
         """Кто из самозаписавшихся первым записал колоду на турнир. None — таких нет.
 
         Момент записи — ``Participant.created_at`` (регистрация в боте идёт сразу с выбором
@@ -339,13 +338,13 @@ class AchievementHistory:
         self._first_recorder[tournament_id] = eligible[0][2] if eligible else None
         return self._first_recorder[tournament_id]
 
-    def first_recorder_participations(self, user_id: int, *, until: Optional[datetime] = None) -> list[Participation]:
+    def first_recorder_participations(self, user_id: int, *, until: datetime | None = None) -> list[Participation]:
         """Участия, где игрок записал свою колоду раньше всех."""
         return [p for p in self.participations(user_id, until=until) if self.first_recorder(p.tournament_id) == user_id]
 
     # ------------------------------------------------------------ метаписец
 
-    def scribe_count(self, user: models.User, *, until: Optional[datetime] = None) -> int:
+    def scribe_count(self, user: models.User, *, until: datetime | None = None) -> int:
         """Сколько ЧУЖИХ колод записал игрок. ``until`` — не позже даты этого турнира."""
         if until is not None:
             return len(self._scribe_rows(user, until=until))

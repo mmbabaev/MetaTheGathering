@@ -2,7 +2,7 @@
 
 import hashlib
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -18,7 +18,7 @@ def _hash_token(token: str) -> str:
 
 def create_magic_token(db: Session, user: models.User) -> str:
     token = secrets.token_urlsafe(32)
-    expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=MAGIC_LINK_TTL_MINUTES)
+    expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=MAGIC_LINK_TTL_MINUTES)
     db.add(models.WebAuthToken(user_id=user.id, token_hash=_hash_token(token), expires_at=expires_at))
     db.commit()
     return token
@@ -26,7 +26,7 @@ def create_magic_token(db: Session, user: models.User) -> str:
 
 def verify_magic_token(db: Session, token: str) -> models.User | None:
     token_hash = _hash_token(token)
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
     record = db.execute(
         select(models.WebAuthToken).where(
             models.WebAuthToken.token_hash == token_hash,

@@ -2,7 +2,7 @@
 
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from telegram import Message, Update, User
 from telegram.ext import ContextTypes
@@ -83,7 +83,7 @@ async def callback_aetherhub_import_prompt(update: Update, context: ContextTypes
             stored_url = None
             club_url = None
             tournament_title = None
-            event_date = datetime.now(timezone.utc).date()
+            event_date = datetime.now(UTC).date()
     finally:
         db.close()
 

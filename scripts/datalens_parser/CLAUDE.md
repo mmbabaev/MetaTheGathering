@@ -58,10 +58,18 @@ __interval_2025-01-01T00:00:00.000Z___relative_-0d   (ТРИ подчёркив�
 
 ```python
 import requests
-H = {"Content-Type":"application/json","Accept":"application/json","Origin":"https://datalens.yandex",
-     "Referer":"https://datalens.yandex/6dr39r9a9l9mt","x-dl-component":"ui","x-dl-display-mode":"basic"}
-d = requests.post("https://datalens.yandex/gateway/root/us/getPublicEntry",
-                  json={"entryId":"6dr39r9a9l9mt"}, headers=H).json()
+
+H = {
+    "Content-Type": "application/json",
+    "Accept": "application/json",
+    "Origin": "https://datalens.yandex",
+    "Referer": "https://datalens.yandex/6dr39r9a9l9mt",
+    "x-dl-component": "ui",
+    "x-dl-display-mode": "basic",
+}
+d = requests.post(
+    "https://datalens.yandex/gateway/root/us/getPublicEntry", json={"entryId": "6dr39r9a9l9mt"}, headers=H
+).json()
 for tab in d["data"]["tabs"]:
     for it in tab.get("items", []):
         for w in it.get("data", {}).get("tabs", []):

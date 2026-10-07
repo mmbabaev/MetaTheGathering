@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
+from collections.abc import Iterable
 from datetime import datetime, timedelta
-from typing import Iterable
 
 from pydantic import BaseModel, computed_field
 from sqlalchemy import select
@@ -142,8 +142,7 @@ def _user_name_variants(user: models.User) -> set[str]:
 
 def _complete_pairings(rows: list[models.RoundPairing]) -> bool:
     return bool(rows) and all(
-        row.opponent_name is None or (row.player_wins is not None and row.opponent_wins is not None)
-        for row in rows
+        row.opponent_name is None or (row.player_wins is not None and row.opponent_wins is not None) for row in rows
     )
 
 
@@ -258,7 +257,9 @@ class SeasonStatsService:
 
                 opponent = name_to_user.get(_normalized_name(pairing.opponent_name))
                 if opponent is None or opponent.id == player.id:
-                    match_names = sorted((_normalized_name(pairing.player_name), _normalized_name(pairing.opponent_name)))
+                    match_names = sorted(
+                        (_normalized_name(pairing.player_name), _normalized_name(pairing.opponent_name))
+                    )
                     unique_match_keys.add((tournament.id, pairing.round_number, *match_names))
                     continue
                 users[opponent.id] = opponent
@@ -365,9 +366,7 @@ class SeasonStatsService:
             for variant in _user_name_variants(participant.user):
                 candidates[variant].append(participant.user)
         return {
-            variant: matches[0]
-            for variant, matches in candidates.items()
-            if len({match.id for match in matches}) == 1
+            variant: matches[0] for variant, matches in candidates.items() if len({match.id for match in matches}) == 1
         }
 
     @staticmethod

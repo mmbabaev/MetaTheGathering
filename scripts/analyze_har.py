@@ -7,7 +7,7 @@ har_path = sys.argv[1] if len(sys.argv) > 1 else "/Users/mbabaev/Downloads/aethe
 
 print(f"Analyzing HAR file: {har_path}")
 
-with open(har_path, "r") as f:
+with open(har_path) as f:
     har_data = json.load(f)
 
 entries = har_data["log"]["entries"]

@@ -84,7 +84,7 @@ async def _render_shelf(shelf) -> bytes | None:
     """Полка картинкой. None — не нарисовалась; рисуем в потоке, это ~100 мс CPU."""
     try:
         return await asyncio.to_thread(render_shelf, shelf.image_items(), title=shelf.title)
-    except Exception:  # noqa: BLE001 — картинка украшение, текст уже готов
+    except Exception:
         logger.exception("[achievements] shelf render failed")
         return None
 
@@ -103,7 +103,7 @@ async def _render_cards(granted: list, subtitle: str) -> list[bytes]:
                     subtitle=subtitle,
                 )
             )
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.exception("[achievements] card render failed for %s", item.definition.code)
     return cards
 
@@ -162,7 +162,7 @@ async def _deliver_pending_reports(
         delivery.attempts += 1
         try:
             await bot.send_message(chat_id=delivery.chat_id, text=delivery.payload)
-        except Exception as exc:  # noqa: BLE001 — pending delivery повторится при следующем запуске
+        except Exception as exc:
             # Не сохраняем текст исключения: он может содержать неожиданные приватные данные.
             delivery.last_error = type(exc).__name__
             db.commit()
@@ -253,7 +253,7 @@ async def _send_achievements_report_locked(bot, db, tournament_id: int, features
         try:
             path = write_achievement_report_log(result, messages, settings.ACHIEVEMENT_LOG_DIR)
             logger.info("[achievements] tournament #%s: report logged to %s", tournament_id, path)
-        except Exception:  # noqa: BLE001 — файловый лог не должен блокировать owner-отчёт
+        except Exception:
             logger.exception("[achievements] could not write report log for #%s", tournament_id)
 
     subtitle = " · ".join(part for part in (result.title, result.club) if part)
@@ -273,7 +273,7 @@ async def _send_achievements_report_locked(bot, db, tournament_id: int, features
                     chat_id=settings.OWNER_CHAT_ID,
                     media=[InputMediaPhoto(io.BytesIO(c)) for c in cards],
                 )
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logger.exception("[achievements] could not send cards for #%s", tournament_id)
 
     if owner_complete:

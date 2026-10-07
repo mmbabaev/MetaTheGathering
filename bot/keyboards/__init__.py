@@ -1484,7 +1484,7 @@ class Keyboards:
         rows.append([InlineKeyboardButton("❌ Отмена", callback_data=CB_CREATE_WIZARD_CANCEL)])
         return InlineKeyboardMarkup(rows)
 
-    def create_tournament_name_keyboard(self, *, auto_title: str, custom_title: str | None) -> InlineKeyboardMarkup:
+    def create_tournament_name_keyboard(self, *, custom_title: str | None) -> InlineKeyboardMarkup:
         """Концеход: шаг «Название» — своё название / авто по умолчанию."""
         keep_label = f"✅ Оставить «{custom_title}»" if custom_title else "✅ Оставить по умолчанию"
         return InlineKeyboardMarkup(

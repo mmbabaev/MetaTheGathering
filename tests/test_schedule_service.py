@@ -276,14 +276,14 @@ class TestScheduleHandler:
 
 # ══════════════════════ Фаза 2: редактирование времён и дня недели ══════════════
 
-from bot.handlers.schedule import (  # noqa: E402
+from bot.handlers.schedule import (
     BAD_IMPORTS,
     BAD_TIME,
     WEEKDAY_TAKEN,
     _parse_imports_preset,
     imports_summary,
 )
-from services.schedule import generate_import_times, normalize_time  # noqa: E402
+from services.schedule import generate_import_times, normalize_time
 
 
 class TestNormalizeTime:

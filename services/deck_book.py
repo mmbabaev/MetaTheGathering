@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Optional
 
 # Эмодзи и прочие пиктограммы: игроки метят ими колоду («🟢🔵🐸 Bogles»).
 # Для сравнения имён они шум, а в легенде — квадраты-тофу: в DejaVu таких глифов нет.
@@ -109,6 +108,6 @@ DECK_BOOK = _book(
 )
 
 
-def lookup_deck(name: str) -> Optional[KnownDeck]:
+def lookup_deck(name: str) -> KnownDeck | None:
     """Запись справочника по названию архетипа. None — колоды в справочнике нет."""
     return DECK_BOOK.get(normalize_deck_name(name))

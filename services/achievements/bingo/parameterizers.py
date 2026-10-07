@@ -95,9 +95,7 @@ def instantiate_play_deck_candidates(
     candidates: list[InstantiatedCandidate] = []
     for target in ordered:
         general_name = target.general_name.strip()
-        identity = sha256(f"{stats_snapshot_id}\0{_normalize_general_name(general_name)}".encode("utf-8")).hexdigest()[
-            :16
-        ]
+        identity = sha256(f"{stats_snapshot_id}\0{_normalize_general_name(general_name)}".encode()).hexdigest()[:16]
         candidates.append(
             InstantiatedCandidate.from_manifest(
                 manifest,

@@ -10,9 +10,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Iterable, Optional, Protocol
+from typing import Protocol
 
 from sqlalchemy import select
 
@@ -33,7 +34,7 @@ class Award:
     user_id: int
     code: str
     level: int
-    progress_value: Optional[int]
+    progress_value: int | None
     evidence: str
 
 
@@ -68,7 +69,7 @@ class RuleOutcome:
     started_at: datetime | None = None
     completed_at: datetime | None = None
 
-    def extend(self, other: "RuleOutcome") -> None:
+    def extend(self, other: RuleOutcome) -> None:
         self.awards.extend(other.awards)
         self.progress.extend(other.progress)
 

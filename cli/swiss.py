@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 import typer
 from sqlalchemy import select
 
@@ -32,7 +30,7 @@ def _fail(exc: RoundResultError) -> None:
     raise typer.Exit(1)
 
 
-def _resolve_tournament_id(db, tournament_id: Optional[int]) -> int:
+def _resolve_tournament_id(db, tournament_id: int | None) -> int:
     if tournament_id is not None:
         return tournament_id
     found = db.execute(
@@ -48,7 +46,7 @@ def _resolve_tournament_id(db, tournament_id: Optional[int]) -> int:
     return found.id
 
 
-def _admin_id(admin_id: Optional[int]) -> int:
+def _admin_id(admin_id: int | None) -> int:
     if admin_id is not None:
         return admin_id
     if app_cfg.owner_chat_id is None:
@@ -85,7 +83,7 @@ def setup(
     players: int = typer.Option(DEFAULT_PLAYERS, "--players", "-p", help="Сколько фейковых игроков нужно"),
     rounds: int = typer.Option(DEFAULT_SWISS_ROUNDS, "--rounds", "-r", help="Число Swiss-раундов"),
     playoff: int = typer.Option(DEFAULT_PLAYOFF_SIZE, "--playoff", help="Размер плей-оффа: 8 или 16"),
-    admin_id: Optional[int] = typer.Option(None, "--admin-id", help="tg_id администратора debug-базы"),
+    admin_id: int | None = typer.Option(None, "--admin-id", help="tg_id администратора debug-базы"),
     fill: bool = typer.Option(True, "--fill/--no-fill", help="Сразу заполнить поле фейками"),
 ):
     """Создать debug-турнир Endstep на внутреннем Swiss и заполнить его игроками."""
@@ -135,7 +133,7 @@ def close_active():
 
 @app.command("fill")
 def fill(
-    tournament_id: Optional[int] = typer.Option(None, "--id", help="ID турнира (по умолчанию — последний Endstep)"),
+    tournament_id: int | None = typer.Option(None, "--id", help="ID турнира (по умолчанию — последний Endstep)"),
     players: int = typer.Option(DEFAULT_PLAYERS, "--players", "-p", help="Сколько игроков должно быть в итоге"),
 ):
     """Добить фейковых игроков (с архетипом и деклистом) до нужного количества."""
@@ -151,8 +149,8 @@ def fill(
 
 @app.command("step")
 def step(
-    tournament_id: Optional[int] = typer.Option(None, "--id", help="ID турнира (по умолчанию — последний Endstep)"),
-    admin_id: Optional[int] = typer.Option(None, "--admin-id", help="tg_id администратора debug-базы"),
+    tournament_id: int | None = typer.Option(None, "--id", help="ID турнира (по умолчанию — последний Endstep)"),
+    admin_id: int | None = typer.Option(None, "--admin-id", help="tg_id администратора debug-базы"),
 ):
     """Случайно закрыть текущий раунд и создать следующий настоящим движком."""
     with get_db() as db:
@@ -174,8 +172,8 @@ def step(
 
 @app.command("run")
 def run(
-    tournament_id: Optional[int] = typer.Option(None, "--id", help="ID турнира (по умолчанию — последний Endstep)"),
-    admin_id: Optional[int] = typer.Option(None, "--admin-id", help="tg_id администратора debug-базы"),
+    tournament_id: int | None = typer.Option(None, "--id", help="ID турнира (по умолчанию — последний Endstep)"),
+    admin_id: int | None = typer.Option(None, "--admin-id", help="tg_id администратора debug-базы"),
     finish: bool = typer.Option(False, "--finish", help="Сразу завершить турнир после последнего раунда"),
 ):
     """Сыграть все запланированные раунды подряд."""
@@ -208,8 +206,8 @@ def run(
 
 @app.command("finish")
 def finish(
-    tournament_id: Optional[int] = typer.Option(None, "--id", help="ID турнира (по умолчанию — последний Endstep)"),
-    admin_id: Optional[int] = typer.Option(None, "--admin-id", help="tg_id администратора debug-базы"),
+    tournament_id: int | None = typer.Option(None, "--id", help="ID турнира (по умолчанию — последний Endstep)"),
+    admin_id: int | None = typer.Option(None, "--admin-id", help="tg_id администратора debug-базы"),
 ):
     """Завершить Swiss: расставить места и закрыть турнир."""
     with get_db() as db:
@@ -225,7 +223,7 @@ def finish(
 
 @app.command("status")
 def status(
-    tournament_id: Optional[int] = typer.Option(None, "--id", help="ID турнира (по умолчанию — последний Endstep)"),
+    tournament_id: int | None = typer.Option(None, "--id", help="ID турнира (по умолчанию — последний Endstep)"),
 ):
     """Текущее состояние турнира: раунды, игроки, формат."""
     with get_db() as db:
@@ -239,7 +237,7 @@ def status(
 
 @app.command("standings")
 def standings(
-    tournament_id: Optional[int] = typer.Option(None, "--id", help="ID турнира (по умолчанию — последний Endstep)"),
+    tournament_id: int | None = typer.Option(None, "--id", help="ID турнира (по умолчанию — последний Endstep)"),
     limit: int = typer.Option(20, "--limit", "-n", help="Сколько строк показать"),
 ):
     """Показать стендинги по официальным тай-брейкам."""

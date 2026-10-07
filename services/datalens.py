@@ -19,10 +19,10 @@ from __future__ import annotations
 import calendar
 import copy
 import json
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, timedelta
 from enum import Enum
-from typing import Iterable, Optional
 
 import requests
 from pydantic import BaseModel
@@ -75,20 +75,20 @@ class Period:
     raw: str
 
     @classmethod
-    def all_time(cls) -> "Period":
+    def all_time(cls) -> Period:
         return cls(f"__interval_{_EPOCH}___relative_-0d")
 
     @classmethod
-    def since(cls, start: date) -> "Period":
+    def since(cls, start: date) -> Period:
         return cls(f"__interval_{start:%Y-%m-%d}T00:00:00.000Z___relative_-0d")
 
     @classmethod
-    def last_months(cls, months: int, *, today: Optional[date] = None) -> "Period":
+    def last_months(cls, months: int, *, today: date | None = None) -> Period:
         today = today or date.today()
         return cls.since(_subtract_months(today, months))
 
     @classmethod
-    def last_days(cls, days: int, *, today: Optional[date] = None) -> "Period":
+    def last_days(cls, days: int, *, today: date | None = None) -> Period:
         today = today or date.today()
         return cls.since(today - timedelta(days=days))
 
@@ -106,9 +106,9 @@ class PlayerReport(BaseModel):
 
     player: str
     period: str
-    decks: Optional[list[StatRow]] = None
-    opponents: Optional[list[StatRow]] = None
-    opponent_decks: Optional[list[StatRow]] = None
+    decks: list[StatRow] | None = None
+    opponents: list[StatRow] | None = None
+    opponent_decks: list[StatRow] | None = None
 
 
 class OpponentScouting(BaseModel):
@@ -123,7 +123,7 @@ class OpponentScouting(BaseModel):
     decks_period: str
     head_to_head_period: str
     opponent_decks: list[StatRow]
-    head_to_head: Optional[StatRow] = None
+    head_to_head: StatRow | None = None
 
 
 class TournamentPlayer(BaseModel):
@@ -182,7 +182,7 @@ class DataLensClient:
     def __init__(
         self,
         *,
-        session: Optional[requests.Session] = None,
+        session: requests.Session | None = None,
         base_url: str = DATALENS_URL,
         dash_id: str = DASH_ID,
         dash_tab_id: str = DASH_TAB_ID,
@@ -246,7 +246,7 @@ class DataLensClient:
 class DataLensService:
     """Высокоуровневый доступ к личной статистике игрока."""
 
-    def __init__(self, client: Optional[DataLensClient] = None) -> None:
+    def __init__(self, client: DataLensClient | None = None) -> None:
         self._client = client or DataLensClient()
 
     def _rows(self, chart: Chart, player: str, period: Period) -> list[StatRow]:
@@ -262,15 +262,15 @@ class DataLensService:
         rows = response.get("data", {}).get("rows", [])
         return [_parse_row(row) for row in rows]
 
-    def player_decks(self, player: str, period: Optional[Period] = None) -> list[StatRow]:
+    def player_decks(self, player: str, period: Period | None = None) -> list[StatRow]:
         """Колоды игрока: архетип, сыгранные матчи, винрейт."""
         return self._rows(Chart.DECKS, player, period or Period.all_time())
 
-    def winrate_vs_opponents(self, player: str, period: Optional[Period] = None) -> list[StatRow]:
+    def winrate_vs_opponents(self, player: str, period: Period | None = None) -> list[StatRow]:
         """Винрейт игрока против каждого оппонента (по имени)."""
         return self._rows(Chart.OPPONENTS, player, period or Period.all_time())
 
-    def winrate_vs_opponent_decks(self, player: str, period: Optional[Period] = None) -> list[StatRow]:
+    def winrate_vs_opponent_decks(self, player: str, period: Period | None = None) -> list[StatRow]:
         """Винрейт игрока против архетипов колод оппонентов."""
         return self._rows(Chart.OPPONENT_DECKS, player, period or Period.all_time())
 
@@ -279,8 +279,8 @@ class DataLensService:
         player: str,
         opponent: str,
         *,
-        decks_period: Optional[Period] = None,
-        head_to_head_period: Optional[Period] = None,
+        decks_period: Period | None = None,
+        head_to_head_period: Period | None = None,
     ) -> OpponentScouting:
         """Сводка для подготовки к матчу ``player`` против ``opponent``.
 
@@ -306,7 +306,7 @@ class DataLensService:
     def player_report(
         self,
         player: str,
-        period: Optional[Period] = None,
+        period: Period | None = None,
         charts: Iterable[Chart] = tuple(Chart),
     ) -> PlayerReport:
         """Собрать сводку по игроку по выбранным чартам.

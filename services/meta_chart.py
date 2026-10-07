@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import io
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Optional, Sequence
 
 from PIL import Image, ImageDraw, ImageFont
 from sqlalchemy.orm import Session
@@ -182,8 +182,8 @@ class MetaChartService:
     def __init__(
         self,
         db: Session,
-        stats: Optional[StatsService] = None,
-        colors: Optional[DeckColorResolver] = None,
+        stats: StatsService | None = None,
+        colors: DeckColorResolver | None = None,
     ):
         self.db = db
         self.stats = stats if stats is not None else StatsService(db)
@@ -214,13 +214,13 @@ class MetaChartService:
         return sorted(groups.values(), key=lambda s: -s.count)
 
     @staticmethod
-    def _general_of(archetype: Optional[models.Archetype], archetype_name: str) -> str:
+    def _general_of(archetype: models.Archetype | None, archetype_name: str) -> str:
         """Общий тип колоды: из кэша Archetype.general_name, иначе считаем на лету по имени."""
         if archetype is not None and archetype.general_name:
             return archetype.general_name
         return general_archetype(archetype_name) or strip_pictographs(archetype_name)
 
-    def prepare(self, tournament_id: int) -> Optional[ChartData]:
+    def prepare(self, tournament_id: int) -> ChartData | None:
         """Всё, что нужно для рисования, одним походом в БД. None — колод ещё нет.
 
         Отделено от `render_sectors`, чтобы работу с БД можно было оставить в вызывающем
@@ -234,7 +234,7 @@ class MetaChartService:
         subtitle = build_subtitle(tournament.club, tournament.title, tournament.created_at) if tournament else ""
         return ChartData(sectors=sectors, subtitle=subtitle, filename=f"meta_chart_{tournament_id}.png")
 
-    def render(self, tournament_id: int) -> Optional[tuple[bytes, str]]:
+    def render(self, tournament_id: int) -> tuple[bytes, str] | None:
         """PNG со срезом метагейма. None — в турнире ещё нет ни одной колоды."""
         data = self.prepare(tournament_id)
         if data is None:

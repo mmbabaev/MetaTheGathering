@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from typing import Literal
 
 import requests
@@ -119,7 +119,7 @@ class HistoricalTournamentMigrator:
         on_update: Callable[[TournamentMigrationReport], None] | None = None,
         max_consecutive_system_errors: int = 3,
     ) -> TournamentMigrationReport:
-        report = TournamentMigrationReport(started_at=datetime.now(timezone.utc), execute=execute)
+        report = TournamentMigrationReport(started_at=datetime.now(UTC), execute=execute)
         batch = self._datalens.all_tournaments()
         selected_clubs = {club.casefold() for club in clubs} if clubs else {"goldfish", "единорог"}
 
@@ -304,7 +304,7 @@ class HistoricalTournamentMigrator:
                     break
             self._notify(report, on_update)
 
-        report.finished_at = datetime.now(timezone.utc)
+        report.finished_at = datetime.now(UTC)
         self._notify(report, on_update)
         return report
 

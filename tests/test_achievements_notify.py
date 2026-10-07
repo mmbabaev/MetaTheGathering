@@ -156,7 +156,7 @@ async def test_owner_failure_does_not_block_targeted_player_delivery(db, played,
     async def send_message(*, chat_id, text):
         if chat_id == OWNER:
             raise RuntimeError("owner unavailable")
-        return None
+        return
 
     bot.send_message.side_effect = send_message
     sent = await send_achievements_report(bot, db, tournament.id)
@@ -200,7 +200,7 @@ async def test_one_player_failure_does_not_block_another_player(
     async def fail_first(*, chat_id, text):
         if chat_id == first.tg_id:
             raise RuntimeError("first player unavailable")
-        return None
+        return
 
     bot.send_message.side_effect = fail_first
     sent = await send_achievements_report(bot, db, tournament.id)
@@ -222,7 +222,7 @@ async def test_player_opt_out_cancels_pending_retry(db, played, owner_chat, monk
     async def fail_player(*, chat_id, text):
         if chat_id == player.tg_id:
             raise RuntimeError("player unavailable")
-        return None
+        return
 
     first_bot.send_message.side_effect = fail_player
     await send_achievements_report(first_bot, db, tournament.id)

@@ -1,6 +1,6 @@
 """Tests for AetherhubFinalReimportJob — morning re-import to backfill final scores."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -69,7 +69,7 @@ async def test_reimports_recent_and_populates_scores(db, use_test_db):
     db.commit()
 
     job = AetherhubFinalReimportJob(_aetherhub_mock(_scored_data()))
-    await job.run(now=datetime.now(timezone.utc), db=db)
+    await job.run(now=datetime.now(UTC), db=db)
 
     db.expire_all()
     alice = db.query(models.RoundPairing).filter_by(tournament_id=t.id, player_name="Alice").first()
@@ -79,14 +79,14 @@ async def test_reimports_recent_and_populates_scores(db, use_test_db):
 async def test_skips_tournaments_outside_window(db, use_test_db):
     _tournament(db, created_days_ago=5)  # too old → not re-imported
     mock = _aetherhub_mock(_scored_data())
-    await AetherhubFinalReimportJob(mock).run(now=datetime.now(timezone.utc), db=db)
+    await AetherhubFinalReimportJob(mock).run(now=datetime.now(UTC), db=db)
     mock.fetch_tournament.assert_not_called()
 
 
 async def test_skips_tournaments_without_url(db, use_test_db):
     _tournament(db, url=None)
     mock = _aetherhub_mock(_scored_data())
-    await AetherhubFinalReimportJob(mock).run(now=datetime.now(timezone.utc), db=db)
+    await AetherhubFinalReimportJob(mock).run(now=datetime.now(UTC), db=db)
     mock.fetch_tournament.assert_not_called()
 
 
@@ -95,7 +95,7 @@ async def test_skips_closed_tournaments(db, use_test_db):
     tournament.status = models.TournamentStatus.CLOSED
     db.commit()
     mock = _aetherhub_mock(_scored_data())
-    await AetherhubFinalReimportJob(mock).run(now=datetime.now(timezone.utc), db=db)
+    await AetherhubFinalReimportJob(mock).run(now=datetime.now(UTC), db=db)
     mock.fetch_tournament.assert_not_called()
 
 
@@ -104,13 +104,13 @@ async def test_skips_already_announced_tournaments(db, use_test_db):
     tournament.completed_announced_at = models.utc_now()
     db.commit()
     mock = _aetherhub_mock(_scored_data())
-    await AetherhubFinalReimportJob(mock).run(now=datetime.now(timezone.utc), db=db)
+    await AetherhubFinalReimportJob(mock).run(now=datetime.now(UTC), db=db)
     mock.fetch_tournament.assert_not_called()
 
 
 async def test_no_tournaments_no_fetch(db, use_test_db):
     mock = _aetherhub_mock(_scored_data())
-    await AetherhubFinalReimportJob(mock).run(now=datetime.now(timezone.utc), db=db)
+    await AetherhubFinalReimportJob(mock).run(now=datetime.now(UTC), db=db)
     mock.fetch_tournament.assert_not_called()
 
 
@@ -119,4 +119,4 @@ async def test_fetch_failure_does_not_raise(db, use_test_db):
     mock = MagicMock()
     mock.fetch_tournament.side_effect = RuntimeError("network down")
     # must not raise — one bad tournament shouldn't abort the morning job
-    await AetherhubFinalReimportJob(mock).run(now=datetime.now(timezone.utc), db=db)
+    await AetherhubFinalReimportJob(mock).run(now=datetime.now(UTC), db=db)

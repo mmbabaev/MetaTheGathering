@@ -10,7 +10,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 class Codes:
@@ -42,7 +41,7 @@ class AchievementDef:
     description: str  # что это значит
     hint: str  # что сделать, чтобы открыть
     rarity: str
-    threshold: Optional[int] = None  # порог счётчика; None — одноразовая ачивка без прогресса
+    threshold: int | None = None  # порог счётчика; None — одноразовая ачивка без прогресса
 
     @property
     def key(self) -> tuple[str, int]:
@@ -197,7 +196,7 @@ def all_definitions() -> tuple[AchievementDef, ...]:
     return tuple(_DEFS)
 
 
-def get(code: str, level: int) -> Optional[AchievementDef]:
+def get(code: str, level: int) -> AchievementDef | None:
     return ACHIEVEMENTS.get((code, level))
 
 
@@ -206,7 +205,7 @@ def levels_for(code: str) -> list[AchievementDef]:
     return sorted((d for d in ACHIEVEMENTS.values() if d.code == code), key=lambda d: d.level)
 
 
-def next_level_for(code: str, value: int) -> Optional[AchievementDef]:
+def next_level_for(code: str, value: int) -> AchievementDef | None:
     """Первый уровень, порог которого ещё не взят значением ``value``.
 
     None — все уровни этого кода уже покрыты (или ачивка одноразовая).

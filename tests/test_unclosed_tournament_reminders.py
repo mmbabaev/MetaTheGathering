@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 
 import pytest
@@ -9,7 +9,7 @@ from core.config import settings
 from core.schemas import TournamentCreate
 from services.tournament import TournamentService
 
-NOW = datetime(2026, 8, 8, 10, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 8, 8, 10, 0, tzinfo=UTC)
 
 
 def _tournament(db, svc, *, age: timedelta, chat_id: int = 100):

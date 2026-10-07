@@ -1,4 +1,4 @@
-from . import models  # noqa: F401
+from . import models
 from .config import settings
 from .database import Base, SessionLocal, engine
 

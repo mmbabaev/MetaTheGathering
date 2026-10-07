@@ -14,7 +14,7 @@
 from __future__ import annotations
 
 import re
-from typing import Iterable, Optional
+from collections.abc import Iterable
 
 from sqlalchemy.orm import Session
 
@@ -148,7 +148,7 @@ def canon(colors: str) -> str:
 PALETTE = {canon(key): value for key, value in _PALETTE_RAW.items()}
 
 
-def hex_for(color_identity: Optional[str]) -> str:
+def hex_for(color_identity: str | None) -> str:
     """Hex-цвет сектора. Неизвестная идентичность → серый (график не должен падать)."""
     return PALETTE.get(canon(color_identity or ""), PALETTE[COLORLESS])
 
@@ -157,7 +157,7 @@ def _words(name: str) -> list[str]:
     return re.findall(r"[A-Za-z0-9]+", name)
 
 
-def _named_combo(lowered: list[str]) -> Optional[str]:
+def _named_combo(lowered: list[str]) -> str | None:
     for word in lowered:
         if word in _NAMED:
             return canon(_NAMED[word])
@@ -186,7 +186,7 @@ def _is_initials_token(word: str, has_mono: bool) -> bool:
     return len(word) <= 3 and word[0].isupper()
 
 
-def _initials(words: list[str]) -> Optional[str]:
+def _initials(words: list[str]) -> str | None:
     """Токены-инициалы: «UW Familiars», «RG Storm», «Ub Faerie», «Mono U faeries»."""
     has_mono = any(w.lower() == "mono" for w in words)
     for word in words:
@@ -195,17 +195,17 @@ def _initials(words: list[str]) -> Optional[str]:
     return None
 
 
-def _from_color_emoji(name: str) -> Optional[str]:
+def _from_color_emoji(name: str) -> str | None:
     found = "".join(_COLOR_EMOJI[ch] for ch in name if ch in _COLOR_EMOJI)
     return canon(found) if found else None
 
 
-def _from_color_words(lowered: list[str]) -> Optional[str]:
+def _from_color_words(lowered: list[str]) -> str | None:
     found = "".join(_COLOR_WORDS[w] for w in lowered if w in _COLOR_WORDS)
     return canon(found) if found else None
 
 
-def parse_color_identity(name: str) -> Optional[str]:
+def parse_color_identity(name: str) -> str | None:
     """Цветовая идентичность из названия архетипа. None — эвристика не разобрала.
 
     Порядок важен: «Grixis Affinity» — это UBR, а не бесцветная.
@@ -228,7 +228,7 @@ def parse_color_identity(name: str) -> Optional[str]:
     return _from_color_words(lowered)
 
 
-def colors_for_deck_name(name: Optional[str]) -> str:
+def colors_for_deck_name(name: str | None) -> str:
     """Цветовая идентичность по названию колоды без похода в БД: справочник → эвристика → «».
 
     Для пипов маны в стендингах: кэш/color_emoji не нужны, важно только имя.

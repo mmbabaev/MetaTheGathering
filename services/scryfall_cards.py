@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import requests
@@ -108,7 +108,7 @@ class ScryfallCardResolver:
             card.error_message = "network error"
             raise ScryfallResolveError(f"Scryfall недоступен для карты {display_name}") from exc
 
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        now = datetime.now(UTC).replace(tzinfo=None)
         card.resolved_at = now
         if response.status_code == 404:
             card.status = "unresolved"

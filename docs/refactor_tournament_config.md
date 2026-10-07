@@ -28,14 +28,14 @@ class Club:
 ```python
 @dataclass
 class TournamentConfig:
-    title: str            # "🐠 Goldfish Pauper" — без даты, дата добавляется при создании
-    club: Club            # ссылка на клуб (берём aetherhub_url)
-    chat_id: int          # Telegram chat_id для этого турнира
-    weekday: str          # "friday"
-    game_time: str        # "19:45"
-    create_time: Optional[str] = None          # если None — берётся из settings
+    title: str  # "🐠 Goldfish Pauper" — без даты, дата добавляется при создании
+    club: Club  # ссылка на клуб (берём aetherhub_url)
+    chat_id: int  # Telegram chat_id для этого турнира
+    weekday: str  # "friday"
+    game_time: str  # "19:45"
+    create_time: Optional[str] = None  # если None — берётся из settings
     aetherhub_fetch_times: List[str] = field(default_factory=list)
-    find_latest: bool = False                  # debug: игнорировать дату
+    find_latest: bool = False  # debug: игнорировать дату
 ```
 
 ### Пример конфигурации

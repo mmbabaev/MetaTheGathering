@@ -11,7 +11,6 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -37,7 +36,7 @@ class GrantedAchievement:
     player: str
     definition: AchievementDef
     evidence: str
-    progress_value: Optional[int]
+    progress_value: int | None
 
 
 @dataclass(frozen=True)
@@ -63,13 +62,13 @@ class AppliedResult:
 
     tournament_id: int
     title: str
-    club: Optional[str]
+    club: str | None
     granted: list[GrantedAchievement] = field(default_factory=list)
     progress_changes: list[ProgressChange] = field(default_factory=list)
     skipped: list[SkippedPlayer] = field(default_factory=list)
     status: str = "completed"
     rule_errors: list[RuleError] = field(default_factory=list)
-    processing_run_id: Optional[int] = None
+    processing_run_id: int | None = None
 
     @property
     def is_empty(self) -> bool:
@@ -106,9 +105,9 @@ class AchievementView:
 
     definition: AchievementDef
     unlocked: bool
-    awarded_at: Optional[datetime] = None
-    evidence: Optional[str] = None
-    progress: Optional[int] = None  # текущее значение счётчика, если ачивка ещё не открыта
+    awarded_at: datetime | None = None
+    evidence: str | None = None
+    progress: int | None = None  # текущее значение счётчика, если ачивка ещё не открыта
 
 
 @dataclass(frozen=True)
@@ -116,7 +115,7 @@ class ProgressReplayResult:
     event_id: int
     changed: bool
     conflict: bool
-    current_value: Optional[int]
+    current_value: int | None
     target_value: int
 
 
@@ -124,8 +123,8 @@ class AchievementService:
     def __init__(
         self,
         db: Session,
-        rules: Optional[list[AchievementRule]] = None,
-        history: Optional[AchievementHistory] = None,
+        rules: list[AchievementRule] | None = None,
+        history: AchievementHistory | None = None,
     ) -> None:
         self.db = db
         self.rules = rules if rules is not None else default_rules()
@@ -133,11 +132,11 @@ class AchievementService:
 
     # ------------------------------------------------------------- оценка
 
-    def build_context(self, tournament_id: int) -> Optional[TournamentContext]:
+    def build_context(self, tournament_id: int) -> TournamentContext | None:
         history = self._history if self._history is not None else AchievementHistory(self.db)
         return build_context(self.db, tournament_id, history)
 
-    def evaluate_for_tournament(self, tournament_id: int) -> tuple[Optional[TournamentContext], RuleOutcome]:
+    def evaluate_for_tournament(self, tournament_id: int) -> tuple[TournamentContext | None, RuleOutcome]:
         """Прогнать правила по турниру. В БД ничего не пишет.
 
         Возвращает (контекст, результат). Контекст нужен вызывающему для имён и списка
@@ -154,7 +153,7 @@ class AchievementService:
         for rule in self.rules:
             try:
                 outcome.extend(rule.evaluate(ctx))
-            except Exception as exc:  # noqa: BLE001 — сбой одного правила не должен ронять остальные
+            except Exception as exc:
                 outcome.rule_errors.append(RuleError(code=rule.code, error_type=type(exc).__name__))
                 logger.exception("[achievements] rule %s failed on tournament #%s", rule.code, tournament_id)
         outcome.completed_at = models.utc_now()
@@ -164,7 +163,7 @@ class AchievementService:
 
     def process_tournament(
         self, tournament_id: int, *, notified: bool = False, commit: bool = True
-    ) -> Optional[AppliedResult]:
+    ) -> AppliedResult | None:
         """Оценить турнир и записать изменения. None — считать нечего (турнир не готов).
 
         Повторный вызов вернёт результат с пустыми ``granted``/``progress_changes``.
@@ -225,7 +224,7 @@ class AchievementService:
         result.progress_changes.sort(key=lambda p: (definitions.CODE_ORDER.index(p.definition.code), p.player))
         return result
 
-    def _grant(self, ctx: TournamentContext, award: Award, *, notified: bool) -> Optional[GrantedAchievement]:
+    def _grant(self, ctx: TournamentContext, award: Award, *, notified: bool) -> GrantedAchievement | None:
         definition = definitions.get(award.code, award.level)
         if definition is None:
             return None
@@ -262,7 +261,7 @@ class AchievementService:
 
     def _update_progress(
         self, ctx: TournamentContext, update: ProgressUpdate, *, processing_run_id: int
-    ) -> Optional[ProgressChange]:
+    ) -> ProgressChange | None:
         definition = definitions.get(update.code, update.next_level)
         if definition is None:
             return None
@@ -393,7 +392,7 @@ class AchievementService:
         value: int,
         evidence: str,
         *,
-        tournament_id: Optional[int] = None,
+        tournament_id: int | None = None,
     ) -> models.AchievementProgressEvent:
         """Owner tooling: set a cell and preserve the override as a separate event."""
         if not evidence.strip():
@@ -445,7 +444,7 @@ class AchievementService:
 
     # ------------------------------------------------------------ бэкафилл
 
-    def backfill(self, *, club: Optional[str] = None, dry_run: bool = True) -> BackfillReport:
+    def backfill(self, *, club: str | None = None, dry_run: bool = True) -> BackfillReport:
         """Прогнать движок по всей истории турниров, от старых к новым.
 
         Идёт в хронологическом порядке, потому что правила смотрят историю «на дату турнира»:
@@ -490,7 +489,7 @@ class AchievementService:
 
         return report
 
-    def _tournaments_in_order(self, club: Optional[str]) -> list[int]:
+    def _tournaments_in_order(self, club: str | None) -> list[int]:
         """id турниров по возрастанию даты (started_at, иначе created_at)."""
         stmt = select(models.Tournament)
         if club:

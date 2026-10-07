@@ -33,7 +33,7 @@ async def execute_creation_plan(bot, db, plan_id: int) -> CreationExecutionResul
         service.mark_failed(plan_id, str(exc))
         logger.warning("Tournament creation plan #%s failed: %s", plan_id, exc)
         return CreationExecutionResult(plan_id, None, False, error=str(exc))
-    except Exception as exc:  # noqa: BLE001 — один план не должен остановить очередь
+    except Exception as exc:
         db.rollback()
         service.mark_failed(plan_id, str(exc))
         logger.exception("Tournament creation plan #%s failed", plan_id)

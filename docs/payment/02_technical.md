@@ -45,24 +45,19 @@ import uuid
 SHOP_ID = "ваш_shop_id"
 SECRET_KEY = "ваш_secret_key"
 
+
 def create_payment(amount: float, player_name: str, tournament_name: str, telegram_id: int) -> str:
     response = requests.post(
         "https://api.yookassa.ru/v3/payments",
         json={
             "amount": {"value": f"{amount:.2f}", "currency": "RUB"},
-            "confirmation": {
-                "type": "redirect",
-                "return_url": "https://t.me/ваш_бот"
-            },
+            "confirmation": {"type": "redirect", "return_url": "https://t.me/ваш_бот"},
             "description": f"{tournament_name} — {player_name}",
-            "metadata": {
-                "telegram_id": telegram_id,
-                "tournament": tournament_name
-            },
-            "capture": True
+            "metadata": {"telegram_id": telegram_id, "tournament": tournament_name},
+            "capture": True,
         },
         auth=(SHOP_ID, SECRET_KEY),
-        headers={"Idempotence-Key": str(uuid.uuid4())}
+        headers={"Idempotence-Key": str(uuid.uuid4())},
     )
     data = response.json()
     return data["confirmation"]["confirmation_url"]
@@ -77,10 +72,7 @@ async def pay_handler(update, context):
     telegram_id = update.effective_user.id
 
     url = create_payment(
-        amount=525.00,
-        player_name=player_name,
-        tournament_name="MTG Standard 26 апреля",
-        telegram_id=telegram_id
+        amount=525.00, player_name=player_name, tournament_name="MTG Standard 26 апреля", telegram_id=telegram_id
     )
 
     await update.message.reply_text(
@@ -98,6 +90,7 @@ from flask import Flask, request
 
 app = Flask(__name__)
 
+
 @app.route("/webhook/yookassa", methods=["POST"])
 def yookassa_webhook():
     data = request.json
@@ -112,10 +105,7 @@ def yookassa_webhook():
         mark_player_as_paid(telegram_id, tournament)
 
         # Уведомляем игрока
-        bot.send_message(
-            telegram_id,
-            f"✅ Оплата {amount} руб. получена! Ты в списке турнира."
-        )
+        bot.send_message(telegram_id, f"✅ Оплата {amount} руб. получена! Ты в списке турнира.")
 
     return {"status": "ok"}, 200
 ```

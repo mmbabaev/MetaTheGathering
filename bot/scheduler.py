@@ -10,7 +10,7 @@ import logging
 from collections import Counter, defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, or_, select, update
@@ -111,7 +111,7 @@ def _event_datetime(now: datetime, schedule: ClubSchedule) -> datetime:
 
 
 def _naive_utc(value: datetime) -> datetime:
-    return value.astimezone(timezone.utc).replace(tzinfo=None) if value.tzinfo else value
+    return value.astimezone(UTC).replace(tzinfo=None) if value.tzinfo else value
 
 
 def _import_day_offset(import_times: list[str], fetch_time: str) -> int:
@@ -343,7 +343,7 @@ class CellarCoordinatorReminderJob:
             ).scalar_one_or_none()
             if tournament is None:
                 return
-            event_at = tournament.registration_close_at.replace(tzinfo=timezone.utc).astimezone(CELLAR_TIMEZONE)
+            event_at = tournament.registration_close_at.replace(tzinfo=UTC).astimezone(CELLAR_TIMEZONE)
             service = CellarService(db)
             reservations = service.active_reservations(event_at.date())
             if not reservations:
@@ -355,7 +355,7 @@ class CellarCoordinatorReminderJob:
                     continue
                 try:
                     await bot.send_message(chat_id=recipient_tg_id, text=text)
-                except Exception as exc:  # noqa: BLE001 — retry on the next minute
+                except Exception as exc:
                     service.finish_coordinator_delivery(delivery, error=str(exc))
                     logger.exception("Cellar coordinator reminder failed for %s", recipient_tg_id)
                     continue
@@ -735,7 +735,7 @@ class AetherhubFinalReimportJob:
         self._aetherhub = aetherhub_service
 
     async def run(self, now: datetime, db=None, bot=None) -> None:
-        now_utc = now.astimezone(timezone.utc).replace(tzinfo=None) if now.tzinfo else now
+        now_utc = now.astimezone(UTC).replace(tzinfo=None) if now.tzinfo else now
         cutoff = now_utc - timedelta(days=FINAL_REIMPORT_WINDOW_DAYS)
         close_db = db is None
         if close_db:
@@ -799,9 +799,7 @@ class AutoRevealDecksJob:
     async def run(self, now: datetime, db=None, bot=None) -> None:
         now_utc = _naive_utc(now)
         if now.tzinfo:
-            day_start = (
-                now.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc).replace(tzinfo=None)
-            )
+            day_start = now.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(UTC).replace(tzinfo=None)
         else:
             day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
@@ -853,7 +851,7 @@ class AutoRevealDecksJob:
         text = format_decks_revealed(tournament.title, total, with_deck, meta)
         try:
             await bot.send_message(chat_id=settings.OWNER_CHAT_ID, text=text)
-        except Exception:  # noqa: BLE001 — сбой одного анонса не должен ронять джобу
+        except Exception:
             logger.exception("AutoRevealDecksJob: announce failed for #%s", tournament.id)
 
 
@@ -863,7 +861,7 @@ class UnclosedTournamentReminderJob:
     async def run(self, bot, now: datetime, db=None) -> None:
         if bot is None or not settings.OWNER_CHAT_ID:
             return
-        now_utc = now.astimezone(timezone.utc).replace(tzinfo=None) if now.tzinfo else now
+        now_utc = now.astimezone(UTC).replace(tzinfo=None) if now.tzinfo else now
         close_db = db is None
         if close_db:
             db = SessionLocal()
@@ -895,7 +893,7 @@ class UnclosedTournamentReminderJob:
                 )
                 try:
                     await bot.send_message(chat_id=settings.OWNER_CHAT_ID, text=text)
-                except Exception:  # noqa: BLE001 — повторим на следующем ежедневном запуске
+                except Exception:
                     logger.exception(
                         "UnclosedTournamentReminderJob: %s-day reminder failed for #%s", days, tournament.id
                     )
@@ -920,7 +918,7 @@ class MissingDecksReminderJob:
     def _event_date(tournament, tz) -> date:
         event_at = tournament.registration_close_at or tournament.started_at or tournament.created_at
         if event_at.tzinfo is None:
-            event_at = event_at.replace(tzinfo=timezone.utc)
+            event_at = event_at.replace(tzinfo=UTC)
         return event_at.astimezone(tz).date()
 
     async def run(self, bot, now: datetime, db=None) -> None:
@@ -960,7 +958,7 @@ class MissingDecksReminderJob:
                         if community_fill_enabled
                         else registration_deeplink(me.username, tournament.id)
                     )
-                except Exception:  # noqa: BLE001 — без рабочей кнопки уведомление не считаем доставленным
+                except Exception:
                     logger.exception("MissingDecksReminderJob: get_me failed for #%s", tournament.id)
                     continue
 
@@ -978,7 +976,7 @@ class MissingDecksReminderJob:
                         reply_markup=keyboard,
                         parse_mode="HTML",
                     )
-                except Exception:  # noqa: BLE001 — повторим на следующем ежедневном запуске
+                except Exception:
                     logger.exception("MissingDecksReminderJob: reminder failed for #%s", tournament.id)
                     continue
 
@@ -994,7 +992,7 @@ class MissingDecksReminderJob:
                             participant_ids=[participant.id for participant in missing_participants],
                             button_url=button_url,
                         )
-                    except Exception:  # noqa: BLE001 — сообщение уже доставлено, повторно не шлём
+                    except Exception:
                         db.rollback()
                         logger.exception("MissingDecksReminderJob: tracking failed for #%s", tournament.id)
         finally:
@@ -1143,7 +1141,7 @@ async def _send_magicoculus_success_link(
             chat_id=chat_id,
             text=f"✅ Турнир загружен в Magic Oculus\n\n{title}\n{url}",
         )
-    except Exception:  # noqa: BLE001 — уведомление не должно откатывать успешный импорт
+    except Exception:
         logger.exception(
             "maybe_announce_meta_gather_completed: Magic Oculus success link failed for #%s",
             magicoculus_tournament_id,
@@ -1162,7 +1160,7 @@ async def _notify_magicoculus_import_error(bot, tournament_id: int, title: str, 
     )
     try:
         await bot.send_message(chat_id=settings.OWNER_CHAT_ID, text=text)
-    except Exception:  # noqa: BLE001 — Telegram не должен откатывать уже закрытый турнир
+    except Exception:
         logger.exception(
             "maybe_announce_meta_gather_completed: Magic Oculus error DM failed for #%s",
             tournament_id,
@@ -1437,7 +1435,7 @@ def setup_scheduler(app: Application) -> None:
     cellar_reminder_job = CellarCoordinatorReminderJob()
 
     async def _remind_cellar_coordinators(context: ContextTypes.DEFAULT_TYPE) -> None:
-        await cellar_reminder_job.run(context.bot, now=datetime.now(timezone.utc))
+        await cellar_reminder_job.run(context.bot, now=datetime.now(UTC))
 
     _remind_cellar_coordinators.__name__ = "cellar_coordinator_reminder"
     app.job_queue.run_repeating(_remind_cellar_coordinators, interval=60, first=20)
@@ -1449,7 +1447,7 @@ def setup_scheduler(app: Application) -> None:
             await send_swiss_requirements_reminders(
                 context.bot,
                 db,
-                datetime.now(timezone.utc),
+                datetime.now(UTC),
             )
         finally:
             db.close()

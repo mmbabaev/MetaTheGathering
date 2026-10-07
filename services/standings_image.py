@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import io
 from dataclasses import dataclass
-from typing import Optional
 
 from PIL import ImageDraw
 from sqlalchemy.orm import Session
@@ -61,7 +60,7 @@ POINTS_X = WIDTH - MARGIN - 30  # очки (правый край)
 DECK_MAX = POINTS_X - 70 - DECK_X
 
 
-def accent_color(row: "StandingRow", total_rounds: int) -> Optional[tuple]:
+def accent_color(row: StandingRow, total_rounds: int) -> tuple | None:
     """Цвет левого акцента по записи игрока. None — не топ-тир.
 
     Верх — тем, кто без поражений (4-0, затем 3-0-1) и ровно с одним поражением (3-1).
@@ -183,11 +182,11 @@ def _draw_pips(draw, color_identity: str, x_left: int, middle: int) -> None:
 
 
 class StandingsImageService:
-    def __init__(self, db: Session, imports: Optional[AetherhubImportService] = None):
+    def __init__(self, db: Session, imports: AetherhubImportService | None = None):
         self.db = db
         self.imports = imports if imports is not None else AetherhubImportService(db)
 
-    def prepare(self, tournament_id: int) -> Optional[StandingsData]:
+    def prepare(self, tournament_id: int) -> StandingsData | None:
         """Данные для стендингов одним походом в БД. None — стендингов ещё нет.
 
         Пипы (color_identity) резолвим по имени колоды здесь же — без похода в БД, так что
@@ -202,7 +201,7 @@ class StandingsImageService:
         subtitle = build_subtitle(tournament.club, tournament.title, tournament.created_at) if tournament else ""
         return StandingsData(rows=rows, subtitle=subtitle, filename_prefix=f"standings_{tournament_id}")
 
-    def render(self, tournament_id: int) -> Optional[list[tuple[bytes, str]]]:
+    def render(self, tournament_id: int) -> list[tuple[bytes, str]] | None:
         """Страницы стендингов [(png, filename)]. None — стендингов ещё нет."""
         data = self.prepare(tournament_id)
         if data is None:

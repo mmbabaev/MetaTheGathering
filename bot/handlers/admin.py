@@ -2,7 +2,6 @@
 
 import re
 from datetime import datetime
-from typing import Optional
 
 from bot.features import FeatureService
 from bot.handlers.base import HandlerResult
@@ -1003,7 +1002,7 @@ class AdminHandler:
 
     # ── Личная рассылка владельца участникам турнира ────────────────────────────
 
-    def _broadcast_guard(self, tg_id: int, tournament_id: int) -> Optional[HandlerResult]:
+    def _broadcast_guard(self, tg_id: int, tournament_id: int) -> HandlerResult | None:
         """Только владелец бота и только для существующего турнира."""
         if settings.OWNER_CHAT_ID is None or tg_id != settings.OWNER_CHAT_ID:
             return HandlerResult(BROADCAST_OWNER_ONLY, is_alert=True)
