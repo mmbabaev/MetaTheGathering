@@ -4,7 +4,37 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
+  changes:
+    name: Detect deploy changes
+    runs-on: ubuntu-latest
+    outputs:
+      deploy: ${{ steps.filter.outputs.deploy }}
+    steps:
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            deploy:
+              - '*.py'
+              - '*.sh'
+              - '**/*.py'
+              - '**/*.sh'
+              - '**/*.service'
+              - '.github/workflows/**'
+              - 'alembic/**'
+              - 'bot/**'
+              - 'core/**'
+              - 'pauper_sim/**'
+              - 'services/**'
+              - 'web/**'
+              - 'requirements*.txt'
+              - 'pyproject.toml'
+
   test:
     name: Run tests
     runs-on: ubuntu-latest
@@ -43,11 +73,12 @@ jobs:
 
   deploy-debug:
     name: Deploy DEBUG
-    needs: test
+    needs: [test, changes]
     runs-on: ubuntu-latest
     # Deploys are paused while the data-center VM is unavailable. Re-enable by
     # setting the repository variable DEPLOY_ENABLED=true.
-    if: vars.DEPLOY_ENABLED == 'true' && github.event.pull_request.head.repo.full_name == github.repository
+    if: vars.DEPLOY_ENABLED == 'true' && github.event.pull_request.head.repo.full_name == github.repository && needs.changes.outputs.deploy == 'true'
+    timeout-minutes: 20
     concurrency:
       group: metagatherer-debug-deploy
       cancel-in-progress: false
@@ -59,7 +90,9 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+          bash bot/setup_ssh_known_hosts.sh
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
 
       - name: Write debug .env
         run: echo "${{ secrets.ENV_FILE_DEBUG }}" > bot/.env.debug
@@ -68,8 +101,12 @@ jobs:
         run: bash bot/deploy_bot_debug.sh
         env:
           SSH_KEY: ~/.ssh/deploy_key
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
 
       - name: Deploy debug web
         run: bash bot/deploy_web_debug.sh
         env:
           SSH_KEY: ~/.ssh/deploy_key
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}

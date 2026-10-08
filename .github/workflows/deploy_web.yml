@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     # Deploys are paused while the data-center VM is unavailable.
     if: vars.DEPLOY_ENABLED == 'true'
+    timeout-minutes: 15
     concurrency:
       group: metagatherer-production-deploy
       cancel-in-progress: false
@@ -26,9 +27,13 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+          bash bot/setup_ssh_known_hosts.sh
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
 
       - name: Deploy web production
         run: bash bot/deploy_web.sh
         env:
           SSH_KEY: ~/.ssh/deploy_key
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}

@@ -6,6 +6,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BOT_DEPLOY = ROOT / "bot" / "deploy_bot_debug.sh"
 WEB_DEPLOY = ROOT / "bot" / "deploy_web_debug.sh"
+PAUPER_DEPLOY = ROOT / "bot" / "deploy_pauper_sim.sh"
+SSH_PREFLIGHT = ROOT / "bot" / "setup_ssh_known_hosts.sh"
 
 
 def _read(path: Path) -> str:
@@ -13,7 +15,7 @@ def _read(path: Path) -> str:
 
 
 def test_deploy_scripts_have_valid_bash_syntax():
-    for script in (BOT_DEPLOY, WEB_DEPLOY):
+    for script in (BOT_DEPLOY, WEB_DEPLOY, PAUPER_DEPLOY, SSH_PREFLIGHT):
         subprocess.run(["bash", "-n", str(script)], check=True)
 
 
@@ -28,6 +30,28 @@ def test_deploy_scripts_lock_and_clean_up_each_attempt():
         assert "REMOTE_FREE_BYTES=" in source
         assert "MIN_FREE_BYTES=$((200 * 1024 * 1024))" in source
         assert "umask 077" in source
+
+
+def test_deploy_scripts_use_shared_host_and_bounded_ssh_options():
+    for script in (BOT_DEPLOY, WEB_DEPLOY, PAUPER_DEPLOY):
+        source = _read(script)
+
+        assert 'SERVER_USER="${SERVER_USER:-mbabaev}"' in source
+        assert 'SERVER_HOST="${SERVER_HOST:-158.160.9.28}"' in source
+        assert 'REMOTE_DIR="/home/${SERVER_USER}/MetaTheGathering/' in source
+        assert "ConnectTimeout=30" in source
+        assert "ConnectionAttempts=3" in source
+        assert '"${SSH_OPTS[@]}"' in source
+
+
+def test_ssh_preflight_has_bounded_retries_and_validates_host():
+    source = _read(SSH_PREFLIGHT)
+
+    assert 'SERVER_HOST="${SERVER_HOST:-}"' in source
+    assert "ssh-keyscan -T 5 -H" in source
+    assert "for attempt in 1 2 3" in source
+    assert "sleep 5" in source
+    assert 'cat "$known_hosts_file" >>"$HOME/.ssh/known_hosts"' in source
 
 
 def test_deploy_archives_never_include_git_metadata():
@@ -68,6 +92,7 @@ def test_workflows_serialize_deploys_by_environment():
         ROOT / ".github" / "workflows" / "pr.yml": "metagatherer-debug-deploy",
         ROOT / ".github" / "workflows" / "deploy.yml": "metagatherer-production-deploy",
         ROOT / ".github" / "workflows" / "deploy_web.yml": "metagatherer-production-deploy",
+        ROOT / ".github" / "workflows" / "pauper_deploy.yml": "pauper-sim-deploy",
     }
 
     for path, expected_group in expected_groups.items():
@@ -75,6 +100,31 @@ def test_workflows_serialize_deploys_by_environment():
 
         assert f"group: {expected_group}" in workflow
         assert "cancel-in-progress: false" in workflow
+
+
+def test_workflows_use_shared_ssh_preflight_and_secret_host():
+    workflow_paths = (
+        ROOT / ".github" / "workflows" / "pr.yml",
+        ROOT / ".github" / "workflows" / "deploy.yml",
+        ROOT / ".github" / "workflows" / "deploy_web.yml",
+        ROOT / ".github" / "workflows" / "pauper_deploy.yml",
+    )
+
+    for path in workflow_paths:
+        workflow = _read(path)
+
+        assert "timeout-minutes:" in workflow
+        assert "bash bot/setup_ssh_known_hosts.sh" in workflow
+        assert "SERVER_HOST: ${{ secrets.SERVER_HOST }}" in workflow
+        assert "SERVER_USER: ${{ secrets.SERVER_USER }}" in workflow
+
+
+def test_pull_request_deploy_skips_docs_only_changes():
+    workflow = _read(ROOT / ".github" / "workflows" / "pr.yml")
+
+    assert "dorny/paths-filter@v3" in workflow
+    assert "needs: [test, changes]" in workflow
+    assert "needs.changes.outputs.deploy == 'true'" in workflow
 
 
 def test_bot_deploy_removes_legacy_endstep_systemd_timer():
