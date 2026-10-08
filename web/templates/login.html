@@ -5,14 +5,57 @@
   <h1 class="text-2xl font-bold text-gray-900 mb-2">MetaGatherer</h1>
   <p class="text-gray-500 mb-8">Запись на Pauper-турниры</p>
 
+  {% if telegram_login %}
+  <div class="card mb-4">
+    <p class="font-medium text-gray-900 mb-2">Вход через Telegram</p>
+    <p class="text-sm text-gray-500 mb-4">Откройте бота и нажмите Start. После этого страница войдёт автоматически.</p>
+    <a href="{{ telegram_url }}" target="_blank" rel="noopener" class="btn btn-primary block text-center">Открыть Telegram</a>
+    <p id="telegram-status" class="text-sm text-gray-500 mt-3" aria-live="polite">Ожидаем подтверждение…</p>
+    <a href="/login" class="text-sm text-blue-600 inline-block mt-3">Другой способ входа</a>
+  </div>
+  <script>
+    (() => {
+      const status = document.getElementById('telegram-status');
+      const token = {{ telegram_poll_token|tojson }};
+      const next = {{ redirect_to|tojson }};
+      let attempts = 0;
+      const poll = async () => {
+        attempts += 1;
+        if (attempts > 150) {
+          status.textContent = 'Ссылка истекла. Запросите новый вход.';
+          return;
+        }
+        try {
+          const response = await fetch(`/auth/telegram/status?token=${encodeURIComponent(token)}&next=${encodeURIComponent(next)}`);
+          if (response.status === 410) {
+            status.textContent = 'Ссылка истекла. Запросите новый вход.';
+            return;
+          }
+          const data = await response.json();
+          if (data.status === 'authenticated') {
+            window.location.href = `/auth/telegram/complete?token=${encodeURIComponent(token)}&next=${encodeURIComponent(next)}`;
+            return;
+          }
+        } catch (_) {
+          status.textContent = 'Не удалось проверить вход. Повторяем…';
+        }
+        window.setTimeout(poll, 2000);
+      };
+      poll();
+    })();
+  </script>
+  {% endif %}
+
   {% if sent %}
   <div class="card">
     {% if debug_link %}
     <p class="text-yellow-700 font-medium mb-1">SMTP не настроен — ссылка для входа:</p>
     <a href="{{ debug_link }}" class="btn btn-primary block text-center mt-2">Войти</a>
-    {% else %}
+    {% elif sent %}
     <p class="text-green-700 font-medium mb-1">Письмо отправлено!</p>
     <p class="text-gray-600 text-sm">Проверьте почту <strong>{{ email }}</strong> и нажмите ссылку для входа. Ссылка действительна 15 минут.</p>
+    {% else %}
+    <p class="text-red-700 font-medium">Почтовый вход временно недоступен.</p>
     {% endif %}
   </div>
   {% else %}
@@ -20,6 +63,10 @@
   <div class="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-700 text-sm mb-4">{{ error }}</div>
   {% endif %}
   <div class="card">
+    {% if not telegram_login %}
+    <a href="/auth/telegram/start" class="btn btn-secondary block text-center mb-4">Войти через Telegram</a>
+    <div class="flex items-center gap-3 text-xs text-gray-400 mb-4"><span class="h-px bg-gray-200 flex-1"></span><span>или по email</span><span class="h-px bg-gray-200 flex-1"></span></div>
+    {% endif %}
     <form method="post" action="/login">
       <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
       <input class="input mb-4" type="email" name="email" placeholder="you@example.com" required autofocus>

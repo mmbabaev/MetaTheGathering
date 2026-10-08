@@ -122,6 +122,22 @@ class WebAuthToken(Base):
     user = relationship("User", back_populates="web_auth_tokens")
 
 
+class WebTelegramAuthAttempt(Base):
+    """Short-lived browser login attempt completed by the Telegram bot."""
+
+    __tablename__ = "web_telegram_auth_attempts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    token_hash = Column(String(64), nullable=False, unique=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    completed_at = Column(DateTime, nullable=True)
+    consumed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+    user = relationship("User")
+
+
 class Tournament(Base):
     __tablename__ = "tournaments"
 

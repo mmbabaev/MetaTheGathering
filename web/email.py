@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 async def send_magic_link(to_email: str, magic_url: str) -> str | None:
     """Send magic link email. Returns magic_url when SMTP is not configured (for debug display)."""
     if not settings.SMTP_HOST:
-        logger.warning("SMTP not configured, magic link for %s: %s", to_email, magic_url)
-        return magic_url
+        logger.warning("SMTP is not configured; cannot send a magic link to %s", to_email)
+        return magic_url if settings.DEBUG else None
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = "Вход в MetaGatherer"

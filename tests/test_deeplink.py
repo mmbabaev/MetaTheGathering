@@ -16,10 +16,13 @@ from bot.deeplink import (
     parse_fill_missing_payload,
     parse_registration_payload,
     parse_round_payload,
+    parse_web_login_payload,
     registration_deeplink,
     registration_payload,
     round_deeplink,
     round_payload,
+    web_login_deeplink,
+    web_login_payload,
 )
 from bot.handlers.base import HandlerResult
 from bot.handlers.player import PlayerHandler
@@ -78,6 +81,15 @@ class TestPayload:
         assert cellar_deeplink("MyBot") == "https://t.me/MyBot?start=cellar"
         assert is_cellar_payload("cellar") is True
         assert is_cellar_payload("cellar_extra") is False
+
+    def test_web_login_payload_round_trip(self):
+        token = "abc_DEF-123"
+        assert parse_web_login_payload(web_login_payload(token)) == token
+        assert web_login_deeplink("MyBot", token) == "https://t.me/MyBot?start=web_login_abc_DEF-123"
+
+    @pytest.mark.parametrize("bad", ["", "web_login_", "web_login_bad.token", "web_login_токен", "register_1"])
+    def test_invalid_web_login_payloads_are_none(self, bad):
+        assert parse_web_login_payload(bad) is None
 
 
 @pytest.fixture
@@ -245,3 +257,16 @@ async def test_cmd_start_routes_cellar_deeplink():
         await cmd_start(update, context)
 
     start_cellar.assert_awaited_once_with(update, context)
+
+
+@pytest.mark.asyncio
+async def test_cmd_start_routes_web_login_deeplink():
+    update = MagicMock()
+    update.effective_user = MagicMock(id=123)
+    update.effective_message = AsyncMock()
+    context = MagicMock(args=["web_login_test-token"], user_data={})
+
+    with patch("bot.telegram.common._start_web_login_deeplink", new_callable=AsyncMock) as start_web_login:
+        await cmd_start(update, context)
+
+    start_web_login.assert_awaited_once_with(update, update.effective_user, "test-token")
