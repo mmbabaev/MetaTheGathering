@@ -15,6 +15,9 @@ info()  { echo -e "${GREEN}[web-deploy]${NC} $1"; }
 error() { echo -e "${RED}[error]${NC} $1"; exit 1; }
 
 SSH_KEY="${SSH_KEY:-~/.ssh/ssh-key-kara}"
+# Сетевой путь до сервера бывает нестабилен: без таймаутов зависший SSH держит
+# деплой (и слот concurrency-группы) часами — до лимита GitHub Actions.
+SSH_OPTS=(-o StrictHostKeyChecking=no -o ConnectTimeout=30 -o ConnectionAttempts=3 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
 SERVER_USER="mbabaev"
 SERVER_IP="158.160.9.28"
 
@@ -46,7 +49,7 @@ SSH_TARGET="${SERVER_USER}@${SERVER_IP}"
 
 cleanup() {
     rm -f -- "$ARCHIVE"
-    ssh -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no "$SSH_TARGET" \
+    ssh -i "${SSH_KEY/#\~/$HOME}" "${SSH_OPTS[@]}" "$SSH_TARGET" \
         "rm -f -- '$REMOTE_ARCHIVE'" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -77,7 +80,7 @@ info "Архив создан: $(du -sh $ARCHIVE | cut -f1)"
 ARCHIVE_BYTES=$(wc -c < "$ARCHIVE" | tr -d ' ')
 MIN_FREE_BYTES=$((200 * 1024 * 1024))
 REQUIRED_BYTES=$((ARCHIVE_BYTES + MIN_FREE_BYTES))
-REMOTE_FREE_BYTES=$(ssh -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no "$SSH_TARGET" \
+REMOTE_FREE_BYTES=$(ssh -i "${SSH_KEY/#\~/$HOME}" "${SSH_OPTS[@]}" "$SSH_TARGET" \
     "df -Pk /tmp | awk 'NR == 2 {print \$4 * 1024}'")
 if ! [[ "$REMOTE_FREE_BYTES" =~ ^[0-9]+$ ]]; then
     error "Не удалось определить свободное место в /tmp на сервере"
@@ -89,10 +92,10 @@ fi
 SYSTEMD_SERVICE_FILE="$REMOTE_DIR/bot/systemd/$SERVICE_NAME.service"
 
 info "Копируем на сервер..."
-scp -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no \
+scp -i "${SSH_KEY/#\~/$HOME}" "${SSH_OPTS[@]}" \
     "$ARCHIVE" "$SSH_TARGET:$REMOTE_ARCHIVE"
 
-ssh -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no "$SSH_TARGET" \
+ssh -i "${SSH_KEY/#\~/$HOME}" "${SSH_OPTS[@]}" "$SSH_TARGET" \
     ARCHIVE_NAME="$ARCHIVE_NAME" REMOTE_DIR="$REMOTE_DIR" SERVICE_NAME="$SERVICE_NAME" \
     SYSTEMD_SERVICE_FILE="$SYSTEMD_SERVICE_FILE" \
     BOT_ENV="$BOT_ENV" \
@@ -141,7 +144,7 @@ echo "→ Сервис $SERVICE_NAME запущен"
 REMOTE
 
 info "Статус сервиса:"
-ssh -i "${SSH_KEY/#\~/$HOME}" -o StrictHostKeyChecking=no "${SERVER_USER}@${SERVER_IP}" \
+ssh -i "${SSH_KEY/#\~/$HOME}" "${SSH_OPTS[@]}" "${SERVER_USER}@${SERVER_IP}" \
     "sudo systemctl status $SERVICE_NAME --no-pager -l | head -20"
 
 info "Web deploy завершён!"

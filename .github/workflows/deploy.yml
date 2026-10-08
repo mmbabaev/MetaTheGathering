@@ -9,6 +9,7 @@ jobs:
   deploy:
     name: Deploy PROD
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     concurrency:
       group: metagatherer-production-deploy
       cancel-in-progress: false
