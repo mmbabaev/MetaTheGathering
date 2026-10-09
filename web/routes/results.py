@@ -14,6 +14,21 @@ from web.templating import templates
 router = APIRouter()
 
 
+def decklist_copy_text(main_cards, sideboard_cards) -> str:
+    """Build a plain-text decklist suitable for pasting into deck tools."""
+
+    lines = [
+        f"{card.quantity} {card.card_name}" for card in sorted(main_cards, key=lambda card: card.card_name.lower())
+    ]
+    if sideboard_cards:
+        lines.extend(("", "Sideboard:"))
+        lines.extend(
+            f"{card.quantity} {card.card_name}"
+            for card in sorted(sideboard_cards, key=lambda card: card.card_name.lower())
+        )
+    return "\n".join(lines)
+
+
 @router.get("/results", response_class=HTMLResponse)
 async def results_list(request: Request, db: Session = Depends(get_db)):
     tournaments = (
@@ -51,6 +66,10 @@ async def result_detail(request: Request, slug: str, db: Session = Depends(get_d
             "standing": standing,
             "main": cards_by_player[standing.player_name]["Main"],
             "sideboard": cards_by_player[standing.player_name]["Sideboard"],
+            "decklist_text": decklist_copy_text(
+                cards_by_player[standing.player_name]["Main"],
+                cards_by_player[standing.player_name]["Sideboard"],
+            ),
         }
         for standing in tournament.standings
     ]
