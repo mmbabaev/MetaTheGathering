@@ -14,6 +14,7 @@ from bot.messages import CUSTOM_ARCHETYPE_PROMPT
 from bot.meta_police_message import refresh_meta_police_message
 from bot.telegram.common import announce_completion_if_ready, parse_callback_ints, parse_callback_page
 from bot.telegram.common import log_event as _log
+from bot.telegram.session import db_session
 from core import models
 from core.database import SessionLocal
 from services.aetherhub_import_service import AetherhubImportService
@@ -75,12 +76,9 @@ async def cmd_tournaments(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
     user = update.effective_user
     _log("cmd_tournaments", user)
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _player_handler(db).handle_tournaments(tg_id=user.id if user else None)
         await update.effective_message.reply_text(result.text, reply_markup=result.keyboard)
-    finally:
-        db.close()
 
 
 async def callback_tournament_select(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -91,16 +89,13 @@ async def callback_tournament_select(update: Update, context: ContextTypes.DEFAU
         return
     (tournament_id,) = ids
     _log("view_tournament", user, tournament_id=tournament_id)
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id if user else None)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
-    finally:
-        db.close()
 
 
 async def callback_register(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -111,8 +106,7 @@ async def callback_register(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
     (tournament_id,) = ids
     _log("register_start", user, tournament_id=tournament_id)
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _player_handler(db).handle_register(tournament_id, tg_id=user.id if user else None)
         _set_registration_pending(context, result, tournament_id)
         if result.is_alert:
@@ -123,8 +117,6 @@ async def callback_register(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         if result.tournament_id is not None and user is not None:
             card = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id)
             await query.message.reply_text(card.text, reply_markup=card.keyboard)
-    finally:
-        db.close()
 
 
 async def callback_archetype(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -136,8 +128,7 @@ async def callback_archetype(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if ids is None:
         return
     tournament_id, archetype_id = ids
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _player_handler(db).handle_archetype(
             user.id,
             user.username,
@@ -161,8 +152,6 @@ async def callback_archetype(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.message.reply_text(card.text, reply_markup=card.keyboard)
         await refresh_meta_police_message(context.bot, db, tournament_id)
         await announce_completion_if_ready(context.bot, db, tournament_id)
-    finally:
-        db.close()
 
 
 async def callback_defer_deck(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -174,8 +163,7 @@ async def callback_defer_deck(update: Update, context: ContextTypes.DEFAULT_TYPE
     if ids is None:
         return
     (tournament_id,) = ids
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _player_handler(db).handle_defer_deck(
             user.id,
             user.username,
@@ -196,8 +184,6 @@ async def callback_defer_deck(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.answer()
         card = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id)
         await query.message.reply_text(card.text, reply_markup=card.keyboard)
-    finally:
-        db.close()
 
 
 async def callback_archetype_more(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -209,13 +195,10 @@ async def callback_archetype_more(update: Update, context: ContextTypes.DEFAULT_
     if ids is None:
         return
     (tournament_id,) = ids
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _player_handler(db).handle_archetype_more(tournament_id, tg_id=user.id)
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
-    finally:
-        db.close()
 
 
 async def callback_custom_archetype(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -240,16 +223,13 @@ async def callback_pick_missing_deck(update: Update, context: ContextTypes.DEFAU
     if ids is None:
         return
     (participant_id,) = ids
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _player_handler(db).handle_pick_missing_deck(user.id, participant_id)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
-    finally:
-        db.close()
 
 
 async def callback_missing_deck_more(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -261,16 +241,13 @@ async def callback_missing_deck_more(update: Update, context: ContextTypes.DEFAU
     if ids is None:
         return
     (participant_id,) = ids
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _player_handler(db).handle_pick_missing_deck(user.id, participant_id, expanded=True)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
-    finally:
-        db.close()
 
 
 async def callback_set_missing_deck(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -282,8 +259,7 @@ async def callback_set_missing_deck(update: Update, context: ContextTypes.DEFAUL
     if ids is None:
         return
     participant_id, archetype_id = ids
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         participant = TournamentService(db).get_participant_by_id(participant_id)
         target = UserService(db).get_by_id(participant.user_id) if participant else None
         result = _player_handler(db).handle_set_missing_deck(user.id, participant_id, archetype_id)
@@ -310,8 +286,6 @@ async def callback_set_missing_deck(update: Update, context: ContextTypes.DEFAUL
             db,
             participant.tournament_id if participant else None,
         )
-    finally:
-        db.close()
 
 
 async def callback_missing_custom_deck(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -323,8 +297,7 @@ async def callback_missing_custom_deck(update: Update, context: ContextTypes.DEF
     if ids is None:
         return
     (participant_id,) = ids
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         validation = _player_handler(db).handle_pick_missing_deck(user.id, participant_id)
         if validation.is_alert:
             await query.answer(validation.text, show_alert=True)
@@ -334,8 +307,6 @@ async def callback_missing_custom_deck(update: Update, context: ContextTypes.DEF
         context.user_data[USER_DATA_PENDING_MISSING_CUSTOM_ARCH] = participant_id
         await query.edit_message_text(CUSTOM_ARCHETYPE_PROMPT)
         await query.answer()
-    finally:
-        db.close()
 
 
 async def callback_tournament_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -349,8 +320,7 @@ async def callback_tournament_status(update: Update, context: ContextTypes.DEFAU
     if page is None:
         return
     _log("view_status", user, tournament_id=tournament_id, page=page)
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         admin_h = _admin_handler(db)
         tournament = db.get(models.Tournament, tournament_id)
         if (
@@ -372,8 +342,6 @@ async def callback_tournament_status(update: Update, context: ContextTypes.DEFAU
             return
         await query.edit_message_text(result.text, reply_markup=result.keyboard, parse_mode=result.parse_mode)
         await query.answer()
-    finally:
-        db.close()
 
 
 async def callback_tournament_status_me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -386,8 +354,7 @@ async def callback_tournament_status_me(update: Update, context: ContextTypes.DE
         return
     (tournament_id,) = ids
     _log("view_status_me", user, tournament_id=tournament_id)
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         admin_h = _admin_handler(db)
         tournament = db.get(models.Tournament, tournament_id)
         if tournament is not None and admin_h.user_svc.is_privileged_for_tournament(user.id, tournament):
@@ -399,8 +366,6 @@ async def callback_tournament_status_me(update: Update, context: ContextTypes.DE
             return
         await query.edit_message_text(result.text, reply_markup=result.keyboard, parse_mode=result.parse_mode)
         await query.answer()
-    finally:
-        db.close()
 
 
 async def callback_decklist_edit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -412,8 +377,7 @@ async def callback_decklist_edit(update: Update, context: ContextTypes.DEFAULT_T
     if ids is None:
         return
     (tournament_id,) = ids
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _player_handler(db).handle_decklist_start(user.id, tournament_id)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
@@ -423,8 +387,6 @@ async def callback_decklist_edit(update: Update, context: ContextTypes.DEFAULT_T
         context.user_data[USER_DATA_PENDING_DECKLIST] = tournament_id
         await query.edit_message_text(result.text)
         await query.answer()
-    finally:
-        db.close()
 
 
 async def callback_own_decklist(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -436,16 +398,13 @@ async def callback_own_decklist(update: Update, context: ContextTypes.DEFAULT_TY
     if ids is None:
         return
     (tournament_id,) = ids
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _player_handler(db).handle_own_decklist(user.id, tournament_id)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
-    finally:
-        db.close()
 
 
 async def callback_decklist_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -457,16 +416,13 @@ async def callback_decklist_list(update: Update, context: ContextTypes.DEFAULT_T
     if ids is None:
         return
     tournament_id, page = ids
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _player_handler(db).handle_decklist_players(user.id, tournament_id, page)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
-    finally:
-        db.close()
 
 
 async def callback_decklist_view(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -478,16 +434,13 @@ async def callback_decklist_view(update: Update, context: ContextTypes.DEFAULT_T
     if ids is None:
         return
     participant_id, tournament_id, page = ids
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _player_handler(db).handle_decklist_view(user.id, participant_id, tournament_id, page)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
-    finally:
-        db.close()
 
 
 async def callback_leave_tournament(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -500,16 +453,13 @@ async def callback_leave_tournament(update: Update, context: ContextTypes.DEFAUL
         return
     (tournament_id,) = ids
     _log("leave_start", user, tournament_id=tournament_id)
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _player_handler(db).handle_leave_tournament(user.id, tournament_id)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
-    finally:
-        db.close()
 
 
 async def callback_leave_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -521,8 +471,7 @@ async def callback_leave_confirm(update: Update, context: ContextTypes.DEFAULT_T
     if ids is None:
         return
     (tournament_id,) = ids
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _player_handler(db).handle_leave_confirm(user.id, tournament_id)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
@@ -530,8 +479,6 @@ async def callback_leave_confirm(update: Update, context: ContextTypes.DEFAULT_T
         _log("leave", user, tournament_id=tournament_id)
         await query.edit_message_text(result.text)
         await query.answer()
-    finally:
-        db.close()
 
 
 async def callback_leave_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -543,16 +490,13 @@ async def callback_leave_cancel(update: Update, context: ContextTypes.DEFAULT_TY
     if ids is None:
         return
     (tournament_id,) = ids
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
-    finally:
-        db.close()
 
 
 async def _handle_pending_name(msg, user, text, context) -> bool:
@@ -562,8 +506,7 @@ async def _handle_pending_name(msg, user, text, context) -> bool:
     if not text:
         await msg.reply_text("Введите непустое имя.")
         return True
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _player_handler(db).handle_save_name_then_register(
             user.id,
             user.username,
@@ -576,8 +519,6 @@ async def _handle_pending_name(msg, user, text, context) -> bool:
         if result.tournament_id is not None:
             card = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id)
             await msg.reply_text(card.text, reply_markup=card.keyboard)
-    finally:
-        db.close()
     return True
 
 
@@ -587,42 +528,33 @@ async def _handle_pending_settings_name(msg, user, text, context) -> bool:
     if not text:
         await msg.reply_text("Введите непустое имя.")
         return True
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _settings_handler(db).handle_settings_name_text(user.id, text)
         if not result.needs_name:
             context.user_data.pop(USER_DATA_PENDING_SETTINGS_NAME, None)
         await msg.reply_text(result.text)
-    finally:
-        db.close()
     return True
 
 
 async def _handle_pending_settings_endstep_username(msg, user, text, context) -> bool:
     if not context.user_data.get(USER_DATA_PENDING_SETTINGS_ENDSTEP_USERNAME):
         return False
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _settings_handler(db).handle_settings_endstep_username_text(user.id, text)
         if not result.needs_endstep_username:
             context.user_data.pop(USER_DATA_PENDING_SETTINGS_ENDSTEP_USERNAME, None)
         await msg.reply_text(result.text)
-    finally:
-        db.close()
     return True
 
 
 async def _handle_pending_settings_city(msg, user, text, context) -> bool:
     if not context.user_data.get(USER_DATA_PENDING_SETTINGS_CITY):
         return False
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _settings_handler(db).handle_settings_city_text(user.id, text)
         if not result.needs_city:
             context.user_data.pop(USER_DATA_PENDING_SETTINGS_CITY, None)
         await msg.reply_text(result.text, reply_markup=result.keyboard)
-    finally:
-        db.close()
     return True
 
 
@@ -632,8 +564,7 @@ async def _handle_pending_cellar_name(msg, user, text, context) -> bool:
     if not text:
         await msg.reply_text("Введите непустое имя.")
         return True
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         saved = _settings_handler(db).handle_settings_name_text(user.id, text)
         if saved.needs_name:
             await msg.reply_text(saved.text)
@@ -646,8 +577,6 @@ async def _handle_pending_cellar_name(msg, user, text, context) -> bool:
             last_name=None,
         )
         await msg.reply_text(result.text, reply_markup=result.keyboard)
-    finally:
-        db.close()
     return True
 
 
@@ -660,8 +589,7 @@ async def _handle_pending_admin_custom_arch(msg, user, text, context) -> bool:
         return True
     context.user_data.pop(USER_DATA_PENDING_ADMIN_CUSTOM_ARCH)
     page = context.user_data.pop(USER_DATA_PENDING_ADMIN_CUSTOM_ARCH_PAGE, None)
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         if page is None:
             result = _admin_handler(db).handle_set_participant_custom_arch(user.id, participant_id, text)
         else:
@@ -673,8 +601,6 @@ async def _handle_pending_admin_custom_arch(msg, user, text, context) -> bool:
             part = TournamentService(db).get_participant_by_id(participant_id)
             await refresh_meta_police_message(context.bot, db, part.tournament_id if part else None)
             await announce_completion_if_ready(context.bot, db, part.tournament_id if part else None)
-    finally:
-        db.close()
     return True
 
 
@@ -686,8 +612,7 @@ async def _handle_pending_missing_custom_arch(msg, user, text, context) -> bool:
         await msg.reply_text("Введите непустое название архетипа.")
         return True
     context.user_data.pop(USER_DATA_PENDING_MISSING_CUSTOM_ARCH)
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         participant = TournamentService(db).get_participant_by_id(participant_id)
         target = UserService(db).get_by_id(participant.user_id) if participant else None
         result = _player_handler(db).handle_set_missing_custom_deck(user.id, participant_id, text)
@@ -712,8 +637,6 @@ async def _handle_pending_missing_custom_arch(msg, user, text, context) -> bool:
                 db,
                 participant.tournament_id if participant else None,
             )
-    finally:
-        db.close()
     return True
 
 
@@ -723,13 +646,10 @@ async def _handle_pending_bulk_add(msg, user, text, context) -> bool:
         return False
     context.user_data.pop(USER_DATA_PENDING_BULK_ADD)
     names = [line.strip() for line in text.splitlines() if line.strip()]
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _admin_handler(db).handle_bulk_add_by_name(user.id, tournament_id, names)
         _log("bulk_add", user, tournament_id=tournament_id, names=names)
         await msg.reply_text(result.text, reply_markup=result.keyboard)
-    finally:
-        db.close()
     return True
 
 
@@ -741,8 +661,7 @@ async def _handle_pending_custom_arch(msg, user, text, context) -> bool:
         await msg.reply_text("Введите непустое название архетипа.")
         return True
     context.user_data.pop(USER_DATA_PENDING_CUSTOM)
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _player_handler(db).handle_custom_archetype_text(
             user.id,
             user.username,
@@ -761,8 +680,6 @@ async def _handle_pending_custom_arch(msg, user, text, context) -> bool:
             await msg.reply_text(card.text, reply_markup=card.keyboard)
             await refresh_meta_police_message(context.bot, db, tournament_id)
             await announce_completion_if_ready(context.bot, db, tournament_id)
-    finally:
-        db.close()
     return True
 
 
@@ -770,8 +687,7 @@ async def _handle_pending_decklist(msg, user, text, context) -> bool:
     tournament_id = context.user_data.get(USER_DATA_PENDING_DECKLIST)
     if tournament_id is None:
         return False
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _player_handler(db).handle_decklist_text(user.id, tournament_id, text)
         await msg.reply_text(result.text)
         if result.is_alert:
@@ -779,8 +695,6 @@ async def _handle_pending_decklist(msg, user, text, context) -> bool:
         context.user_data.pop(USER_DATA_PENDING_DECKLIST, None)
         card = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id)
         await msg.reply_text(card.text, reply_markup=card.keyboard)
-    finally:
-        db.close()
     return True
 
 
@@ -798,8 +712,7 @@ async def _handle_pending_meta_import(msg, user, text, context) -> bool:
     if tournament_id is None:
         return False
     context.user_data.pop(USER_DATA_PENDING_META_IMPORT)
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _admin_handler(db).handle_meta_import_table(user.id, tournament_id, text)
         if result.is_alert:
             await msg.reply_text(result.text)
@@ -808,8 +721,6 @@ async def _handle_pending_meta_import(msg, user, text, context) -> bool:
         await msg.reply_text(result.text, reply_markup=result.keyboard, parse_mode=result.parse_mode)
         await refresh_meta_police_message(context.bot, db, tournament_id)
         await announce_completion_if_ready(context.bot, db, tournament_id)
-    finally:
-        db.close()
     return True
 
 
@@ -819,8 +730,7 @@ async def _handle_pending_broadcast_text(msg, user, text, context) -> bool:
     if not draft:
         return False
     tournament_id = draft["tournament_id"]
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _admin_handler(db).handle_broadcast_preview(user.id, tournament_id, text)
         if result.is_alert:
             context.user_data.pop(USER_DATA_PENDING_BROADCAST, None)
@@ -832,8 +742,6 @@ async def _handle_pending_broadcast_text(msg, user, text, context) -> bool:
         }
         _log("broadcast_preview", user, tournament_id=tournament_id)
         await msg.reply_text(result.text, reply_markup=result.keyboard)
-    finally:
-        db.close()
     return True
 
 

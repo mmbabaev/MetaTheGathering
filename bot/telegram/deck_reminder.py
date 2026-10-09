@@ -11,12 +11,8 @@ from services.deck_reminders import DeckReminderService, DeckReminderStage
 logger = logging.getLogger(__name__)
 
 _MESSAGES = {
-    DeckReminderStage.PRESTART: (
-        "⏰ Турнир скоро начинается, а ты ещё не указал колоду. Выбери её сейчас:"
-    ),
-    DeckReminderStage.ROUND2: (
-        "🔔 Уже начался второй раунд, а колода всё ещё не указана. Пожалуйста, выбери её:"
-    ),
+    DeckReminderStage.PRESTART: ("⏰ Турнир скоро начинается, а ты ещё не указал колоду. Выбери её сейчас:"),
+    DeckReminderStage.ROUND2: ("🔔 Уже начался второй раунд, а колода всё ещё не указана. Пожалуйста, выбери её:"),
 }
 
 

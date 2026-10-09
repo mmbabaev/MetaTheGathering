@@ -6,6 +6,7 @@ from telegram.ext import ContextTypes
 from bot.handlers.leaderboard import RankedLeaderboardHandler, leaderboard_menu
 from bot.handlers.ranked import RankedPreseasonHandler
 from bot.telegram.common import parse_callback_ints
+from bot.telegram.session import db_session
 from core.database import SessionLocal
 from services.feature_flags import FeatureFlagService
 from services.ranked import RankedPreseasonService
@@ -46,13 +47,10 @@ async def callback_leaderboard_moscow(update: Update, context: ContextTypes.DEFA
     query = update.callback_query
     if query is None:
         return
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _leaderboard_handler(db).handle_page()
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
-    finally:
-        db.close()
 
 
 async def callback_leaderboard_page(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -60,13 +58,10 @@ async def callback_leaderboard_page(update: Update, context: ContextTypes.DEFAUL
     ids = await parse_callback_ints(query, 1)
     if ids is None:
         return
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _leaderboard_handler(db).handle_page(ids[0])
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
-    finally:
-        db.close()
 
 
 async def callback_leaderboard_me(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -74,13 +69,10 @@ async def callback_leaderboard_me(update: Update, context: ContextTypes.DEFAULT_
     user = update.effective_user
     if query is None or user is None:
         return
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _leaderboard_handler(db).handle_me(user.id)
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
-    finally:
-        db.close()
 
 
 async def callback_leaderboard_rules(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -88,13 +80,10 @@ async def callback_leaderboard_rules(update: Update, context: ContextTypes.DEFAU
     ids = await parse_callback_ints(query, 1)
     if ids is None:
         return
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _leaderboard_handler(db).handle_rules(ids[0])
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
-    finally:
-        db.close()
 
 
 async def cmd_ranked_preseason(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -102,9 +91,6 @@ async def cmd_ranked_preseason(update: Update, context: ContextTypes.DEFAULT_TYP
     msg = update.effective_message
     if not user or not msg:
         return
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _handler(db).handle(user.id)
         await msg.reply_text(result.text)
-    finally:
-        db.close()

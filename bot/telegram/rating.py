@@ -2,6 +2,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from bot.handlers.rating import RatingHandler
+from bot.telegram.session import db_session
 from core.database import SessionLocal
 from services.tournament import TournamentService
 from services.user import UserService
@@ -16,12 +17,9 @@ async def cmd_social_rating(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     msg = update.effective_message
     if not user or not msg:
         return
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _handler(db).handle_social_rating(tg_id=user.id)
         await msg.reply_text(result.text, reply_markup=result.keyboard)
-    finally:
-        db.close()
 
 
 async def callback_social_rating(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -29,10 +27,7 @@ async def callback_social_rating(update: Update, context: ContextTypes.DEFAULT_T
     user = update.effective_user
     if query is None or user is None:
         return
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _handler(db).handle_social_rating(tg_id=user.id)
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer()
-    finally:
-        db.close()

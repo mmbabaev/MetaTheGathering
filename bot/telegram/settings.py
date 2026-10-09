@@ -10,6 +10,7 @@ from bot.messages import (
     SETTINGS_CITY_CUSTOM_PROMPT,
 )
 from bot.telegram.common import log_event as _log
+from bot.telegram.session import db_session
 from core.database import SessionLocal
 from services.user import UserService
 
@@ -44,12 +45,9 @@ async def cmd_settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not user or not msg:
         return
     _log("cmd_settings", user)
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _settings_handler(db).handle_settings(user.id)
         await msg.reply_text(result.text, reply_markup=result.keyboard)
-    finally:
-        db.close()
 
 
 async def callback_settings_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -81,12 +79,9 @@ async def callback_settings_city(update: Update, context: ContextTypes.DEFAULT_T
         return
     _log("settings_city_open", user)
     _set_pending_field(context)
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _settings_handler(db).handle_city_menu(user.id)
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
-    finally:
-        db.close()
     await query.answer()
 
 
@@ -98,16 +93,13 @@ async def callback_settings_city_choice(update: Update, context: ContextTypes.DE
     _log("settings_city_choice", user)
     city_code = query.data.partition(":")[2]
     _set_pending_field(context)
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _settings_handler(db).handle_settings_city_choice(user.id, city_code)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
             return
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
         await query.answer(result.answer_text)
-    finally:
-        db.close()
 
 
 async def callback_settings_city_custom(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -127,12 +119,9 @@ async def callback_settings_home(update: Update, context: ContextTypes.DEFAULT_T
     if not query or not user:
         return
     _set_pending_field(context)
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _settings_handler(db).handle_settings(user.id)
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
-    finally:
-        db.close()
     await query.answer()
 
 
@@ -142,12 +131,9 @@ async def callback_toggle_emoji(update: Update, context: ContextTypes.DEFAULT_TY
     if not query or not user:
         return
     _log("settings_toggle_emoji", user)
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _settings_handler(db).handle_toggle_emoji(user.id)
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
-    finally:
-        db.close()
     await query.answer()
 
 
@@ -157,12 +143,9 @@ async def callback_toggle_opponent_notify(update: Update, context: ContextTypes.
     if not query or not user:
         return
     _log("settings_toggle_opp_notify", user)
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _settings_handler(db).handle_toggle_opponent_notify(user.id)
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
-    finally:
-        db.close()
     await query.answer()
 
 
@@ -172,12 +155,9 @@ async def callback_toggle_achievements_notify(update: Update, context: ContextTy
     if not query or not user:
         return
     _log("settings_toggle_achievements_notify", user)
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _settings_handler(db).handle_toggle_achievements_notify(user.id)
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
-    finally:
-        db.close()
     await query.answer()
 
 
@@ -187,12 +167,9 @@ async def callback_toggle_poll_notify(update: Update, context: ContextTypes.DEFA
     if not query or not user:
         return
     _log("settings_toggle_poll_notify", user)
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _settings_handler(db).handle_toggle_poll_notify(user.id)
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
-    finally:
-        db.close()
     await query.answer()
 
 
@@ -202,12 +179,9 @@ async def callback_toggle_cellar_notify(update: Update, context: ContextTypes.DE
     if not query or not user:
         return
     _log("settings_toggle_cellar_notify", user)
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _settings_handler(db).handle_toggle_cellar_notify(user.id)
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
-    finally:
-        db.close()
     await query.answer()
 
 
@@ -217,10 +191,7 @@ async def callback_toggle_status_pairings(update: Update, context: ContextTypes.
     if not query or not user:
         return
     _log("settings_toggle_status_pairings", user)
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _settings_handler(db).handle_toggle_status_by_pairings(user.id)
         await query.edit_message_text(result.text, reply_markup=result.keyboard)
-    finally:
-        db.close()
     await query.answer()

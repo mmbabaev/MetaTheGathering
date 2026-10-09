@@ -6,6 +6,7 @@ from telegram.ext import ContextTypes
 from bot.handlers.clubs import ClubSettingsHandler
 from bot.keyboards import Keyboards
 from bot.telegram.common import log_event as _log
+from bot.telegram.session import db_session
 from core.database import SessionLocal
 from services.club_settings import ClubAnnouncementSettingsService
 from services.user import UserService
@@ -20,11 +21,8 @@ async def cmd_clubs(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.effective_message
     if not user or not message:
         return
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _handler(db).handle_list(user.id)
-    finally:
-        db.close()
     await message.reply_text(result.text, reply_markup=result.keyboard)
 
 
@@ -33,11 +31,8 @@ async def callback_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     user = update.effective_user
     if not query or not user:
         return
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _handler(db).handle_list(user.id)
-    finally:
-        db.close()
     await query.edit_message_text(result.text, reply_markup=result.keyboard)
     await query.answer()
 
@@ -52,11 +47,8 @@ async def callback_club(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     except ValueError:
         await query.answer("Ошибка данных.", show_alert=True)
         return
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _handler(db).handle_club(user.id, club_index)
-    finally:
-        db.close()
     if result.is_alert:
         await query.answer(result.text, show_alert=True)
         return
@@ -74,11 +66,8 @@ async def callback_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await query.answer("Ошибка данных.", show_alert=True)
         return
     club_index, destination = int(parts[1]), parts[2]
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _handler(db).handle_set_destination(user.id, club_index, destination)
-    finally:
-        db.close()
     if result.is_alert:
         await query.answer(result.text, show_alert=True)
         return

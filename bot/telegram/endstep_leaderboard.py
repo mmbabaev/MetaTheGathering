@@ -9,6 +9,7 @@ from telegram.ext import ContextTypes
 
 from bot.handlers.endstep_leaderboard import EndstepRuLeaderboardHandler, EndstepRuLeaderboardLoad
 from bot.telegram.common import parse_callback_ints
+from bot.telegram.session import db_session
 from core.database import SessionLocal
 from services.endstep_ru_leaderboard import EndstepRuLeaderboard, EndstepRuLeaderboardService
 from services.user import UserService
@@ -17,21 +18,15 @@ USER_DATA_ENDSTEP_RU_SNAPSHOT = "endstep_ru_leaderboard_snapshot"
 
 
 def _load_sync(tg_id: int, page: int = 0) -> EndstepRuLeaderboardLoad:
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         handler = EndstepRuLeaderboardHandler(EndstepRuLeaderboardService(db))
         return handler.load(tg_id, page)
-    finally:
-        db.close()
 
 
 def _load_me_sync(tg_id: int) -> EndstepRuLeaderboardLoad:
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         handler = EndstepRuLeaderboardHandler(EndstepRuLeaderboardService(db), UserService(db))
         return handler.load_me(tg_id)
-    finally:
-        db.close()
 
 
 async def _load(tg_id: int, page: int = 0) -> EndstepRuLeaderboardLoad:

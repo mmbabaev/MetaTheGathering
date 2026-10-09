@@ -10,6 +10,7 @@ from telegram.ext import ContextTypes
 from bot.handlers.create_tournament import CreateTournamentWizardHandler
 from bot.keyboards import Keyboards
 from bot.telegram.common import log_event as _log
+from bot.telegram.session import db_session
 from bot.tournament_creation import execute_creation_plan
 from core import models
 from core.database import SessionLocal
@@ -51,11 +52,8 @@ async def cmd_create_tournament_wizard(update: Update, context: ContextTypes.DEF
     message = update.effective_message
     if not user or not message:
         return
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _handler(db).handle_start(user.id)
-    finally:
-        db.close()
     if result.keyboard is not None:
         _draft(context).clear()
         context.user_data.pop(USER_DATA_PENDING_CREATE_TOURNAMENT_NAME, None)
@@ -67,11 +65,8 @@ async def _edit(update: Update, context, action) -> None:
     user = update.effective_user
     if not query or not user:
         return
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = action(_handler(db), user.id, _draft(context))
-    finally:
-        db.close()
     if result.is_alert:
         await query.answer(result.text, show_alert=True)
         return
@@ -158,16 +153,13 @@ async def handle_pending_create_tournament_name(msg, user, text, context) -> boo
     if not text:
         await msg.reply_text("Введите непустое название.")
         return True
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _handler(db).handle_name_text(user.id, draft, text)
         if result.is_alert:
             await msg.reply_text(result.text)
             return True
         context.user_data.pop(USER_DATA_PENDING_CREATE_TOURNAMENT_NAME, None)
         await msg.reply_text(result.text, reply_markup=result.keyboard)
-    finally:
-        db.close()
     return True
 
 
@@ -188,8 +180,7 @@ async def callback_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     user = update.effective_user
     if not query or not user:
         return
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _handler(db).handle_confirm(user.id, _draft(context))
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
@@ -212,5 +203,3 @@ async def callback_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         _log("create_tournament_plan", user, creation_plan_id=result.creation_plan_id)
         await query.edit_message_text(result.text)
         await query.answer()
-    finally:
-        db.close()

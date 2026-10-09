@@ -7,6 +7,7 @@ from bot.handlers.schedule import ScheduleHandler
 from bot.keyboards import Keyboards
 from bot.telegram.common import log_event as _log
 from bot.telegram.common import parse_callback_ints
+from bot.telegram.session import db_session
 from core.database import SessionLocal
 from services.schedule import ScheduleService
 from services.user import UserService
@@ -38,11 +39,8 @@ async def cmd_schedule(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not user or not msg:
         return
     _log("cmd_schedule", user)
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _schedule_handler(db).handle_schedule_list(user.id)
-    finally:
-        db.close()
     await msg.reply_text(result.text, reply_markup=result.keyboard)
 
 
@@ -52,11 +50,8 @@ async def callback_schedule_list(update: Update, context: ContextTypes.DEFAULT_T
     user = update.effective_user
     if not user:
         return
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _schedule_handler(db).handle_schedule_list(user.id)
-    finally:
-        db.close()
     await query.edit_message_text(result.text, reply_markup=result.keyboard)
     await query.answer()
 
@@ -66,11 +61,8 @@ async def callback_club_settings_list(update: Update, context: ContextTypes.DEFA
     user = update.effective_user
     if not query or not user:
         return
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _schedule_handler(db).handle_club_settings_list(user.id)
-    finally:
-        db.close()
     await query.edit_message_text(result.text, reply_markup=result.keyboard)
     await query.answer()
 
@@ -83,11 +75,8 @@ async def callback_club_settings(update: Update, context: ContextTypes.DEFAULT_T
     ids = await parse_callback_ints(query, 1)
     if ids is None:
         return
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _schedule_handler(db).handle_club_settings(user.id, ids[0])
-    finally:
-        db.close()
     if result.is_alert:
         await query.answer(result.text, show_alert=True)
         return
@@ -103,11 +92,8 @@ async def callback_club_toggle_pairings(update: Update, context: ContextTypes.DE
     ids = await parse_callback_ints(query, 1)
     if ids is None:
         return
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _schedule_handler(db).handle_toggle_pairings_publication(user.id, ids[0])
-    finally:
-        db.close()
     if result.is_alert:
         await query.answer(result.text, show_alert=True)
         return
@@ -126,11 +112,8 @@ async def callback_schedule_row(update: Update, context: ContextTypes.DEFAULT_TY
     if ids is None:
         return
     (row_id,) = ids
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _schedule_handler(db).handle_schedule_row(user.id, row_id)
-    finally:
-        db.close()
     if result.is_alert:
         await query.answer(result.text, show_alert=True)
         return
@@ -148,11 +131,8 @@ async def callback_schedule_toggle(update: Update, context: ContextTypes.DEFAULT
     if ids is None:
         return
     (row_id,) = ids
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _schedule_handler(db).handle_toggle_row(user.id, row_id)
-    finally:
-        db.close()
     if result.is_alert:
         await query.answer(result.text, show_alert=True)
         return
@@ -172,16 +152,13 @@ async def callback_schedule_edit_field(update: Update, context: ContextTypes.DEF
     if ids is None:
         return
     row_id, field_idx = ids
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         handler = _schedule_handler(db)
         field = handler.field_name(field_idx)
         if field is None:
             await query.answer("Ошибка данных.", show_alert=True)
             return
         result = handler.handle_edit_field_prompt(user.id, row_id, field)
-    finally:
-        db.close()
     if result.is_alert:
         await query.answer(result.text, show_alert=True)
         return
@@ -202,11 +179,8 @@ async def callback_schedule_imports(update: Update, context: ContextTypes.DEFAUL
     if ids is None:
         return
     (row_id,) = ids
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _schedule_handler(db).handle_imports_prompt(user.id, row_id)
-    finally:
-        db.close()
     if result.is_alert:
         await query.answer(result.text, show_alert=True)
         return
@@ -227,11 +201,8 @@ async def callback_schedule_weekday(update: Update, context: ContextTypes.DEFAUL
     if ids is None:
         return
     (row_id,) = ids
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _schedule_handler(db).handle_weekday_picker(user.id, row_id)
-    finally:
-        db.close()
     if result.is_alert:
         await query.answer(result.text, show_alert=True)
         return
@@ -249,11 +220,8 @@ async def callback_schedule_set_weekday(update: Update, context: ContextTypes.DE
     if ids is None:
         return
     row_id, weekday_idx = ids
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _schedule_handler(db).handle_set_weekday(user.id, row_id, weekday_idx)
-    finally:
-        db.close()
     if result.is_alert:
         await query.answer(result.text, show_alert=True)
         return
@@ -271,15 +239,12 @@ async def handle_pending_schedule_edit(msg: Message, user: User, text: str, cont
     row_id, kind = pending
     context.user_data.pop(USER_DATA_PENDING_SCHEDULE_EDIT)
 
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         handler = _schedule_handler(db)
         if kind == "imports":
             result = handler.handle_set_imports(user.id, row_id, text)
         else:
             result = handler.handle_set_time(user.id, row_id, kind, text)
-    finally:
-        db.close()
 
     if result.is_alert:
         await msg.reply_text(result.text)
