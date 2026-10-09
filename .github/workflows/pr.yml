@@ -45,7 +45,9 @@ jobs:
     name: Deploy DEBUG
     needs: test
     runs-on: ubuntu-latest
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    # Deploys are paused while the data-center VM is unavailable. Re-enable by
+    # setting the repository variable DEPLOY_ENABLED=true.
+    if: vars.DEPLOY_ENABLED == 'true' && github.event.pull_request.head.repo.full_name == github.repository
     concurrency:
       group: metagatherer-debug-deploy
       cancel-in-progress: false

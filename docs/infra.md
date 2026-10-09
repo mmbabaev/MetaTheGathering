@@ -56,6 +56,14 @@ Read `pauper_sim/README.md` for the full description.
 
 ## GitHub Actions
 
+### Deployment pause
+
+All deploy jobs are guarded by the repository variable `DEPLOY_ENABLED`. When it is absent
+or not equal to `true`, GitHub Actions still runs tests but skips production, web, Pauper Sim,
+and PR Debug deployments. This is the temporary safe mode while the data-center VM is
+unavailable. Re-enable deployments by setting `DEPLOY_ENABLED=true` in the repository Actions
+variables after SSH and the VM have been verified.
+
 ### `deploy.yml` — Production deploy
 
 Trigger: push to `main`

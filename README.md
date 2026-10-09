@@ -29,14 +29,17 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. Конфигурация
+### 2. Конфигурация локального Debug
 
-Создайте `.env` в корне проекта:
+Локальный `server.sh` всегда запускает только Debug-режим и читает `bot/.env.debug`:
 
 ```env
-TELEGRAM_BOT_TOKEN=<токен бота>
-DATABASE_URL=postgresql://user:password@localhost:5432/metagatherer
+TELEGRAM_BOT_TOKEN=<токен отдельного debug-бота>
+DATABASE_URL=postgresql://user:password@localhost:5432/metagatherer_debug
 ```
+
+Debug-токен должен отличаться от production-токена. База должна быть локальной
+(SQLite или PostgreSQL на `localhost`/`127.0.0.1`). Production `bot/.env` локально не используется.
 
 ### 3. База данных
 
@@ -47,8 +50,8 @@ alembic upgrade head
 ### 4. Запуск
 
 ```bash
-./server.sh          # перезапустить (стоп + старт) — по умолчанию
-./server.sh start    # запустить, если не запущен
+./server.sh          # перезапустить Debug (стоп + старт) — по умолчанию
+./server.sh start    # запустить Debug, если не запущен
 ./server.sh stop     # остановить
 ./server.sh status   # PID и последние 20 строк лога
 ./server.sh logs     # tail -f server.log
@@ -62,8 +65,15 @@ alembic upgrade head
 
 Деплой происходит автоматически через GitHub Actions:
 
-- push в `main` → деплой на продовый сервер
-- открытие PR → деплой на дебаг-сервер
+- push в `main` → деплой на продовый сервер, только когда repository variable
+  `DEPLOY_ENABLED=true`
+- открытие PR → тесты; debug-деплой также выполняется только при
+  `DEPLOY_ENABLED=true`
+
+Сейчас деплои временно приостановлены из-за недоступности дата-центра. Новые PR можно
+проверять и вливать после успешных тестов, не затрагивая production. После восстановления
+VM владелец может вернуть `DEPLOY_ENABLED=true` в Settings → Secrets and variables →
+Actions → Variables.
 
 ---
 
