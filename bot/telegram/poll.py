@@ -19,6 +19,7 @@ from bot.keyboards import (
 )
 from bot.telegram.common import log_event as _log
 from bot.telegram.common import parse_callback_ints
+from bot.telegram.session import db_session
 from core.config import settings
 from core.database import SessionLocal
 from services.archetype import ArchetypeService
@@ -87,8 +88,7 @@ async def callback_poll_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
     (tournament_id,) = ids
 
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         if not UserService(db).can_manage_polls(user.id):
             await query.answer("Нет прав.", show_alert=True)
             return
@@ -109,8 +109,6 @@ async def callback_poll_menu(update: Update, context: ContextTypes.DEFAULT_TYPE)
             reply_markup=poll_menu_keyboard(tournament_id, poll_link),
         )
         await query.answer()
-    finally:
-        db.close()
 
 
 async def callback_link_poll_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -124,13 +122,10 @@ async def callback_link_poll_prompt(update: Update, context: ContextTypes.DEFAUL
         return
     (tournament_id,) = ids
 
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         if not UserService(db).can_manage_polls(user.id):
             await query.answer("Нет прав.", show_alert=True)
             return
-    finally:
-        db.close()
 
     context.user_data[USER_DATA_PENDING_LINK_POLL] = tournament_id
     await query.answer()
@@ -184,8 +179,7 @@ async def handle_pending_link_poll(msg: Message, user: User, text: str, context)
         actual_chat_id = from_chat_id if isinstance(from_chat_id, int) else 0
         chat_username = None
 
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         poll_svc = PollService(db)
         existing = poll_svc.get_poll_by_tg_id(tg_poll_id)
         if existing:
@@ -200,8 +194,6 @@ async def handle_pending_link_poll(msg: Message, user: User, text: str, context)
             )
         t = get_tournament(db, tournament_id)
         poll_link = _poll_message_link(poll.chat_id, poll.message_id, poll.chat_username)
-    finally:
-        db.close()
 
     await msg.reply_text(
         f"📊 Опрос — «{t.title}»",
@@ -221,8 +213,7 @@ async def callback_create_poll(update: Update, context: ContextTypes.DEFAULT_TYP
         return
     (tournament_id,) = ids
 
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _admin_handler(db).handle_create_poll(user.id, tournament_id)
         if result.is_alert:
             await query.answer(result.text, show_alert=True)
@@ -271,8 +262,6 @@ async def callback_create_poll(update: Update, context: ContextTypes.DEFAULT_TYP
             )
         else:
             await query.message.reply_text(f"{created_text}\n\nПодписчиков на уведомления пока нет.")
-    finally:
-        db.close()
 
 
 def _organizer_display(user: User) -> str:
@@ -292,8 +281,7 @@ async def callback_poll_broadcast(update: Update, context: ContextTypes.DEFAULT_
         return
     (tournament_id,) = ids
 
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         if not UserService(db).can_manage_polls(user.id):
             await query.answer("Нет прав.", show_alert=True)
             return
@@ -335,8 +323,6 @@ async def callback_poll_broadcast(update: Update, context: ContextTypes.DEFAULT_
         _log("poll_broadcast", user, tournament_id=tournament_id, sent=sent, total=len(targets))
         await query.edit_message_text(f"✅ Уведомление разослано {sent} подписчикам.")
         await query.answer()
-    finally:
-        db.close()
 
 
 async def callback_poll_broadcast_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -368,14 +354,11 @@ async def cmd_poll(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not user or not msg:
         return
     _log("cmd_poll", user)
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         if not UserService(db).can_manage_polls(user.id):
             await msg.reply_text("Эта команда только для организаторов голосований.")
             return
         clubs = PollService(db).list_club_chats()
-    finally:
-        db.close()
 
     if not clubs:
         await msg.reply_text("Пока нет ни одного клуба с турнирами.")
@@ -389,14 +372,11 @@ async def callback_poll_org_menu(update: Update, context: ContextTypes.DEFAULT_T
     user = update.effective_user
     if not user:
         return
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         if not UserService(db).can_manage_polls(user.id):
             await query.answer("Нет прав.", show_alert=True)
             return
         clubs = PollService(db).list_club_chats()
-    finally:
-        db.close()
     await query.edit_message_text("📊 Организатор голосований — выбери клуб:", reply_markup=poll_clubs_keyboard(clubs))
     await query.answer()
 
@@ -412,16 +392,13 @@ async def callback_poll_club(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
     (chat_id,) = ids
 
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         if not UserService(db).can_manage_polls(user.id):
             await query.answer("Нет прав.", show_alert=True)
             return
         poll_svc = PollService(db)
         label = dict(poll_svc.list_club_chats()).get(chat_id, f"chat {chat_id}")
         count = len(poll_svc.get_regular_user_ids(chat_id))
-    finally:
-        db.close()
 
     await query.edit_message_text(
         f"📊 Клуб «{label}»",
@@ -441,16 +418,13 @@ async def callback_poll_regulars(update: Update, context: ContextTypes.DEFAULT_T
         return
     chat_id, page = ids
 
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         if not UserService(db).can_manage_polls(user.id):
             await query.answer("Нет прав.", show_alert=True)
             return
         poll_svc = PollService(db)
         players = [(u.id, _display_name(u)) for u in poll_svc.get_club_players(chat_id)]
         regular_ids = poll_svc.get_regular_user_ids(chat_id)
-    finally:
-        db.close()
 
     if not players:
         await query.answer("В этом клубе пока нет игроков с ботом.", show_alert=True)
@@ -473,8 +447,7 @@ async def callback_poll_regular_toggle(update: Update, context: ContextTypes.DEF
         return
     chat_id, target_user_id, page = ids
 
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         if not UserService(db).can_manage_polls(user.id):
             await query.answer("Нет прав.", show_alert=True)
             return
@@ -482,8 +455,6 @@ async def callback_poll_regular_toggle(update: Update, context: ContextTypes.DEF
         now_regular = poll_svc.toggle_regular(chat_id, target_user_id)
         players = [(u.id, _display_name(u)) for u in poll_svc.get_club_players(chat_id)]
         regular_ids = poll_svc.get_regular_user_ids(chat_id)
-    finally:
-        db.close()
 
     await query.edit_message_reply_markup(
         reply_markup=poll_regulars_keyboard(chat_id, players, regular_ids, page, page_size=REGULARS_PAGE_SIZE)
@@ -502,8 +473,7 @@ async def callback_poll_ping(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
     (chat_id,) = ids
 
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         if not UserService(db).can_manage_polls(user.id):
             await query.answer("Нет прав.", show_alert=True)
             return
@@ -516,8 +486,6 @@ async def callback_poll_ping(update: Update, context: ContextTypes.DEFAULT_TYPE)
         poll = poll_svc.get_latest_poll_for_chat(chat_id)
         targets = poll_svc.get_ping_targets(chat_id, poll.id if poll else None)
         names = poll_svc.get_voter_display_names(targets)
-    finally:
-        db.close()
 
     if not targets:
         text = f"📋 «{label}»: все регуляры уже написаны/проголосовали 🎉"
@@ -541,8 +509,7 @@ async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     option_ids = poll_answer.option_ids
 
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         poll_svc = PollService(db)
         poll = poll_svc.get_poll_by_tg_id(poll_answer.poll_id)
         if poll is None:
@@ -551,8 +518,6 @@ async def handle_poll_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
             poll_svc.remove_vote(poll.id, tg_user_id)
         else:
             poll_svc.upsert_vote(poll.id, tg_user_id, option_ids[0])
-    finally:
-        db.close()
 
 
 def _build_notify_preview(
@@ -605,8 +570,7 @@ async def callback_notify_no_deck(update: Update, context: ContextTypes.DEFAULT_
         return
     (tournament_id,) = ids
 
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         if not UserService(db).can_manage_polls(user.id):
             await query.answer("Нет прав.", show_alert=True)
             return
@@ -620,8 +584,6 @@ async def callback_notify_no_deck(update: Update, context: ContextTypes.DEFAULT_
         preview_text, _ = result
         await query.edit_message_text(preview_text, reply_markup=notify_confirm_keyboard(tournament_id))
         await query.answer()
-    finally:
-        db.close()
 
 
 async def callback_notify_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -635,8 +597,7 @@ async def callback_notify_confirm(update: Update, context: ContextTypes.DEFAULT_
         return
     (tournament_id,) = ids
 
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         if not UserService(db).can_manage_polls(user.id):
             await query.answer("Нет прав.", show_alert=True)
             return
@@ -672,8 +633,6 @@ async def callback_notify_confirm(update: Update, context: ContextTypes.DEFAULT_
         _log("notify_no_deck", user, tournament_id=tournament_id, sent=sent, total=len(voters))
         await query.edit_message_text(f"✅ Отправлено {sent} из {len(voters)} игроков.")
         await query.answer()
-    finally:
-        db.close()
 
 
 async def callback_notify_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

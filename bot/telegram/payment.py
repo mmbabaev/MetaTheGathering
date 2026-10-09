@@ -4,6 +4,7 @@ from telegram.ext import ContextTypes
 from bot.handlers.payment import PaymentHandler
 from bot.keyboards import Keyboards
 from bot.telegram.common import parse_callback_ints
+from bot.telegram.session import db_session
 from core.database import SessionLocal
 from services import errors
 from services.payment_service import PaymentService
@@ -30,8 +31,7 @@ async def callback_pay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
     (tournament_id,) = ids
 
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         try:
             t = get_tournament(db, tournament_id)
         except errors.TournamentNotFound:
@@ -53,5 +53,3 @@ async def callback_pay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 tg_chat_id=sent.chat_id,
                 tg_message_id=sent.message_id,
             )
-    finally:
-        db.close()

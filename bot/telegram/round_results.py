@@ -14,6 +14,7 @@ from bot.swiss_completion import publish_swiss_completion
 from bot.telegram.club_pairings import refresh_club_pairings, send_club_pairings
 from bot.telegram.common import parse_callback_ints
 from bot.telegram.round_notify import send_round_notifications
+from bot.telegram.session import db_session
 from core import models
 from core.config import settings
 from core.database import SessionLocal
@@ -66,11 +67,8 @@ async def _simple(update: Update, count: int, action) -> None:
     values = await parse_callback_ints(query, count)
     if values is None:
         return
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         await _render(query, action(RoundResultsHandler(db), user.id, *values))
-    finally:
-        db.close()
 
 
 async def callback_open(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -98,14 +96,11 @@ async def callback_send(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if values is None:
         return
     match_id, own, opponent = values
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         delivery = RoundResultsHandler(db).handle_send(match_id, user.id, own, opponent)
         if await _render(query, delivery.screen):
             await _refresh_public_message(context.bot, db, delivery)
             await _deliver_one(context.bot, delivery)
-    finally:
-        db.close()
 
 
 async def callback_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -125,8 +120,7 @@ async def _respond(update: Update, context: ContextTypes.DEFAULT_TYPE, *, confir
     if values is None:
         return
     match_id, revision = values
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         handler = RoundResultsHandler(db)
         delivery = (
             handler.handle_confirm(match_id, revision, user.id)
@@ -136,8 +130,6 @@ async def _respond(update: Update, context: ContextTypes.DEFAULT_TYPE, *, confir
         if await _render(query, delivery.screen):
             await _refresh_public_message(context.bot, db, delivery)
             await _deliver_one(context.bot, delivery)
-    finally:
-        db.close()
 
 
 async def callback_view(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -171,15 +163,12 @@ async def callback_admin_p2(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if values is None:
         return
     match_id, left, right = values
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = RoundResultsHandler(db).handle_admin_p2(match_id, user.id, left, right)
         if await _render(query, result) and result.tournament_id is not None:
             match = db.get(models.RoundMatch, match_id)
             if match is not None:
                 await refresh_club_pairings(context.bot, db, result.tournament_id, match.round_number)
-    finally:
-        db.close()
 
 
 async def callback_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -195,8 +184,7 @@ async def callback_toggle_view(update: Update, context: ContextTypes.DEFAULT_TYP
     if values is None:
         return
     (tournament_id,) = values
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         handler = RoundResultsHandler(db)
         result = handler.handle_toggle_view(tournament_id, user.id)
         if result.is_alert:
@@ -207,8 +195,6 @@ async def callback_toggle_view(update: Update, context: ContextTypes.DEFAULT_TYP
             "Действия с турниром:",
             reply_markup=_admin_more_keyboard(db, tournament_id, user.id),
         )
-    finally:
-        db.close()
 
 
 async def callback_swiss_mode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -220,8 +206,7 @@ async def callback_swiss_mode(update: Update, context: ContextTypes.DEFAULT_TYPE
     if values is None:
         return
     (tournament_id,) = values
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         if not UserService(db).is_admin(user.id):
             await query.answer("Нет прав.", show_alert=True)
             return
@@ -234,8 +219,6 @@ async def callback_swiss_mode(update: Update, context: ContextTypes.DEFAULT_TYPE
             reply_markup=_admin_more_keyboard(db, tournament_id, user.id),
         )
         await query.answer(result.answer_text, show_alert=True)
-    finally:
-        db.close()
 
 
 async def callback_swiss_next_round(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -247,8 +230,7 @@ async def callback_swiss_next_round(update: Update, context: ContextTypes.DEFAUL
     if values is None:
         return
     (tournament_id,) = values
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         tournament = db.get(models.Tournament, tournament_id)
         if tournament is None or not UserService(db).can_manage_tournament(user.id, tournament):
             await query.answer("Нет прав.", show_alert=True)
@@ -269,8 +251,6 @@ async def callback_swiss_next_round(update: Update, context: ContextTypes.DEFAUL
                     )
             except Exception:
                 logger.exception("Round notifications failed for tournament %s", tournament_id)
-    finally:
-        db.close()
 
 
 async def callback_draft_seating(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -282,8 +262,7 @@ async def callback_draft_seating(update: Update, context: ContextTypes.DEFAULT_T
     if values is None:
         return
     (tournament_id,) = values
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         tournament = db.get(models.Tournament, tournament_id)
         was_new = bool(tournament is not None and tournament.draft_seating_generated_at is None)
         result = RoundResultsHandler(db).handle_draft_seating(tournament_id, user.id)
@@ -295,8 +274,6 @@ async def callback_draft_seating(update: Update, context: ContextTypes.DEFAULT_T
                 await context.bot.send_message(chat_id=tournament.chat_id, text=result.text)
             except Exception as exc:  # noqa: BLE001 — seating remains persisted and visible to organizer
                 logger.warning("Could not publish draft seating for tournament=%s: %s", tournament_id, exc)
-    finally:
-        db.close()
 
 
 async def callback_swiss_standings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -358,8 +335,7 @@ async def callback_swiss_finish_confirm(update: Update, context: ContextTypes.DE
     if values is None:
         return
     (tournament_id,) = values
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         tournament = db.get(models.Tournament, tournament_id)
         users = UserService(db)
         if tournament is None or (
@@ -371,8 +347,6 @@ async def callback_swiss_finish_confirm(update: Update, context: ContextTypes.DE
         result = RoundResultsHandler(db).handle_swiss_finish(tournament_id, user.id)
         if await _render(query, result):
             await publish_swiss_completion(context.bot, db, tournament_id)
-    finally:
-        db.close()
 
 
 def _admin_more_keyboard(db, tournament_id: int, tg_id: int):

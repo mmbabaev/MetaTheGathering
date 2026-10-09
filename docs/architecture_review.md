@@ -47,6 +47,9 @@
 #### 4. Бойлерплейт в Telegram-обёртках
 - [ ] Каждый callback в `bot/telegram/` повторяет ~20 строк: открытие сессии, парсинг `query.data`, `try/finally`, отправку ответа
 - [ ] Написать декоратор `@callback_handler(parser)` или контекст-менеджер `async with get_db_session() as db` в `bot/telegram/session.py`
+  - [x] Добавить общий `db_session(session_factory)` и тесты закрытия сессии при успехе и исключении
+  - [x] Перевести простые session blocks в 18 Telegram-модулях на общий контекст
+  - [ ] Отдельно мигрировать сложные блоки с дополнительными `except` в `admin.py`, `aetherhub.py` и `debug.py`
 
 #### 5. Разбросанный state management *(частично сделано)*
 - [x] Роутинг через последовательные `if key in user_data` — разделён на `_handle_pending_*` функции (`refactor/text-input-router`)

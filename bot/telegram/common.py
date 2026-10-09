@@ -13,6 +13,7 @@ from bot.deeplink import (
     parse_round_payload,
 )
 from bot.messages import HELP_TEXT, HELP_TEXT_ADMIN
+from bot.telegram.session import db_session
 from core.database import SessionLocal
 from core.event_log import event_logger
 from services.user import UserService
@@ -115,11 +116,8 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     _log("cmd_start", user)
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         db_user = UserService(db).get_by_tg_id(user.id)
-    finally:
-        db.close()
 
     if db_user and db_user.first_name:
         name_parts = [p for p in [db_user.first_name, db_user.last_name] if p]
@@ -146,16 +144,13 @@ async def _start_deck_deeplink(update: Update, context: ContextTypes.DEFAULT_TYP
     from bot.telegram.player import _player_handler, _set_registration_pending  # noqa: PLC0415
 
     _log("cmd_start_deeplink", user, tournament_id=tournament_id)
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _player_handler(db).handle_deeplink_deck(tournament_id, tg_id=user.id)
         _set_registration_pending(context, result, tournament_id)
         await update.effective_message.reply_text(result.text, reply_markup=result.keyboard)
         if result.tournament_id is not None:
             card = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id)
             await update.effective_message.reply_text(card.text, reply_markup=card.keyboard)
-    finally:
-        db.close()
 
 
 async def _start_registration_deeplink(
@@ -165,16 +160,13 @@ async def _start_registration_deeplink(
     from bot.telegram.player import _player_handler, _set_registration_pending  # noqa: PLC0415
 
     _log("cmd_start_registration_deeplink", user, tournament_id=tournament_id)
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _player_handler(db).handle_deeplink_registration(tournament_id, tg_id=user.id)
         _set_registration_pending(context, result, tournament_id)
         await update.effective_message.reply_text(result.text, reply_markup=result.keyboard)
         if result.tournament_id is not None:
             card = _player_handler(db).handle_tournament_select(tournament_id, tg_id=user.id)
             await update.effective_message.reply_text(card.text, reply_markup=card.keyboard)
-    finally:
-        db.close()
 
 
 async def _start_round_deeplink(update: Update, context: ContextTypes.DEFAULT_TYPE, user, tournament_id: int) -> None:
@@ -184,8 +176,7 @@ async def _start_round_deeplink(update: Update, context: ContextTypes.DEFAULT_TY
     from services.round_results import FINAL_STATUSES, RoundResultError, RoundResultsService  # noqa: PLC0415
 
     _log("cmd_start_round_deeplink", user, tournament_id=tournament_id)
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         try:
             match = RoundResultsService(db).current_match_for_user(tournament_id, user.id)
         except RoundResultError:
@@ -199,8 +190,6 @@ async def _start_round_deeplink(update: Update, context: ContextTypes.DEFAULT_TY
             reply_markup=result.keyboard,
             parse_mode=result.parse_mode,
         )
-    finally:
-        db.close()
 
 
 async def _start_fill_missing_deeplink(
@@ -210,12 +199,9 @@ async def _start_fill_missing_deeplink(
     from bot.telegram.player import _player_handler  # noqa: PLC0415
 
     _log("meta_police_open", user, tournament_id=tournament_id)
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _player_handler(db).handle_fill_missing_deeplink(tournament_id, tg_id=user.id)
         await update.effective_message.reply_text(result.text, reply_markup=result.keyboard)
-    finally:
-        db.close()
 
 
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -223,10 +209,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     user = update.effective_user
     _log("cmd_help", user)
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         is_admin = UserService(db).is_admin(user.id)
-    finally:
-        db.close()
     text = HELP_TEXT + "\n\n" + HELP_TEXT_ADMIN if is_admin else HELP_TEXT
     await update.effective_message.reply_text(text)

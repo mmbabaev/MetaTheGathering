@@ -6,6 +6,7 @@ from telegram.ext import ContextTypes
 
 from bot.handlers.cellar import CellarActionResult, CellarHandler
 from bot.telegram.common import log_event
+from bot.telegram.session import db_session
 from core.database import SessionLocal
 from services.cellar import CellarService, cellar_immediate_notification_recipients, format_group_reservation
 from services.feature_flags import FeatureFlagService
@@ -39,8 +40,7 @@ async def cmd_cellar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if user is None or message is None:
         return
     log_event("cmd_cellar", user)
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _handler(db).handle_open(
             tg_id=user.id,
             username=user.username,
@@ -50,8 +50,6 @@ async def cmd_cellar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         if result.needs_name:
             context.user_data[USER_DATA_PENDING_CELLAR_NAME] = True
         await message.reply_text(result.text, reply_markup=result.keyboard)
-    finally:
-        db.close()
 
 
 async def callback_dates(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -59,8 +57,7 @@ async def callback_dates(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     user = update.effective_user
     if query is None or user is None:
         return
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _handler(db).handle_open(
             tg_id=user.id,
             username=user.username,
@@ -70,8 +67,6 @@ async def callback_dates(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if result.needs_name:
             context.user_data[USER_DATA_PENDING_CELLAR_NAME] = True
         await _show(query, result)
-    finally:
-        db.close()
 
 
 async def callback_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -81,12 +76,9 @@ async def callback_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if query is None or user is None or parsed is None:
         return
     event_date, page = parsed
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _handler(db).handle_date(tg_id=user.id, event_date=event_date, page=page)
         await _show(query, result)
-    finally:
-        db.close()
 
 
 async def callback_deck(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -96,8 +88,7 @@ async def callback_deck(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if query is None or user is None or parsed is None:
         return
     event_date, deck_id, page = parsed
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _handler(db).handle_deck(
             tg_id=user.id,
             event_date=event_date,
@@ -105,8 +96,6 @@ async def callback_deck(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             page=page,
         )
         await _show(query, result)
-    finally:
-        db.close()
 
 
 async def callback_reserve(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -116,8 +105,7 @@ async def callback_reserve(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if query is None or user is None or parsed is None:
         return
     event_date, deck_id, page = parsed
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         action = _handler(db).handle_reserve(
             tg_id=user.id,
             event_date=event_date,
@@ -125,8 +113,6 @@ async def callback_reserve(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             page=page,
         )
         await _show_action(query, context, db, action)
-    finally:
-        db.close()
 
 
 async def callback_cancel_prompt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -136,12 +122,9 @@ async def callback_cancel_prompt(update: Update, context: ContextTypes.DEFAULT_T
     if query is None or user is None or parsed is None:
         return
     reservation_id, page = parsed
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _handler(db).handle_cancel_prompt(tg_id=user.id, reservation_id=reservation_id, page=page)
         await _show(query, result)
-    finally:
-        db.close()
 
 
 async def callback_cancel_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -151,12 +134,9 @@ async def callback_cancel_confirm(update: Update, context: ContextTypes.DEFAULT_
     if query is None or user is None or parsed is None:
         return
     reservation_id, page = parsed
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         action = _handler(db).handle_cancel(tg_id=user.id, reservation_id=reservation_id, page=page)
         await _show_action(query, context, db, action)
-    finally:
-        db.close()
 
 
 async def callback_noop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

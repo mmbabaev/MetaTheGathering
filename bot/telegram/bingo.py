@@ -12,6 +12,7 @@ from telegram.ext import ContextTypes
 
 from bot.handlers.base import HandlerResult
 from bot.handlers.bingo import MAX_PREVIEW_SEED, BingoPreviewHandler, format_bingo_preview
+from bot.telegram.session import db_session
 from core.database import SessionLocal
 from services.achievement_bingo_image import render_bingo_board
 from services.feature_flags import FeatureFlagService
@@ -33,15 +34,12 @@ async def cmd_bingo_preview(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     args = list(context.args or [])
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         result = _handler(db).preview(
             user.id,
             args,
             default_seed=secrets.randbelow(MAX_PREVIEW_SEED + 1),
         )
-    finally:
-        db.close()
 
     if isinstance(result, HandlerResult):
         await msg.reply_text(result.text)

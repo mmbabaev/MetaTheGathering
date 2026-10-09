@@ -20,6 +20,7 @@ from telegram.ext import ContextTypes
 from bot.features import FeatureService
 from bot.handlers.achievements import AchievementsHandler, format_shelf
 from bot.handlers.base import HandlerResult
+from bot.telegram.session import db_session
 from core import models
 from core.config import settings
 from core.database import SessionLocal
@@ -61,8 +62,7 @@ async def cmd_achievements(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if not user or not msg:
         return
     query = " ".join(context.args).strip() if context.args else None
-    db = SessionLocal()
-    try:
+    with db_session(SessionLocal) as db:
         shelf = _handler(db).shelf(tg_id=user.id, query=query)
         if isinstance(shelf, HandlerResult):  # нет прав / игрок не найден
             if not shelf.silent:
@@ -70,8 +70,6 @@ async def cmd_achievements(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             return
         text = format_shelf(shelf.title, shelf.views)
         png = await _render_shelf(shelf)
-    finally:
-        db.close()
 
     if png is None:  # картинка не обязана получиться — текст важнее
         await msg.reply_text(text)
