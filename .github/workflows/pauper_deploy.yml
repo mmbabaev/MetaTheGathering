@@ -13,6 +13,8 @@ jobs:
   deploy:
     name: Deploy Pauper Sim PROD
     runs-on: ubuntu-latest
+    # Deploys are paused while the data-center VM is unavailable.
+    if: vars.DEPLOY_ENABLED == 'true'
     concurrency:
       group: pauper-sim-deploy
       cancel-in-progress: false

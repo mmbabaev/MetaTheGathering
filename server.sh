@@ -32,15 +32,55 @@ start() {
         rm "$PID_FILE"
     fi
 
-    local env_file="$SCRIPT_DIR/.env.debug"
+    local env_file="$SCRIPT_DIR/bot/.env.debug"
     if [ ! -f "$env_file" ]; then
         echo "ERROR: .env.debug not found. Create it with a debug bot token to avoid conflicting with prod."
-        echo "  Example: cp .env .env.debug  # then replace TELEGRAM_BOT_TOKEN with a test token"
+        echo "  Expected file: $env_file"
+        echo "  Copy bot/.env and replace TELEGRAM_BOT_TOKEN with a separate debug token"
         return 1
     fi
 
     cd "$SCRIPT_DIR"
-    set -a; source "$env_file"; set +a
+    env_exports="$($VENV_PYTHON - "$env_file" <<'PY'
+from dotenv import dotenv_values
+import shlex
+import sys
+
+for key, value in dotenv_values(sys.argv[1]).items():
+    if value is not None:
+        print(f"export {key}={shlex.quote(value)}")
+PY
+    )" || {
+        echo "ERROR: failed to parse $env_file"
+        return 1
+    }
+    eval "$env_exports"
+    unset env_exports
+
+    # The local Debug bot must not depend on a proxy hosted in the unavailable
+    # data center. Set USE_TELEGRAM_PROXY=1 explicitly when a local proxy is ready.
+    if [ "${USE_TELEGRAM_PROXY:-0}" != "1" ]; then
+        export TELEGRAM_PROXY_URL=""
+    fi
+
+    case "${DATABASE_URL:-}" in
+        sqlite:*|*localhost*|*127.0.0.1*|*::1*) ;;
+        *)
+            echo "ERROR: debug DATABASE_URL must point to local SQLite/PostgreSQL, not a remote database."
+            return 1
+            ;;
+    esac
+
+    debug_token="$(grep -E '^TELEGRAM_BOT_TOKEN=' "$env_file" | head -1 | cut -d= -f2-)"
+    prod_env_file="$SCRIPT_DIR/bot/.env"
+    if [ -f "$prod_env_file" ]; then
+        prod_token="$(grep -E '^TELEGRAM_BOT_TOKEN=' "$prod_env_file" | head -1 | cut -d= -f2-)"
+        if [ -n "$debug_token" ] && [ -n "$prod_token" ] && [ "$debug_token" = "$prod_token" ]; then
+            echo "ERROR: .env.debug uses the production Telegram token. Use a separate debug bot token."
+            return 1
+        fi
+    fi
+
     BOT_ENV=debug nohup "$VENV_PYTHON" main.py >> "$LOG_FILE" 2>&1 &
     echo $! > "$PID_FILE"
     echo "Server started in DEBUG mode (PID $!), logging to $LOG_FILE"
