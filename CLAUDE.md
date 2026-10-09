@@ -78,6 +78,9 @@ or product decision changes.
 >   fix, after merge check `git show origin/main:<file>` (or `gh pr checks`) to confirm the change is
 >   in `main`, not just on the branch.
 > - Keep unrelated changes in separate PRs/branches so a partial merge can't strand a dependent fix.
+> - **После создания PR обязательно подождать минимум 60 секунд и только потом проверить CI:**
+>   выполнить `gh pr checks <pr-number>`. Если проверки ещё `pending`, повторять проверку через
+>   30–60 секунд до финального `success`/`failure`; локальные тесты не заменяют GitHub checks.
 
 ## Alembic migrations
 
