@@ -123,7 +123,7 @@ def test_pull_request_deploy_skips_docs_only_changes():
     workflow = _read(ROOT / ".github" / "workflows" / "pr.yml")
 
     assert "dorny/paths-filter@v3" in workflow
-    assert "needs: [test, changes]" in workflow
+    assert "needs: [test, changes, telegram-e2e]" in workflow
     assert "needs.changes.outputs.deploy == 'true'" in workflow
 
 
