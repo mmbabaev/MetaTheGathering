@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="650" viewBox="0 0 1200 650">
+<style>text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#243447}.title{font-size:25px;font-weight:700}.subtitle{font-size:14px;fill:#52616b}.label{font-size:14px;font-weight:600}.small{font-size:12px}.axis{stroke:#8b99a5;stroke-width:1}.grid{stroke:#e4e9ee;stroke-width:1}</style>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="48" y="38" class="title">Понедельники «Единорога»: цена и запуск Endstep</text>
+<text x="48" y="63" class="subtitle">Записи участников; оранжевая линия — повышение цены 01.09, красная — первый обычный Endstep 05.09.</text>
+<line x1="78" y1="485.0" x2="1158" y2="485.0" class="grid"/>
+<text x="66" y="489.0" text-anchor="end" class="small">0</text>
+<line x1="78" y1="388.8" x2="1158" y2="388.8" class="grid"/>
+<text x="66" y="392.8" text-anchor="end" class="small">20</text>
+<line x1="78" y1="292.5" x2="1158" y2="292.5" class="grid"/>
+<text x="66" y="296.5" text-anchor="end" class="small">40</text>
+<line x1="78" y1="196.2" x2="1158" y2="196.2" class="grid"/>
+<text x="66" y="200.2" text-anchor="end" class="small">60</text>
+<line x1="78" y1="100.0" x2="1158" y2="100.0" class="grid"/>
+<text x="66" y="104.0" text-anchor="end" class="small">80</text>
+<line x1="78" y1="485" x2="1158" y2="485" class="axis"/>
+<line x1="78" y1="100" x2="78" y2="485" class="axis"/>
+<rect x="939.4" y="100" width="218.6" height="385" fill="#fff7ed"/>
+<line x1="939.4" y1="88" x2="939.4" y2="519" stroke="#ea580c" stroke-width="2" stroke-dasharray="5 5"/>
+<text x="931.4" y="82" text-anchor="end" class="label" fill="#c2410c">Цена: 01.09</text>
+<line x1="965.1" y1="88" x2="965.1" y2="519" stroke="#dc2626" stroke-width="2" stroke-dasharray="7 5"/>
+<text x="973.1" y="118" class="label" fill="#b91c1c">Endstep: 05.09</text>
+<line x1="78.0" y1="272.5" x2="939.4" y2="272.5" stroke="#2563eb" stroke-width="2" stroke-dasharray="4 4"/>
+<text x="935.4" y="264.5" text-anchor="end" class="small" fill="#2563eb">до повышения: 44.1</text>
+<line x1="939.4" y1="363.7" x2="1158.0" y2="363.7" stroke="#c2410c" stroke-width="2" stroke-dasharray="4 4"/>
+<text x="1154.0" y="355.7" text-anchor="end" class="small" fill="#c2410c">после повышения: 25.2</text>
+<polyline points="78.0,340.6 123.0,287.7 168.0,297.3 213.0,143.3 258.0,326.2 303.0,326.2 348.0,263.6 393.0,249.2 438.0,316.6 483.0,292.5 528.0,273.2 573.0,273.2 618.0,268.4 663.0,210.7 708.0,282.9 753.0,273.2 798.0,311.8 843.0,239.6 888.0,186.6 933.0,287.7 978.0,292.5 1023.0,383.9 1068.0,374.3 1113.0,350.2 1158.0,417.6" fill="none" stroke="#2563eb" stroke-width="3"/>
+<circle cx="78.0" cy="340.6" r="5" fill="#1d4ed8"/>
+<text x="78.0" y="328.6" text-anchor="middle" class="small">30</text>
+<text x="78.0" y="509" text-anchor="middle" class="small">04.20</text>
+<circle cx="123.0" cy="287.7" r="5" fill="#1d4ed8"/>
+<text x="123.0" y="275.7" text-anchor="middle" class="small">41</text>
+<text x="123.0" y="509" text-anchor="middle" class="small">04.27</text>
+<circle cx="168.0" cy="297.3" r="5" fill="#1d4ed8"/>
+<text x="168.0" y="285.3" text-anchor="middle" class="small">39</text>
+<text x="168.0" y="509" text-anchor="middle" class="small">05.04</text>
+<circle cx="213.0" cy="143.3" r="5" fill="#1d4ed8"/>
+<text x="213.0" y="131.3" text-anchor="middle" class="small">71</text>
+<text x="213.0" y="509" text-anchor="middle" class="small">05.11</text>
+<circle cx="258.0" cy="326.2" r="5" fill="#1d4ed8"/>
+<text x="258.0" y="314.2" text-anchor="middle" class="small">33</text>
+<text x="258.0" y="509" text-anchor="middle" class="small">05.18</text>
+<circle cx="303.0" cy="326.2" r="5" fill="#1d4ed8"/>
+<text x="303.0" y="314.2" text-anchor="middle" class="small">33</text>
+<text x="303.0" y="509" text-anchor="middle" class="small">05.25</text>
+<circle cx="348.0" cy="263.6" r="5" fill="#1d4ed8"/>
+<text x="348.0" y="251.6" text-anchor="middle" class="small">46</text>
+<text x="348.0" y="509" text-anchor="middle" class="small">06.01</text>
+<circle cx="393.0" cy="249.2" r="5" fill="#1d4ed8"/>
+<text x="393.0" y="237.2" text-anchor="middle" class="small">49</text>
+<text x="393.0" y="509" text-anchor="middle" class="small">06.08</text>
+<circle cx="438.0" cy="316.6" r="5" fill="#1d4ed8"/>
+<text x="438.0" y="304.6" text-anchor="middle" class="small">35</text>
+<text x="438.0" y="509" text-anchor="middle" class="small">06.15</text>
+<circle cx="483.0" cy="292.5" r="5" fill="#1d4ed8"/>
+<text x="483.0" y="280.5" text-anchor="middle" class="small">40</text>
+<text x="483.0" y="509" text-anchor="middle" class="small">06.22</text>
+<circle cx="528.0" cy="273.2" r="5" fill="#1d4ed8"/>
+<text x="528.0" y="261.2" text-anchor="middle" class="small">44</text>
+<text x="528.0" y="509" text-anchor="middle" class="small">06.29</text>
+<circle cx="573.0" cy="273.2" r="5" fill="#1d4ed8"/>
+<text x="573.0" y="261.2" text-anchor="middle" class="small">44</text>
+<text x="573.0" y="509" text-anchor="middle" class="small">07.06</text>
+<circle cx="618.0" cy="268.4" r="5" fill="#1d4ed8"/>
+<text x="618.0" y="256.4" text-anchor="middle" class="small">45</text>
+<text x="618.0" y="509" text-anchor="middle" class="small">07.13</text>
+<circle cx="663.0" cy="210.7" r="5" fill="#1d4ed8"/>
+<text x="663.0" y="198.7" text-anchor="middle" class="small">57</text>
+<text x="663.0" y="509" text-anchor="middle" class="small">07.20</text>
+<circle cx="708.0" cy="282.9" r="5" fill="#1d4ed8"/>
+<text x="708.0" y="270.9" text-anchor="middle" class="small">42</text>
+<text x="708.0" y="509" text-anchor="middle" class="small">07.27</text>
+<circle cx="753.0" cy="273.2" r="5" fill="#1d4ed8"/>
+<text x="753.0" y="261.2" text-anchor="middle" class="small">44</text>
+<text x="753.0" y="509" text-anchor="middle" class="small">08.03</text>
+<circle cx="798.0" cy="311.8" r="5" fill="#1d4ed8"/>
+<text x="798.0" y="299.8" text-anchor="middle" class="small">36</text>
+<text x="798.0" y="509" text-anchor="middle" class="small">08.10</text>
+<circle cx="843.0" cy="239.6" r="5" fill="#1d4ed8"/>
+<text x="843.0" y="227.6" text-anchor="middle" class="small">51</text>
+<text x="843.0" y="509" text-anchor="middle" class="small">08.17</text>
+<circle cx="888.0" cy="186.6" r="5" fill="#1d4ed8"/>
+<text x="888.0" y="174.6" text-anchor="middle" class="small">62</text>
+<text x="888.0" y="509" text-anchor="middle" class="small">08.24</text>
+<circle cx="933.0" cy="287.7" r="5" fill="#1d4ed8"/>
+<text x="933.0" y="275.7" text-anchor="middle" class="small">41</text>
+<text x="933.0" y="509" text-anchor="middle" class="small">08.31</text>
+<circle cx="978.0" cy="292.5" r="5" fill="#1d4ed8"/>
+<text x="978.0" y="280.5" text-anchor="middle" class="small">40</text>
+<text x="978.0" y="509" text-anchor="middle" class="small">09.07</text>
+<circle cx="1023.0" cy="383.9" r="5" fill="#1d4ed8"/>
+<text x="1023.0" y="371.9" text-anchor="middle" class="small">21</text>
+<text x="1023.0" y="509" text-anchor="middle" class="small">09.14</text>
+<circle cx="1068.0" cy="374.3" r="5" fill="#1d4ed8"/>
+<text x="1068.0" y="362.3" text-anchor="middle" class="small">23</text>
+<text x="1068.0" y="509" text-anchor="middle" class="small">09.21</text>
+<circle cx="1113.0" cy="350.2" r="5" fill="#1d4ed8"/>
+<text x="1113.0" y="338.2" text-anchor="middle" class="small">28</text>
+<text x="1113.0" y="509" text-anchor="middle" class="small">09.28</text>
+<circle cx="1158.0" cy="417.6" r="5" fill="#1d4ed8"/>
+<text x="1158.0" y="405.6" text-anchor="middle" class="small">14</text>
+<text x="1158.0" y="509" text-anchor="middle" class="small">10.05</text>
+<text x="78" y="543" class="subtitle">Среднее до: 44,1 · после: 25,2 · изменение: −43%</text>
+</svg>

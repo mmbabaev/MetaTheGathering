@@ -1,0 +1,10 @@
+scope,category,count,share_percent
+endstep_regular,edinorog_before_and_after,17,22.4
+endstep_regular,edinorog_before_only_switch_candidate,11,14.5
+endstep_regular,no_edinorog_before_first_endstep,48,63.2
+endstep_regular,ever_in_edinorog,28,36.8
+endstep_regular,never_in_edinorog,48,63.2
+endstep_plus_stilek,ever_in_edinorog,36,25.7
+endstep_plus_stilek,never_in_edinorog,104,74.3
+known_city_moscow,ever_in_edinorog,17,85.0
+known_city_moscow,not_found_in_edinorog,3,15.0
