@@ -52,13 +52,13 @@ async def cmd_bingo_preview(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             result.draft,
             persona_label=result.persona_label,
         )
-    except Exception:  # noqa: BLE001 — текст остаётся полным fallback
+    except Exception:
         logger.exception("[bingo-preview] board render failed")
 
     if png is not None:
         try:
             await msg.reply_photo(photo=io.BytesIO(png), caption=result.caption)
-        except Exception:  # noqa: BLE001 — описания всё равно отправляем инициатору
+        except Exception:
             logger.exception("[bingo-preview] could not send board image")
 
     for text in format_bingo_preview(result):

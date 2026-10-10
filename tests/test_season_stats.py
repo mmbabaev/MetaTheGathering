@@ -42,7 +42,11 @@ def _tournament(
     db.add(tournament)
     db.flush()
     for user, archetype in participants:
-        db.add(models.Participant(tournament_id=tournament.id, user_id=user.id, archetype_id=archetype.id if archetype else None))
+        db.add(
+            models.Participant(
+                tournament_id=tournament.id, user_id=user.id, archetype_id=archetype.id if archetype else None
+            )
+        )
     for round_number, (player, opponent, player_wins, opponent_wins) in enumerate(matches, start=1):
         db.add_all(
             [
@@ -105,9 +109,7 @@ def test_snapshot_uses_only_closed_complete_tournaments_and_excludes_no_shows(db
     assert snapshot.quality.scored_matches == 1
     assert snapshot.quality.actual_participations == 2
     assert snapshot.quality.participants_without_pairing == 1
-    assert [(row.deck, row.participations, row.players) for row in snapshot.popular_decks] == [
-        ("Kuldotha Red", 2, 2)
-    ]
+    assert [(row.deck, row.participations, row.players) for row in snapshot.popular_decks] == [("Kuldotha Red", 2, 2)]
     assert {row.name for row in snapshot.players} == {"Smith Alice", "Jones Bob"}
 
 

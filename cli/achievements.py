@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 import typer
 from sqlalchemy import select
@@ -152,9 +151,9 @@ def audit():
 @app.command("season-stats")
 def season_stats(
     as_of: datetime = typer.Option(..., "--as-of", formats=["%Y-%m-%d"], help="Начало сезона YYYY-MM-DD"),
-    club: Optional[str] = typer.Option(None, "--club", help="Только один клуб"),
+    club: str | None = typer.Option(None, "--club", help="Только один клуб"),
     output_format: str = typer.Option("markdown", "--format", help="markdown или json"),
-    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Сохранить результат в файл"),
+    output: Path | None = typer.Option(None, "--output", "-o", help="Сохранить результат в файл"),
     history_days: int = typer.Option(365, "--history-days", min=1, help="Глубина head-to-head"),
     deck_window_days: int = typer.Option(120, "--deck-window-days", min=1, help="Окно популярности колод"),
     winrate_window_days: int = typer.Option(90, "--winrate-window-days", min=1, help="Размер каждого окна"),
@@ -200,7 +199,7 @@ def season_stats(
 
 @app.command("backfill")
 def backfill(
-    club: Optional[str] = typer.Option(None, "--club", help="Только турниры этого клуба"),
+    club: str | None = typer.Option(None, "--club", help="Только турниры этого клуба"),
     apply: bool = typer.Option(False, "--apply", help="Записать выдачи (без флага — только показать)"),
     top: int = typer.Option(20, "--top", help="Сколько игроков показать в сводке"),
 ):
@@ -233,7 +232,7 @@ def backfill(
 @app.command("list")
 def list_awards(
     limit: int = typer.Option(50, "--limit", "-n", help="Сколько последних выдач показать"),
-    code: Optional[str] = typer.Option(None, "--code", help="Фильтр по коду ачивки"),
+    code: str | None = typer.Option(None, "--code", help="Фильтр по коду ачивки"),
 ):
     """Последние выданные ачивки по всем игрокам."""
     with get_db() as db:
@@ -256,8 +255,8 @@ def list_awards(
 @app.command("events")
 def list_progress_events(
     limit: int = typer.Option(50, "--limit", "-n", help="Сколько последних events показать"),
-    user_id: Optional[int] = typer.Option(None, "--user-id"),
-    code: Optional[str] = typer.Option(None, "--code"),
+    user_id: int | None = typer.Option(None, "--user-id"),
+    code: str | None = typer.Option(None, "--code"),
 ):
     """Immutable progress audit log with before/after and source versions."""
     with get_db() as db:
@@ -297,7 +296,7 @@ def override_progress(
     code: str = typer.Argument(...),
     value: int = typer.Argument(...),
     reason: str = typer.Option(..., "--reason", help="Обязательная причина owner override"),
-    tournament_id: Optional[int] = typer.Option(None, "--tournament-id"),
+    tournament_id: int | None = typer.Option(None, "--tournament-id"),
 ):
     """Owner override recorded as a separate immutable event."""
     with get_db() as db:

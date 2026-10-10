@@ -197,9 +197,7 @@ class MagicOculusTournamentCollector:
             for participant in participants
         ]
         matched_participants = (
-            _matched_roster_indexes(participant_names, aetherhub_players)
-            if aetherhub_players is not None
-            else None
+            _matched_roster_indexes(participant_names, aetherhub_players) if aetherhub_players is not None else None
         )
         for index, participant in enumerate(participants):
             player = participant_names[index]

@@ -37,6 +37,7 @@ Lives in **`bot/telegram/`** (not in `bot/handlers/`).
 def _foo_handler(db) -> FooHandler:
     return FooHandler(TournamentService(db), UserService(db))
 
+
 async def cmd_xxx(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     msg = update.effective_message

@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 from telegram.error import BadRequest
@@ -13,7 +13,7 @@ from services.tournament_creation import TournamentCreationPlanService
 from services.user import UserService
 
 ADMIN_ID = 88001
-NOW = datetime(2026, 9, 4, 9, 0, tzinfo=timezone.utc)  # 12:00 Europe/Moscow
+NOW = datetime(2026, 9, 4, 9, 0, tzinfo=UTC)  # 12:00 Europe/Moscow
 
 
 def _handler(db):

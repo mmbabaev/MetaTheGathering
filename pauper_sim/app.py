@@ -7,7 +7,7 @@ JSON endpoints for pairing and rolling match games.
 from __future__ import annotations
 
 import random
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -43,7 +43,7 @@ class RollIn(BaseModel):
 def _serialize(data: WinrateData) -> dict:
     return {
         "source_url": WINRATES_URL,
-        "fetched_at": datetime.fromtimestamp(data.fetched_at, tz=timezone.utc).isoformat(),
+        "fetched_at": datetime.fromtimestamp(data.fetched_at, tz=UTC).isoformat(),
         "pool_size": POOL_SIZE,
         "decks": [
             {"name": deck.name, "overall_winrate": deck.overall_winrate, "matches": deck.matches} for deck in data.decks

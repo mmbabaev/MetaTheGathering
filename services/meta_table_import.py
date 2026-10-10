@@ -2,7 +2,6 @@
 
 import re
 from dataclasses import dataclass, field
-from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -44,17 +43,17 @@ class MetaTableImportResult:
         return "\n".join(lines) if lines else "Ничего не импортировано."
 
 
-def parse_meta_table(text: str) -> tuple[list[tuple[str, Optional[str]]], dict[int, list[tuple[str, str]]]]:
+def parse_meta_table(text: str) -> tuple[list[tuple[str, str | None]], dict[int, list[tuple[str, str]]]]:
     """Parse the /recognize-meta table format.
 
     Returns:
         players: list of (full_name, deck_name_or_None)
         pairings: dict of round_number → list of (player1_name, player2_name)
     """
-    players: list[tuple[str, Optional[str]]] = []
+    players: list[tuple[str, str | None]] = []
     pairings: dict[int, list[tuple[str, str]]] = {}
 
-    current_round: Optional[int] = None
+    current_round: int | None = None
 
     for raw_line in text.splitlines():
         line = raw_line.strip()
@@ -134,7 +133,7 @@ class MetaTableImportService:
         self,
         tournament_id: int,
         full_name: str,
-        deck_name: Optional[str],
+        deck_name: str | None,
         added_by_tg_id: int,
         result: MetaTableImportResult,
     ) -> None:

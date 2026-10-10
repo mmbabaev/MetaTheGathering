@@ -192,7 +192,7 @@ python3 -m pytest tests/test_tournament_service.py -v
 
 `HandlerResult` is defined in `bot/handlers/base.py` (`text`, `keyboard`, `is_alert`, `needs_name`).
 
-**Current status (181 tests, all passing, ~84% coverage):**
+**Current status (2600+ tests, all passing, ~87% coverage):**
 
 | File | Coverage | Notes |
 |------|----------|-------|

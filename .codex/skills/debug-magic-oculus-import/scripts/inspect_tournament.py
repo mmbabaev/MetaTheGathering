@@ -6,8 +6,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(REPO_ROOT))
@@ -91,12 +91,8 @@ def main() -> None:
                 "standings_count": len(standings),
                 "rounds_count": len([row for row in source.rounds if row.pairings]),
                 "players_not_in_bot": sorted(players_map[key] for key in players_map.keys() - bot_map.keys()),
-                "standings_not_in_bot": sorted(
-                    standings_map[key] for key in standings_map.keys() - bot_map.keys()
-                ),
-                "bot_not_in_standings": sorted(
-                    bot_map[key] for key in bot_map.keys() - standings_map.keys()
-                ),
+                "standings_not_in_bot": sorted(standings_map[key] for key in standings_map.keys() - bot_map.keys()),
+                "bot_not_in_standings": sorted(bot_map[key] for key in bot_map.keys() - standings_map.keys()),
             }
 
         print(json.dumps(result, ensure_ascii=False, indent=2))

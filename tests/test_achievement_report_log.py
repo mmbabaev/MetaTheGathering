@@ -1,7 +1,7 @@
 """Структурированный файловый журнал owner-отчётов ачивок."""
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 from services.achievement_report_log import write_achievement_report_log
 from services.achievements.context import SkippedPlayer
@@ -44,7 +44,7 @@ def test_log_contains_every_section_needed_for_database_audit(tmp_path):
         processing_run_id=44,
         rule_errors=[RuleError(code="multiclass", error_type="RuntimeError")],
     )
-    created_at = datetime(2026, 8, 7, 12, 34, 56, 123456, tzinfo=timezone.utc)
+    created_at = datetime(2026, 8, 7, 12, 34, 56, 123456, tzinfo=UTC)
 
     path = write_achievement_report_log(
         result,
@@ -81,7 +81,5 @@ def test_log_contains_every_section_needed_for_database_audit(tmp_path):
         "threshold": 3,
         "evidence": "два турнира без поражений",
     }
-    assert payload["skipped"] == [
-        {"user_id": 13, "player": "Игрок Три", "reason": "колоду записал не он"}
-    ]
+    assert payload["skipped"] == [{"user_id": 13, "player": "Игрок Три", "reason": "колоду записал не он"}]
     assert payload["rule_errors"] == [{"code": "multiclass", "error_type": "RuntimeError"}]

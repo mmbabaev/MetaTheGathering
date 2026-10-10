@@ -31,7 +31,7 @@ async def _round_keyboard(bot, tournament_id: int, message: ClubPairingsMessage)
                 ]
             )
         return InlineKeyboardMarkup(rows)
-    except Exception:  # noqa: BLE001 — отсутствие кнопки не должно блокировать публикацию раунда
+    except Exception:
         logger.warning("[club_pairings] could not build tournament deep-link button", exc_info=True)
         return None
 
@@ -64,7 +64,7 @@ async def send_club_pairings(bot, db, tournament_id: int, round_numbers: list[in
         if isinstance(message_id, int):
             try:
                 tracker.upsert(tournament_id, round_number, message.chat_id, message_id)
-            except Exception:  # noqa: BLE001 — опубликованное сообщение уже нельзя отменить
+            except Exception:
                 db.rollback()
                 logger.exception(
                     "[club_pairings] could not track tournament #%s round=%s message", tournament_id, round_number
@@ -84,7 +84,7 @@ async def refresh_club_pairings(bot, db, tournament_id: int, round_number: int) 
         if tracked is None:
             return False
         message = ClubPairingsService(db).build_for_round(tournament_id, round_number)
-    except Exception:  # noqa: BLE001 — result persistence must survive refresh preparation failures
+    except Exception:
         db.rollback()
         logger.exception("[club_pairings] could not prepare refresh for tournament #%s", tournament_id)
         return False
@@ -114,7 +114,7 @@ async def refresh_club_pairings(bot, db, tournament_id: int, round_number: int) 
     except TelegramError:
         logger.warning("[club_pairings] temporary refresh failure for tracked message #%s", tracked.id, exc_info=True)
         return False
-    except Exception:  # noqa: BLE001 — result persistence must survive a failed public edit
+    except Exception:
         logger.exception("[club_pairings] refresh failed for tracked message #%s", tracked.id)
         return False
     return True
@@ -123,6 +123,6 @@ async def refresh_club_pairings(bot, db, tournament_id: int, round_number: int) 
 def _disable_tracking(tracker: RoundPairingsMessageService, db, row_id: int, message_id: int) -> None:
     try:
         tracker.disable(row_id, message_id)
-    except Exception:  # noqa: BLE001 — a cleanup failure must not affect result submission
+    except Exception:
         db.rollback()
         logger.exception("[club_pairings] could not disable tracked message #%s", row_id)

@@ -4,7 +4,7 @@ import csv
 import io
 import logging
 from datetime import datetime
-from typing import List, Literal
+from typing import Literal
 
 import openpyxl
 from openpyxl.styles import Alignment, Font, PatternFill
@@ -54,7 +54,6 @@ class ExportService:
         self,
         tournament_id: int,
         file: io.TextIOBase | None = None,
-        encoding: str = "utf-8",
     ) -> str:
         """
         Выгрузка участников турнира в CSV.
@@ -357,7 +356,7 @@ class ExportService:
         if not meta:
             return "| Archetype | Players | Upvotes | Downvotes |\n|---|---|---|---|\n"
 
-        lines: List[str] = []
+        lines: list[str] = []
         lines.append("| Archetype | Players | Upvotes | Downvotes |")
         lines.append("|---|---|---|---|")
         for row in meta:

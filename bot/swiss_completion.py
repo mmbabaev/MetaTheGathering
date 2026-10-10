@@ -39,7 +39,7 @@ async def publish_swiss_completion(bot, db, tournament_id: int) -> bool:
         played_playoff = tournament.playoff_size is not None and (
             InternalSwissService(db).effective_playoff_size(tournament) > 0
         )
-    except Exception:  # noqa: BLE001 — закрытие уже зафиксировано, публикация best-effort
+    except Exception:
         logger.exception("publish_swiss_completion: data collection failed for #%s", tournament_id)
         db.rollback()
         return False
@@ -60,7 +60,7 @@ async def publish_swiss_completion(bot, db, tournament_id: int) -> bool:
                 ),
                 parse_mode="HTML",
             )
-    except Exception:  # noqa: BLE001 — закрытие уже зафиксировано, Telegram можно только залогировать
+    except Exception:
         logger.exception("publish_swiss_completion: text delivery failed for #%s", tournament_id)
         return False
 
@@ -77,6 +77,6 @@ async def publish_swiss_completion(bot, db, tournament_id: int) -> bool:
                     chat_id=chat_id,
                     media=[InputMediaPhoto(io.BytesIO(image.png)) for image in group],
                 )
-    except Exception:  # noqa: BLE001 — картинки best-effort, текст уже доставлен
+    except Exception:
         logger.exception("publish_swiss_completion: image delivery failed for #%s", tournament_id)
     return True

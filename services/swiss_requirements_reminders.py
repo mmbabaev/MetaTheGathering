@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -28,7 +28,7 @@ class SwissRequirementsReminderService:
     def _naive_utc(value: datetime) -> datetime:
         if value.tzinfo is None:
             return value
-        return value.astimezone(timezone.utc).replace(tzinfo=None)
+        return value.astimezone(UTC).replace(tzinfo=None)
 
     def pending(self, now: datetime, *, horizon: timedelta = timedelta(minutes=15)) -> list[SwissRequirementsRecipient]:
         now = self._naive_utc(now)

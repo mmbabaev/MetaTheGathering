@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import timezone
+from datetime import UTC
 from zoneinfo import ZoneInfo
 
 from bot.handlers.base import HandlerResult
@@ -83,7 +83,7 @@ class EndstepRuLeaderboardHandler:
         page = min(max(0, page), total_pages - 1)
         start = page * ENDSTEP_RU_PAGE_SIZE
         rows = snapshot.rows[start : start + ENDSTEP_RU_PAGE_SIZE]
-        generated_at = snapshot.generated_at.replace(tzinfo=timezone.utc).astimezone(MOSCOW_TZ)
+        generated_at = snapshot.generated_at.replace(tzinfo=UTC).astimezone(MOSCOW_TZ)
         lines = [
             "🏆 Endstep Pauper Ranked — RU",
             f"Обновлено {generated_at.strftime('%d.%m.%Y %H:%M')} МСК · игроков: {total_rows}",

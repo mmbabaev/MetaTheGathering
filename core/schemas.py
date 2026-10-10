@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -10,24 +9,24 @@ from core.models import TournamentEngineMode, TournamentStatus, VoteType
 
 class ArchetypeBase(BaseModel):
     name: str
-    color_emoji: Optional[str] = None
-    short_name: Optional[str] = None
+    color_emoji: str | None = None
+    short_name: str | None = None
 
 
 class ArchetypeCreate(ArchetypeBase):
-    aliases: Optional[List[str]] = None
+    aliases: list[str] | None = None
 
 
 class ArchetypeRead(ArchetypeBase):
     id: int
-    macro_name: Optional[str] = None
+    macro_name: str | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class ArchetypeWithAliases(ArchetypeRead):
-    aliases: List[str] = []
+    aliases: list[str] = []
 
 
 # ==== User ====
@@ -35,11 +34,11 @@ class ArchetypeWithAliases(ArchetypeRead):
 
 class UserBase(BaseModel):
     tg_id: int
-    username: Optional[str] = None
-    endstep_username: Optional[str] = None
-    city: Optional[str] = None
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
+    username: str | None = None
+    endstep_username: str | None = None
+    city: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
 
 
 class UserCreate(UserBase):
@@ -63,16 +62,16 @@ class UserRead(UserBase):
 class TournamentBase(BaseModel):
     title: str
     chat_id: int
-    slug: Optional[str] = None
-    club: Optional[str] = None
+    slug: str | None = None
+    club: str | None = None
     is_online: bool = False
     is_draft: bool = False
     engine_mode: str = TournamentEngineMode.AETHERHUB
 
 
 class TournamentCreate(TournamentBase):
-    registration_close_at: Optional[datetime] = None
-    created_by_tg_id: Optional[int] = None
+    registration_close_at: datetime | None = None
+    created_by_tg_id: int | None = None
     decklist_reminders_enabled: bool = True
 
 
@@ -81,18 +80,18 @@ class TournamentRead(TournamentBase):
     status: TournamentStatus
     decks_hidden: bool = True
     show_round_pairings: bool = False
-    swiss_rounds: Optional[int] = None
-    playoff_size: Optional[int] = None
+    swiss_rounds: int | None = None
+    playoff_size: int | None = None
     swiss_large_format: bool = False
-    draft_seating_generated_at: Optional[datetime] = None
-    aetherhub_url: Optional[str] = None
-    aetherhub_import_time: Optional[str] = None
-    registration_open_at: Optional[datetime] = None
-    registration_close_at: Optional[datetime] = None
-    started_at: Optional[datetime] = None
-    ended_at: Optional[datetime] = None
-    closed_by_tg_id: Optional[int] = None
-    created_by_tg_id: Optional[int] = None
+    draft_seating_generated_at: datetime | None = None
+    aetherhub_url: str | None = None
+    aetherhub_import_time: str | None = None
+    registration_open_at: datetime | None = None
+    registration_close_at: datetime | None = None
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    closed_by_tg_id: int | None = None
+    created_by_tg_id: int | None = None
     decklist_reminders_enabled: bool = False
     created_at: datetime
 
@@ -105,7 +104,7 @@ class TournamentRead(TournamentBase):
 class ParticipantBase(BaseModel):
     tournament_id: int
     user_id: int
-    archetype_id: Optional[int] = None
+    archetype_id: int | None = None
 
 
 class ParticipantCreate(ParticipantBase):
@@ -117,14 +116,14 @@ class ParticipantRead(ParticipantBase):
     confirmed: bool
     added_by_admin: bool
     deck_deferred: bool = False
-    deck_reminder_prestart_sent_at: Optional[datetime] = None
-    deck_reminder_round2_sent_at: Optional[datetime] = None
-    swiss_requirements_reminder_sent_at: Optional[datetime] = None
-    aetherhub_seen_at: Optional[datetime] = None
-    ranked_activated_at: Optional[datetime] = None
-    ranked_activation_source: Optional[str] = None
-    swiss_initial_rank: Optional[int] = None
-    playoff_seed: Optional[int] = None
+    deck_reminder_prestart_sent_at: datetime | None = None
+    deck_reminder_round2_sent_at: datetime | None = None
+    swiss_requirements_reminder_sent_at: datetime | None = None
+    aetherhub_seen_at: datetime | None = None
+    ranked_activated_at: datetime | None = None
+    ranked_activation_source: str | None = None
+    swiss_initial_rank: int | None = None
+    playoff_seed: int | None = None
     upvotes_count: int
     downvotes_count: int
     created_at: datetime
@@ -135,7 +134,7 @@ class ParticipantRead(ParticipantBase):
 
 class ParticipantWithUserAndArchetype(ParticipantRead):
     user: UserRead
-    archetype: Optional[ArchetypeRead] = None
+    archetype: ArchetypeRead | None = None
 
 
 # ==== Vote ====

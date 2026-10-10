@@ -54,10 +54,12 @@ class AetherhubPairing:
     player: str
     opponent: str | None  # None = bye
 
+
 @dataclass
 class AetherhubRound:
     number: int
     pairings: list[AetherhubPairing]
+
 
 @dataclass
 class AetherhubTournamentData:

@@ -636,7 +636,7 @@ class AetherhubImportService:
                 rec["draws"] += 1
         return records
 
-    def _player_profile(self, tournament_id: int, name: str) -> "PlayerProfile":
+    def _player_profile(self, tournament_id: int, name: str) -> PlayerProfile:
         """Имя из бота, колода и финальное место для игрока из парингов (по имени).
 
         Общий блок для стендингов и списка X-0: игрока ищем в боте, у участника берём

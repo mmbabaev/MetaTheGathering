@@ -90,7 +90,7 @@ python -m pytest tests/ --cov=. --cov-report=term-missing --ignore=.venv
 python -m pytest tests/test_tournament_service.py -v
 ```
 
-181 тест, ~84% покрытия. Тесты используют SQLite in-memory — PostgreSQL не нужен.
+2600+ тестов, ~87% покрытия. Тесты используют SQLite in-memory — PostgreSQL не нужен.
 
 ---
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
 
 from bot.handlers.base import HandlerResult
@@ -31,7 +31,7 @@ def tournament_event_date(
         return (now or datetime.now(local_timezone)).astimezone(local_timezone).date()
     event_at = registration_close_at
     if event_at.tzinfo is None:
-        event_at = event_at.replace(tzinfo=timezone.utc)
+        event_at = event_at.replace(tzinfo=UTC)
     return event_at.astimezone(local_timezone).date()
 
 

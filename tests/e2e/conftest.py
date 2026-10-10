@@ -2,7 +2,7 @@ import pytest
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session
 
-import core.models  # noqa: F401
+import core.models
 from core.database import Base
 from core.schemas import TournamentCreate
 from services.aetherhub_models import AetherhubPairing, AetherhubRound, AetherhubTournamentData

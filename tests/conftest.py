@@ -2,7 +2,7 @@ import pytest
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session
 
-import core.models  # noqa: F401 — регистрирует все модели на Base.metadata
+import core.models
 from bot.features import FeatureService
 from bot.keyboards import Keyboards
 from core.database import Base

@@ -50,7 +50,7 @@ class FairnessConstraints(FrozenModel):
     max_peer_confirmed_per_line: int = Field(default=1, ge=0)
 
     @model_validator(mode="after")
-    def validate_fairness_shape(self) -> "FairnessConstraints":
+    def validate_fairness_shape(self) -> FairnessConstraints:
         if self.rows != self.columns:
             raise ValueError("bingo-v2 winning diagonals require a square board")
         if self.probability_floor >= self.probability_ceiling:

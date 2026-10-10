@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
@@ -460,8 +460,8 @@ class CellarService:
     def _event_tournament(self, event_date: date) -> models.Tournament | None:
         start_local = datetime.combine(event_date, time.min, tzinfo=CELLAR_TIMEZONE)
         end_local = start_local + timedelta(days=1)
-        start_utc = start_local.astimezone(timezone.utc).replace(tzinfo=None)
-        end_utc = end_local.astimezone(timezone.utc).replace(tzinfo=None)
+        start_utc = start_local.astimezone(UTC).replace(tzinfo=None)
+        end_utc = end_local.astimezone(UTC).replace(tzinfo=None)
         return self.db.execute(
             select(models.Tournament)
             .where(

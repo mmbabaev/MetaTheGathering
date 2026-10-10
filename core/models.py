@@ -1,5 +1,5 @@
 import enum
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     BigInteger,
@@ -24,7 +24,7 @@ from core.database import Base
 
 def utc_now() -> datetime:
     """Current UTC time as naive datetime (matches SQLAlchemy DateTime without timezone=True / SQLite)."""
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class TournamentStatus(str, enum.Enum):

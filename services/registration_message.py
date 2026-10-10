@@ -17,9 +17,12 @@ class RegistrationMessageService:
         self.db = db
 
     def participant_count(self, tournament_id: int) -> int:
-        return self.db.scalar(
-            select(func.count(models.Participant.id)).where(models.Participant.tournament_id == tournament_id)
-        ) or 0
+        return (
+            self.db.scalar(
+                select(func.count(models.Participant.id)).where(models.Participant.tournament_id == tournament_id)
+            )
+            or 0
+        )
 
     def upsert_last(
         self,

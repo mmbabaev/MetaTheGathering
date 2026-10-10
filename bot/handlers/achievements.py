@@ -9,7 +9,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 from bot.features import FeatureService
 from bot.handlers.base import HandlerResult
@@ -79,14 +78,14 @@ class AchievementsHandler:
         self.user_svc = user_svc
         self.features = features
 
-    def handle_achievements(self, tg_id: int, query: Optional[str] = None) -> HandlerResult:
+    def handle_achievements(self, tg_id: int, query: str | None = None) -> HandlerResult:
         """Полка ачивок текстом: своя или (для админов) названного игрока."""
         shelf = self.shelf(tg_id, query)
         if isinstance(shelf, HandlerResult):
             return shelf
         return HandlerResult(format_shelf(shelf.title, shelf.views))
 
-    def shelf(self, tg_id: int, query: Optional[str] = None) -> "Shelf | HandlerResult":
+    def shelf(self, tg_id: int, query: str | None = None) -> Shelf | HandlerResult:
         """Данные полки или готовый отказ (нет прав / игрок не найден).
 
         Отдельно от ``handle_achievements``, чтобы Telegram-слой мог нарисовать картинку

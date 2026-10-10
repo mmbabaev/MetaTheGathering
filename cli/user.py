@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Optional
-
 import typer
 from sqlalchemy import select
 
@@ -20,9 +18,9 @@ def _fmt_user(u: models.User) -> str:
 
 @app.command("show")
 def show_user(
-    user_id: Optional[int] = typer.Option(None, "--id", help="Внутренний user_id"),
-    tg_id: Optional[int] = typer.Option(None, "--tg-id", help="Telegram user_id"),
-    username: Optional[str] = typer.Option(None, "--username", help="Telegram username (без @)"),
+    user_id: int | None = typer.Option(None, "--id", help="Внутренний user_id"),
+    tg_id: int | None = typer.Option(None, "--tg-id", help="Telegram user_id"),
+    username: str | None = typer.Option(None, "--username", help="Telegram username (без @)"),
 ):
     """Показать информацию о пользователе."""
     with get_db() as db:

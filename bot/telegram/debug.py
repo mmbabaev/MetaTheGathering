@@ -45,7 +45,7 @@ async def callback_debug_meta_police(update: Update, context: ContextTypes.DEFAU
         )
     except ValueError as exc:
         await query.answer(str(exc), show_alert=True)
-    except Exception:  # noqa: BLE001 — a debug action must not crash the update loop
+    except Exception:
         logger.exception("debug meta-police preview failed for #%s", tournament_id)
         await query.answer("Не удалось собрать debug-превью.", show_alert=True)
     else:

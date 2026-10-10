@@ -45,7 +45,7 @@ async def _announce(db: Session, reservation, *, cancelled: bool = False) -> boo
     for recipient_tg_id in cellar_immediate_notification_recipients(db):
         try:
             delivered = await send_tg_message(recipient_tg_id, text) or delivered
-        except Exception:  # noqa: BLE001 — one unavailable recipient must not break the booking
+        except Exception:
             logger.exception("Cellar reservation notification failed for %s", recipient_tg_id)
     return delivered
 

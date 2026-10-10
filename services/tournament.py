@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import List, Optional
 
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
@@ -35,9 +34,9 @@ MAX_ACTIVE_TOURNAMENTS_PER_CLUB = 2
 class DeckRecorder:
     """Метаписец: кто и сколько колод записал в турнире."""
 
-    username: Optional[str]
-    first_name: Optional[str]
-    last_name: Optional[str]
+    username: str | None
+    first_name: str | None
+    last_name: str | None
     count: int
 
 
@@ -66,7 +65,7 @@ class TournamentService:
         tournament_id: int,
         participant_id: int,
         voter_id: int,
-    ) -> Optional[models.Vote]:
+    ) -> models.Vote | None:
         stmt = select(models.Vote).where(
             models.Vote.tournament_id == tournament_id,
             models.Vote.participant_id == participant_id,
@@ -124,7 +123,7 @@ class TournamentService:
         self.db.refresh(tournament)
         return TournamentRead.model_validate(tournament)
 
-    def get_active_tournament_for_chat(self, chat_id: int) -> Optional[TournamentRead]:
+    def get_active_tournament_for_chat(self, chat_id: int) -> TournamentRead | None:
         stmt = (
             select(models.Tournament)
             .where(
@@ -142,7 +141,7 @@ class TournamentService:
         chat_id: int,
         limit: int = 20,
         offset: int = 0,
-    ) -> List[TournamentRead]:
+    ) -> list[TournamentRead]:
         stmt = (
             select(models.Tournament)
             .where(models.Tournament.chat_id == chat_id)
@@ -153,7 +152,7 @@ class TournamentService:
         rows = self.db.execute(stmt).scalars().all()
         return [TournamentRead.model_validate(t) for t in rows]
 
-    def list_active_tournaments_for_chat(self, chat_id: int) -> List[TournamentRead]:
+    def list_active_tournaments_for_chat(self, chat_id: int) -> list[TournamentRead]:
         """Турниры чата со статусом не CLOSED, по убыванию created_at."""
         stmt = (
             select(models.Tournament)
@@ -166,7 +165,7 @@ class TournamentService:
         rows = self.db.execute(stmt).scalars().all()
         return [TournamentRead.model_validate(t) for t in rows]
 
-    def get_active_tournament_for_club(self, club: str) -> Optional[TournamentRead]:
+    def get_active_tournament_for_club(self, club: str) -> TournamentRead | None:
         stmt = (
             select(models.Tournament)
             .where(
@@ -179,7 +178,7 @@ class TournamentService:
         obj = self.db.execute(stmt).scalar_one_or_none()
         return TournamentRead.model_validate(obj) if obj else None
 
-    def list_active_tournaments_for_club(self, club: str) -> List[TournamentRead]:
+    def list_active_tournaments_for_club(self, club: str) -> list[TournamentRead]:
         """Активные турниры одного клуба независимо от адреса объявления."""
         stmt = (
             select(models.Tournament)
@@ -203,7 +202,7 @@ class TournamentService:
             raise errors.MultipleActiveTournaments([(t.id, t.title) for t in tournaments])
         return tournaments[0]
 
-    def list_all_active_tournaments(self) -> List[TournamentRead]:
+    def list_all_active_tournaments(self) -> list[TournamentRead]:
         """Все турниры со статусом не CLOSED, по убыванию created_at."""
         stmt = (
             select(models.Tournament)
@@ -213,7 +212,7 @@ class TournamentService:
         rows = self.db.execute(stmt).scalars().all()
         return [TournamentRead.model_validate(t) for t in rows]
 
-    def list_closed_tournaments(self, limit: int = 20) -> List[TournamentRead]:
+    def list_closed_tournaments(self, limit: int = 20) -> list[TournamentRead]:
         """Закрытые турниры, по убыванию created_at."""
         stmt = (
             select(models.Tournament)
@@ -316,9 +315,9 @@ class TournamentService:
         *,
         tournament_id: int,
         user_id: int,
-        archetype_id: Optional[int] = None,
+        archetype_id: int | None = None,
         added_by_admin: bool = False,
-        deck_added_by_tg_id: Optional[int] = None,
+        deck_added_by_tg_id: int | None = None,
         deck_deferred: bool = False,
         ranked_activation_source: str | None = None,
     ) -> ParticipantRead:
@@ -365,9 +364,9 @@ class TournamentService:
         self,
         *,
         participant_id: int,
-        archetype_id: Optional[int],
+        archetype_id: int | None,
         reset_votes: bool = True,
-        deck_added_by_tg_id: Optional[int] = None,
+        deck_added_by_tg_id: int | None = None,
         ranked_activation_source: str | None = None,
     ) -> ParticipantRead:
         participant = self._get_participant(participant_id)
@@ -399,7 +398,7 @@ class TournamentService:
         archetype_id: int,
         deck_added_by_tg_id: int,
         ranked_activation_source: str | None = None,
-    ) -> Optional[ParticipantRead]:
+    ) -> ParticipantRead | None:
         """Атомарно записать только ещё пустую колоду.
 
         Community-flow мета-полиции не должен перетирать уже заполненную запись даже
@@ -464,7 +463,7 @@ class TournamentService:
     def list_participants_for_tournament(
         self,
         tournament_id: int,
-    ) -> List[ParticipantWithUserAndArchetype]:
+    ) -> list[ParticipantWithUserAndArchetype]:
         stmt = (
             select(models.Participant)
             .where(models.Participant.tournament_id == tournament_id)
@@ -473,7 +472,7 @@ class TournamentService:
         participants = self.db.execute(stmt).scalars().all()
         return [ParticipantWithUserAndArchetype.model_validate(p) for p in participants]
 
-    def list_broadcast_recipients(self, tournament_id: int) -> List[UserRead]:
+    def list_broadcast_recipients(self, tournament_id: int) -> list[UserRead]:
         """Кому владелец может написать лично по этому турниру.
 
         Берём всех участников, у которых есть настоящий Telegram: служебные записи с
@@ -494,7 +493,7 @@ class TournamentService:
         users = self.db.execute(stmt).scalars().all()
         return [UserRead.model_validate(user) for user in users]
 
-    def get_deck_recorders(self, tournament_id: int, min_count: int = 2) -> List[DeckRecorder]:
+    def get_deck_recorders(self, tournament_id: int, min_count: int = 2) -> list[DeckRecorder]:
         """Метаписцы: кто записал ≥ ``min_count`` колод в турнире, по убыванию количества.
 
         Считаем по ``deck_added_by_tg_id`` участников с колодой (сам игрок, админ или оппонент).
@@ -520,12 +519,12 @@ class TournamentService:
             DeckRecorder(username=r.username, first_name=r.first_name, last_name=r.last_name, count=r.cnt) for r in rows
         ]
 
-    def get_participant_by_id(self, participant_id: int) -> Optional[models.Participant]:
+    def get_participant_by_id(self, participant_id: int) -> models.Participant | None:
         """Вернуть участника по participant.id или None."""
         stmt = select(models.Participant).where(models.Participant.id == participant_id)
         return self.db.execute(stmt).scalar_one_or_none()
 
-    def get_participant(self, tournament_id: int, user_id: int) -> Optional[models.Participant]:
+    def get_participant(self, tournament_id: int, user_id: int) -> models.Participant | None:
         """Вернуть участника турнира по user_id или None."""
         stmt = select(models.Participant).where(
             models.Participant.tournament_id == tournament_id,

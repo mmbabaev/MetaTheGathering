@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass, field, replace
-from functools import lru_cache
+from functools import cache
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
@@ -729,7 +729,7 @@ class InternalSwissService:
     ) -> list[tuple[int, int]]:
         size = len(players)
 
-        @lru_cache(maxsize=None)
+        @cache
         def solve(mask: int) -> tuple[tuple[int, int, int, int, int], tuple[tuple[int, int], ...]]:
             if mask == 0:
                 return (0, 0, 0, 0, 0), ()

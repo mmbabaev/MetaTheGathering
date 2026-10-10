@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional
 
 from services.meta_chart import ChartSector, MetaChartService, render_sectors
 from services.standings_image import StandingsImageService, render_standings_pages
@@ -59,7 +59,7 @@ async def _safe_build(db, tournament_id: int, prepare: Callable, render: Callabl
     return data, png
 
 
-async def build_chart(db, tournament_id: int, chart_svc: Optional[MetaChartService] = None) -> Optional[RenderedChart]:
+async def build_chart(db, tournament_id: int, chart_svc: MetaChartService | None = None) -> RenderedChart | None:
     """График «Метагейм-срез» турнира или None — колод нет либо что-то сломалось."""
     svc = chart_svc if chart_svc is not None else MetaChartService(db)
     result = await _safe_build(
@@ -72,7 +72,7 @@ async def build_chart(db, tournament_id: int, chart_svc: Optional[MetaChartServi
 
 
 async def build_standings(
-    db, tournament_id: int, standings_svc: Optional[StandingsImageService] = None
+    db, tournament_id: int, standings_svc: StandingsImageService | None = None
 ) -> list[RenderedImage]:
     """Страницы итоговых стендингов (по 30 игроков). Пустой список — стендингов нет либо сбой."""
     svc = standings_svc if standings_svc is not None else StandingsImageService(db)

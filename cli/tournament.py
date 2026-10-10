@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 import typer
 from sqlalchemy import select
@@ -30,7 +29,7 @@ def _default_chat_id() -> int:
 @app.command("list")
 def list_tournaments(
     all_chats: bool = typer.Option(False, "--all", help="Показать турниры всех чатов"),
-    chat_id: Optional[int] = typer.Option(None, "--chat-id", help="Фильтр по chat_id"),
+    chat_id: int | None = typer.Option(None, "--chat-id", help="Фильтр по chat_id"),
     limit: int = typer.Option(20, "--limit", "-n", help="Сколько турниров показать"),
 ):
     """Список последних турниров."""
@@ -53,7 +52,7 @@ def list_tournaments(
 
 @app.command("participants")
 def list_participants(
-    tournament_id: Optional[int] = typer.Option(None, "--id", help="ID турнира (по умолчанию — последний)"),
+    tournament_id: int | None = typer.Option(None, "--id", help="ID турнира (по умолчанию — последний)"),
 ):
     """Список участников турнира с местом, архетипом и user_id."""
     with get_db() as db:
@@ -115,7 +114,7 @@ def delete_last(yes: bool = typer.Option(False, "--yes", "-y", help="Не спр
 @app.command("import")
 def import_aetherhub(
     url: str = typer.Argument(..., help="URL турнира на AetherHub"),
-    tournament_id: Optional[int] = typer.Option(None, "--id", help="ID турнира (по умолчанию — активный)"),
+    tournament_id: int | None = typer.Option(None, "--id", help="ID турнира (по умолчанию — активный)"),
 ):
     """Импортировать данные турнира с AetherHub."""
     with get_db() as db:
@@ -151,8 +150,8 @@ def import_aetherhub(
 
 @app.command("export-excel")
 def export_excel(
-    tournament_id: Optional[int] = typer.Option(None, "--id", help="ID турнира (по умолчанию — последний)"),
-    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Путь для сохранения файла"),
+    tournament_id: int | None = typer.Option(None, "--id", help="ID турнира (по умолчанию — последний)"),
+    output: Path | None = typer.Option(None, "--output", "-o", help="Путь для сохранения файла"),
 ):
     """Выгрузить участников турнира в Excel."""
     with get_db() as db:

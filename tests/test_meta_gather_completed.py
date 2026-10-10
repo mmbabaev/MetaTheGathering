@@ -16,7 +16,7 @@ from sqlalchemy.exc import OperationalError
 from telegram.error import TelegramError
 
 from bot import chart as chart_mod
-from bot import scheduler  # noqa: F401
+from bot import scheduler
 from bot.messages import format_meta_gather_completed
 from bot.scheduler import (
     AnnouncementDelivery,
@@ -598,7 +598,7 @@ async def test_flag_survives_session_close_during_send(db, user_svc, arch_svc, m
 
     async def close_session_midway(*args, **kwargs):
         db.close()  # ровно то, что делает finally соседней задачи
-        return None
+        return
 
     bot.send_media_group.side_effect = close_session_midway
 
@@ -618,7 +618,7 @@ async def test_concurrent_announces_send_once(db, user_svc, arch_svc, monkeypatc
 
     async def slow_send(*args, **kwargs):
         await asyncio.sleep(0)  # уступаем управление — второй вызов успевает войти
-        return None
+        return
 
     bot.send_media_group.side_effect = slow_send
 

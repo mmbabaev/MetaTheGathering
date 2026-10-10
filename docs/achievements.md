@@ -208,13 +208,13 @@ class UserAchievement(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    code = Column(String(32), nullable=False)          # "undefeated"
-    level = Column(Integer, nullable=False, default=1) # 1/2/3 для многоуровневых
+    code = Column(String(32), nullable=False)  # "undefeated"
+    level = Column(Integer, nullable=False, default=1)  # 1/2/3 для многоуровневых
     tournament_id = Column(Integer, ForeignKey("tournaments.id", ondelete="SET NULL"), nullable=True)
-    progress_value = Column(Integer, nullable=True)    # значение счётчика на момент выдачи
-    evidence = Column(String(512), nullable=True)      # причина: «4-0 на Elves», «серия 03.07…24.07»
+    progress_value = Column(Integer, nullable=True)  # значение счётчика на момент выдачи
+    evidence = Column(String(512), nullable=True)  # причина: «4-0 на Elves», «серия 03.07…24.07»
     awarded_at = Column(DateTime, default=utc_now, nullable=False)
-    notified_at = Column(DateTime, nullable=True)      # NULL = ещё не сообщили (кому — см. §6)
+    notified_at = Column(DateTime, nullable=True)  # NULL = ещё не сообщили (кому — см. §6)
 
     __table_args__ = (UniqueConstraint("user_id", "code", "level", name="uq_user_achievement"),)
 ```
@@ -233,9 +233,9 @@ class UserAchievementProgress(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     code = Column(String(32), nullable=False)
-    value = Column(Integer, nullable=False, default=0)          # 2 деки, 7 колод, серия 3
+    value = Column(Integer, nullable=False, default=0)  # 2 деки, 7 колод, серия 3
     tournament_id = Column(Integer, ForeignKey("tournaments.id", ondelete="SET NULL"), nullable=True)  # когда обновили
-    evidence = Column(String(512), nullable=True)               # из чего сложилось (для сообщения)
+    evidence = Column(String(512), nullable=True)  # из чего сложилось (для сообщения)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, nullable=False)
 
     __table_args__ = (UniqueConstraint("user_id", "code", name="uq_user_achievement_progress"),)
@@ -285,14 +285,15 @@ cli/achievements.py            # process / show / list на debug-базе
 ```python
 @dataclass(frozen=True)
 class AchievementDef:
-    code: str            # "multiclass"
-    level: int           # 1
-    title: str           # "Мультикласс"
-    icon: str            # "🎭" — для текстового UI
-    description: str     # «Сыграть на 3 разных колодах за 90 дней»
-    hint: str            # что сделать, чтобы открыть
-    rarity: str          # "common" | "rare" | "epic" — влияет на цвет бейджа
+    code: str  # "multiclass"
+    level: int  # 1
+    title: str  # "Мультикласс"
+    icon: str  # "🎭" — для текстового UI
+    description: str  # «Сыграть на 3 разных колодах за 90 дней»
+    hint: str  # что сделать, чтобы открыть
+    rarity: str  # "common" | "rare" | "epic" — влияет на цвет бейджа
     threshold: int | None = None  # 3 деки / 10 колод / серия 4 — None у одноразовых
+
 
 ACHIEVEMENTS: dict[tuple[str, int], AchievementDef] = {...}
 ```
@@ -310,13 +311,13 @@ ACHIEVEMENTS: dict[tuple[str, int], AchievementDef] = {...}
 @dataclass
 class TournamentContext:
     tournament: models.Tournament
-    history: AchievementHistory                   # история игроков с кэшами на прогон
-    participants: dict[int, models.Participant]   # user_id -> participant (все, включая чужие записи)
+    history: AchievementHistory  # история игроков с кэшами на прогон
+    participants: dict[int, models.Participant]  # user_id -> participant (все, включая чужие записи)
     users: dict[int, models.User]
-    eligible_user_ids: set[int]                   # прошли все requirements текущего lifetime ruleset
-    records: dict[int, PlayerRecord]              # user_id -> wins/losses/draws/rounds
+    eligible_user_ids: set[int]  # прошли все requirements текущего lifetime ruleset
+    records: dict[int, PlayerRecord]  # user_id -> wins/losses/draws/rounds
     undefeated_user_ids: set[int]
-    skipped: list[SkippedPlayer]                  # кто и почему не в зачёте — идёт в отчёт
+    skipped: list[SkippedPlayer]  # кто и почему не в зачёте — идёт в отчёт
 ```
 
 Собирается один раз в `build_context()`: имена из canonical read-only match projection →
@@ -336,25 +337,29 @@ class Award:
     code: str
     level: int
     progress_value: int | None
-    evidence: str                 # «4-0 на Elves; всего X-0 турниров: 3»
+    evidence: str  # «4-0 на Elves; всего X-0 турниров: 3»
+
 
 @dataclass
 class ProgressUpdate:
     user_id: int
     code: str
-    value: int                    # стало (previous читается из БД при записи)
-    threshold: int                # порог следующего уровня
+    value: int  # стало (previous читается из БД при записи)
+    threshold: int  # порог следующего уровня
     next_level: int
-    evidence: str                 # «Mono Red Madness (17.07), Elves (24.07)»
+    evidence: str  # «Mono Red Madness (17.07), Elves (24.07)»
+
 
 @dataclass
 class RuleOutcome:
     awards: list[Award]
     progress: list[ProgressUpdate]
 
+
 class AchievementRule(Protocol):
     code: str
     requirements: DataRequirements
+
     def evaluate(self, ctx: TournamentContext) -> RuleOutcome: ...
 ```
 
@@ -427,9 +432,9 @@ feature flag + один резолвер получателя, а не три р
 
 ```python
 class FeatureFlags:
-    ACHIEVEMENTS = "achievements"           # движок считает и пишет в БД
-    ACHIEVEMENTS_PUBLIC_UI = "achievementsPublicUi"     # /achievements доступна игрокам
-    ACHIEVEMENTS_PLAYER_DM = "achievementsPlayerDm"     # уведомления уходят самим игрокам
+    ACHIEVEMENTS = "achievements"  # движок считает и пишет в БД
+    ACHIEVEMENTS_PUBLIC_UI = "achievementsPublicUi"  # /achievements доступна игрокам
+    ACHIEVEMENTS_PLAYER_DM = "achievementsPlayerDm"  # уведомления уходят самим игрокам
 ```
 
 Маршрутизация получателя — **одно место**: `send_achievements_report()` в

@@ -8,9 +8,8 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
-from typing import Optional
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -35,7 +34,7 @@ CLUB_NAMES = {"edinorog": "Единорог", "goldfish": "Goldfish"}
 _DATE_IN_TITLE_RE = re.compile(r"\b(\d{2}\.\d{2}\.\d{4})\b")
 
 
-@lru_cache(maxsize=None)
+@cache
 def font(filename: str, size: int) -> ImageFont.FreeTypeFont:
     """Шрифт из assets/fonts. Кэшируем: TTF-файлы по ~700КБ, парсить их на каждую строку дорого."""
     return ImageFont.truetype(str(_FONT_DIR / filename), size)
@@ -85,7 +84,7 @@ def ellipsize(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont
     return text.rstrip() + "…"
 
 
-def build_subtitle(club: Optional[str], title: str, fallback_date: Optional[datetime] = None) -> str:
+def build_subtitle(club: str | None, title: str, fallback_date: datetime | None = None) -> str:
     """Подзаголовок «Единорог · 13.07.2026». Пустая строка — если нечего показать."""
     match = _DATE_IN_TITLE_RE.search(title or "")
     date = match.group(1) if match else (fallback_date.strftime("%d.%m.%Y") if fallback_date else None)

@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from hashlib import sha256
-from typing import Iterable
 
 from services.achievements.bingo.models import (
     ALGORITHM_VERSION,
@@ -85,7 +84,7 @@ def generate_board(
             )
         )
 
-    rank_salt = f"{algorithm_version}|{catalog_version}|{season_id}|{player_id}|{seed}".encode("utf-8")
+    rank_salt = f"{algorithm_version}|{catalog_version}|{season_id}|{player_id}|{seed}".encode()
     ordered_by_position = tuple(
         tuple(
             sorted(

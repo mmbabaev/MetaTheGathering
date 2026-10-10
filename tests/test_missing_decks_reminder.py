@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 from zoneinfo import ZoneInfo
 
@@ -29,7 +29,7 @@ def _tournament(db, svc, *, chat_id: int = 100, event_at: datetime = EVENT_AT):
             title="Goldfish Pauper 14.08.2026",
             chat_id=chat_id,
             slug=f"missing-{chat_id}",
-            registration_close_at=event_at.astimezone(timezone.utc).replace(tzinfo=None),
+            registration_close_at=event_at.astimezone(UTC).replace(tzinfo=None),
         )
     )
     return db.get(models.Tournament, tournament.id)

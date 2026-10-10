@@ -1,7 +1,6 @@
 # Сервис управления пользователями
 
 import re
-from typing import Optional
 
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, select
@@ -48,7 +47,7 @@ class CityInvalid(ValueError):
     pass
 
 
-def _name_variants(first_name: str, last_name: Optional[str]) -> set[tuple[str, str]]:
+def _name_variants(first_name: str, last_name: str | None) -> set[tuple[str, str]]:
     """Comparable full-name forms, including Telegram's one-field display names."""
     first = _normalize_name(first_name)
     last = _normalize_name(last_name or "")
@@ -64,12 +63,12 @@ class UserService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def get_by_id(self, user_id: int) -> Optional[models.User]:
+    def get_by_id(self, user_id: int) -> models.User | None:
         """Вернуть пользователя по внутреннему id или None."""
         stmt = select(models.User).where(models.User.id == user_id)
         return self.db.execute(stmt).scalar_one_or_none()
 
-    def get_by_tg_id(self, tg_id: int) -> Optional[models.User]:
+    def get_by_tg_id(self, tg_id: int) -> models.User | None:
         """Вернуть пользователя по tg_id или None."""
         stmt = select(models.User).where(models.User.tg_id == tg_id)
         return self.db.execute(stmt).scalar_one_or_none()
@@ -78,9 +77,9 @@ class UserService:
         self,
         *,
         tg_id: int,
-        username: Optional[str] = None,
-        first_name: Optional[str] = None,
-        last_name: Optional[str] = None,
+        username: str | None = None,
+        first_name: str | None = None,
+        last_name: str | None = None,
     ) -> models.User:
         """Найти пользователя по tg_id или создать нового. Обновляет username/имя при изменении."""
         first_name = clean_person_name_component(first_name)
@@ -111,26 +110,26 @@ class UserService:
         self.db.refresh(user)
         return user
 
-    def get_by_username(self, username: str) -> Optional[models.User]:
+    def get_by_username(self, username: str) -> models.User | None:
         """Найти пользователя по Telegram username (без @, без учёта регистра)."""
         stmt = select(models.User).where(models.User.username.ilike(username))
         return self.db.execute(stmt).scalar_one_or_none()
 
-    def get_by_endstep_username(self, username: str) -> Optional[models.User]:
+    def get_by_endstep_username(self, username: str) -> models.User | None:
         normalized = normalize_endstep_username(username)
         if normalized is None:
             return None
         stmt = select(models.User).where(func.lower(models.User.endstep_username) == normalized.lower())
         return self.db.execute(stmt).scalar_one_or_none()
 
-    def find_by_name(self, query: str) -> Optional[models.User]:
+    def find_by_name(self, query: str) -> models.User | None:
         """Найти пользователя по имени/фамилии (через _find_user_flexible)."""
         parts = query.strip().split(None, 1)
         first = parts[0]
         last = parts[1] if len(parts) > 1 else None
         return self._find_user_flexible(first, last)
 
-    def _find_name_candidates(self, first_name: str, last_name: Optional[str]) -> list[models.User]:
+    def _find_name_candidates(self, first_name: str, last_name: str | None) -> list[models.User]:
         """Все юзеры, чьё имя совпадает по имени/фамилии (оба порядка, регистр, ё→е).
 
         Работает на Python-уровне (fetches all users). Допустимо при небольшом
@@ -144,7 +143,7 @@ class UserService:
                 candidates.append(user)
         return candidates
 
-    def resolve_and_merge_import_name(self, query: str) -> Optional[models.User]:
+    def resolve_and_merge_import_name(self, query: str) -> models.User | None:
         """Resolve an imported full name and merge only an unambiguous placeholder duplicate.
 
         Automatic merging is deliberately limited to exactly one real Telegram account plus
@@ -164,7 +163,7 @@ class UserService:
             return self.get_by_id(target_id)
         return self._find_user_flexible(first, last)
 
-    def _find_user_flexible(self, first_name: str, last_name: Optional[str]) -> Optional[models.User]:
+    def _find_user_flexible(self, first_name: str, last_name: str | None) -> models.User | None:
         """Гибкий поиск пользователя по имени:
         — регистронезависимый
         — нормализует ё→е
@@ -210,7 +209,7 @@ class UserService:
     def get_or_create_by_name(
         self,
         first_name: str,
-        last_name: Optional[str] = None,
+        last_name: str | None = None,
     ) -> tuple[models.User, bool]:
         """Найти пользователя по имени или создать с placeholder tg_id.
 
@@ -239,7 +238,7 @@ class UserService:
         self.db.flush()
         return user, True
 
-    def merge_placeholder_by_name(self, real_tg_id: int, first_name: str, last_name: Optional[str]) -> bool:
+    def merge_placeholder_by_name(self, real_tg_id: int, first_name: str, last_name: str | None) -> bool:
         """Привязывает реального пользователя к placeholder-дублю(ям) по имени.
 
         Placeholder (tg_id < 0) с таким же именем заводит импорт AetherHub. Ищем ИМЕННО
@@ -474,7 +473,7 @@ class UserService:
         """Admins manage every event; scorekeepers only manage offline tournaments."""
         return self.is_admin(tg_id) or (not tournament.is_online and self.is_scorekeeper(tg_id))
 
-    def toggle_scorekeeper(self, tg_id: int) -> Optional[bool]:
+    def toggle_scorekeeper(self, tg_id: int) -> bool | None:
         """Toggle is_scorekeeper for user by tg_id. Returns new value, or None if user not found."""
         user = self.get_by_tg_id(tg_id)
         if user is None:
@@ -505,7 +504,7 @@ class UserService:
         """Кто может создавать опросы и рассылать уведомления: админ или организатор голосований."""
         return self.is_admin(tg_id) or self.is_poll_organizer(tg_id)
 
-    def toggle_poll_organizer(self, tg_id: int) -> Optional[bool]:
+    def toggle_poll_organizer(self, tg_id: int) -> bool | None:
         """Инвертирует is_poll_organizer. Возвращает новое значение, или None если юзер не найден."""
         user = self.get_by_tg_id(tg_id)
         if user is None:
@@ -518,7 +517,7 @@ class UserService:
         self,
         tg_id: int,
         first_name: str,
-        last_name: Optional[str] = None,
+        last_name: str | None = None,
     ) -> models.User:
         """Обновить имя пользователя. Создаёт запись если не существует."""
         user = self.get_by_tg_id(tg_id)

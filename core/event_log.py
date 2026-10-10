@@ -16,7 +16,7 @@ import logging
 import threading
 import urllib.request
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from core.config import settings
@@ -50,9 +50,8 @@ class JsonlBackend(EventBackend):
     def send(self, entry: dict) -> None:
         line = json.dumps(entry, ensure_ascii=False)
         try:
-            with self._lock:
-                with open(self._path, "a", encoding="utf-8") as f:
-                    f.write(line + "\n")
+            with self._lock, open(self._path, "a", encoding="utf-8") as f:
+                f.write(line + "\n")
         except Exception as exc:
             logger.warning("JsonlBackend write failed: %s", exc)
 
@@ -120,7 +119,7 @@ class EventLogger:
         username: str | None = None,
         **params,
     ) -> None:
-        entry: dict = {"ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "event": event}
+        entry: dict = {"ts": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"), "event": event}
         if tg_id is not None:
             entry["tg_id"] = tg_id
         if username:

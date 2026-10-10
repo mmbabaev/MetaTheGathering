@@ -83,7 +83,7 @@ class AchievementTypeManifest(FrozenModel):
     status: ManifestStatus = ManifestStatus.IDEA
 
     @model_validator(mode="after")
-    def validate_references(self) -> "AchievementTypeManifest":
+    def validate_references(self) -> AchievementTypeManifest:
         if self.code in self.incompatibilities:
             raise ValueError("manifest cannot be incompatible with itself")
         if self.code in self.fallback_codes:
@@ -110,7 +110,7 @@ class EligibilityResult(FrozenModel):
     baseline_sample: int | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
-    def require_reason_for_rejection(self) -> "EligibilityResult":
+    def require_reason_for_rejection(self) -> EligibilityResult:
         if not self.eligible and not self.reason_code:
             raise ValueError("ineligible candidate must have reason_code")
         return self
@@ -156,7 +156,7 @@ class InstantiatedCandidate(FrozenModel):
         attainability: float,
         requires_high_winrate: bool = False,
         target_opponent_id: str | None = None,
-    ) -> "InstantiatedCandidate":
+    ) -> InstantiatedCandidate:
         return cls(
             candidate_id=candidate_id,
             manifest_code=manifest.code,
@@ -211,7 +211,7 @@ class BoardConstraints(FrozenModel):
         return self.rows * self.columns
 
     @model_validator(mode="after")
-    def validate_board_shape(self) -> "BoardConstraints":
+    def validate_board_shape(self) -> BoardConstraints:
         if set(self.difficulty_quotas) != set(Difficulty):
             raise ValueError("difficulty_quotas must define every difficulty")
         if sum(self.difficulty_quotas.values()) != self.cell_count:

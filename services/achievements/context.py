@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -57,7 +56,7 @@ class EligibilityFacts:
 
 @dataclass(frozen=True)
 class SkippedPlayer:
-    user_id: Optional[int]
+    user_id: int | None
     name: str
     reason: str
 
@@ -82,7 +81,7 @@ class TournamentContext:
     def played_at(self) -> datetime:
         return tournament_date(self.tournament)
 
-    def deck_name(self, user_id: int) -> Optional[str]:
+    def deck_name(self, user_id: int) -> str | None:
         participant = self.participants.get(user_id)
         if participant is None or participant.archetype is None:
             return None
@@ -110,8 +109,8 @@ class TournamentContext:
 
 
 def build_context(
-    db: Session, tournament_id: int, history: Optional[AchievementHistory] = None
-) -> Optional[TournamentContext]:
+    db: Session, tournament_id: int, history: AchievementHistory | None = None
+) -> TournamentContext | None:
     """Собрать контекст завершённого турнира. None — турнира нет.
 
     Незавершённость (нет парингов / не у всех матчей счёт) здесь не проверяется:
