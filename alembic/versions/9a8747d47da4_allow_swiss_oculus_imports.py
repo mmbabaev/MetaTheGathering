@@ -1,7 +1,7 @@
 """allow Magic Oculus imports without AetherHub
 
 Revision ID: 9a8747d47da4
-Revises: 7167a65fad51
+Revises: 59c54037a9d8
 Create Date: 2026-09-06
 """
 
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "9a8747d47da4"
-down_revision: Union[str, Sequence[str], None] = "7167a65fad51"
+down_revision: Union[str, Sequence[str], None] = "59c54037a9d8"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
