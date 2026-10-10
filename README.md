@@ -59,6 +59,23 @@ alembic upgrade head
 
 > **Внимание:** не запускайте `python main.py` локально с продовым токеном — это вызовет конфликт с сервером (`Conflict: terminated by other getUpdates request`). Для локальной разработки используйте отдельный тестовый токен.
 
+### После merge PR
+
+Перед переходом к следующему PR обновите локальную Debug-версию из `main` и убедитесь, что она
+запустилась на локальной базе:
+
+```bash
+git fetch origin main
+git checkout main
+git pull --ff-only origin main
+BOT_ENV=debug python3 -m alembic upgrade head
+./server.sh restart
+./server.sh status
+```
+
+`server.sh` читает только `bot/.env.debug`, проверяет локальность Debug-базы и не должен
+подключаться к production.
+
 ---
 
 ## Деплой
