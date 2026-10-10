@@ -15,7 +15,8 @@ GitHub Actions
     └── deploy_pauper_sim.sh ──────────────► Server: pauper-sim (side web project)
 ```
 
-**Server:** `158.160.9.28` (Yandex Cloud), user `mbabaev`
+**Server:** configured by the `SERVER_HOST` and `SERVER_USER` GitHub Actions secrets.
+The current production values are the Yandex Cloud VM and user `mbabaev`.
 
 ---
 
@@ -69,7 +70,7 @@ variables after SSH and the VM have been verified.
 Trigger: push to `main`
 
 Steps:
-1. Setup SSH from `SSH_PRIVATE_KEY` secret
+1. Run the bounded SSH preflight (`bot/setup_ssh_known_hosts.sh`) from `SERVER_HOST`
 2. Write `ENV_FILE` secret → `bot/.env`
 3. Run `bot/deploy_bot.sh` (→ `deploy_bot_debug.sh --release`)
 
@@ -78,27 +79,34 @@ Steps:
 Trigger: push to `main`, only when `web/**`, `bot/systemd/meta-the-gathering-web.service`, or `bot/deploy_web*.sh` changed
 
 Steps:
-1. Setup SSH
+1. Run the bounded SSH preflight from `SERVER_HOST`
 2. Run `bot/deploy_web.sh` (→ `deploy_web_debug.sh --release`)
 
 ### `pr.yml` — PR pipeline
 
 Trigger: PR to `main`
 
-Jobs run in order: tests, then one serialized debug deploy job:
+Jobs run in order: tests, then one serialized debug deploy job when the PR contains
+runtime or deployment changes. Documentation-only PRs do not need the server and skip
+the debug deploy:
 
 **test:**
 - `pip install` + `ruff check` + alembic heads check + `pytest`
 - Env: `TELEGRAM_BOT_TOKEN=0000000000:test_token_for_ci`, `DATABASE_URL=sqlite:///:memory:`
 
-**deploy-debug** (needs: test):
+**deploy-debug** (needs: test, changes):
+- Detect deploy-relevant paths with `dorny/paths-filter`
 - Write `ENV_FILE_DEBUG` secret → `bot/.env.debug`
 - Normalize `DATABASE_SCHEMA` to an empty value so every PR uses the same durable debug schema
 - Run `bot/deploy_bot_debug.sh`
 - Then run `bot/deploy_web_debug.sh` in the same job
 - Uses `bot/.env.debug` installed by the successful bot deploy
 
-The deploy job shares a GitHub Actions concurrency group with other debug deploys.
+The deploy job has a 20-minute timeout and shares a GitHub Actions concurrency group with
+other debug deploys. Before any upload, every workflow runs `bot/setup_ssh_known_hosts.sh`:
+it validates the host, tries `ssh-keyscan` three times with a 5-second timeout, and emits
+a clear infrastructure diagnostic if the VM or TCP port 22 is unavailable. The deploy
+scripts use the same `SERVER_HOST`/`SERVER_USER` values and bounded SSH options.
 The scripts also acquire the same environment-specific remote `flock`, so a manual
 deploy cannot mutate the directory and virtualenv concurrently with CI.
 
@@ -106,8 +114,9 @@ deploy cannot mutate the directory and virtualenv concurrently with CI.
 
 | Secret | Used by | Description |
 |---|---|---|
-| `SSH_PRIVATE_KEY` | all deploy jobs | Private key for `mbabaev@158.160.9.28` |
-| `SERVER_HOST` | all deploy jobs | `158.160.9.28` (used for `ssh-keyscan`) |
+| `SSH_PRIVATE_KEY` | all deploy jobs | Private key for the deployment user |
+| `SERVER_HOST` | all deploy jobs | Bare hostname or IP address of the deployment VM |
+| `SERVER_USER` | all deploy jobs | SSH user for the deployment VM; scripts default to `mbabaev` locally |
 | `ENV_FILE` | `deploy.yml` | Full contents of prod `bot/.env` |
 | `ENV_FILE_DEBUG` | `pr.yml` | Full contents of debug `bot/.env.debug` |
 
