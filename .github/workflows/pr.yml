@@ -66,14 +66,39 @@ jobs:
           DATABASE_URL: "sqlite:///:memory:"
 
       - name: Run tests
-        run: python -m pytest tests/ pauper_sim/tests/ -v --ignore=tests/e2e
+        run: python -m pytest tests/ pauper_sim/tests/ -v --ignore=tests/e2e --ignore=tests/telegram_e2e
+        env:
+          TELEGRAM_BOT_TOKEN: "0000000000:test_token_for_ci"
+          DATABASE_URL: "sqlite:///:memory:"
+
+  telegram-e2e:
+    name: Telegram integration E2E
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run in-process Telegram flows
+        run: |
+          started_at=$(date +%s)
+          python -m pytest tests/telegram_e2e/ -v --durations=10
+          elapsed=$(( $(date +%s) - started_at ))
+          echo "Telegram E2E test runtime: ${elapsed}s" >> "$GITHUB_STEP_SUMMARY"
         env:
           TELEGRAM_BOT_TOKEN: "0000000000:test_token_for_ci"
           DATABASE_URL: "sqlite:///:memory:"
 
   deploy-debug:
     name: Deploy DEBUG
-    needs: [test, changes]
+    needs: [test, changes, telegram-e2e]
     runs-on: ubuntu-latest
     # Deploys are paused while the data-center VM is unavailable. Re-enable by
     # setting the repository variable DEPLOY_ENABLED=true.
