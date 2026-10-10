@@ -11,12 +11,14 @@ from bot.deeplink import (
     parse_fill_missing_payload,
     parse_registration_payload,
     parse_round_payload,
+    parse_web_login_payload,
 )
 from bot.messages import HELP_TEXT, HELP_TEXT_ADMIN
 from bot.telegram.session import db_session
 from core.database import SessionLocal
 from core.event_log import event_logger
 from services.user import UserService
+from services.web_auth import complete_telegram_auth_attempt, telegram_auth_attempt_status
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +97,10 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     # Диплинк `?start=deck_<id>` — сразу в запись колоды на турнир (issue #136).
     payload = (context.args or [None])[0]
+    web_login_token = parse_web_login_payload(payload) if payload else None
+    if web_login_token is not None:
+        await _start_web_login_deeplink(update, user, web_login_token)
+        return
     if payload and is_cellar_payload(payload):
         await _start_cellar_deeplink(update, context)
         return
@@ -128,6 +134,31 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.effective_message.reply_text(
         greeting + "Используйте /tournaments чтобы увидеть активные турниры и записаться."
     )
+
+
+async def _start_web_login_deeplink(update: Update, user, token: str) -> None:
+    """Complete a browser login without sending anything outside the requesting chat."""
+    db = SessionLocal()
+    try:
+        status, _ = telegram_auth_attempt_status(db, token)
+        if status != "pending":
+            completed = False
+        else:
+            db_user = UserService(db).get_or_create(
+                tg_id=user.id,
+                username=user.username,
+                first_name=user.first_name,
+                last_name=user.last_name,
+            )
+            completed = complete_telegram_auth_attempt(db, token, db_user)
+    finally:
+        db.close()
+
+    if completed:
+        text = "Готово — вернитесь на сайт, вход будет подтверждён автоматически."
+    else:
+        text = "Ссылка для входа недействительна или уже истекла. Запросите новую на сайте."
+    await update.effective_message.reply_text(text)
 
 
 async def _start_cellar_deeplink(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

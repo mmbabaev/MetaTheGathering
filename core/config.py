@@ -92,6 +92,7 @@ class Settings(BaseSettings):
     WEB_SECRET_KEY: str = "dev-secret-change-in-prod"
     WEB_BASE_URL: str = "http://localhost:8080"
     WEB_PORT: int = 8080
+    TELEGRAM_BOT_USERNAME: str = ""
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587
     SMTP_USER: str = ""

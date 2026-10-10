@@ -1,8 +1,8 @@
 """Telegram deeplinks: `t.me/<bot>?start=<payload>`.
 
 Поддерживаются переход в запись своей колоды (`deck_<id>`), общая регистрация
-(`register_<id>`), текущий раунд (`round_<id>`), помощь мета-полиции (`fill_<id>`)
-и меню ячейки (`cellar`).
+(`register_<id>`), текущий раунд (`round_<id>`), помощь мета-полиции (`fill_<id>`),
+web-вход (`web_login_<token>`) и меню ячейки (`cellar`).
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ _DECK_PREFIX = "deck_"
 _REGISTER_PREFIX = "register_"
 _ROUND_PREFIX = "round_"
 _FILL_MISSING_PREFIX = "fill_"
+_WEB_LOGIN_PREFIX = "web_login_"
 _CELLAR_PAYLOAD = "cellar"
 
 
@@ -87,6 +88,29 @@ def parse_fill_missing_payload(payload: str) -> Optional[int]:
 def fill_missing_deeplink(bot_username: str, tournament_id: int) -> str:
     """Ссылка из напоминания: открыть выбор своей либо чужой пустой колоды."""
     return f"https://t.me/{bot_username}?start={fill_missing_payload(tournament_id)}"
+
+
+def web_login_payload(token: str) -> str:
+    return f"{_WEB_LOGIN_PREFIX}{token}"
+
+
+def parse_web_login_payload(payload: str) -> Optional[str]:
+    """Return an opaque login token, rejecting malformed or oversized payloads."""
+    if not payload or not payload.startswith(_WEB_LOGIN_PREFIX):
+        return None
+    token = payload[len(_WEB_LOGIN_PREFIX) :]
+    if (
+        not token
+        or len(token) > 128
+        or not token.isascii()
+        or not all(char.isalnum() or char in "-_" for char in token)
+    ):
+        return None
+    return token
+
+
+def web_login_deeplink(bot_username: str, token: str) -> str:
+    return f"https://t.me/{bot_username}?start={web_login_payload(token)}"
 
 
 def is_cellar_payload(payload: str) -> bool:
