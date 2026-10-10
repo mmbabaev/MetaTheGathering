@@ -1,0 +1,219 @@
+{
+  "event": {
+    "title": "Стилёк x Концеход @ Endstep",
+    "date": "03.10.2026",
+    "players_public": 104,
+    "swiss_rounds": 7,
+    "cut_to": 8,
+    "database_registrations": 113,
+    "database_with_deck": 110,
+    "database_normalized_general": 91,
+    "database_round_pairings": 0,
+    "database_status": "registration",
+    "public_swiss_pairings": 284,
+    "public_reported_swiss_matches": 272,
+    "bot_identity_matches": 81,
+    "public_decklist_classifications": 23
+  },
+  "full_swiss_meta": [
+    ["Elves", 7, 45, "23-22", 51.1],
+    ["Red Madness", 8, 44, "21-23", 47.7],
+    ["Affinity", 9, 43, "23-20", 53.5],
+    ["Tron", 7, 35, "11-24", 31.4],
+    ["BG Gardens", 6, 35, "18-17", 51.4],
+    ["Blue Terror", 5, 33, "22-11", 66.7],
+    ["White Aggro", 6, 32, "15-17", 46.9],
+    ["Spy", 6, 32, "20-12", 62.5],
+    ["RG Ramp", 6, 26, "7-19", 26.9],
+    ["Faeries", 4, 20, "11-9", 55.0],
+    ["Bogles", 4, 20, "13-7", 65.0],
+    ["MBC", 4, 18, "7-11", 38.9],
+    ["WB Blade", 3, 18, "10-8", 55.6]
+  ],
+  "mtgdecks_benchmark": {
+    "source": "https://mtgdecks.net/Pauper/winrates",
+    "filters": "ALL",
+    "snapshot": "2026-10-06",
+    "period_180d": "2026-04-09..2026-10-06",
+    "period_30d": "2026-09-06..2026-10-06",
+    "matches_180d": 73956,
+    "matches_30d": 15857,
+    "method": "Overall rate from MTGDecks; percentages are rounded as displayed. Affinity and Tron are weighted proxies across the listed MTGDecks variants.",
+    "rows": [
+      ["Elves", 7, 45, 51.1, 50.0, 51.0, "Elves"],
+      ["Red Madness", 8, 44, 47.7, 51.0, 51.0, "Mono Red Madness"],
+      ["Affinity", 9, 43, 53.5, 52.1, 52.5, "Grixis + Esper + Dimir Affinity"],
+      ["Tron", 7, 35, 31.4, 50.6, 50.5, "Monster + Flicker + Altar Tron"],
+      ["BG Gardens", 6, 35, 51.4, 50.0, 48.0, "Golgari Gardens"],
+      ["Blue Terror", 5, 33, 66.7, 51.0, 49.0, "Mono Blue Terror"],
+      ["White Aggro", 6, 32, 46.9, 50.0, 52.0, "White Weenie"],
+      ["Spy", 6, 32, 62.5, 55.0, 57.0, "Spy Combo"],
+      ["RG Ramp", 6, 26, 26.9, 51.0, 50.0, "Gruul Ramp"],
+      ["Faeries", 4, 20, 55.0, 51.0, 52.0, "UB Faeries"],
+      ["Bogles", 4, 20, 65.0, 51.0, 52.0, "GW Bogles"],
+      ["WB Blade", 3, 18, 55.6, 46.0, 44.0, "Orzhov Blade"]
+    ],
+    "top8_spikes": [
+      ["Izzet Skred", 7, 85.7, 47.0, 46.0, "Izzet Skred"],
+      ["Simic Petitioners", 7, 71.4, 51.0, 48.0, "Persistent Petitioners"],
+      ["Aura Hexproof", 7, 100.0, 51.0, 52.0, "GW Bogles"]
+    ]
+  },
+  "top8_swiss": [
+    [1, "WB Blade", "6-1", 60.27],
+    [2, "UR Control", "6-1", 63.90],
+    [3, "Affinity", "6-1", 66.53],
+    [4, "UB Affinity", "5-2", 63.27],
+    [5, "Blue Terror", "7-0", 61.45],
+    [6, "Bogles", "6-1", 61.86],
+    [7, "Spy", "6-1", 52.88],
+    [8, "Simic Petitioners", "5-2", 77.55]
+  ],
+  "champion_swiss_path": [
+    [1, "Ashnod's Altar", "W", "1-2"],
+    [2, "Infect", "W", "3-4"],
+    [3, "BG Gardens", "W", "5-2"],
+    [4, "Red Madness", "W", "3-2"],
+    [5, "UR Control", "W", "4-3"],
+    [6, "Affinity", "L", "6-1"],
+    [7, "Elves", "W", "5-2"]
+  ],
+  "matchup_highlights": [
+    ["Blue Terror", "Elves", 5, "2-3"],
+    ["BG Gardens", "Poison Storm", 4, "1-3"],
+    ["RG Ramp", "White Aggro", 4, "1-3"],
+    ["BG Gardens", "Spy", 3, "3-0"],
+    ["Blue Terror", "Red Madness", 3, "2-1"],
+    ["Elves", "Red Madness", 3, "1-2"],
+    ["Spy", "White Aggro", 3, "3-0"],
+    ["RG Ramp", "Red Madness", 3, "0-3"]
+  ],
+  "registered_general_meta": [
+    ["Не нормализовано", 22],
+    ["Elves", 8],
+    ["RG Ramp", 7],
+    ["Spy", 7],
+    ["Red Madness", 6],
+    ["Blue Terror", 5],
+    ["BG Gardens", 5],
+    ["WB Blade", 4],
+    ["Bogles", 4],
+    ["Monster Tron", 4],
+    ["Flicker Tron", 3],
+    ["Red Rally", 3],
+    ["Grixis Affinity", 3],
+    ["White Aggro", 3],
+    ["Esper Affinity", 2],
+    ["Tron", 2],
+    ["Poison Storm", 2],
+    ["BR Madness", 2],
+    ["UB Control", 2]
+  ],
+  "registered_macro_meta": [
+    ["Не указано", 63],
+    ["Burn", 11],
+    ["Tron", 9],
+    ["Affinity", 7],
+    ["Spy", 7],
+    ["Terror", 5],
+    ["BG Control", 5],
+    ["Bogles", 4],
+    ["Faeries", 2]
+  ],
+  "top8": [
+    {
+      "place": "1",
+      "deck": "Orzhov Glintblade",
+      "db_deck": "WB Blade",
+      "macro": "WB Blade",
+      "record": "6-1",
+      "core": "4 Glint Hawk; 4 Kor Skyfisher; 4 Refurbished Familiar; 4 Thraben Inspector; 4 Dispatch; 4 Thraben Charm",
+      "sideboard": "4 Dust to Dust; 3 Temporal Intervention; 2 Arms of Hadar; 2 Mukotai Ambusher",
+      "note": "Плотный value/tempo-план с артефактами, широким removal и сильным Affinity-планом после сайда"
+    },
+    {
+      "place": "2",
+      "deck": "Izzet Skred",
+      "db_deck": "UR Control",
+      "macro": "UR Control",
+      "record": "6-1",
+      "core": "4 Skred; 4 Counterspell; 4 Spell Pierce; 4 Brainstorm; 4 Lórien Revealed; 4 Plunder the Trollshaws",
+      "sideboard": "4 Hydroblast; 4 Pyroblast; 3 Vandalblast; 2 Relic of Progenitus",
+      "note": "Контроль темпа: дешёвое взаимодействие, много добора и сильный цветовой сайд"
+    },
+    {
+      "place": "3-4",
+      "deck": "Dimir Affinity",
+      "db_deck": "Affinity",
+      "macro": "Affinity",
+      "record": "6-1",
+      "core": "4 Myr Enforcer; 4 Refurbished Familiar; 4 Thoughtcast; 4 Reckoner's Bargain; 4 Giant's Boulder",
+      "sideboard": "4 Pyroblast; 4 Hydroblast; 3 Krark-Clan Shaman; 2 Extract a Confession",
+      "note": "Быстрый affinity/value с большой плотностью артефактов и мощной post-board защитой"
+    },
+    {
+      "place": "3-4",
+      "deck": "Grixis Affinity",
+      "db_deck": "UB Affinity",
+      "macro": "Affinity",
+      "record": "5-2",
+      "core": "4 Myr Enforcer; 4 Refurbished Familiar; 4 Utrom Monitor; 4 Thoughtcast; 4 Reckoner's Bargain",
+      "sideboard": "3 Blue Elemental Blast; 3 Steel Sabotage; 2 Drown in Sorrow; 2 Duress; 2 Extract a Confession",
+      "note": "Более интерактивный вариант Affinity: Cast Down, discard и отдельный пакет против артефактов"
+    },
+    {
+      "place": "5-8",
+      "deck": "Aura Hexproof",
+      "db_deck": "Bogles",
+      "macro": "Bogles",
+      "record": "7-0 Swiss",
+      "core": "4 Gladecover Scout; 4 Slippery Bogle; 4 Rancor; 4 Armadillo Cloak; 4 Ethereal Armor; 4 Ancestral Mask",
+      "sideboard": "3 Spirit Link; 2 Flaring Pain; 2 Scattershot Archer; 2 Standard Bearer; 2 Dust to Dust",
+      "note": "Лучший Swiss-рекорд турнира; линейная стратегия с высокой наградой за отсутствие точечного ответа"
+    },
+    {
+      "place": "5-8",
+      "deck": "Balustrade Spy",
+      "db_deck": "Spy Combo",
+      "macro": "Spy",
+      "record": "6-1",
+      "core": "4 Balustrade Spy; 4 Land Grant; 4 Lead the Stampede; 4 Winding Way; 4 Generous Ent; 3 Lotus Petal",
+      "sideboard": "3 Mesmeric Fiend; 2 Fang Dragon; 2 Avenging Hunter; 2 Gorilla Shaman; 1 Faerie Macabre",
+      "note": "Комбо с очень низкой земельной базой: максимизирует скорость и устойчивость к mana screw"
+    },
+    {
+      "place": "5-8",
+      "deck": "Mono Blue Terror",
+      "db_deck": "Blue Terror",
+      "macro": "Terror",
+      "record": "6-1",
+      "core": "4 Tolarian Terror; 4 Cryptic Serpent; 4 Brainstorm; 4 Counterspell; 4 Mental Note; 4 Thought Scour",
+      "sideboard": "4 Hydroblast; 4 Annul; 4 Gut Shot; 3 Spreading Seas",
+      "note": "Классический graveyard tempo/control: дешёвые угрозы, контрмагия и плотный card selection"
+    },
+    {
+      "place": "5-8",
+      "deck": "Simic Petitioners",
+      "db_deck": "UG advisors",
+      "macro": "Не нормализовано",
+      "record": "5-2",
+      "core": "11 Persistent Petitioners; 4 Glistener Seer; 4 Mothdust Changeling; 4 Pond Prophet; 4 Winding Way",
+      "sideboard": "4 Hydroblast; 4 Moment's Peace; 4 Faerie Macabre",
+      "note": "Самый необычный Top 8: tribal/engine deck с повторяемым mill-планом и неожиданным разгромом Swiss"
+    }
+  ],
+  "playoff": [
+    ["Quarterfinal", "Aura Hexproof", "Orzhov Glintblade", "0-2"],
+    ["Quarterfinal", "Mono Blue Terror", "Dimir Affinity", "1-2"],
+    ["Quarterfinal", "Grixis Affinity", "Simic Petitioners", "2-0"],
+    ["Quarterfinal", "Balustrade Spy", "Izzet Skred", "0-2"],
+    ["Semifinal", "Balustrade Spy", "Orzhov Glintblade", "1-2"],
+    ["Semifinal", "Dimir Affinity", "Izzet Skred", "1-2"],
+    ["Final", "Orzhov Glintblade", "Izzet Skred", "2-1"]
+  ],
+  "sources": {
+    "mtgtop8": "https://www.mtgtop8.com/event?e=91652&f=PAU",
+    "endstep_results": "https://endstep.cc/tournaments/c65a4470-500a-4850-a1e8-ff1ca9abbe04",
+    "public_api": "https://endstep.cc/api/tournaments/public/c65a4470-500a-4850-a1e8-ff1ca9abbe04"
+  }
+}
