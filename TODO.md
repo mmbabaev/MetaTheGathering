@@ -1,6 +1,6 @@
 # MetaGatherer — живой план проекта
 
-Последнее обновление: **3 октября 2026**.
+Последнее обновление: **10 октября 2026**.
 
 Это верхнеуровневый source of truth о том, что уже находится в `main`, что сейчас
 проходит review и что ещё только запланировано. Детали и acceptance criteria живут
@@ -452,6 +452,9 @@ Pull-only UI от delivery не зависит.
 
 ### Ещё не реализовано
 
+- Пользовательская навигация Telegram-бота: постоянное главное меню, контекстный экран
+  «Мой статус», единые `Назад` / `Главное меню` и отдельная зона организатора. Живой план
+  реализации и критерии приёмки — [`docs/plans/telegram-navigation.md`](docs/plans/telegram-navigation.md).
 - `Season`, frozen ruleset/stats snapshot и lifecycle сезона.
 - Персональные `Board`, 16 `Cell` и immutable completion/progress events.
 - Полный owner Board Lab: реальные игроки, pool/quotas, batch fairness, JSON export и drafts.
