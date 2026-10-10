@@ -205,6 +205,12 @@ def test_endstep_swiss_result_reveals_both_declared_decks_to_both_players(db, on
     _set_deck(db, tournament.id, bob.id, "Spy")
     handler = RoundResultsHandler(db)
 
+    preview = handler.handle_opponent_wins(match.id, alice.tg_id, 0, 2)
+
+    assert "Иванова Алиса 0–2 Петров Борис" in preview.text
+    assert "Blue Terror" not in preview.text
+    assert "Spy" not in preview.text
+
     delivery = handler.handle_send(match.id, alice.tg_id, 0, 2)
 
     expected = "Иванова Алиса - Blue Terror 0–2 Петров Борис - Spy"
